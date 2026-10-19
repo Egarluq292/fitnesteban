@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.0.1';
+const APP_VERSION = '4.0.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -999,7 +999,7 @@ function renderProgress() {
   const hist = sortedSessions().slice(-20).reverse();
 
   return `
-  ${needBackup ? `<div class="banner-warn mb-3"><span>${backupAge === null ? 'Aún no has hecho copia de seguridad.' : `Última copia hace ${backupAge} días.`} Si borras datos del navegador, lo pierdes todo.</span><button class="btn-mini text-ink bg-amber-300 shrink-0" data-act="export" type="button">Exportar</button></div>` : ''}
+  ${needBackup ? `<div class="banner-warn mb-3"><span>${backupAge === null ? 'Aún no has hecho copia de seguridad.' : `Última copia hace ${backupAge} días.`} Si borras datos del navegador, lo pierdes todo.</span><button class="btn-banner btn-banner-warn shrink-0" data-act="export" type="button">Exportar</button></div>` : ''}
 
   <section class="grid grid-cols-3 gap-2">
     <div class="stat"><div class="stat-v">${w.sessionsWeek}</div><div class="stat-l">sesiones esta semana</div></div>
@@ -1397,7 +1397,7 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferr
 window.addEventListener('appinstalled', () => { deferredInstall = null; toast('App instalada ✓'); });
 
 function showUpdate(worker) {
-  $('#topBanner').innerHTML = `<div class="banner-info mt-3"><span>Hay una versión nueva de la app.</span><button class="btn-mini bg-brand text-ink shrink-0" id="doUpdate" type="button">Actualizar</button></div>`;
+  $('#topBanner').innerHTML = `<div class="banner-info mt-3"><span>Hay una versión nueva de la app.</span><button class="btn-banner shrink-0" id="doUpdate" type="button">Actualizar</button></div>`;
   $('#doUpdate').onclick = () => worker.postMessage('SKIP_WAITING');
 }
 
