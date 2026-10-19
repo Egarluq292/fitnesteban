@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.0.2';
+const APP_VERSION = '4.0.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -21,8 +21,7 @@ const mkEx = (id, block, sets, minReps, maxReps, increment, rest, variants) => (
   variants: variants.map(([name, note]) => ({ name, note: note || '' }))
 });
 
-const DEFAULT_PLAN = {
-  days: [
+const PPT_DAYS = [
     {
       id: 'day1', label: 'PUSH', rotation: true,
       title: 'Día 1 · Push + peaje de cuádriceps',
@@ -68,6 +67,46 @@ const DEFAULT_PLAN = {
       subtitle: 'Añade tus ejercicios y entrena a tu aire',
       exercises: []
     }
+];
+
+const FULLBODY_DAYS = [
+  {
+    id: 'fb_a', label: 'FB A', rotation: true,
+    title: 'Full Body A',
+    subtitle: 'Sentadilla, banca y remo pesados + accesorios',
+    exercises: [
+      mkEx('fa_squat', '🏋️ Pierna principal', 4, 6, 8, 2.5, 150, [['Sentadilla trasera', 'Profundidad paralela o más, core apretado.']]),
+      mkEx('fa_bench', '💪 Empuje principal', 4, 6, 8, 2.5, 150, [['Press de banca', 'Escápulas retraídas, pies firmes.']]),
+      mkEx('fa_row', '🦅 Tirón principal', 4, 8, 10, 2.5, 120, [['Remo con barra', 'Torso a ~45º, barra al ombligo.']]),
+      mkEx('fa_legcurl', '🔥 Isquios', 3, 8, 10, 2.5, 90, [['Curl femoral acostado', 'Bajada lenta en 3 s.']]),
+      mkEx('fa_ohp', '🎯 Hombro', 3, 8, 10, 2.5, 120, [['Press militar de pie', 'Glúteos y abdomen apretados.']]),
+      mkEx('fa_lat', '⚡ Accesorio hombro', 3, 12, 15, 1, 60, [['Elevaciones laterales', 'Sin impulso, codos ligeramente flexionados.']]),
+      mkEx('fa_curl', '💪 Brazos', 3, 10, 12, 2, 60, [['Curl de bíceps con barra', 'Codos pegados, sin balanceo.']]),
+      mkEx('fa_hammer', '💪 Brazos', 3, 10, 12, 1, 60, [['Curl martillo', 'Agarre neutro.']])
+    ]
+  },
+  {
+    id: 'fb_b', label: 'FB B', rotation: true,
+    title: 'Full Body B',
+    subtitle: 'Peso muerto, dominadas e inclinado + accesorios',
+    exercises: [
+      mkEx('fb_deadlift', '🏋️ Bisagra principal', 4, 6, 10, 2.5, 180, [['Peso muerto', 'Espalda neutra, empuja el suelo.']]),
+      mkEx('fb_pullup', '🦅 Tirón vertical', 3, 6, 10, 2, 120, [['Dominadas pronas', '0 kg = peso corporal.']]),
+      mkEx('fb_incline', '💪 Empuje superior', 4, 8, 10, 2, 120, [['Press inclinado con mancuernas', 'Banco a 30º.']]),
+      mkEx('fb_squat', '🔥 Pierna', 3, 10, 12, 2, 90, [['Sentadilla con peso', 'Goblet, mancuernas o barra.']]),
+      mkEx('fb_hipthrust', '🍑 Glúteo', 3, 8, 12, 5, 90, [['Hip thrust', 'Pausa de 1 s arriba.']]),
+      mkEx('fb_face', '🎯 Hombro posterior', 3, 15, 20, 1, 60, [['Face pull / TRX', 'Codos altos, abre al final.']]),
+      mkEx('fb_triceps', '💪 Brazos', 3, 10, 12, 2.5, 60, [['Extensión de tríceps en polea', 'Codos fijos.']]),
+      mkEx('fb_calf', '🦵 Gemelos', 4, 10, 15, 2, 60, [['Elevación de gemelos de pie', 'Pausa abajo y arriba.']])
+    ]
+  }
+];
+
+const DEFAULT_PLAN = {
+  active: 'ppt',
+  programs: [
+    { id: 'ppt', name: 'PPT', days: PPT_DAYS },
+    { id: 'fullbody', name: 'FULL BODY', days: FULLBODY_DAYS }
   ]
 };
 
@@ -114,17 +153,31 @@ function normalizeExercise(e) {
   if (out.maxReps < out.minReps) out.maxReps = out.minReps;
   return out;
 }
+function normalizeDay(day) {
+  return {
+    id: day.id || uid('d_'), label: String(day.label || 'DÍA').slice(0, 10), rotation: day.rotation !== false,
+    title: day.title || day.label || 'Día', subtitle: day.subtitle || '',
+    exercises: (day.exercises || []).map(normalizeExercise)
+  };
+}
+function normalizePlan(plan) {
+  let programs;
+  if (plan && Array.isArray(plan.programs) && plan.programs.length) programs = plan.programs;
+  else if (plan && Array.isArray(plan.days) && plan.days.length) {
+    // plan antiguo (solo días): pasa a ser el bloque PPT y se añade FULL BODY
+    programs = [{ id: 'ppt', name: 'PPT', days: plan.days }, ...clone(DEFAULT_PLAN.programs.filter(p => p.id !== 'ppt'))];
+  } else programs = clone(DEFAULT_PLAN.programs);
+  programs = programs.map(p => ({ id: p.id || uid('p_'), name: String(p.name || 'BLOQUE').slice(0, 16), days: (p.days || []).map(normalizeDay) }));
+  for (const p of programs) if (!p.days.length) p.days.push(normalizeDay({ label: 'DÍA 1', title: 'Día 1' }));
+  const active = programs.some(p => p.id === plan?.active) ? plan.active : programs[0].id;
+  return { active, programs };
+}
 function normalize(s) {
   const d = defaultState();
   const out = { ...d, ...s };
   out.settings = { ...d.settings, ...(s.settings || {}) };
   if (!Array.isArray(out.settings.habits)) out.settings.habits = [...DEFAULT_HABITS];
-  if (!out.plan || !Array.isArray(out.plan.days) || !out.plan.days.length) out.plan = clone(DEFAULT_PLAN);
-  out.plan.days = out.plan.days.map(day => ({
-    id: day.id || uid('d_'), label: String(day.label || 'DÍA').slice(0, 10), rotation: day.rotation !== false,
-    title: day.title || day.label || 'Día', subtitle: day.subtitle || '',
-    exercises: (day.exercises || []).map(normalizeExercise)
-  }));
+  out.plan = normalizePlan(out.plan);
   for (const k of ['selectedVariants', 'memory', 'meals', 'drafts']) if (!out[k] || typeof out[k] !== 'object' || Array.isArray(out[k])) out[k] = {};
   for (const k of ['sessions', 'bodyMetrics']) if (!Array.isArray(out[k])) out[k] = [];
   out.version = 4;
@@ -154,7 +207,7 @@ function migrateV3(old) {
   const idMap = {};
   const custom = old.customExercises || {};
   for (const dayKey of Object.keys(custom)) {
-    const day = st.plan.days.find(d => d.id === dayKey);
+    const day = st.plan.programs.flatMap(p => p.days).find(d => d.id === dayKey);
     if (!day) continue;
     (custom[dayKey] || []).forEach((c, i) => {
       const nid = uid('c_');
@@ -167,7 +220,7 @@ function migrateV3(old) {
   for (const [k, v] of Object.entries(old.exerciseMemory || {})) st.memory[mapKey(k)] = { date: v3DateToISO(v.date), sets: cleanSets(v.sets) };
 
   const nameMap = {};
-  st.plan.days.forEach(d => d.exercises.forEach(e => e.variants.forEach((v, i) => {
+  st.plan.programs.flatMap(p => p.days).forEach(d => d.exercises.forEach(e => e.variants.forEach((v, i) => {
     const k = `${d.id}|${normName(v.name)}`;
     if (!nameMap[k]) nameMap[k] = { exId: e.id, exKey: `${e.id}_v${i}` };
   })));
@@ -347,8 +400,13 @@ function bestE1rm(exKey, sessions = state.sessions) {
 /* =========================================================================
    ENTRENO
    ========================================================================= */
+function prog() {
+  return state.plan.programs.find(p => p.id === state.plan.active) || state.plan.programs[0];
+}
+function allDays() { return state.plan.programs.flatMap(p => p.days); }
+function programOfDay(dayId) { return state.plan.programs.find(p => p.days.some(d => d.id === dayId)); }
 function currentDay() {
-  return state.plan.days.find(d => d.id === ui.dayId) || state.plan.days[0];
+  return prog().days.find(d => d.id === ui.dayId) || prog().days[0];
 }
 function variantOf(e) {
   const v = clamp(state.selectedVariants[e.id] || 0, 0, e.variants.length - 1);
@@ -371,8 +429,8 @@ function cellValue(d, key, i, field, c) {
   return '';
 }
 function nextDayId() {
-  const rot = state.plan.days.filter(d => d.rotation && d.exercises.length);
-  if (!rot.length) return state.plan.days[0].id;
+  const rot = prog().days.filter(d => d.rotation && d.exercises.length);
+  if (!rot.length) return prog().days[0].id;
   const ss = sortedSessions();
   for (let i = ss.length - 1; i >= 0; i--) {
     const idx = rot.findIndex(d => d.id === ss[i].dayId);
@@ -391,7 +449,7 @@ function renderTrain() {
   const today = todayISO();
   const lastSess = sortedSessions().filter(s => s.dayId === day.id).pop();
 
-  const chips = state.plan.days.map(dd => {
+  const chips = prog().days.map(dd => {
     const doneToday = state.sessions.some(s => s.dayId === dd.id && s.date === today);
     return `<button class="chip ${dd.id === day.id ? 'chip-on' : ''}" data-act="pickDay" data-day="${esc(dd.id)}" type="button">
       ${esc(dd.label)}${doneToday ? ' ✓' : (dd.id === next ? ' <span class="dot"></span>' : '')}
@@ -406,7 +464,14 @@ function renderTrain() {
       <span>${esc(h)}</span>
     </label>`).join('');
 
+  const progRow = state.plan.programs.map(p => `<button class="prog ${p.id === prog().id ? 'prog-on' : ''}" data-act="pickProg" data-prog="${esc(p.id)}" type="button">${esc(p.name)}</button>`).join('')
+    + `<button class="prog prog-add" data-act="addProg" type="button" aria-label="Añadir bloque">＋ Bloque</button>`;
+
   return `
+  <div class="flex items-center gap-2 -mx-4 px-4 mb-2.5">
+    <div class="chips-row flex-1">${progRow}</div>
+    <button class="iconbtn iconbtn-sm shrink-0" data-act="editProg" type="button" aria-label="Editar bloque">✎</button>
+  </div>
   <div class="chips-row -mx-4 px-4">${chips}</div>
 
   <section class="card p-4 mt-3">
@@ -496,7 +561,7 @@ function renderExerciseCard(e, idx, day, d) {
 }
 
 function findEx(exId) {
-  for (const d of state.plan.days) { const i = d.exercises.findIndex(e => e.id === exId); if (i >= 0) return { day: d, ex: d.exercises[i], idx: i }; }
+  for (const d of allDays()) { const i = d.exercises.findIndex(e => e.id === exId); if (i >= 0) return { day: d, ex: d.exercises[i], idx: i }; }
   return null;
 }
 
@@ -569,7 +634,7 @@ function saveSession() {
   if (!persist()) return;
   render();
 
-  const nxt = state.plan.days.find(x => x.id === nextDayId());
+  const nxt = prog().days.find(x => x.id === nextDayId());
   openModal(`
     <div class="text-center">
       <div class="text-4xl">💪</div>
@@ -591,7 +656,7 @@ function saveSession() {
 /* --- Editor de días y ejercicios --- */
 function editDayModal(dayId) {
   const isNew = !dayId;
-  const day = isNew ? { label: '', title: '', subtitle: '', rotation: true } : state.plan.days.find(d => d.id === dayId);
+  const day = isNew ? { label: '', title: '', subtitle: '', rotation: true } : allDays().find(d => d.id === dayId);
   openModal(`
     <h3 class="modal-title">${isNew ? 'Nuevo día' : 'Editar día'}</h3>
     <label class="lbl">Nombre corto (pestaña)<input class="field mt-1" name="label" maxlength="10" value="${esc(day.label)}" placeholder="PIERNA" /></label>
@@ -602,7 +667,7 @@ function editDayModal(dayId) {
       ${!isNew ? `<button class="btn-ghost" data-mact="left" type="button" aria-label="Mover a la izquierda">◀</button><button class="btn-ghost" data-mact="right" type="button" aria-label="Mover a la derecha">▶</button>` : ''}
       <button class="btn-primary flex-1" data-mact="save" type="button">Guardar</button>
     </div>
-    ${!isNew && state.plan.days.length > 1 ? `<button class="btn-danger w-full mt-3" data-mact="del" type="button">Eliminar este día</button>` : ''}
+    ${!isNew && programOfDay(dayId).days.length > 1 ? `<button class="btn-danger w-full mt-3" data-mact="del" type="button">Eliminar este día</button>` : ''}
     ${!isNew ? `<p class="text-[11px] text-mute mt-3">Eliminar un día no borra el historial de sesiones ya guardadas.</p>` : ''}
   `, {
     autofocus: isNew,
@@ -612,7 +677,7 @@ function editDayModal(dayId) {
       const data = { label, title: mval(root, 'title').trim() || label, subtitle: mval(root, 'subtitle').trim(), rotation: root.querySelector('[name="rotation"]').checked };
       if (isNew) {
         const nd = { id: uid('d_'), ...data, exercises: [] };
-        state.plan.days.push(nd);
+        prog().days.push(nd);
         ui.dayId = nd.id;
       } else Object.assign(day, data);
       persist(); closeModal(); render();
@@ -621,15 +686,60 @@ function editDayModal(dayId) {
     right: () => moveDay(dayId, 1),
     del: () => {
       if (!confirm(`¿Eliminar el día "${day.label}" y sus ejercicios del plan?`)) return;
-      state.plan.days = state.plan.days.filter(d => d.id !== dayId);
+      const pr = programOfDay(dayId);
+      pr.days = pr.days.filter(d => d.id !== dayId);
       delete state.drafts[dayId];
-      ui.dayId = state.plan.days[0].id;
+      ui.dayId = prog().days[0].id;
       persist(); closeModal(); render();
     }
   });
 }
+function editProgModal(progId) {
+  const isNew = !progId;
+  const p = isNew ? { name: '' } : state.plan.programs.find(x => x.id === progId);
+  openModal(`
+    <h3 class="modal-title">${isNew ? 'Nuevo bloque' : 'Editar bloque'}</h3>
+    <label class="lbl">Nombre del bloque<input class="field mt-1" name="name" maxlength="16" value="${esc(p.name)}" placeholder="TORSO-PIERNA" /></label>
+    ${isNew ? '<p class="text-[11px] text-mute">Se crea con un día vacío. Añade días con «＋ Día» y ejercicios con «＋ Añadir ejercicio».</p>' : `<p class="text-[11px] text-mute">${p.days.length} días: ${esc(p.days.map(d => d.label).join(' · '))}</p>`}
+    <div class="flex gap-2 mt-4">
+      ${!isNew ? `<button class="btn-ghost" data-mact="left" type="button" aria-label="Mover a la izquierda">◀</button><button class="btn-ghost" data-mact="right" type="button" aria-label="Mover a la derecha">▶</button>` : ''}
+      <button class="btn-primary flex-1" data-mact="save" type="button">Guardar</button>
+    </div>
+    ${!isNew && state.plan.programs.length > 1 ? `<button class="btn-danger w-full mt-3" data-mact="del" type="button">Eliminar este bloque</button><p class="text-[11px] text-mute mt-2">Eliminar un bloque no borra el historial de sesiones ya guardadas.</p>` : ''}
+  `, {
+    autofocus: isNew,
+    save: root => {
+      const name = mval(root, 'name').trim().toUpperCase();
+      if (!name) return toast('Ponle un nombre al bloque', 'warn');
+      if (isNew) {
+        const np = { id: uid('p_'), name, days: [normalizeDay({ id: uid('d_'), label: 'DÍA 1', title: `${name} · Día 1` })] };
+        state.plan.programs.push(np);
+        state.plan.active = np.id;
+        ui.dayId = np.days[0].id;
+      } else p.name = name;
+      persist(); closeModal(); render();
+    },
+    left: () => moveProg(progId, -1),
+    right: () => moveProg(progId, 1),
+    del: () => {
+      if (!confirm(`¿Eliminar el bloque "${p.name}" con todos sus días y ejercicios?`)) return;
+      for (const d of p.days) delete state.drafts[d.id];
+      state.plan.programs = state.plan.programs.filter(x => x.id !== progId);
+      if (state.plan.active === progId) state.plan.active = state.plan.programs[0].id;
+      ui.dayId = nextDayId();
+      persist(); closeModal(); render();
+    }
+  });
+}
+function moveProg(progId, dir) {
+  const arr = state.plan.programs; const i = arr.findIndex(p => p.id === progId); const j = i + dir;
+  if (j < 0 || j >= arr.length) return;
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  persist(); render(); toast('Orden cambiado');
+}
+
 function moveDay(dayId, dir) {
-  const arr = state.plan.days; const i = arr.findIndex(d => d.id === dayId); const j = i + dir;
+  const arr = programOfDay(dayId).days; const i = arr.findIndex(d => d.id === dayId); const j = i + dir;
   if (j < 0 || j >= arr.length) return;
   [arr[i], arr[j]] = [arr[j], arr[i]];
   persist(); render(); toast('Orden cambiado');
@@ -1086,19 +1196,23 @@ function renderSettings() {
   </section>
 
   <section class="card p-4 mt-3 space-y-3">
-    <h3 class="section-title">🗓️ Plan de entrenamiento</h3>
-    <div class="space-y-1.5">
-      ${state.plan.days.map(d => `<div class="flex items-center justify-between bg-ink rounded-xl border border-line px-3 py-2">
+    <h3 class="section-title">🗓️ Bloques de entrenamiento</h3>
+    ${state.plan.programs.map(p => `<div class="space-y-1.5">
+      <div class="flex items-center justify-between">
+        <div class="text-sm font-extrabold ${p.id === prog().id ? 'text-brand' : ''}">${esc(p.name)}${p.id === prog().id ? ' <span class="text-[10px] font-semibold">· activo</span>' : ''}</div>
+        <button class="iconbtn iconbtn-sm" data-act="editProgId" data-prog="${esc(p.id)}" type="button" aria-label="Editar bloque">✎</button>
+      </div>
+      ${p.days.map(d => `<div class="flex items-center justify-between bg-ink rounded-xl border border-line px-3 py-2">
         <div class="min-w-0"><div class="text-sm font-bold">${esc(d.label)} <span class="text-mute font-normal text-xs">· ${d.exercises.length} ejercicios${d.rotation ? '' : ' · fuera de rotación'}</span></div>
         <div class="text-[11px] text-mute truncate">${esc(d.title)}</div></div>
         <button class="iconbtn" data-act="editDayId" data-day="${esc(d.id)}" type="button" aria-label="Editar">✎</button>
       </div>`).join('')}
-    </div>
+    </div>`).join('')}
     <div class="grid grid-cols-2 gap-2">
-      <button class="btn-ghost" data-act="addDay" type="button">＋ Añadir día</button>
-      <button class="btn-ghost" data-act="resetPlan" type="button">Restaurar plan</button>
+      <button class="btn-ghost" data-act="addProg" type="button">＋ Añadir bloque</button>
+      <button class="btn-ghost" data-act="resetPlan" type="button">Restaurar bloques</button>
     </div>
-    <p class="text-[11px] text-mute">Los ejercicios se editan desde la pestaña Entreno con el botón ✎ de cada uno.</p>
+    <p class="text-[11px] text-mute">Los días se añaden desde Entreno con «＋ Día» (en el bloque activo) y los ejercicios con el botón ✎ de cada uno.</p>
   </section>
 
   <section class="card p-4 mt-3 space-y-3">
@@ -1255,6 +1369,10 @@ document.querySelectorAll('.navbtn').forEach(b => b.addEventListener('click', ()
 
 const actions = {
   pickDay: b => { ui.dayId = b.dataset.day; render(); window.scrollTo({ top: 0 }); },
+  pickProg: b => { state.plan.active = b.dataset.prog; ui.dayId = nextDayId(); persist(); render(); window.scrollTo({ top: 0 }); },
+  addProg: () => editProgModal(null),
+  editProg: () => editProgModal(prog().id),
+  editProgId: b => editProgModal(b.dataset.prog),
   addDay: () => editDayModal(null),
   editDay: () => editDayModal(currentDay().id),
   editDayId: b => editDayModal(b.dataset.day),
@@ -1337,7 +1455,7 @@ const actions = {
   },
   saveHabits: () => { state.settings.habits = $('#habitsTxt').value.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 8); persist(); render(); toast('Hábitos guardados ✓'); },
   resetPlan: () => {
-    if (!confirm('¿Restaurar el plan Push/Pull/Torso original? Perderás los ejercicios y días que hayas creado o editado (el historial se conserva).')) return;
+    if (!confirm('¿Restaurar los bloques originales (PPT y FULL BODY)? Perderás los bloques, días y ejercicios que hayas creado o editado (el historial se conserva).')) return;
     state.plan = clone(DEFAULT_PLAN); state.selectedVariants = {}; state.drafts = {}; ui.dayId = nextDayId();
     persist(); render(); toast('Plan restaurado');
   },
@@ -1352,7 +1470,7 @@ const actions = {
     if (!confirm('¿Borrar TODOS los datos de la app en este móvil? Esto no se puede deshacer.')) return;
     if (prompt('Escribe BORRAR para confirmar') !== 'BORRAR') return;
     const key = state.settings.apiKey;
-    state = defaultState(); state.settings.apiKey = key; ui.dayId = state.plan.days[0].id;
+    state = defaultState(); state.settings.apiKey = key; ui.dayId = nextDayId();
     persist(); render(); toast('Datos borrados');
   }
 };
