@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.1.0';
+const APP_VERSION = '4.2.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -160,6 +160,9 @@ function defaultSettings() {
 function defaultState() {
   return { version: 4, plan: clone(DEFAULT_PLAN), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], settings: defaultSettings(), drafts: {} };
 }
+const safeUrl = u => { const t = String(u || '').trim(); return /^https:\/\/[^\s"'<>]+$/i.test(t) ? t : ''; };
+const videoUrl = v => v.video || `https://www.youtube.com/results?search_query=${encodeURIComponent(v.name + ' técnica correcta')}`;
+
 function normalizeExercise(e) {
   const out = {
     id: e.id || uid('c_'), block: e.block || 'Ejercicio',
@@ -168,7 +171,7 @@ function normalizeExercise(e) {
     maxReps: clamp(parseInt(e.maxReps, 10) || 12, 1, 100),
     increment: num(e.increment) ?? 2,
     rest: clamp(parseInt(e.rest, 10) || 90, 10, 600),
-    variants: Array.isArray(e.variants) && e.variants.length ? e.variants.map(v => ({ name: String(v.name || 'Ejercicio'), note: String(v.note || '') })) : [{ name: 'Ejercicio', note: '' }]
+    variants: Array.isArray(e.variants) && e.variants.length ? e.variants.map(v => ({ name: String(v.name || 'Ejercicio'), note: String(v.note || ''), video: safeUrl(v.video) })) : [{ name: 'Ejercicio', note: '', video: '' }]
   };
   if (out.maxReps < out.minReps) out.maxReps = out.minReps;
   return out;
@@ -587,7 +590,10 @@ function renderExerciseCard(e, idx, day, d) {
         <button class="iconbtn" data-act="editEx" data-ex="${esc(e.id)}" type="button" aria-label="Editar ejercicio">✎</button>
       </div>
     </div>
-    ${variant.note ? `<p class="text-xs text-mute italic mt-2">${esc(variant.note)}</p>` : ''}
+    <div class="flex items-center justify-between gap-3 mt-2">
+      <p class="text-xs text-mute italic min-w-0">${esc(variant.note)}</p>
+      <a class="btn-video" href="${esc(videoUrl(variant))}" target="_blank" rel="noopener noreferrer" aria-label="Ver técnica en YouTube">▶ Técnica${variant.video ? '' : ' 🔎'}</a>
+    </div>
     <div class="coach ${tone.cls} mt-3">
       <div class="font-bold text-sm">${tone.icon} ${esc(c.title)}</div>
       <p class="text-xs mt-1 opacity-90 leading-relaxed">${esc(c.text)}</p>
@@ -798,13 +804,13 @@ function editExModal(exId) {
   const day = currentDay();
   const f = isNew ? null : findEx(exId);
   const e = isNew ? { block: '⚡ Personalizado', sets: 3, minReps: 8, maxReps: 12, increment: 2, rest: 90, variants: [] } : f.ex;
-  const variantsTxt = e.variants.map(v => v.note ? `${v.name} | ${v.note}` : v.name).join('\n');
+  const variantsTxt = e.variants.map(v => [v.name, v.note, v.video].filter((x, i) => i === 0 || x).join(' | ')).join('\n');
   openModal(`
     <h3 class="modal-title">${isNew ? 'Nuevo ejercicio' : 'Editar ejercicio'}</h3>
-    <label class="lbl">Variantes (una por línea · <span class="text-mute">Nombre | nota</span>)
-      <textarea class="field mt-1" name="variants" rows="3" placeholder="Curl femoral con mancuerna | Bajada lenta">${esc(variantsTxt)}</textarea>
+    <label class="lbl">Variantes (una por línea · <span class="text-mute">Nombre | nota | enlace de YouTube</span>)
+      <textarea class="field mt-1" name="variants" rows="3" placeholder="Curl femoral con mancuerna | Bajada lenta | https://youtu.be/…">${esc(variantsTxt)}</textarea>
     </label>
-    <p class="text-[11px] text-mute -mt-1">El historial va ligado a la posición de cada variante: añade las nuevas al final.</p>
+    <p class="text-[11px] text-mute -mt-1">Nota y enlace son opcionales. Sin enlace, «▶ Técnica 🔎» abre una búsqueda en YouTube del ejercicio. El historial va ligado a la posición de cada variante: añade las nuevas al final.</p>
     <label class="lbl">Bloque / etiqueta<input class="field mt-1" name="block" value="${esc(e.block)}" /></label>
     <div class="grid grid-cols-3 gap-2">
       <label class="lbl">Series<input class="field mt-1" name="sets" inputmode="numeric" value="${e.sets}" /></label>
@@ -822,7 +828,11 @@ function editExModal(exId) {
   `, {
     autofocus: isNew,
     save: root => {
-      const variants = mval(root, 'variants').split('\n').map(l => l.trim()).filter(Boolean).map(l => { const [name, ...rest] = l.split('|'); return { name: name.trim(), note: rest.join('|').trim() }; });
+      const variants = mval(root, 'variants').split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+        const [name, ...rest] = l.split('|').map(x => x.trim());
+        const video = rest.find(x => /^https?:\/\//i.test(x)) || '';
+        return { name, note: rest.filter(x => x !== video).join(' | '), video: safeUrl(video.replace(/^http:/i, 'https:')) };
+      });
       if (!variants.length) return toast('Escribe al menos el nombre del ejercicio', 'warn');
       const minReps = parseInt(mval(root, 'minReps'), 10), maxReps = parseInt(mval(root, 'maxReps'), 10);
       if (!(minReps > 0) || !(maxReps >= minReps)) return toast('Revisa el rango de reps (mín ≤ máx)', 'warn');
