@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.0.3';
+const APP_VERSION = '4.0.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -60,7 +60,10 @@ const PPT_DAYS = [
         mkEx('d3_arms', '💥 Superserie brazos', 3, 12, 15, 1, 60, [['Elevaciones + bíceps + tríceps', 'Giant set sin descanso.']]),
         mkEx('d3_spartan', '🛡️ Circuito espartano', 3, 10, 12, 2, 90, [['Zancadas con kettlebells + granjero + rueda', 'A tope de intensidad.']])
       ]
-    },
+    }
+];
+
+const FREE_DAYS = [
     {
       id: 'free', label: 'FREE', rotation: false,
       title: 'Día free · Entreno libre',
@@ -106,7 +109,8 @@ const DEFAULT_PLAN = {
   active: 'ppt',
   programs: [
     { id: 'ppt', name: 'PPT', days: PPT_DAYS },
-    { id: 'fullbody', name: 'FULL BODY', days: FULLBODY_DAYS }
+    { id: 'fullbody', name: 'FULL BODY', days: FULLBODY_DAYS },
+    { id: 'free', name: 'FREE', days: FREE_DAYS }
   ]
 };
 
@@ -165,8 +169,18 @@ function normalizePlan(plan) {
   if (plan && Array.isArray(plan.programs) && plan.programs.length) programs = plan.programs;
   else if (plan && Array.isArray(plan.days) && plan.days.length) {
     // plan antiguo (solo días): pasa a ser el bloque PPT y se añade FULL BODY
-    programs = [{ id: 'ppt', name: 'PPT', days: plan.days }, ...clone(DEFAULT_PLAN.programs.filter(p => p.id !== 'ppt'))];
+    programs = [{ id: 'ppt', name: 'PPT', days: plan.days }, ...clone(DEFAULT_PLAN.programs.filter(p => p.id !== 'ppt' && p.id !== 'free'))];
   } else programs = clone(DEFAULT_PLAN.programs);
+  // FREE va como bloque propio, no dentro de PPT
+  if (!programs.some(p => p.id === 'free')) {
+    let freeDay = null;
+    programs = programs.map(p => {
+      const fd = (p.days || []).find(d => d.id === 'free');
+      if (fd) freeDay = fd;
+      return fd ? { ...p, days: p.days.filter(d => d.id !== 'free') } : p;
+    });
+    programs.push({ id: 'free', name: 'FREE', days: [freeDay || clone(FREE_DAYS[0])] });
+  }
   programs = programs.map(p => ({ id: p.id || uid('p_'), name: String(p.name || 'BLOQUE').slice(0, 16), days: (p.days || []).map(normalizeDay) }));
   for (const p of programs) if (!p.days.length) p.days.push(normalizeDay({ label: 'DÍA 1', title: 'Día 1' }));
   const active = programs.some(p => p.id === plan?.active) ? plan.active : programs[0].id;
