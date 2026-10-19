@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.0.0';
+const APP_VERSION = '4.0.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -790,12 +790,13 @@ function renderDiet() {
         <div class="absolute bottom-0 inset-x-0 text-[10px] text-mute bg-ink/80 px-2 py-1">La foto no se guarda: solo se usa para estimar.</div>
       </div>` : ''}
     <div class="grid grid-cols-2 gap-2">
-      <button class="btn-ghost" data-act="photo" type="button">📸 ${ui.img ? 'Cambiar foto' : 'Foto'}</button>
-      <button class="btn-ghost" data-act="manualMeal" type="button">✍️ A mano</button>
+      <button class="btn-ghost" data-act="photo" type="button">📸 Cámara</button>
+      <button class="btn-ghost" data-act="gallery" type="button">🖼️ Galería</button>
     </div>
     <button class="btn-primary w-full" data-act="analyze" type="button" ${ui.aiBusy ? 'disabled' : ''}>
       ${ui.aiBusy ? '<span class="spinner"></span> Analizando…' : '⚡ Estimar macros con IA'}
     </button>
+    ${!ai ? `<p class="text-center"><button class="text-xs text-mute underline" data-act="manualMeal" type="button">o introduce los macros a mano</button></p>` : ''}
     ${!state.settings.apiKey ? `<p class="text-[11px] text-amber-300">Para usar la IA, pega tu clave de Gemini en <button class="underline" data-act="goSettings" type="button">Ajustes</button>.</p>` : ''}
     ${ai ? renderMealResult(ai) : ''}
   </section>
@@ -1277,6 +1278,7 @@ const actions = {
 
   mealType: b => { ui.mealType = b.dataset.type; render(); },
   photo: () => $('#mealPhotoInput').click(),
+  gallery: () => $('#mealGalleryInput').click(),
   clearImg: () => { ui.img = null; render(); },
   analyze: () => analyzeMeal(),
   manualMeal: () => { ui.aiResult = { desc: ui.mealDesc.trim() || ui.mealType, kcal: 0, prot: 0, carbs: 0, fat: 0, note: '' }; render(); },
@@ -1377,11 +1379,13 @@ app.addEventListener('change', e => {
 });
 app.addEventListener('focusin', e => { if (e.target.classList?.contains('field-set')) setTimeout(() => e.target.select?.(), 0); });
 
-$('#mealPhotoInput').addEventListener('change', async e => {
+async function onMealImage(e) {
   const f = e.target.files[0]; e.target.value = '';
   if (!f) return;
   try { ui.img = await compressImage(f); render(); } catch (err) { toast(err.message, 'error'); }
-});
+}
+$('#mealPhotoInput').addEventListener('change', onMealImage);
+$('#mealGalleryInput').addEventListener('change', onMealImage);
 $('#importInput').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) importBackup(f); });
 
 /* =========================================================================
