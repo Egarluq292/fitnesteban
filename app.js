@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.0.5';
+const APP_VERSION = '4.1.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -110,8 +110,24 @@ const DEFAULT_PLAN = {
   programs: [
     { id: 'ppt', name: 'PPT', days: PPT_DAYS },
     { id: 'fullbody', name: 'FULL BODY', days: FULLBODY_DAYS },
-    { id: 'free', name: 'FREE', days: FREE_DAYS }
+    { id: 'free', name: 'FREE', days: FREE_DAYS },
+    { id: 'cardio', name: 'CARDIO', icon: '🔥', type: 'cardio', days: [] }
   ]
+};
+
+/* Cardio: METs orientativos (Compendium of Physical Activities) por intensidad percibida */
+const INTENSITIES = [['baja', 'Baja'], ['media-baja', 'Media-baja'], ['media', 'Media'], ['media-alta', 'Media-alta'], ['alta', 'Alta']];
+const CARDIO_TYPES = {
+  bike: {
+    label: 'Bicicleta', icon: '🚴',
+    met: { baja: 3.5, 'media-baja': 4.8, media: 6.8, 'media-alta': 8.8, alta: 11 },
+    hint: { baja: 'Pedaleo suave, hablas sin esfuerzo', 'media-baja': 'Algo de esfuerzo, conversación fácil', media: 'Respiras fuerte, frases cortas', 'media-alta': 'Cuesta hablar, sudas bastante', alta: 'Casi sin poder hablar / HIIT' }
+  },
+  walk: {
+    label: 'Caminata', icon: '🚶',
+    met: { baja: 2.8, 'media-baja': 3, media: 3.5, 'media-alta': 4.3, alta: 5 },
+    hint: { baja: 'Paseo tranquilo (~3 km/h)', 'media-baja': 'Paseo normal (~4 km/h)', media: 'Paso ligero (~5 km/h)', 'media-alta': 'Paso rápido (~5,5 km/h)', alta: 'Muy rápido o con cuestas (~6,5 km/h)' }
+  }
 };
 
 /* ---------- Utilidades ---------- */
@@ -139,10 +155,10 @@ const isStandalone = () => window.matchMedia('(display-mode: standalone)').match
 
 /* ---------- Estado ---------- */
 function defaultSettings() {
-  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null };
+  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false };
 }
 function defaultState() {
-  return { version: 4, plan: clone(DEFAULT_PLAN), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, settings: defaultSettings(), drafts: {} };
+  return { version: 4, plan: clone(DEFAULT_PLAN), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], settings: defaultSettings(), drafts: {} };
 }
 function normalizeExercise(e) {
   const out = {
@@ -181,8 +197,13 @@ function normalizePlan(plan) {
     });
     programs.push({ id: 'free', name: 'FREE', days: [freeDay || clone(FREE_DAYS[0])] });
   }
-  programs = programs.map(p => ({ id: p.id || uid('p_'), name: String(p.name || 'BLOQUE').slice(0, 16), days: (p.days || []).map(normalizeDay) }));
-  for (const p of programs) if (!p.days.length) p.days.push(normalizeDay({ label: 'DÍA 1', title: 'Día 1' }));
+  if (!programs.some(p => p.type === 'cardio')) programs.push(clone(DEFAULT_PLAN.programs.find(p => p.type === 'cardio')));
+  programs = programs.map(p => ({
+    id: p.id || uid('p_'), name: String(p.name || 'BLOQUE').slice(0, 16), icon: p.icon || '',
+    type: p.type === 'cardio' ? 'cardio' : 'strength',
+    days: p.type === 'cardio' ? [] : (p.days || []).map(normalizeDay)
+  }));
+  for (const p of programs) if (p.type !== 'cardio' && !p.days.length) p.days.push(normalizeDay({ label: 'DÍA 1', title: 'Día 1' }));
   const active = programs.some(p => p.id === plan?.active) ? plan.active : programs[0].id;
   return { active, programs };
 }
@@ -193,7 +214,7 @@ function normalize(s) {
   if (!Array.isArray(out.settings.habits)) out.settings.habits = [...DEFAULT_HABITS];
   out.plan = normalizePlan(out.plan);
   for (const k of ['selectedVariants', 'memory', 'meals', 'drafts']) if (!out[k] || typeof out[k] !== 'object' || Array.isArray(out[k])) out[k] = {};
-  for (const k of ['sessions', 'bodyMetrics']) if (!Array.isArray(out[k])) out[k] = [];
+  for (const k of ['sessions', 'bodyMetrics', 'cardio']) if (!Array.isArray(out[k])) out[k] = [];
   out.version = 4;
   return out;
 }
@@ -291,7 +312,8 @@ const ui = {
   aiBusy: false,
   aiResult: null,
   progEx: null,
-  showKey: false
+  showKey: false,
+  cardio: { type: 'bike', minutes: '', intensity: 'media', date: todayISO(), weight: '', est: null, busy: false }
 };
 function guessMealType() {
   const h = new Date().getHours();
@@ -443,6 +465,7 @@ function cellValue(d, key, i, field, c) {
   return '';
 }
 function nextDayId() {
+  if (!prog().days.length) return null;
   const rot = prog().days.filter(d => d.rotation && d.exercises.length);
   if (!rot.length) return prog().days[0].id;
   const ss = sortedSessions();
@@ -456,7 +479,18 @@ function nextDayId() {
   return rot[0].id;
 }
 
+function progLabel(p) { return `${p.icon ? p.icon + ' ' : ''}${esc(p.name)}`; }
+function renderProgHeader() {
+  const progRow = state.plan.programs.map(p => `<button class="prog ${p.id === prog().id ? 'prog-on' : ''}" data-act="pickProg" data-prog="${esc(p.id)}" type="button">${progLabel(p)}</button>`).join('')
+    + `<button class="prog prog-add" data-act="addProg" type="button" aria-label="Añadir bloque">＋ Bloque</button>`;
+  return `<div class="flex items-center gap-2 -mx-4 px-4 mb-2.5">
+    <div class="chips-row flex-1">${progRow}</div>
+    <button class="iconbtn iconbtn-sm shrink-0" data-act="editProg" type="button" aria-label="Editar bloque">✎</button>
+  </div>`;
+}
+
 function renderTrain() {
+  if (prog().type === 'cardio') return renderProgHeader() + renderCardio();
   const day = currentDay();
   const d = draftOf(day.id);
   const next = nextDayId();
@@ -478,14 +512,8 @@ function renderTrain() {
       <span>${esc(h)}</span>
     </label>`).join('');
 
-  const progRow = state.plan.programs.map(p => `<button class="prog ${p.id === prog().id ? 'prog-on' : ''}" data-act="pickProg" data-prog="${esc(p.id)}" type="button">${esc(p.name)}</button>`).join('')
-    + `<button class="prog prog-add" data-act="addProg" type="button" aria-label="Añadir bloque">＋ Bloque</button>`;
-
   return `
-  <div class="flex items-center gap-2 -mx-4 px-4 mb-2.5">
-    <div class="chips-row flex-1">${progRow}</div>
-    <button class="iconbtn iconbtn-sm shrink-0" data-act="editProg" type="button" aria-label="Editar bloque">✎</button>
-  </div>
+  ${renderProgHeader()}
   <div class="chips-row -mx-4 px-4">${chips}</div>
 
   <section class="card p-4 mt-3">
@@ -572,6 +600,12 @@ function renderExerciseCard(e, idx, day, d) {
       <button class="btn-mini text-emerald-300" data-act="setCount" data-key="${esc(key)}" data-ex="${esc(e.id)}" data-delta="1" type="button">+ Serie</button>
     </div>
   </article>`;
+}
+
+function keepCardioInputs() {
+  const m = $('#cdMin'); if (m) ui.cardio.minutes = m.value;
+  const d = $('#cdDate'); if (d) ui.cardio.date = d.value || todayISO();
+  const w = $('#cdWeight'); if (w) ui.cardio.weight = w.value;
 }
 
 function findEx(exId) {
@@ -714,12 +748,12 @@ function editProgModal(progId) {
   openModal(`
     <h3 class="modal-title">${isNew ? 'Nuevo bloque' : 'Editar bloque'}</h3>
     <label class="lbl">Nombre del bloque<input class="field mt-1" name="name" maxlength="16" value="${esc(p.name)}" placeholder="TORSO-PIERNA" /></label>
-    ${isNew ? '<p class="text-[11px] text-mute">Se crea con un día vacío. Añade días con «＋ Día» y ejercicios con «＋ Añadir ejercicio».</p>' : `<p class="text-[11px] text-mute">${p.days.length} días: ${esc(p.days.map(d => d.label).join(' · '))}</p>`}
+    ${!isNew && p.type === 'cardio' ? '<p class="text-[11px] text-mute">Bloque de cardio: registra bicicleta y caminata. Se puede renombrar, no eliminar.</p>' : isNew ? '<p class="text-[11px] text-mute">Se crea con un día vacío. Añade días con «＋ Día» y ejercicios con «＋ Añadir ejercicio».</p>' : `<p class="text-[11px] text-mute">${p.days.length} días: ${esc(p.days.map(d => d.label).join(' · '))}</p>`}
     <div class="flex gap-2 mt-4">
       ${!isNew ? `<button class="btn-ghost" data-mact="left" type="button" aria-label="Mover a la izquierda">◀</button><button class="btn-ghost" data-mact="right" type="button" aria-label="Mover a la derecha">▶</button>` : ''}
       <button class="btn-primary flex-1" data-mact="save" type="button">Guardar</button>
     </div>
-    ${!isNew && state.plan.programs.length > 1 ? `<button class="btn-danger w-full mt-3" data-mact="del" type="button">Eliminar este bloque</button><p class="text-[11px] text-mute mt-2">Eliminar un bloque no borra el historial de sesiones ya guardadas.</p>` : ''}
+    ${!isNew && p.type !== 'cardio' && state.plan.programs.length > 1 ? `<button class="btn-danger w-full mt-3" data-mact="del" type="button">Eliminar este bloque</button><p class="text-[11px] text-mute mt-2">Eliminar un bloque no borra el historial de sesiones ya guardadas.</p>` : ''}
   `, {
     autofocus: isNew,
     save: root => {
@@ -819,6 +853,116 @@ function moveEx(exId, dir) {
 }
 
 /* =========================================================================
+   CARDIO
+   ========================================================================= */
+function latestWeight() {
+  const w = [...state.bodyMetrics].filter(m => m.weight !== null).sort((a, b) => (a.date < b.date ? -1 : 1)).pop();
+  return w ? w.weight : null;
+}
+function metKcal(type, intensity, minutes, kg) {
+  const met = CARDIO_TYPES[type]?.met[intensity] ?? 3.5;
+  return Math.max(0, Math.round((met - 1) * kg * minutes / 60)); // netas: descontado el gasto en reposo
+}
+function cardioOf(date) { return state.cardio.filter(c => c.date === date); }
+function burnedOf(date) { return cardioOf(date).reduce((a, c) => a + (c.kcal || 0), 0); }
+
+function renderCardio() {
+  const c = ui.cardio;
+  const T = CARDIO_TYPES[c.type];
+  const w = latestWeight();
+  const today = todayISO();
+  const dayMin = cardioOf(c.date).reduce((a, x) => a + x.minutes, 0);
+  const recent = [...state.cardio].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).slice(0, 12);
+  const est = c.est;
+  return `
+  <section class="card p-4 mt-1 space-y-3">
+    <h2 class="font-extrabold text-lg">🔥 Registrar cardio</h2>
+    <label class="lbl">Fecha<input class="field mt-1 px-2" type="date" id="cdDate" value="${c.date}" max="${today}" /></label>
+    <div class="grid grid-cols-2 gap-2">
+      ${Object.entries(CARDIO_TYPES).map(([k, v]) => `<button class="cardio-type ${c.type === k ? 'cardio-type-on' : ''}" data-act="cdType" data-type="${k}" type="button"><span class="text-2xl">${v.icon}</span><span>${v.label}</span></button>`).join('')}
+    </div>
+    <label class="lbl">Minutos<input class="field mt-1 text-lg" id="cdMin" inputmode="numeric" value="${esc(c.minutes)}" placeholder="Ej: 30" /></label>
+    <div>
+      <div class="lbl mb-1.5">Intensidad</div>
+      <div class="flex flex-wrap gap-1.5">${INTENSITIES.map(([k, l]) => `<button class="chip chip-sm ${c.intensity === k ? 'chip-on' : ''}" data-act="cdInt" data-int="${k}" type="button">${l}</button>`).join('')}</div>
+      <p class="text-[11px] text-mute mt-2">${esc(T.hint[c.intensity])}</p>
+    </div>
+    ${w ? `<p class="text-[11px] text-mute">Se calcula con tu último peso registrado: <strong class="text-white">${fmtKg(w)}</strong>.</p>`
+        : `<label class="lbl">Tu peso (kg)<input class="field mt-1" id="cdWeight" inputmode="decimal" value="${esc(c.weight)}" placeholder="Ej: 84" /></label>`}
+    ${!est ? `<button class="btn-primary w-full" data-act="cdEstimate" type="button" ${c.busy ? 'disabled' : ''}>${c.busy ? '<span class="spinner"></span> Calculando…' : '⚡ Calcular calorías con IA'}</button>` : `
+    <div class="border-t border-line pt-3 space-y-3">
+      <div class="text-xs text-mute bg-ink rounded-xl p-2.5 border border-line leading-relaxed">${est.ai ? '🤖 ' : '📐 '}${esc(est.note)}</div>
+      <label class="lbl text-amber-300">Calorías quemadas (netas)<input class="field mt-1 text-center text-xl font-black" id="cdKcal" inputmode="numeric" value="${est.kcal}" /></label>
+      ${est.warn ? `<p class="text-[11px] text-amber-300">${esc(est.warn)}</p>` : ''}
+      <div class="grid grid-cols-3 gap-2">
+        <button class="btn-ghost" data-act="cdCancel" type="button">Cancelar</button>
+        <button class="btn-primary col-span-2" data-act="cdSave" type="button">✅ Registrar</button>
+      </div>
+    </div>`}
+  </section>
+
+  <section class="card p-4 mt-3">
+    <div class="flex items-center justify-between">
+      <h3 class="section-title">${c.date === today ? 'Hoy' : esc(fmtDate(c.date))}</h3>
+      <span class="text-xs text-mute">${dayMin} min · <strong class="text-amber-300">${burnedOf(c.date)} kcal</strong></span>
+    </div>
+    <p class="text-[11px] text-mute mt-1">Estas calorías aparecen también en la pestaña Dieta de ese día.</p>
+    <div class="space-y-1.5 mt-3">
+      ${recent.map(x => `<div class="meal">
+        <span class="text-xl">${CARDIO_TYPES[x.type]?.icon || '🔥'}</span>
+        <div class="min-w-0 flex-1">
+          <div class="text-sm font-semibold">${esc(CARDIO_TYPES[x.type]?.label || 'Cardio')} · ${x.minutes} min · ${esc((INTENSITIES.find(i => i[0] === x.intensity) || ['', x.intensity])[1])}</div>
+          <div class="text-[11px] text-mute">${esc(fmtDate(x.date))} · <span class="text-amber-300">${x.kcal} kcal</span>${x.ai ? ' · IA' : ''}</div>
+        </div>
+        <button class="iconbtn iconbtn-sm" data-act="cdDel" data-id="${esc(x.id)}" type="button" aria-label="Borrar">✕</button>
+      </div>`).join('') || '<p class="text-sm text-mute">Aún no has registrado cardio.</p>'}
+    </div>
+  </section>`;
+}
+
+async function estimateCardio() {
+  const c = ui.cardio;
+  keepCardioInputs();
+  const minutes = parseInt(c.minutes, 10);
+  if (!(minutes > 0 && minutes <= 600)) return toast('Pon los minutos (1–600)', 'warn');
+  let kg = latestWeight();
+  if (!kg) {
+    kg = num(c.weight);
+    if (!(kg >= 30 && kg <= 300)) return toast('Indica tu peso para calcularlo', 'warn');
+  }
+  const T = CARDIO_TYPES[c.type];
+  const ref = metKcal(c.type, c.intensity, minutes, kg);
+  const intLabel = INTENSITIES.find(i => i[0] === c.intensity)[1].toLowerCase();
+  if (!state.settings.apiKey || !navigator.onLine) {
+    c.est = { kcal: ref, ai: false, note: `Cálculo estándar (MET ${fmtNum(T.met[c.intensity])}): ${T.label.toLowerCase()} ${minutes} min a intensidad ${intLabel} con ${fmtKg(kg)}.${!state.settings.apiKey ? ' Sin clave de IA configurada.' : ' Sin conexión.'}` };
+    return render();
+  }
+  c.busy = true; render();
+  try {
+    const prompt = `Eres fisiólogo del ejercicio. Estima las calorías NETAS (por encima del gasto en reposo) que ha quemado esta persona.
+Actividad: ${T.label} (${c.type === 'bike' ? 'bicicleta estática o exterior' : 'caminar'}).
+Duración: ${minutes} minutos.
+Intensidad percibida: ${intLabel} (escala: baja, media-baja, media, media-alta, alta). Descripción: ${T.hint[c.intensity]}.
+Peso corporal: ${kg} kg. Hombre adulto.
+Sé conservador: relojes y máquinas suelen sobrestimar.
+Responde SOLO con JSON válido: {"kcal": número entero, "explanation": "una frase breve con el razonamiento"}`;
+    const r = parseJSONLoose(await callGemini([{ text: prompt }], { timeout: 30000 }));
+    const k = Math.round(num(r.kcal) || 0);
+    if (!(k > 0)) throw new Error('respuesta sin calorías');
+    const dev = ref ? Math.abs(k - ref) / ref : 0;
+    c.est = {
+      kcal: k, ai: true,
+      note: `${r.explanation || 'Estimación de la IA.'} Referencia estándar (MET): ${ref} kcal.`,
+      warn: dev > 0.35 ? `La IA se aleja un ${Math.round(dev * 100)} % del cálculo estándar (${ref} kcal). Revisa el número antes de registrar.` : ''
+    };
+  } catch (e) {
+    c.est = { kcal: ref, ai: false, note: `La IA no respondió (${e.message}). Uso el cálculo estándar (MET ${fmtNum(T.met[c.intensity])}).` };
+  } finally {
+    c.busy = false; render();
+  }
+}
+
+/* =========================================================================
    DIETA
    ========================================================================= */
 function mealsOf(date) { return state.meals[date] || []; }
@@ -850,14 +994,17 @@ function renderDiet() {
   const isToday = date === todayISO();
   const st = state.settings;
   const t = totalsOf(date);
-  const leftK = Math.round(st.targetKcal - t.kcal);
+  const burned = burnedOf(date);
+  const budget = st.targetKcal + (st.eatBackCardio ? burned : 0);
+  const leftK = Math.round(budget - t.kcal);
   const leftP = Math.round(st.targetProt - t.prot);
+  const cardioTxt = burned ? ` Con cardio has quemado ${burned} kcal (balance neto ${Math.round(t.kcal - burned)} kcal)${st.eatBackCardio ? ', ya sumadas a tu margen' : ', que no se suman a tu margen: así el déficit es real'}.` : '';
   let advice;
-  if (!mealsOf(date).length) advice = isToday ? 'Aún no has registrado nada hoy.' : 'Sin registros este día.';
-  else if (leftP > 0 && leftK > 0) advice = `Te quedan ${leftK} kcal y ${leftP} g de proteína. Prioriza la proteína: ${leftP > 40 ? 'pavo, claras, atún o un batido' : 'un yogur proteico basta'}.`;
-  else if (leftP > 0) advice = `Calorías cubiertas pero faltan ${leftP} g de proteína: tira de fuentes magras (claras, atún, batido con agua).`;
-  else if (leftK >= 0) advice = `Proteína cumplida ✓. Margen: ${leftK} kcal.`;
-  else advice = `Te has pasado ${-leftK} kcal. Sin drama: mañana vuelve a tu objetivo, no compenses de más.`;
+  if (!mealsOf(date).length) advice = (isToday ? 'Aún no has registrado comida hoy.' : 'Sin comidas registradas este día.') + cardioTxt;
+  else if (leftP > 0 && leftK > 0) advice = `Llevas ${Math.round(t.kcal)} kcal y ${Math.round(t.prot)} g de proteína consumidas.${cardioTxt} Te quedan ${leftK} kcal y ${leftP} g de proteína. Prioriza la proteína: ${leftP > 40 ? 'pavo, claras, atún o un batido' : 'un yogur proteico basta'}.`;
+  else if (leftP > 0) advice = `Llevas ${Math.round(t.kcal)} kcal consumidas.${cardioTxt} Calorías cubiertas pero faltan ${leftP} g de proteína: tira de fuentes magras (claras, atún, batido con agua).`;
+  else if (leftK >= 0) advice = `Llevas ${Math.round(t.kcal)} kcal consumidas.${cardioTxt} Proteína cumplida ✓. Margen: ${leftK} kcal.`;
+  else advice = `Llevas ${Math.round(t.kcal)} kcal consumidas.${cardioTxt} Te has pasado ${-leftK} kcal. Sin drama: mañana vuelve a tu objetivo, no compenses de más.`;
 
   const typeChips = MEAL_TYPES.map(tp => `<button class="chip chip-sm ${ui.mealType === tp ? 'chip-on' : ''}" data-act="mealType" data-type="${tp}" type="button">${tp}</button>`).join('');
   const recents = recentMeals();
@@ -891,15 +1038,20 @@ function renderDiet() {
   <section class="card p-4 mt-3">
     <div class="flex items-end justify-between">
       <div><div class="text-[11px] text-mute font-bold uppercase tracking-wider">Calorías</div>
-        <div class="text-3xl font-black">${Math.round(t.kcal)}<span class="text-sm text-mute font-semibold"> / ${st.targetKcal}</span></div></div>
+        <div class="text-3xl font-black">${Math.round(t.kcal)}<span class="text-sm text-mute font-semibold"> / ${budget}</span></div></div>
       <div class="text-right"><div class="text-[11px] text-mute font-bold uppercase tracking-wider">Proteína</div>
         <div class="text-3xl font-black text-brand">${Math.round(t.prot)}<span class="text-sm text-mute font-semibold"> / ${st.targetProt} g</span></div></div>
     </div>
     <div class="space-y-2.5 mt-4">
       ${bar('Proteína', t.prot, st.targetProt, { text: 'text-brand', bg: 'bg-brand' })}
-      ${bar('Calorías', t.kcal, st.targetKcal, { text: 'text-amber-300', bg: 'bg-amber-400' })}
+      ${bar(st.eatBackCardio && burned ? 'Calorías (+cardio)' : 'Calorías', t.kcal, budget, { text: 'text-amber-300', bg: 'bg-amber-400' })}
       ${bar('Carbohidratos', t.carbs, st.targetCarbs, { text: 'text-emerald-300', bg: 'bg-emerald-400' })}
       ${bar('Grasas', t.fat, st.targetFat, { text: 'text-rose-300', bg: 'bg-rose-400' })}
+    </div>
+    <div class="grid grid-cols-3 gap-2 mt-4 text-center">
+      <div class="bg-ink rounded-xl border border-line py-2"><div class="text-[10px] text-mute font-bold uppercase">Consumidas</div><div class="font-black">${Math.round(t.kcal)}</div></div>
+      <div class="bg-ink rounded-xl border border-line py-2"><div class="text-[10px] text-mute font-bold uppercase">🔥 Cardio</div><div class="font-black text-amber-300">${burned ? '−' + burned : '0'}</div></div>
+      <div class="bg-ink rounded-xl border border-line py-2"><div class="text-[10px] text-mute font-bold uppercase">Neto</div><div class="font-black">${Math.round(t.kcal - burned)}</div></div>
     </div>
     <p class="text-xs text-mute mt-3 leading-relaxed">${esc(advice)}</p>
   </section>
@@ -1206,6 +1358,7 @@ function renderSettings() {
       <label class="lbl">Grasa g<input class="field mt-1 text-center" id="tF" inputmode="numeric" value="${st.targetFat}" /></label>
     </div>
     <p class="text-[11px] ${Math.abs(sumK - st.targetKcal) > st.targetKcal * 0.05 ? 'text-amber-300' : 'text-mute'}">Tus macros suman ${sumK} kcal (objetivo ${st.targetKcal}).</p>
+    <label class="habit"><input type="checkbox" id="tEat" ${st.eatBackCardio ? 'checked' : ''} /><span class="text-xs">Sumar las calorías del cardio a lo que puedo comer <span class="text-mute">(desactivado = déficit más fiable)</span></span></label>
     <button class="btn-primary w-full" data-act="saveGoals" type="button">Guardar objetivos</button>
   </section>
 
@@ -1213,9 +1366,10 @@ function renderSettings() {
     <h3 class="section-title">🗓️ Bloques de entrenamiento</h3>
     ${state.plan.programs.map(p => `<div class="space-y-1.5">
       <div class="flex items-center justify-between">
-        <div class="text-sm font-extrabold ${p.id === prog().id ? 'text-brand' : ''}">${esc(p.name)}${p.id === prog().id ? ' <span class="text-[10px] font-semibold">· activo</span>' : ''}</div>
+        <div class="text-sm font-extrabold ${p.id === prog().id ? 'text-brand' : ''}">${progLabel(p)}${p.id === prog().id ? ' <span class="text-[10px] font-semibold">· activo</span>' : ''}</div>
         <button class="iconbtn iconbtn-sm" data-act="editProgId" data-prog="${esc(p.id)}" type="button" aria-label="Editar bloque">✎</button>
       </div>
+      ${p.type === 'cardio' ? '<p class="text-[11px] text-mute bg-ink rounded-xl border border-line px-3 py-2">Bicicleta y caminata con estimación de calorías.</p>' : ''}
       ${p.days.map(d => `<div class="flex items-center justify-between bg-ink rounded-xl border border-line px-3 py-2">
         <div class="min-w-0"><div class="text-sm font-bold">${esc(d.label)} <span class="text-mute font-normal text-xs">· ${d.exercises.length} ejercicios${d.rotation ? '' : ' · fuera de rotación'}</span></div>
         <div class="text-[11px] text-mute truncate">${esc(d.title)}</div></div>
@@ -1387,6 +1541,20 @@ const actions = {
   addProg: () => editProgModal(null),
   editProg: () => editProgModal(prog().id),
   editProgId: b => editProgModal(b.dataset.prog),
+  cdType: b => { keepCardioInputs(); ui.cardio.type = b.dataset.type; ui.cardio.est = null; render(); },
+  cdInt: b => { keepCardioInputs(); ui.cardio.intensity = b.dataset.int; ui.cardio.est = null; render(); },
+  cdEstimate: () => estimateCardio(),
+  cdCancel: () => { ui.cardio.est = null; render(); },
+  cdSave: () => {
+    const c = ui.cardio;
+    const k = Math.round(num($('#cdKcal').value) ?? -1);
+    if (!(k >= 0 && k <= 5000)) return toast('Revisa las calorías', 'warn');
+    state.cardio.push({ id: uid('k_'), date: c.date, type: c.type, minutes: parseInt(c.minutes, 10), intensity: c.intensity, kcal: k, ai: !!c.est?.ai });
+    persist();
+    c.est = null; c.minutes = '';
+    render(); toast(`Cardio registrado: ${k} kcal ✓`);
+  },
+  cdDel: b => { if (!confirm('¿Borrar este registro de cardio?')) return; state.cardio = state.cardio.filter(x => x.id !== b.dataset.id); persist(); render(); },
   addDay: () => editDayModal(null),
   editDay: () => editDayModal(currentDay().id),
   editDayId: b => editDayModal(b.dataset.day),
@@ -1465,6 +1633,7 @@ const actions = {
     const v = id => parseInt($(id).value, 10);
     const g = { targetKcal: v('#tK'), targetProt: v('#tP'), targetCarbs: v('#tC'), targetFat: v('#tF') };
     if (Object.values(g).some(x => !(x > 0))) return toast('Revisa los objetivos', 'warn');
+    g.eatBackCardio = $('#tEat').checked;
     Object.assign(state.settings, g); persist(); render(); toast('Objetivos guardados ✓');
   },
   saveHabits: () => { state.settings.habits = $('#habitsTxt').value.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 8); persist(); render(); toast('Hábitos guardados ✓'); },
@@ -1508,6 +1677,7 @@ app.addEventListener('change', e => {
     const h = state.settings.habits[parseInt(t.dataset.habit, 10)];
     draftOf(currentDay().id).habits[h] = t.checked; persist();
   } else if (t.dataset.actChange === 'progEx') { ui.progEx = t.value; render(); }
+  else if (t.id === 'cdDate') { keepCardioInputs(); ui.cardio.est = null; render(); }
 });
 app.addEventListener('focusin', e => { if (e.target.classList?.contains('field-set')) setTimeout(() => e.target.select?.(), 0); });
 
