@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.8.2';
+const APP_VERSION = '4.9.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -322,6 +322,8 @@ const ui = {
   reportBusy: false,
   driveBusy: false,
   mealSearch: '',
+  calMonth: '',
+  calSel: '',
   cardio: { type: 'bike', minutes: '', intensity: 'media', date: todayISO(), weight: '', est: null, busy: false }
 };
 function guessMealType() {
@@ -1265,6 +1267,108 @@ function bar(label, val, target, color) {
   </div>`;
 }
 
+/* ---------- Calendario mensual (Dieta + entreno + cardio) ---------- */
+const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+function dietStatus(date) {
+  if (!mealsOf(date).length) return null;
+  const st = state.settings, t = totalsOf(date);
+  const budget = st.targetKcal + (st.eatBackCardio ? burnedOf(date) : 0);
+  const protOk = t.prot >= st.targetProt * 0.9;
+  if (t.kcal > budget * 1.2) return { c: 'red', label: 'Bastante pasado de calorías' };
+  if (t.kcal > budget * 1.1 || !protOk) return { c: 'amber', label: t.kcal > budget * 1.1 ? 'Algo pasado de calorías' : 'Proteína corta' };
+  return { c: 'green', label: 'Dentro del objetivo' };
+}
+const DOT = { green: 'bg-emerald-400', amber: 'bg-amber-400', red: 'bg-rose-500' };
+function dayActivity(date) {
+  return { sessions: sortedSessions().filter(s => s.date === date && s.exercises.length), cardio: state.cardio.filter(c => c.date === date) };
+}
+function renderCalendar() {
+  const m0 = ui.calMonth;
+  const first = parseISO(m0);
+  const y = first.getFullYear(), mo = first.getMonth();
+  const days = new Date(y, mo + 1, 0).getDate();
+  const lead = (first.getDay() + 6) % 7;
+  const today = todayISO();
+  let logged = 0, green = 0, sess = 0, cmin = 0;
+  const cells = [];
+  for (let i = 0; i < lead; i++) cells.push('<div></div>');
+  for (let d = 1; d <= days; d++) {
+    const iso = toISO(new Date(y, mo, d));
+    const future = iso > today;
+    const ds = dietStatus(iso), act = dayActivity(iso);
+    if (ds) { logged++; if (ds.c === 'green') green++; }
+    sess += act.sessions.length; cmin += act.cardio.reduce((a, c) => a + c.minutes, 0);
+    const sel = iso === ui.calSel;
+    cells.push(`<button class="cal-day ${sel ? 'cal-sel' : ''} ${iso === today ? 'cal-today' : ''} ${future ? 'opacity-25 pointer-events-none' : ''}" data-mact="calDay" data-d="${iso}" type="button">
+      <span class="text-xs font-bold">${d}</span>
+      <span class="flex items-center gap-0.5 h-3 text-[9px] leading-none">
+        ${ds ? `<span class="w-1.5 h-1.5 rounded-full ${DOT[ds.c]}"></span>` : ''}${act.sessions.length ? '🏋️' : ''}${act.cardio.length ? '🔥' : ''}
+      </span>
+    </button>`);
+  }
+  const prevOk = true, nextOk = toISO(new Date(y, mo + 1, 1)) <= today;
+  return `
+    <div class="flex items-center justify-between">
+      <button class="iconbtn" data-mact="calPrev" type="button" aria-label="Mes anterior" ${prevOk ? '' : 'disabled'}>‹</button>
+      <div class="text-center"><div class="font-extrabold capitalize">${MONTHS[mo]} ${y}</div>
+        <div class="text-[11px] text-mute whitespace-nowrap">🍽️ ${logged} · <span class="text-emerald-300">● ${green}</span> · 🏋️ ${sess} · 🔥 ${cmin}′</div></div>
+      <button class="iconbtn ${nextOk ? '' : 'opacity-30 pointer-events-none'}" data-mact="calNext" type="button" aria-label="Mes siguiente">›</button>
+    </div>
+    <div class="grid grid-cols-7 gap-1 text-center text-[10px] text-mute font-bold mt-3">${['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(x => `<div>${x}</div>`).join('')}</div>
+    <div class="grid grid-cols-7 gap-1 mt-1">${cells.join('')}</div>
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-mute mt-2">
+      <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>dieta bien</span>
+      <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>regular</span>
+      <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>pasado</span>
+      <span>🏋️ pesas</span><span>🔥 cardio</span>
+    </div>
+    ${renderCalDetail(ui.calSel)}
+    <div class="grid grid-cols-2 gap-2 mt-1">
+      <button class="btn-ghost" data-mact="calToday" type="button">Hoy</button>
+      <button class="btn-ghost" data-close type="button">Cerrar</button>
+    </div>`;
+}
+function renderCalDetail(date) {
+  if (!date) return '';
+  const ds = dietStatus(date), t = totalsOf(date), act = dayActivity(date), st = state.settings;
+  const nMeals = mealsOf(date).length;
+  return `<div class="bg-ink rounded-xl border border-line p-3 mt-3 space-y-2.5">
+    <div class="font-extrabold text-sm capitalize">${esc(fmtDate(date))}</div>
+    <div>
+      <div class="text-[11px] font-bold uppercase tracking-wider text-brand">🍽️ Dieta</div>
+      ${nMeals ? `<div class="text-xs mt-0.5 flex items-center gap-1.5">${ds ? `<span class="w-2 h-2 rounded-full ${DOT[ds.c]}"></span>` : ''}<span>${Math.round(t.kcal)} / ${st.targetKcal} kcal · 🥩 ${Math.round(t.prot)} / ${st.targetProt} g · ${nMeals} ${nMeals === 1 ? 'comida' : 'comidas'}</span></div>
+        <div class="text-[11px] text-mute">${esc(ds?.label || '')}</div>`
+        : '<div class="text-xs text-mute mt-0.5">Sin comidas registradas.</div>'}
+    </div>
+    <div>
+      <div class="text-[11px] font-bold uppercase tracking-wider text-brand">🏋️ Entreno</div>
+      ${act.sessions.length ? act.sessions.map(s => `<div class="mt-1">
+          <div class="text-xs font-semibold">${esc(s.dayTitle || 'Sesión')}${s.deload ? ' · 🔋 descarga' : ''}</div>
+          ${s.exercises.map(e => `<div class="text-[11px] text-mute leading-snug">· ${esc(e.name)}: <span class="font-mono">${e.sets.map(x => `${fmtNum(x.w)}×${x.r}`).join(' · ')}</span></div>`).join('')}
+        </div>`).join('') : '<div class="text-xs text-mute mt-0.5">Sin entreno de fuerza.</div>'}
+    </div>
+    <div>
+      <div class="text-[11px] font-bold uppercase tracking-wider text-brand">🔥 Cardio</div>
+      ${act.cardio.length ? act.cardio.map(c => `<div class="text-xs mt-0.5">${CARDIO_TYPES[c.type]?.icon || '🔥'} ${esc(CARDIO_TYPES[c.type]?.label || 'Cardio')} · ${c.minutes} min · ${esc((INTENSITIES.find(i => i[0] === c.intensity) || ['', c.intensity])[1])} · <span class="text-amber-300">${c.kcal} kcal</span></div>`).join('') : '<div class="text-xs text-mute mt-0.5">Sin cardio.</div>'}
+    </div>
+    <button class="btn-primary w-full py-2.5" data-mact="calGo" type="button">🍽️ Ver comidas de este día</button>
+  </div>`;
+}
+function openCalendar() {
+  ui.calSel = ui.dietDate;
+  ui.calMonth = ui.dietDate.slice(0, 8) + '01';
+  const reopen = () => openModal(renderCalendar(), handlers);
+  const shift = n => { const d = parseISO(ui.calMonth); ui.calMonth = toISO(new Date(d.getFullYear(), d.getMonth() + n, 1)); reopen(); };
+  const handlers = {
+    calPrev: () => shift(-1),
+    calNext: () => shift(1),
+    calDay: (root, b) => { ui.calSel = b.dataset.d; reopen(); },
+    calToday: () => { ui.calSel = todayISO(); ui.calMonth = todayISO().slice(0, 8) + '01'; reopen(); },
+    calGo: () => { ui.editing = null; ui.aiResult = null; ui.dietDate = ui.calSel; closeModal(); render(); window.scrollTo({ top: 0 }); }
+  };
+  reopen();
+}
+
 function renderDiet() {
   const date = ui.dietDate;
   const isToday = date === todayISO();
@@ -1305,10 +1409,10 @@ function renderDiet() {
   return `
   <div class="flex items-center justify-between">
     <button class="iconbtn" data-act="dietPrev" type="button" aria-label="Día anterior">‹</button>
-    <div class="text-center">
-      <div class="font-extrabold">${isToday ? 'Hoy' : esc(fmtDate(date))}</div>
+    <button class="text-center px-3 py-1 rounded-xl active:bg-panel" data-act="openCal" type="button" aria-label="Abrir calendario">
+      <div class="font-extrabold flex items-center justify-center gap-1.5">${isToday ? 'Hoy' : esc(fmtDate(date))} <span class="text-sm">📅</span><span class="tri scale-75"></span></div>
       <div class="text-[11px] text-mute">${esc(fmtDateShort(date))}/${parseISO(date).getFullYear()}</div>
-    </div>
+    </button>
     <button class="iconbtn ${isToday ? 'opacity-30 pointer-events-none' : ''}" data-act="dietNext" type="button" aria-label="Día siguiente">›</button>
   </div>
 
@@ -2221,6 +2325,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.9.0', ['📅 Calendario en Dieta: toca la fecha. Cada día muestra cómo fue la dieta (punto de color) y si entrenaste (🏋️) o hiciste cardio (🔥); al tocar un día ves el detalle.']],
   ['4.8.2', ['👆 Al deslizar, la pantalla siguiente entra acompañando al dedo; arreglado el parpadeo de la barra inferior.']],
   ['4.8.1', ['👆 Cambia de pestaña deslizando el dedo a izquierda o derecha (se puede desactivar en Ajustes → Aplicación).']],
   ['4.8.0', ['🥩 Proteína por comida: cada desayuno, comida, puente y cena te indica si llega al mínimo (25 g por defecto, ajustable en Ajustes → Objetivos). El resumen semanal lo tiene en cuenta.']],
@@ -2268,6 +2373,7 @@ const GUIDE = [
     'Tras «Estimar macros con IA», ajusta cada alimento con <b>P / M / G</b> (pequeña, mediana, grande) u «Otra» con los gramos exactos. ✕ quita un alimento que la IA vio por error.',
     '🥩 <b>Proteína por comida</b>: en recomposición importa repartirla. Cada toma principal (desayuno, comida, puente, cena) debería llegar al mínimo (25 g por defecto). «Otro» (picoteos) no cuenta. Al registrar verás si la toma llega, sumando lo ya registrado en ese tipo.',
     'Consumidas · Cardio · Neto: el cardio se muestra pero <b>no amplía</b> lo que te queda por comer, salvo que lo actives en Ajustes.',
+    '📅 Toca la <b>fecha</b> de Dieta para abrir el calendario del mes: punto verde/ámbar/rojo según la dieta, 🏋️ si hubo pesas y 🔥 si hubo cardio. Al tocar un día ves el detalle y puedes ir a sus comidas.',
     '✎ en una comida la edita; ⭐ «Comidas habituales» repite tus platos más frecuentes de ese tipo, y el buscador encuentra cualquiera del historial.'
   ]],
   ['📈 Progreso', [
@@ -2530,6 +2636,7 @@ const actions = {
     if (!state.meals[ui.dietDate].length) delete state.meals[ui.dietDate];
     persist(); render();
   },
+  openCal: () => openCalendar(),
   dietPrev: () => { ui.editing = null; ui.aiResult = null; ui.dietDate = addDays(ui.dietDate, -1); render(); },
   dietNext: () => { if (ui.dietDate < todayISO()) { ui.editing = null; ui.aiResult = null; ui.dietDate = addDays(ui.dietDate, 1); render(); } },
   goSettings: () => go('settings'),
