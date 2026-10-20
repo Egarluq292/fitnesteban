@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.5.0';
+const APP_VERSION = '4.6.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -158,7 +158,7 @@ function defaultSettings() {
   return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, pinHash: '', lastSeenVersion: '' };
 }
 function defaultState() {
-  return { version: 4, plan: clone(DEFAULT_PLAN), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], settings: defaultSettings(), drafts: {} };
+  return { version: 4, plan: clone(DEFAULT_PLAN), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {} };
 }
 const safeUrl = u => { const t = String(u || '').trim(); return /^https:\/\/[^\s"'<>]+$/i.test(t) ? t : ''; };
 const videoUrl = v => v.video || `https://www.youtube.com/results?search_query=${encodeURIComponent(v.name + ' técnica correcta')}`;
@@ -217,7 +217,7 @@ function normalize(s) {
   if (!Array.isArray(out.settings.habits)) out.settings.habits = [...DEFAULT_HABITS];
   out.plan = normalizePlan(out.plan);
   for (const k of ['selectedVariants', 'memory', 'meals', 'drafts']) if (!out[k] || typeof out[k] !== 'object' || Array.isArray(out[k])) out[k] = {};
-  for (const k of ['sessions', 'bodyMetrics', 'cardio']) if (!Array.isArray(out[k])) out[k] = [];
+  for (const k of ['sessions', 'bodyMetrics', 'cardio', 'reports']) if (!Array.isArray(out[k])) out[k] = [];
   out.version = 4;
   return out;
 }
@@ -319,6 +319,7 @@ const ui = {
   aiOpen: false,
   blocksOpen: false,
   editing: null,
+  reportBusy: false,
   mealSearch: '',
   cardio: { type: 'bike', minutes: '', intensity: 'media', date: todayISO(), weight: '', est: null, busy: false }
 };
@@ -372,6 +373,7 @@ function sortedSessions() {
 function exHistory(exKey) {
   const h = [];
   for (const s of sortedSessions()) for (const e of s.exercises) {
+    if (s.deload) continue; // las semanas de descarga no cuentan para la progresión
     if (e.exKey === exKey && e.sets.some(x => x.r > 0)) h.push({ date: s.date, sets: e.sets });
   }
   if (!h.length && state.memory[exKey]?.sets?.some(x => x.r > 0)) h.push(state.memory[exKey]);
@@ -465,7 +467,8 @@ function draftHasData(dayId) {
   if (!d) return false;
   return Object.values(d.sets || {}).some(arr => (arr || []).some(c => c && (c.r !== undefined && c.r !== '')));
 }
-function setCount(e, key, d) { return d.counts[key] ?? e.sets; }
+function setCount(e, key, d) { return d.counts[key] ?? (deloadActive() ? Math.max(1, Math.ceil(e.sets / 2)) : e.sets); }
+function coachFor(e, key) { const c = coach(e, key); return deloadActive() ? deloadCoach(c, e, key) : c; }
 function cellValue(d, key, i, field, c) {
   const v = d.sets[key]?.[i]?.[field];
   if (v !== undefined) return v;
@@ -522,6 +525,7 @@ function renderTrain() {
 
   return `
   ${renderProgHeader()}
+  ${renderDeloadCard()}
   <div class="chips-row -mx-4 px-4">${chips}</div>
 
   <section class="card p-4 mt-3">
@@ -557,7 +561,7 @@ function renderTrain() {
 
 function renderExerciseCard(e, idx, day, d) {
   const { key, variant } = variantOf(e);
-  const c = coach(e, key);
+  const c = coachFor(e, key);
   const n = setCount(e, key, d);
   const tone = TONE[c.tone];
   const doneArr = d.done[key] || [];
@@ -648,7 +652,7 @@ function markSetDone(exId, key, i) {
   const now = !d.done[key][i];
   d.done[key][i] = now;
   if (now) {
-    const c = coach(f.ex, key);
+    const c = coachFor(f.ex, key);
     if (!d.sets[key]) d.sets[key] = [];
     if (!d.sets[key][i]) d.sets[key][i] = {};
     const cell = d.sets[key][i];
@@ -668,7 +672,7 @@ function saveSession() {
   const exs = [];
   for (const e of day.exercises) {
     const { key, variant } = variantOf(e);
-    const c = coach(e, key);
+    const c = coachFor(e, key);
     const n = setCount(e, key, d);
     const sets = [];
     for (let i = 0; i < n; i++) {
@@ -695,6 +699,7 @@ function saveSession() {
   }
   const habits = state.settings.habits.filter(h => d.habits[h]);
   const session = { id: uid('s_'), date: today, dayId: day.id, dayTitle: day.title, habits, exercises: exs };
+  if (deloadActive()) session.deload = true;
   state.sessions = others;
   state.sessions.push(session);
   delete state.drafts[day.id];
@@ -873,6 +878,222 @@ function moveEx(exId, dir) {
   [arr[f.idx], arr[j]] = [arr[j], arr[f.idx]];
   persist(); closeModal(); render();
   document.getElementById(`ex-${exId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+/* =========================================================================
+   TENDENCIA DE PESO · RÉCORDS · DESCARGA · RESUMEN SEMANAL
+   ========================================================================= */
+/* Media móvil de 7 días por fecha de pesaje */
+function trendSeries(points) {
+  return points.map(p => {
+    const from = addDays(p.x, -6);
+    const win = points.filter(q => q.x >= from && q.x <= p.x);
+    return { x: p.x, y: Math.round(win.reduce((a, q) => a + q.y, 0) / win.length * 10) / 10 };
+  });
+}
+function trendAt(trend, date) { let v = null; for (const t of trend) if (t.x <= date) v = t; return v; }
+function weightTrend() {
+  const pts = [...state.bodyMetrics].filter(m => m.weight !== null).sort((a, b) => (a.date < b.date ? -1 : 1)).map(m => ({ x: m.date, y: m.weight }));
+  const trend = trendSeries(pts);
+  if (pts.length < 3 || daysBetween(pts[0].x, pts[pts.length - 1].x) < 7) return { pts, trend, ready: false };
+  const last = trend[trend.length - 1];
+  const prev = trendAt(trend, addDays(last.x, -7));
+  const days = Math.max(1, daysBetween(prev.x, last.x));
+  const kgWeek = (last.y - prev.y) / days * 7;
+  const pctWeek = kgWeek / prev.y * 100;
+  // 3 semanas: peso y cintura
+  const old3 = trendAt(trend, addDays(last.x, -21));
+  const waist = [...state.bodyMetrics].filter(m => m.waist !== null).sort((a, b) => (a.date < b.date ? -1 : 1));
+  const wLast = waist[waist.length - 1], wOld = [...waist].reverse().find(m => m.date <= addDays(last.x, -21));
+  const waistChange3 = wLast && wOld ? r2(wLast.waist - wOld.waist) : null;
+  const flat3 = old3 && daysBetween(old3.x, last.x) >= 18 ? Math.abs((last.y - old3.y) / old3.y * 100) < 0.3 : false;
+  let tone = 'ok', msg;
+  if (pctWeek < -1) { tone = 'warn'; msg = `Bajas ${fmtNum(Math.abs(r2(pctWeek)))} % por semana: demasiado rápido para recomposición, riesgo de perder músculo. Sube 100–150 kcal.`; }
+  else if (pctWeek <= -0.25) msg = `Bajas ~${fmtNum(Math.abs(r2(kgWeek)))} kg/semana (${fmtNum(Math.abs(r2(pctWeek)))} %): ritmo adecuado para recomposición.`;
+  else if (pctWeek <= 0.25) {
+    if (flat3 && waistChange3 !== null && waistChange3 >= 0) { tone = 'warn'; msg = 'Peso y cintura estables 3 semanas: estancado. Revisa que registras todo y baja ~100 kcal o añade cardio suave.'; }
+    else msg = waistChange3 !== null && waistChange3 < 0 ? `Peso estable y cintura −${fmtNum(Math.abs(waistChange3))} cm en 3 semanas: recomposición funcionando.` : 'Peso estable. En recomposición es normal si la cintura baja: vigílala.';
+  } else { tone = 'warn'; msg = `Subes ~${fmtNum(r2(kgWeek))} kg/semana. Si la cintura también sube, baja 100–150 kcal.`; }
+  return { pts, trend, ready: true, last, kgWeek, pctWeek, tone, msg, waistChange3 };
+}
+
+function personalRecords() {
+  const map = new Map();
+  for (const s of sortedSessions()) for (const e of s.exercises) {
+    if (!e.exKey) continue;
+    const r = map.get(e.exKey) || { name: e.name, bestW: -1, bestWReps: 0, bestWDate: '', best1: 0, best1Date: '', bestReps: 0, bestRepsDate: '', lastPR: '' };
+    r.name = e.name;
+    for (const x of e.sets) {
+      if (!(x.r > 0)) continue;
+      if (x.w > r.bestW || (x.w === r.bestW && x.r > r.bestWReps)) { r.bestW = x.w; r.bestWReps = x.r; r.bestWDate = s.date; r.lastPR = s.date; }
+      const one = e1rm(x.w, x.r);
+      if (one > r.best1 + 0.05) { r.best1 = one; r.best1Date = s.date; r.lastPR = s.date; }
+      if (!x.w && x.r > r.bestReps) { r.bestReps = x.r; r.bestRepsDate = s.date; r.lastPR = s.date; }
+    }
+    map.set(e.exKey, r);
+  }
+  return [...map.values()].filter(r => r.bestW >= 0).sort((a, b) => (a.lastPR < b.lastPR ? 1 : -1));
+}
+function renderRecords() {
+  const recs = personalRecords();
+  if (!recs.length) return '';
+  return `<details class="card p-4 mt-3">
+    <summary class="flex items-center justify-between cursor-pointer select-none"><h3 class="section-title">🏆 Récords personales</h3><span class="flex items-center gap-2 text-[11px] text-mute">${recs.length} ejercicios<span class="tri"></span></span></summary>
+    <div class="space-y-1.5 mt-3">
+      ${recs.map(r => `<div class="bg-ink rounded-xl border border-line px-3 py-2">
+        <div class="flex items-center justify-between gap-2"><span class="text-sm font-bold truncate">${esc(r.name)}</span>${r.lastPR >= addDays(todayISO(), -7) ? '<span class="text-[10px] font-bold text-emerald-300 shrink-0">NUEVO</span>' : ''}</div>
+        <div class="text-[11px] text-mute mt-0.5">${r.bestW > 0
+          ? `Máx. <strong class="text-white">${fmtKg(r.bestW)} × ${r.bestWReps}</strong> (${fmtDateShort(r.bestWDate)}) · 1RM est. <strong class="text-brand">${fmtKg(Math.round(r.best1 * 10) / 10)}</strong> (${fmtDateShort(r.best1Date)})`
+          : `Máx. <strong class="text-white">${r.bestReps} reps</strong> con peso corporal (${fmtDateShort(r.bestRepsDate)})`}</div>
+      </div>`).join('')}
+    </div>
+  </details>`;
+}
+
+/* ---------- Semana de descarga ---------- */
+const mondayOf = iso => addDays(iso, -((parseISO(iso).getDay() + 6) % 7));
+function deloadActive() { const d = state.deload; const t = todayISO(); return !!(d && d.start <= t && t <= d.end); }
+function deloadStatus() {
+  if (deloadActive()) return { active: true, end: state.deload.end };
+  const strength = sortedSessions().filter(s => !s.deload && s.exercises.length);
+  const boundary = state.deload?.end || '';
+  let weeks = 0;
+  let wk = addDays(mondayOf(todayISO()), -7); // última semana completa
+  while (weeks < 52) {
+    if (boundary && addDays(wk, 6) <= boundary) break;
+    const n = strength.filter(s => s.date >= wk && s.date <= addDays(wk, 6)).length;
+    if (n < 3) break;
+    weeks++; wk = addDays(wk, -7);
+  }
+  const since = addDays(todayISO(), -21);
+  const recentKeys = new Set(strength.filter(s => s.date >= since).flatMap(s => s.exercises.map(e => e.exKey)));
+  let signals = 0;
+  for (const day of allDays()) for (const e of day.exercises) {
+    const { key } = variantOf(e);
+    if (!recentKeys.has(key)) continue;
+    const t = coach(e, key).tone;
+    if (t === 'stall' || t === 'down') signals++;
+  }
+  const snoozed = state.deloadSnooze && state.deloadSnooze > todayISO();
+  const recommend = !snoozed && ((weeks >= 6 && signals >= 2) || weeks >= 8);
+  return { active: false, recommend, weeks, signals };
+}
+function renderDeloadCard() {
+  const s = deloadStatus();
+  if (s.active) return `<div class="coach coach-break mb-3">
+      <div class="font-bold text-sm">🔋 Semana de descarga · hasta el ${esc(fmtDate(s.end))}</div>
+      <p class="text-xs mt-1 opacity-90 leading-relaxed">−10 % de peso, la mitad de series y deja 3 reps en recámara. Estas sesiones no cuentan para la progresión del coach.</p>
+      <button class="underline text-xs mt-1.5" data-act="deloadEnd" type="button">Terminar la descarga</button>
+    </div>`;
+  if (!s.recommend) return '';
+  return `<div class="coach coach-stall mb-3">
+      <div class="font-bold text-sm">🔋 Te toca una semana de descarga</div>
+      <p class="text-xs mt-1 opacity-90 leading-relaxed">Llevas ${s.weeks} semanas seguidas con 3 o más sesiones${s.signals ? ` y ${s.signals} ejercicios estancados o bajando` : ''}. Una semana suave ahora suele desbloquear la progresión.</p>
+      <div class="grid grid-cols-2 gap-2 mt-2.5">
+        <button class="btn-ghost py-2 text-xs" data-act="deloadSnooze" type="button">Ahora no</button>
+        <button class="btn-primary py-2 text-xs" data-act="deloadStart" type="button">Empezar esta semana</button>
+      </div>
+    </div>`;
+}
+function deloadCoach(c, e, exKey) {
+  if (c.tone === 'new') return c;
+  const hist = exHistory(exKey);
+  const top = hist.length ? topOf(hist[hist.length - 1].sets) : null;
+  const topW = top ? top.t : 0;
+  const w = topW > 0 ? Math.max(e.increment || 1, roundStep(topW * 0.9, e.increment || 0.5)) : 0;
+  return { ...c, tone: 'break', title: topW > 0 ? `Descarga: ${fmtKg(w)}` : 'Descarga: peso corporal', text: `Semana de descarga: ${topW > 0 ? '−10 % de peso, ' : ''}la mitad de series y ${e.minReps} reps dejando 3 en recámara.`, weight: w, targets: Array.from({ length: e.sets }, () => e.minReps) };
+}
+
+/* ---------- Resumen semanal ---------- */
+function weekData() {
+  const to = todayISO(), from = addDays(to, -6);
+  const inRange = d => d >= from && d <= to;
+  const sess = sortedSessions().filter(s => inRange(s.date));
+  const before = sortedSessions().filter(s => s.date < from);
+  const up = [], flat = [];
+  const keys = [...new Set(sess.flatMap(s => s.exercises.map(e => e.exKey)).filter(Boolean))];
+  for (const k of keys) {
+    const name = sess.flatMap(s => s.exercises).find(e => e.exKey === k).name;
+    const now = Math.max(...sess.flatMap(s => s.exercises.filter(e => e.exKey === k).flatMap(e => e.sets.map(x => e1rm(x.w, x.r) || x.r))));
+    const prev = Math.max(0, ...before.flatMap(s => s.exercises.filter(e => e.exKey === k).flatMap(e => e.sets.map(x => e1rm(x.w, x.r) || x.r))));
+    if (!prev) continue;
+    if (now > prev * 1.01) up.push(name); else if (now < prev * 0.97) flat.push(`${name} (bajó)`); else flat.push(name);
+  }
+  const stalled = [];
+  for (const day of allDays()) for (const e of day.exercises) {
+    const { key, variant } = variantOf(e);
+    if (!keys.includes(key)) continue;
+    const t = coach(e, key).tone;
+    if (t === 'stall' || t === 'down') stalled.push(variant.name);
+  }
+  let kc = 0, pr = 0, nd = 0, protOk = 0;
+  for (let i = 0; i < 7; i++) {
+    const dt = addDays(to, -i);
+    if (!mealsOf(dt).length) continue;
+    const t = totalsOf(dt); kc += t.kcal; pr += t.prot; nd++;
+    if (t.prot >= state.settings.targetProt * 0.9) protOk++;
+  }
+  const cardio = state.cardio.filter(c => inRange(c.date));
+  const wt = weightTrend();
+  const habits = sess.reduce((a, s) => a + (s.habits?.length || 0), 0);
+  return {
+    periodo: `${from} a ${to}`, objetivo: 'recomposición corporal',
+    sesiones_fuerza: sess.length, dias_entrenados: [...new Set(sess.map(s => s.dayTitle))],
+    ejercicios_que_suben: up, ejercicios_igual_o_bajan: flat, ejercicios_estancados_segun_coach: [...new Set(stalled)],
+    dias_dieta_registrados: nd, kcal_media: nd ? Math.round(kc / nd) : null, objetivo_kcal: state.settings.targetKcal,
+    proteina_media_g: nd ? Math.round(pr / nd) : null, objetivo_proteina_g: state.settings.targetProt, dias_proteina_cumplida: protOk,
+    cardio_sesiones: cardio.length, cardio_minutos: cardio.reduce((a, c) => a + c.minutes, 0), cardio_kcal: cardio.reduce((a, c) => a + c.kcal, 0),
+    peso_tendencia_kg: wt.ready ? wt.last.y : null, cambio_peso_kg_semana: wt.ready ? r2(wt.kgWeek) : null, cambio_cintura_cm_3_semanas: wt.ready ? wt.waistChange3 : null,
+    habitos_cumplidos_en_sesiones: habits, semana_de_descarga: deloadActive()
+  };
+}
+async function generateReport() {
+  const data = weekData();
+  const rep = { id: uid('r_'), date: todayISO(), data, ai: null };
+  if (state.settings.apiKey && navigator.onLine) {
+    ui.reportBusy = true; render();
+    try {
+      const prompt = `Eres entrenador personal y nutricionista deportivo. Analiza la última semana de un hombre adulto cuyo objetivo es la RECOMPOSICIÓN corporal (perder grasa manteniendo o ganando músculo).
+Datos (JSON, null = sin datos): ${JSON.stringify(data)}
+Reglas: básate SOLO en estos datos; si faltan datos importantes, dilo en "mejorar". Sé directo, concreto y breve, en español de España. Nada de frases motivacionales vacías.
+Responde SOLO con JSON válido:
+{"titular": "una frase con el balance de la semana", "bien": ["máx. 3 puntos"], "mejorar": ["máx. 3 puntos"], "acciones": ["exactamente 3 acciones concretas y medibles para la próxima semana"]}`;
+      const r = parseJSONLoose(await callGemini([{ text: prompt }], { timeout: 45000 }));
+      const arr = v => (Array.isArray(v) ? v : []).map(String).slice(0, 3);
+      rep.ai = { titular: String(r.titular || ''), bien: arr(r.bien), mejorar: arr(r.mejorar), acciones: arr(r.acciones) };
+    } catch (e) { toast('IA: ' + e.message + '. Guardo solo los datos.', 'warn'); }
+    finally { ui.reportBusy = false; }
+  } else toast(state.settings.apiKey ? 'Sin conexión: guardo solo los datos.' : 'Sin clave de IA: guardo solo los datos.', 'warn');
+  state.reports = [rep, ...state.reports.filter(x => x.date !== rep.date)].slice(0, 12);
+  persist(); render();
+}
+function renderReport(r, open) {
+  const d = r.data;
+  const chips = [
+    `🏋️ ${d.sesiones_fuerza} sesiones`, d.kcal_media !== null ? `🍽️ ${d.kcal_media} kcal/día` : null, d.proteina_media_g !== null ? `🥩 ${d.proteina_media_g} g prot` : null,
+    d.cardio_minutos ? `🔥 ${d.cardio_minutos} min cardio` : null, d.cambio_peso_kg_semana !== null ? `⚖️ ${d.cambio_peso_kg_semana > 0 ? '+' : ''}${fmtNum(d.cambio_peso_kg_semana)} kg/sem` : null
+  ].filter(Boolean);
+  const list = (icon, arr) => arr?.length ? `<ul class="space-y-1 mt-1">${arr.map(x => `<li class="text-xs leading-relaxed">${icon} ${esc(x)}</li>`).join('')}</ul>` : '';
+  return `<details class="bg-ink rounded-xl border border-line px-3 py-2.5" ${open ? 'open' : ''}>
+    <summary class="flex items-center justify-between cursor-pointer gap-2"><span class="text-xs font-bold truncate">${esc(fmtDate(r.date))} · ${esc(r.ai?.titular || 'Resumen de datos')}</span><span class="tri"></span></summary>
+    <div class="flex flex-wrap gap-1 mt-2">${chips.map(c => `<span class="text-[10px] bg-panel border border-line rounded-full px-2 py-0.5 text-slate-300">${c}</span>`).join('')}</div>
+    ${r.ai ? `${list('✅', r.ai.bien)}${list('⚠️', r.ai.mejorar)}
+      ${r.ai.acciones?.length ? `<div class="mt-2 text-[11px] font-bold text-brand uppercase tracking-wider">Próxima semana</div>${list('🎯', r.ai.acciones)}` : ''}`
+      : `<p class="text-[11px] text-mute mt-2">${d.ejercicios_que_suben.length ? `Suben: ${esc(d.ejercicios_que_suben.join(', '))}. ` : ''}${d.ejercicios_estancados_segun_coach.length ? `Estancados: ${esc(d.ejercicios_estancados_segun_coach.join(', '))}.` : ''}</p>`}
+  </details>`;
+}
+function renderWeeklyCard() {
+  const last = state.reports[0];
+  const isMonday = parseISO(todayISO()).getDay() === 1;
+  const fresh = last && daysBetween(last.date, todayISO()) < 7;
+  return `<section class="card p-4 mt-3 space-y-2.5 ${isMonday && !fresh ? 'border-brand/50' : ''}">
+    <div class="flex items-center justify-between"><h3 class="section-title">🧠 Resumen semanal</h3>${isMonday && !fresh ? '<span class="text-[10px] font-bold text-brand">NUEVO</span>' : ''}</div>
+    <p class="text-[11px] text-mute">Analiza los últimos 7 días: fuerza, dieta, cardio y tendencia de peso. Mejor cada lunes.</p>
+    <button class="btn-primary w-full" data-act="report" type="button" ${ui.reportBusy ? 'disabled' : ''}>${ui.reportBusy ? '<span class="spinner"></span> Analizando la semana…' : last?.date === todayISO() ? '↻ Rehacer el resumen de hoy' : '🧠 Generar resumen de la semana'}</button>
+    ${last ? renderReport(last, fresh) : ''}
+    ${state.reports.length > 1 ? `<details class="text-xs"><summary class="text-mute cursor-pointer flex items-center justify-between"><span>Anteriores (${state.reports.length - 1})</span><span class="tri"></span></summary>
+      <div class="space-y-1.5 mt-2">${state.reports.slice(1).map(r => renderReport(r, false)).join('')}</div></details>` : ''}
+  </section>`;
 }
 
 /* =========================================================================
@@ -1317,13 +1538,16 @@ function addMeal(date, m) {
 /* =========================================================================
    PROGRESO
    ========================================================================= */
-function lineChart(pts, { color = '#00d2df', unit = '', label = '' } = {}) {
+function lineChart(rawPts, { color = '#00d2df', unit = '', label = '', trend = null } = {}) {
+  const pts = trend && trend.length >= 2 ? trend : rawPts;
   if (pts.length < 2) return `<div class="text-xs text-mute py-6 text-center">Necesito al menos 2 registros para dibujar ${esc(label || 'la gráfica')}.</div>`;
   const W = 340, H = 150, pl = 36, pr = 12, pt = 14, pb = 22;
   const xs = pts.map(p => parseISO(p.x).getTime());
   const ys = pts.map(p => p.y);
-  let x0 = Math.min(...xs), x1 = Math.max(...xs); if (x1 === x0) x1 = x0 + 86400000;
-  let y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const rawXs = trend ? rawPts.map(p => parseISO(p.x).getTime()) : [];
+  const allY = trend ? [...ys, ...rawPts.map(p => p.y)] : ys;
+  let x0 = Math.min(...xs, ...rawXs), x1 = Math.max(...xs, ...rawXs); if (x1 === x0) x1 = x0 + 86400000;
+  let y0 = Math.min(...allY), y1 = Math.max(...allY);
   const py = (y1 - y0) * 0.15 || 1; y0 -= py; y1 += py;
   const X = t => pl + (t - x0) / (x1 - x0) * (W - pl - pr);
   const Y = v => pt + (1 - (v - y0) / (y1 - y0)) * (H - pt - pb);
@@ -1337,7 +1561,7 @@ function lineChart(pts, { color = '#00d2df', unit = '', label = '' } = {}) {
     ${grid}
     <path d="${area}" fill="url(#${gid})"/>
     <path d="${line}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
-    ${pts.length <= 40 ? pts.map((p, i) => `<circle cx="${X(xs[i]).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="2.6" fill="#05080a" stroke="${color}" stroke-width="1.6"/>`).join('') : ''}
+    ${trend ? rawPts.map((p, i) => `<circle cx="${X(rawXs[i]).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="2.2" fill="${color}" opacity="0.35"/>`).join('') : pts.length <= 40 ? pts.map((p, i) => `<circle cx="${X(xs[i]).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="2.6" fill="#05080a" stroke="${color}" stroke-width="1.6"/>`).join('') : ''}
     <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="4" fill="${color}"/>
     <text x="${pl}" y="${H - 6}" fill="#8a9ba5" font-size="10">${fmtDateShort(pts[0].x)}</text>
     <text x="${W - pr}" y="${H - 6}" fill="#8a9ba5" font-size="10" text-anchor="end">${fmtDateShort(pts[pts.length - 1].x)}</text>
@@ -1375,6 +1599,7 @@ function renderProgress() {
   const bm = [...state.bodyMetrics].sort((a, b) => (a.date < b.date ? -1 : 1));
   const wPts = bm.filter(m => m.weight !== null).map(m => ({ x: m.date, y: m.weight }));
   const cPts = bm.filter(m => m.waist !== null).map(m => ({ x: m.date, y: m.waist }));
+  const wt = weightTrend();
   const delta = (pts, unit) => pts.length >= 2 ? (() => { const d = r2(pts[pts.length - 1].y - pts[0].y); return `<span class="${d <= 0 ? 'text-emerald-300' : 'text-rose-300'} font-bold">${d > 0 ? '+' : ''}${fmtNum(d)} ${unit}</span> desde ${fmtDateShort(pts[0].x)}`; })() : '';
 
   const opts = strengthOptions();
@@ -1402,13 +1627,15 @@ function renderProgress() {
   const hist = sortedSessions().slice(-20).reverse();
 
   return `
-  ${needBackup ? `<div class="banner-warn mb-3"><span>${backupAge === null ? 'Aún no has hecho copia de seguridad.' : `Última copia hace ${backupAge} días.`} Si borras datos del navegador, lo pierdes todo.</span><button class="btn-banner btn-banner-warn shrink-0" data-act="export" type="button">Exportar</button></div>` : ''}
+  ${needBackup ? `<div class="banner-warn mb-3"><span>${backupAge === null ? 'Aún no has hecho copia de seguridad.' : `Última copia hace ${backupAge} días.`} Si borras datos del navegador, lo pierdes todo.</span><button class="btn-banner btn-banner-warn shrink-0" data-act="share" type="button">📤 Copia</button></div>` : ''}
 
   <section class="grid grid-cols-3 gap-2">
     <div class="stat"><div class="stat-v">${w.sessionsWeek}</div><div class="stat-l">sesiones esta semana</div></div>
     <div class="stat"><div class="stat-v">${w.avgK ?? '—'}</div><div class="stat-l">kcal media 7 días${w.avgK ? ` · obj. ${st.targetKcal}` : ''}</div></div>
     <div class="stat"><div class="stat-v ${w.avgP !== null && w.avgP < st.targetProt * 0.9 ? 'text-amber-300' : ''}">${w.avgP ?? '—'}</div><div class="stat-l">g prot media${w.avgP ? ` · obj. ${st.targetProt}` : ''}</div></div>
   </section>
+
+  ${renderWeeklyCard()}
 
   <section class="card p-4 mt-3 space-y-3">
     <h3 class="section-title">📏 Peso y cintura (en ayunas)</h3>
@@ -1419,8 +1646,10 @@ function renderProgress() {
     </div>
     <button class="btn-primary w-full" data-act="saveMetric" type="button">Registrar medición</button>
     <div>
-      <div class="flex justify-between text-[11px] text-mute"><span>Peso</span><span>${delta(wPts, 'kg')}</span></div>
-      ${lineChart(wPts, { color: '#00d2df', unit: ' kg', label: 'el peso' })}
+      <div class="flex justify-between text-[11px] text-mute"><span>Peso <span class="opacity-70">· línea = media de 7 días, puntos = pesajes</span></span><span>${delta(wPts, 'kg')}</span></div>
+      ${lineChart(wPts, { color: '#00d2df', unit: ' kg', label: 'el peso', trend: wt.trend.length >= 2 ? wt.trend : null })}
+      ${wt.ready ? `<div class="coach ${wt.tone === 'warn' ? 'coach-stall' : 'coach-hold'} mt-2"><div class="font-bold text-xs">📉 Tendencia: ${wt.kgWeek > 0 ? '+' : ''}${fmtNum(r2(wt.kgWeek))} kg/semana</div><p class="text-xs mt-1 opacity-90 leading-relaxed">${esc(wt.msg)}</p></div>`
+        : wPts.length ? '<p class="text-[11px] text-mute mt-1">Con pesajes durante al menos 8 días te diré la tendencia semanal.</p>' : ''}
     </div>
     <div>
       <div class="flex justify-between text-[11px] text-mute"><span>Cintura</span><span>${delta(cPts, 'cm')}</span></div>
@@ -1436,6 +1665,8 @@ function renderProgress() {
     <h3 class="section-title mb-3">🏋️ Fuerza por ejercicio</h3>
     ${strengthHtml}
   </section>
+
+  ${renderRecords()}
 
   <section class="card p-4 mt-3">
     <h3 class="section-title">📚 Historial de sesiones</h3>
@@ -1530,10 +1761,11 @@ function renderSettings() {
     <h3 class="section-title">💾 Copias de seguridad</h3>
     <p class="text-xs text-mute">${backupAge === null ? 'Nunca has exportado una copia.' : `Última copia: hace ${backupAge} día${backupAge === 1 ? '' : 's'}.`} Tus datos viven solo en este móvil: exporta cada semana y guarda el archivo en Drive o similar.</p>
     <div class="grid grid-cols-2 gap-2">
-      <button class="btn-primary" data-act="export" type="button">Exportar</button>
+      <button class="btn-primary col-span-2" data-act="share" type="button">📤 Compartir copia (Drive, WhatsApp…)</button>
+      <button class="btn-ghost" data-act="export" type="button">⬇️ Descargar</button>
       <button class="btn-ghost" data-act="import" type="button">Importar</button>
     </div>
-    <p class="text-[11px] text-mute">Importar admite copias de esta versión y de la versión anterior (fitnesteban_backup.json).</p>
+    <p class="text-[11px] text-mute">«Compartir» abre el menú del móvil para guardarla en Drive o enviártela. Importar admite archivos .json y .txt de copias de FITNESTEBAN.</p>
   </section>
 
   <section class="card p-4 mt-3 space-y-3">
@@ -1621,21 +1853,38 @@ function pinSetModal() {
   });
 }
 
-function exportBackup() {
+function backupText() {
   const data = clone(state);
   data.settings.apiKey = '';
   delete data.settings.pinHash;
   data.drafts = {};
   data.exportedAt = new Date().toISOString();
-  const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
+  return JSON.stringify(data, null, 1);
+}
+function markBackup(msg) { state.settings.lastBackup = todayISO(); persist(); render(); toast(msg); }
+function exportBackup() {
+  const blob = new Blob([backupText()], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `fitnesteban_backup_${todayISO()}.json`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  state.settings.lastBackup = todayISO();
-  persist(); render();
-  toast('Copia exportada ✓');
+  markBackup('Copia descargada ✓');
+}
+/* Compartir la copia (Drive, WhatsApp, correo…) con el menú del móvil */
+async function shareBackup() {
+  const text = backupText();
+  const name = `fitnesteban_backup_${todayISO()}`;
+  const candidates = [new File([text], name + '.json', { type: 'application/json' }), new File([text], name + '.txt', { type: 'text/plain' })];
+  const file = candidates.find(f => navigator.canShare?.({ files: [f] }));
+  if (!file) { exportBackup(); return toast('Este navegador no permite compartir archivos: la copia se ha descargado.', 'warn'); }
+  try {
+    await navigator.share({ files: [file], title: 'Copia FITNESTEBAN', text: `Copia de seguridad del ${fmtDate(todayISO())}` });
+    markBackup('Copia compartida ✓');
+  } catch (e) {
+    if (e.name === 'AbortError') return toast('Copia no compartida', 'warn');
+    exportBackup();
+  }
 }
 
 function importBackup(file) {
@@ -1731,6 +1980,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.6.0', ['📤 Compartir copia en un toque (Drive, WhatsApp…), en Ajustes y en el aviso de Progreso.', '🧠 Resumen semanal con IA en Progreso: qué va bien, qué mejorar y 3 acciones.', '📉 Peso como tendencia (media de 7 días) con aviso si bajas demasiado rápido o te estancas.', '🏆 Récords personales por ejercicio.', '🔋 Semana de descarga sugerida solo si llevas 6+ semanas seguidas fuertes y hay estancamientos.']],
   ['4.5.0', ['Botón «?» arriba: guía de la app por secciones.', 'Tras cada actualización verás esta ventana de novedades (una sola vez).']],
   ['4.4.1', ['«Comidas habituales» muestra solo las del tipo elegido (Desayuno, Comida…), sin rellenar con otras.']],
   ['4.4.0', ['Editar comidas con ✎: cambia raciones por alimento, totales, descripción o tipo.', '«Comidas habituales»: tus platos más repetidos + buscador en todo el historial.']],
@@ -1752,6 +2002,7 @@ const GUIDE = [
     '<b>Doble progresión</b>: cada ejercicio tiene un rango de reps (p. ej. 8–10). Mantienes el peso y sumas reps; cuando llegas al máximo en <b>todas</b> las series, te dice que subas el incremento (p. ej. +2 kg).',
     'Si no llegas al mínimo <b>dos sesiones seguidas</b> con el mismo peso → baja un 10 %. Tres sesiones sin sumar reps → aviso de estancamiento.',
     'Si hace 14 días o más que no haces un ejercicio → vuelta con −10 %.',
+    '🔋 <b>Semana de descarga</b>: solo se sugiere si llevas 6+ semanas seguidas con 3 o más sesiones y hay ejercicios estancados (o 8+ semanas). Durante esa semana: −10 % de peso y mitad de series; esas sesiones no cuentan para la progresión.',
     '«Sesión de calibración» = aún no tiene datos de ese ejercicio (o de esa variante, o de ese bloque). Busca un peso exigente con 1–2 reps en recámara.'
   ]],
   ['📝 Registrar una sesión', [
@@ -1772,12 +2023,14 @@ const GUIDE = [
     '✎ en una comida la edita; ⭐ «Comidas habituales» repite tus platos más frecuentes de ese tipo, y el buscador encuentra cualquiera del historial.'
   ]],
   ['📈 Progreso', [
-    'Peso y cintura en ayunas: mejor el mismo día de la semana y a la misma hora. Mantén el peso al día: lo usa el cálculo de cardio.',
+    'Peso y cintura en ayunas, a la misma hora. La línea del peso es la <b>media de 7 días</b>: el peso diario oscila 1–2 kg por agua y sal. Con 8+ días de pesajes verás la tendencia semanal y si va bien para recomposición (bajar 0,25–1 % por semana o mantener peso bajando cintura).',
+    '🧠 <b>Resumen semanal</b>: cada lunes (o cuando quieras) analiza 7 días de fuerza, dieta, cardio y peso, y te da 3 acciones para la semana siguiente.',
+    '🏆 <b>Récords personales</b>: mejor peso y mejor 1RM estimado de cada ejercicio, con fecha.',
     '«Fuerza por ejercicio» dibuja tu 1RM estimado (o reps totales en ejercicios sin peso).',
     'En el historial puedes borrar una sesión mal guardada: el coach dejará de tenerla en cuenta.'
   ]],
   ['🔒 Datos, copias y PIN', [
-    'Tus datos viven <b>solo en este móvil</b>. Exporta una copia cada semana (Ajustes → Copias) y guárdala en Drive. La app te avisa si pasan más de 7 días.',
+    'Tus datos viven <b>solo en este móvil</b>. Haz una copia cada semana con <b>📤 Compartir copia</b> y guárdala en Drive o envíatela. La app te avisa si pasan más de 7 días.',
     'La copia no incluye la clave de Gemini ni el PIN. Al importar se conservan los actuales.',
     'Con PIN activo, «Borrar todo» e «Importar» lo piden. Antes de borrar se descarga una copia automáticamente.',
     'Ábrela siempre desde el icono instalado, no desde Chrome.'
@@ -1992,6 +2245,11 @@ const actions = {
     persist(); render(); toast('Plan restaurado');
   },
   export: () => exportBackup(),
+  share: () => shareBackup(),
+  report: () => generateReport(),
+  deloadStart: () => { state.deload = { start: todayISO(), end: addDays(todayISO(), 6) }; persist(); render(); toast('Semana de descarga activada 🔋'); },
+  deloadSnooze: () => { state.deloadSnooze = addDays(todayISO(), 7); persist(); render(); toast('Te lo vuelvo a sugerir en una semana'); },
+  deloadEnd: () => { if (!confirm('¿Terminar la semana de descarga ya?')) return; state.deload.end = addDays(todayISO(), -1); if (state.deload.end < state.deload.start) state.deload.start = state.deload.end; persist(); render(); },
   import: () => {
     if (!state.settings.pinHash) return $('#importInput').click();
     guardModal({ title: 'Importar copia', text: 'Importar sustituye todos tus datos actuales por los de la copia.', word: 'IMPORTAR', onOk: () => $('#importInput').click() });
