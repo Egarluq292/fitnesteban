@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.6.2';
+const APP_VERSION = '4.7.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -155,7 +155,7 @@ const isStandalone = () => window.matchMedia('(display-mode: standalone)').match
 
 /* ---------- Estado ---------- */
 function defaultSettings() {
-  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, pinHash: '', lastSeenVersion: '' };
+  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, pinHash: '', lastSeenVersion: '', driveConnected: false, driveEmail: '', driveFolderId: '', autoDrive: true, lastDriveBackup: null };
 }
 function defaultState() {
   return { version: 4, plan: clone(DEFAULT_PLAN), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {} };
@@ -320,6 +320,7 @@ const ui = {
   blocksOpen: false,
   editing: null,
   reportBusy: false,
+  driveBusy: false,
   mealSearch: '',
   cardio: { type: 'bike', minutes: '', intensity: 'media', date: todayISO(), weight: '', est: null, busy: false }
 };
@@ -1635,7 +1636,7 @@ function renderProgress() {
   const hist = sortedSessions().slice(-20).reverse();
 
   return `
-  ${needBackup ? `<div class="banner-warn mb-3"><span>${backupAge === null ? 'Aún no has hecho copia de seguridad.' : `Última copia hace ${backupAge} días.`} Si borras datos del navegador, lo pierdes todo.</span><button class="btn-banner btn-banner-warn shrink-0" data-act="share" type="button">📤 Copia</button></div>` : ''}
+  ${needBackup ? `<div class="banner-warn mb-3"><span>${backupAge === null ? 'Aún no has hecho copia de seguridad.' : `Última copia hace ${backupAge} días.`} Si borras datos del navegador, lo pierdes todo.</span>${state.settings.driveConnected ? '<button class="btn-banner btn-banner-warn shrink-0" data-act="driveBackup" type="button">☁️ Drive</button>' : '<button class="btn-banner btn-banner-warn shrink-0" data-act="share" type="button">📤 Copia</button>'}</div>` : ''}
 
   <section class="grid grid-cols-3 gap-2">
     <div class="stat"><div class="stat-v">${w.sessionsWeek}</div><div class="stat-l">sesiones esta semana</div></div>
@@ -1767,13 +1768,29 @@ function renderSettings() {
 
   <section class="card p-4 mt-3 space-y-3">
     <h3 class="section-title">💾 Copias de seguridad</h3>
-    <p class="text-xs text-mute">${backupAge === null ? 'Nunca has exportado una copia.' : `Última copia: hace ${backupAge} día${backupAge === 1 ? '' : 's'}.`} Tus datos viven solo en este móvil: exporta cada semana y guarda el archivo en Drive o similar.</p>
+    <p class="text-xs text-mute">${backupAge === null ? 'Nunca has hecho una copia.' : backupAge === 0 ? 'Última copia: hoy ✓' : `Última copia: hace ${backupAge} día${backupAge === 1 ? '' : 's'}.`} Tus datos viven solo en este móvil.</p>
+    <div class="rounded-xl border ${st.driveConnected ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-line bg-ink'} p-3 space-y-2.5">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-sm font-bold">☁️ Google Drive</span>
+        <span class="text-[11px] ${st.driveConnected ? 'text-emerald-300' : 'text-mute'} truncate">${st.driveConnected ? `Conectado${st.driveEmail ? ' · ' + esc(st.driveEmail) : ''}` : 'Sin conectar'}</span>
+      </div>
+      ${st.driveConnected ? `
+        <p class="text-[11px] text-mute">Carpeta «${esc(DRIVE_FOLDER)}» en tu Drive. ${st.lastDriveBackup ? `Última copia allí: ${esc(fmtDate(st.lastDriveBackup))}.` : ''} Se conservan las ${DRIVE_KEEP} más recientes.</p>
+        <button class="btn-primary w-full" data-act="driveBackup" type="button" ${ui.driveBusy ? 'disabled' : ''}>${ui.driveBusy ? '<span class="spinner"></span> Conectando con Drive…' : '☁️ Guardar copia en Drive'}</button>
+        <div class="grid grid-cols-2 gap-2">
+          <button class="btn-ghost" data-act="driveRestore" type="button" ${ui.driveBusy ? 'disabled' : ''}>Restaurar de Drive</button>
+          <button class="btn-ghost" data-act="driveDisconnect" type="button">Desconectar</button>
+        </div>
+        <label class="habit"><input type="checkbox" id="autoDrive" ${st.autoDrive !== false ? 'checked' : ''} /><span class="text-xs">Copia automática semanal al abrir la app</span></label>`
+      : `<p class="text-[11px] text-mute">Guarda las copias directamente en una carpeta de tu Drive, con copia automática cada semana.</p>
+        <button class="btn-primary w-full" data-act="driveConnect" type="button" ${ui.driveBusy ? 'disabled' : ''}>${ui.driveBusy ? '<span class="spinner"></span> Conectando…' : 'Conectar Google Drive'}</button>`}
+    </div>
     <div class="grid grid-cols-2 gap-2">
-      <button class="btn-primary col-span-2" data-act="share" type="button">📤 Compartir copia (Drive, WhatsApp…)</button>
+      <button class="btn-ghost col-span-2" data-act="share" type="button">📤 Compartir copia (WhatsApp, correo…)</button>
       <button class="btn-ghost" data-act="export" type="button">⬇️ Descargar</button>
       <button class="btn-ghost" data-act="import" type="button">Importar</button>
     </div>
-    <p class="text-[11px] text-mute">«Compartir» abre el menú del móvil para guardarla en Drive o enviártela. Importar admite archivos .json y .txt de copias de FITNESTEBAN.</p>
+    <p class="text-[11px] text-mute">«Compartir» abre el menú del móvil para enviártela. Importar admite archivos .json y .txt de copias de FITNESTEBAN.</p>
   </section>
 
   <section class="card p-4 mt-3 space-y-3">
@@ -1865,6 +1882,7 @@ function backupText() {
   const data = clone(state);
   data.settings.apiKey = '';
   delete data.settings.pinHash;
+  for (const k of ['driveConnected', 'driveEmail', 'driveFolderId', 'lastDriveBackup']) delete data.settings[k];
   data.drafts = {};
   data.exportedAt = new Date().toISOString();
   return JSON.stringify(data, null, 1);
@@ -1904,23 +1922,199 @@ async function shareBackup() {
 
 function importBackup(file) {
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = () => importText(reader.result);
+  reader.readAsText(file);
+}
+function importText(text) {
+  {
     try {
-      const parsed = JSON.parse(reader.result);
+      const parsed = JSON.parse(text);
       if (!parsed || typeof parsed !== 'object') throw new Error('Archivo no válido');
       const incoming = parsed.version === 4 ? normalize(parsed) : migrateV3(parsed);
       const msg = `Copia con ${incoming.sessions.length} sesiones, ${Object.keys(incoming.meals).length} días de dieta y ${incoming.bodyMetrics.length} mediciones.\n\nVa a SUSTITUIR los datos actuales (${state.sessions.length} sesiones). ¿Continuar?`;
       if (!confirm(msg)) return;
       incoming.settings.apiKey = state.settings.apiKey;
       incoming.settings.pinHash = state.settings.pinHash || '';
+      for (const k of ['driveConnected', 'driveEmail', 'driveFolderId', 'autoDrive', 'lastDriveBackup', 'lastSeenVersion']) incoming.settings[k] = state.settings[k];
       delete incoming.exportedAt;
       state = incoming;
       ui.dayId = nextDayId();
       persist(); render();
       toast('Datos importados ✓');
     } catch (e) { toast('No se pudo importar: ' + e.message, 'error'); }
-  };
-  reader.readAsText(file);
+  }
+}
+
+/* =========================================================================
+   GOOGLE DRIVE: copias en la carpeta «FITNESTEBAN – copias»
+   Permiso drive.file: la app solo ve los archivos que ella misma crea.
+   ========================================================================= */
+const GOOGLE_CLIENT_ID = '534557412512-8med3prg1mchie6i4nsb7mmqtje97o6m.apps.googleusercontent.com';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const DRIVE_FOLDER = 'FITNESTEBAN – copias';
+const DRIVE_KEEP = 30; // copias que se conservan en Drive (las más antiguas se borran)
+const TOKEN_KEY = 'fitnesteban_gtoken'; // fuera del estado: nunca va en las copias
+
+let gisPromise = null;
+function loadGis() {
+  if (window.google?.accounts?.oauth2) return Promise.resolve();
+  if (!gisPromise) gisPromise = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+    s.onload = () => res(); s.onerror = () => { gisPromise = null; rej(new Error('No se pudo cargar el inicio de sesión de Google (¿sin conexión?)')); };
+    document.head.appendChild(s);
+  });
+  return gisPromise;
+}
+function storedToken() {
+  try { const t = JSON.parse(localStorage.getItem(TOKEN_KEY) || 'null'); return t && t.exp > Date.now() + 60000 ? t.token : null; } catch { return null; }
+}
+function saveToken(token, expiresIn) { try { localStorage.setItem(TOKEN_KEY, JSON.stringify({ token, exp: Date.now() + (Number(expiresIn) || 3600) * 1000 })); } catch { /* nada */ } }
+function clearToken() { try { localStorage.removeItem(TOKEN_KEY); } catch { /* nada */ } }
+
+/* Pide un permiso a Google. Solo con interactive=true puede abrir la ventana de Google (necesita un toque del usuario). */
+async function driveToken(interactive) {
+  const t = storedToken();
+  if (t) return t;
+  if (!interactive) return null;
+  if (!navigator.onLine) throw new Error('Sin conexión a internet');
+  await loadGis();
+  return new Promise((resolve, reject) => {
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID, scope: DRIVE_SCOPE,
+      callback: r => {
+        if (r.error) return reject(new Error(r.error_description || r.error));
+        saveToken(r.access_token, r.expires_in);
+        resolve(r.access_token);
+      },
+      error_callback: e => reject(new Error(e?.type === 'popup_closed' ? 'Ventana de Google cerrada' : e?.type === 'popup_failed_to_open' ? 'El móvil bloqueó la ventana de Google' : (e?.message || 'Error de Google')))
+    });
+    client.requestAccessToken({ prompt: state.settings.driveConnected ? '' : 'consent' });
+  });
+}
+
+async function driveFetch(url, opts = {}, interactive = false, retry = true) {
+  const token = await driveToken(interactive);
+  if (!token) { const e = new Error('Hace falta volver a autorizar Google Drive'); e.needAuth = true; throw e; }
+  const r = await fetch(url, { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` } });
+  if (r.status === 401 && retry) { clearToken(); return driveFetch(url, opts, interactive, false); }
+  if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error?.message || `Drive respondió ${r.status}`); }
+  return r;
+}
+
+async function driveFolder(interactive) {
+  const s = state.settings;
+  const q = encodeURIComponent(`name='${DRIVE_FOLDER}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const found = await (await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,name)&pageSize=10`, {}, interactive)).json();
+  if (found.files?.length) { s.driveFolderId = found.files[0].id; return s.driveFolderId; }
+  const created = await (await driveFetch('https://www.googleapis.com/drive/v3/files?fields=id', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: DRIVE_FOLDER, mimeType: 'application/vnd.google-apps.folder' })
+  }, interactive)).json();
+  s.driveFolderId = created.id;
+  return s.driveFolderId;
+}
+
+async function driveList(interactive) {
+  const folder = await driveFolder(interactive);
+  const q = encodeURIComponent(`'${folder}' in parents and trashed=false`);
+  const r = await (await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime desc&fields=files(id,name,createdTime,size)&pageSize=100`, {}, interactive)).json();
+  return r.files || [];
+}
+
+async function driveUpload(interactive) {
+  const folder = await driveFolder(interactive);
+  const now = new Date();
+  const name = `fitnesteban_backup_${todayISO()}_${pad(now.getHours())}${pad(now.getMinutes())}.json`;
+  const boundary = 'fb' + Math.random().toString(36).slice(2);
+  const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [folder], mimeType: 'application/json' })}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${backupText()}\r\n--${boundary}--`;
+  await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+    method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body
+  }, interactive);
+  // limpieza: conserva las DRIVE_KEEP más recientes
+  try {
+    const files = await driveList(false);
+    for (const f of files.slice(DRIVE_KEEP)) await driveFetch(`https://www.googleapis.com/drive/v3/files/${f.id}`, { method: 'DELETE' }, false);
+  } catch { /* no es grave */ }
+  state.settings.lastDriveBackup = todayISO();
+  state.settings.lastBackup = todayISO();
+  persist();
+}
+
+async function driveConnect() {
+  ui.driveBusy = true; render();
+  try {
+    await driveToken(true);
+    state.settings.driveConnected = true;
+    try {
+      const about = await (await driveFetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)', {}, false)).json();
+      state.settings.driveEmail = about.user?.emailAddress || '';
+    } catch { /* opcional */ }
+    await driveUpload(false);
+    persist();
+    toast('Drive conectado y primera copia guardada ✓');
+  } catch (e) {
+    toast('Drive: ' + e.message, 'error');
+  } finally { ui.driveBusy = false; render(); }
+}
+async function driveBackupNow() {
+  ui.driveBusy = true; render();
+  try { await driveUpload(true); toast('Copia guardada en Drive ✓'); $('#topBanner').innerHTML = ''; }
+  catch (e) { toast('Drive: ' + e.message, 'error'); }
+  finally { ui.driveBusy = false; render(); }
+}
+function driveDisconnect() {
+  if (!confirm('¿Desconectar Google Drive? Tus copias se quedan en Drive; solo se deja de guardar desde la app.')) return;
+  const t = storedToken();
+  try { if (t && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(t, () => {}); } catch { /* nada */ }
+  clearToken();
+  Object.assign(state.settings, { driveConnected: false, driveEmail: '', driveFolderId: '' });
+  persist(); render(); toast('Drive desconectado');
+}
+async function driveRestoreList() {
+  ui.driveBusy = true; render();
+  let files;
+  try { files = await driveList(true); }
+  catch (e) { toast('Drive: ' + e.message, 'error'); return; }
+  finally { ui.driveBusy = false; render(); }
+  if (!files.length) return toast('No hay copias en tu carpeta de Drive', 'warn');
+  const label = f => { const d = new Date(f.createdTime); return `${fmtDate(toISO(d))} · ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  openModal(`
+    <h3 class="modal-title">Restaurar desde Drive</h3>
+    <p class="text-xs text-mute">Elige una copia. Sustituirá todos los datos actuales de la app.</p>
+    <div class="space-y-1.5 max-h-[50dvh] overflow-y-auto">
+      ${files.slice(0, 30).map((f, i) => `<button class="w-full text-left bg-ink border border-line rounded-xl px-3 py-2.5 flex justify-between items-center" data-mact="pick" data-i="${i}" type="button">
+        <span class="text-sm font-semibold">${esc(label(f))}</span><span class="text-[11px] text-mute">${f.size ? Math.round(f.size / 1024) + ' KB' : ''}</span></button>`).join('')}
+    </div>
+    <button class="btn-ghost w-full" data-close type="button">Cancelar</button>
+  `, {
+    pick: (root, b) => {
+      const f = files[+b.dataset.i];
+      const go = async () => {
+        try {
+          const text = await (await driveFetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`, {}, true)).text();
+          importText(text);
+        } catch (e) { toast('Drive: ' + e.message, 'error'); }
+      };
+      closeModal();
+      if (state.settings.pinHash) guardModal({ title: 'Restaurar copia', text: `Se sustituirán tus datos por la copia del ${label(f)}.`, word: 'IMPORTAR', onOk: go });
+      else go();
+    }
+  });
+}
+
+/* Al abrir la app: copia semanal automática */
+async function maybeAutoDriveBackup() {
+  const s = state.settings;
+  if (!s.driveConnected || s.autoDrive === false || !navigator.onLine) return;
+  const age = s.lastDriveBackup ? daysBetween(s.lastDriveBackup, todayISO()) : 99;
+  if (age < 7) return;
+  if (storedToken()) {
+    try { await driveUpload(false); toast('Copia semanal guardada en Drive ✓'); render(); return; } catch { /* sigue: pide permiso */ }
+  }
+  $('#topBanner').innerHTML = `<div class="banner-info mt-3"><span>☁️ Toca para guardar la copia semanal en Drive${s.lastDriveBackup ? ` (última hace ${age} días)` : ''}.</span><button class="btn-banner shrink-0" id="doDriveBackup" type="button">Guardar</button></div>`;
+  $('#doDriveBackup').onclick = () => driveBackupNow();
+  loadGis().catch(() => null); // precarga para que la ventana de Google abra al instante
 }
 
 /* =========================================================================
@@ -1995,6 +2189,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.7.0', ['☁️ Copias en Google Drive: conéctalo en Ajustes → Copias. Guarda en la carpeta «FITNESTEBAN – copias», copia automática semanal y restaurar desde Drive.']],
   ['4.6.2', ['🧠 El resumen semanal ahora se pliega y recuerda si lo dejaste abierto o cerrado.']],
   ['4.6.1', ['📤 «Compartir copia» corregido en Android: ahora abre el menú de compartir.']],
   ['4.6.0', ['📤 Compartir copia en un toque (Drive, WhatsApp…), en Ajustes y en el aviso de Progreso.', '🧠 Resumen semanal con IA en Progreso: qué va bien, qué mejorar y 3 acciones.', '📉 Peso como tendencia (media de 7 días) con aviso si bajas demasiado rápido o te estancas.', '🏆 Récords personales por ejercicio.', '🔋 Semana de descarga sugerida solo si llevas 6+ semanas seguidas fuertes y hay estancamientos.']],
@@ -2047,7 +2242,7 @@ const GUIDE = [
     'En el historial puedes borrar una sesión mal guardada: el coach dejará de tenerla en cuenta.'
   ]],
   ['🔒 Datos, copias y PIN', [
-    'Tus datos viven <b>solo en este móvil</b>. Haz una copia cada semana con <b>📤 Compartir copia</b> y guárdala en Drive o envíatela. La app te avisa si pasan más de 7 días.',
+    'Tus datos viven <b>solo en este móvil</b>. Conecta <b>☁️ Google Drive</b> (Ajustes → Copias): cada semana, al abrir la app, se guarda una copia en la carpeta «FITNESTEBAN – copias» (si Google pide confirmar, verás un aviso arriba para hacerlo con un toque). Desde ahí también puedes restaurar. La app te avisa si pasan más de 7 días.',
     'La copia no incluye la clave de Gemini ni el PIN. Al importar se conservan los actuales.',
     'Con PIN activo, «Borrar todo» e «Importar» lo piden. Antes de borrar se descarga una copia automáticamente.',
     'Ábrela siempre desde el icono instalado, no desde Chrome.'
@@ -2118,6 +2313,7 @@ function render() {
 
 function go(view) {
   ui.view = view;
+  if (view === 'settings' && navigator.onLine) loadGis().catch(() => null);
   render();
   window.scrollTo({ top: 0 });
 }
@@ -2263,6 +2459,10 @@ const actions = {
   },
   export: () => exportBackup(),
   share: () => shareBackup(),
+  driveConnect: () => driveConnect(),
+  driveBackup: () => { if (!state.settings.driveConnected) return driveConnect(); driveBackupNow(); },
+  driveRestore: () => driveRestoreList(),
+  driveDisconnect: () => driveDisconnect(),
   report: () => generateReport(),
   deloadStart: () => { state.deload = { start: todayISO(), end: addDays(todayISO(), 6) }; persist(); render(); toast('Semana de descarga activada 🔋'); },
   deloadSnooze: () => { state.deloadSnooze = addDays(todayISO(), 7); persist(); render(); toast('Te lo vuelvo a sugerir en una semana'); },
@@ -2318,6 +2518,7 @@ app.addEventListener('change', e => {
     const h = state.settings.habits[parseInt(t.dataset.habit, 10)];
     draftOf(currentDay().id).habits[h] = t.checked; persist();
   } else if (t.dataset.actChange === 'progEx') { ui.progEx = t.value; render(); }
+  else if (t.id === 'autoDrive') { state.settings.autoDrive = t.checked; persist(); }
   else if (t.id === 'cdDate') { keepCardioInputs(); ui.cardio.est = null; render(); }
 });
 app.addEventListener('toggle', e => { if (e.target.id === 'aiBox') ui.aiOpen = e.target.open; if (e.target.id === 'blocksBox') ui.blocksOpen = e.target.open; const k = e.target.dataset?.openKey; if (k) openKeys[k] = e.target.open; }, true);
@@ -2366,3 +2567,4 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 ui.dayId = nextDayId();
 render();
 maybeShowNews();
+setTimeout(() => maybeAutoDriveBackup(), 1500);
