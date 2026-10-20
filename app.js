@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.6.0';
+const APP_VERSION = '4.6.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1871,20 +1871,27 @@ function exportBackup() {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   markBackup('Copia descargada ✓');
 }
-/* Compartir la copia (Drive, WhatsApp, correo…) con el menú del móvil */
+/* Compartir la copia (Drive, WhatsApp, correo…) con el menú del móvil.
+   Chrome en Android rechaza algunos tipos de archivo (.json) aunque canShare diga que sí:
+   por eso se prueba primero .txt (siempre admitido) y, si falla, .json; solo al final se descarga. */
 async function shareBackup() {
   const text = backupText();
   const name = `fitnesteban_backup_${todayISO()}`;
-  const candidates = [new File([text], name + '.json', { type: 'application/json' }), new File([text], name + '.txt', { type: 'text/plain' })];
-  const file = candidates.find(f => navigator.canShare?.({ files: [f] }));
-  if (!file) { exportBackup(); return toast('Este navegador no permite compartir archivos: la copia se ha descargado.', 'warn'); }
-  try {
-    await navigator.share({ files: [file], title: 'Copia FITNESTEBAN', text: `Copia de seguridad del ${fmtDate(todayISO())}` });
-    markBackup('Copia compartida ✓');
-  } catch (e) {
-    if (e.name === 'AbortError') return toast('Copia no compartida', 'warn');
-    exportBackup();
+  if (!navigator.share) { exportBackup(); return toast('Este navegador no tiene «Compartir»: copia descargada. Ábrela desde Chrome o desde la app instalada.', 'warn'); }
+  const candidates = [new File([text], name + '.txt', { type: 'text/plain' }), new File([text], name + '.json', { type: 'application/json' })];
+  let lastErr = null;
+  for (const file of candidates) {
+    if (navigator.canShare && !navigator.canShare({ files: [file] })) { lastErr = new Error(`tipo ${file.type} no admitido`); continue; }
+    try {
+      await navigator.share({ files: [file], title: 'Copia FITNESTEBAN' });
+      return markBackup('Copia compartida ✓');
+    } catch (e) {
+      if (e.name === 'AbortError') return toast('Copia no compartida', 'warn');
+      lastErr = e;
+    }
   }
+  exportBackup();
+  toast(`No se pudo abrir «Compartir» (${lastErr?.name || ''}: ${lastErr?.message || 'desconocido'}). La copia se ha descargado.`, 'warn');
 }
 
 function importBackup(file) {
@@ -1980,6 +1987,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.6.1', ['📤 «Compartir copia» corregido en Android: ahora abre el menú de compartir.']],
   ['4.6.0', ['📤 Compartir copia en un toque (Drive, WhatsApp…), en Ajustes y en el aviso de Progreso.', '🧠 Resumen semanal con IA en Progreso: qué va bien, qué mejorar y 3 acciones.', '📉 Peso como tendencia (media de 7 días) con aviso si bajas demasiado rápido o te estancas.', '🏆 Récords personales por ejercicio.', '🔋 Semana de descarga sugerida solo si llevas 6+ semanas seguidas fuertes y hay estancamientos.']],
   ['4.5.0', ['Botón «?» arriba: guía de la app por secciones.', 'Tras cada actualización verás esta ventana de novedades (una sola vez).']],
   ['4.4.1', ['«Comidas habituales» muestra solo las del tipo elegido (Desayuno, Comida…), sin rellenar con otras.']],
