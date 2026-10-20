@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.8.1';
+const APP_VERSION = '4.8.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2221,6 +2221,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.8.2', ['👆 Al deslizar, la pantalla siguiente entra acompañando al dedo; arreglado el parpadeo de la barra inferior.']],
   ['4.8.1', ['👆 Cambia de pestaña deslizando el dedo a izquierda o derecha (se puede desactivar en Ajustes → Aplicación).']],
   ['4.8.0', ['🥩 Proteína por comida: cada desayuno, comida, puente y cena te indica si llega al mínimo (25 g por defecto, ajustable en Ajustes → Objetivos). El resumen semanal lo tiene en cuenta.']],
   ['4.7.0', ['☁️ Copias en Google Drive: conéctalo en Ajustes → Copias. Guarda en la carpeta «FITNESTEBAN – copias», copia automática semanal y restaurar desde Drive.']],
@@ -2355,23 +2356,39 @@ function go(view) {
 document.querySelectorAll('.navbtn').forEach(b => b.addEventListener('click', () => go(b.dataset.view)));
 
 /* ---------- Deslizar entre pestañas ----------
+   La pantalla siguiente entra desde el lado siguiendo el dedo.
    Solo con un gesto claramente horizontal y largo; nunca desde los bordes (gesto «atrás» de Android),
    ni sobre filas deslizables, campos, gráficas o ventanas abiertas. No da la vuelta. */
 const VIEWS = ['train', 'diet', 'progress', 'settings'];
-const swipe = { on: false, axis: null, x0: 0, y0: 0, dx: 0 };
+const VIEW_HTML = { train: () => renderTrain(), diet: () => renderDiet(), progress: () => renderProgress(), settings: () => renderSettings() };
+const swipe = { on: false, axis: null, x0: 0, y0: 0, dx: 0, dir: 0, peek: null, busy: false };
 const appEl = document.getElementById('app');
 const NO_SWIPE = '.chips-row, input, textarea, select, svg, .seg, .modal-sheet, [data-noswipe]';
-function swipeReset(animate) {
-  appEl.style.transition = animate ? 'transform .2s ease, opacity .2s ease' : '';
-  appEl.style.transform = ''; appEl.style.opacity = '';
+const W = () => window.innerWidth;
+function setX(el, x, ms = 0) {
+  el.style.transition = ms ? `transform ${ms}ms cubic-bezier(.2,.7,.3,1)` : '';
+  el.style.transform = x ? `translate3d(${x}px,0,0)` : '';
 }
+function makePeek(view) {
+  const prevView = ui.view;
+  ui.view = view;
+  let html = '';
+  try { html = VIEW_HTML[view](); } finally { ui.view = prevView; }
+  const el = document.createElement('div');
+  el.className = 'swipe-peek';
+  el.style.top = appEl.getBoundingClientRect().top + 'px';
+  el.innerHTML = `<div class="max-w-xl mx-auto px-4 pt-4">${html}</div>`;
+  document.body.appendChild(el);
+  return el;
+}
+function dropPeek() { swipe.peek?.remove(); swipe.peek = null; }
 document.addEventListener('touchstart', e => {
   swipe.on = false; swipe.axis = null;
-  if (state.settings.swipeNav === false || e.touches.length !== 1 || $('#modalRoot').classList.contains('open')) return;
+  if (swipe.busy || state.settings.swipeNav === false || e.touches.length !== 1 || $('#modalRoot').classList.contains('open')) return;
   const t = e.touches[0], edge = 28;
-  if (t.clientX < edge || t.clientX > window.innerWidth - edge) return;
+  if (t.clientX < edge || t.clientX > W() - edge) return;
   if (!appEl.contains(e.target) || e.target.closest(NO_SWIPE)) return;
-  Object.assign(swipe, { on: true, x0: t.clientX, y0: t.clientY, dx: 0 });
+  Object.assign(swipe, { on: true, x0: t.clientX, y0: t.clientY, dx: 0, dir: 0 });
 }, { passive: true });
 document.addEventListener('touchmove', e => {
   if (!swipe.on) return;
@@ -2382,26 +2399,38 @@ document.addEventListener('touchmove', e => {
     swipe.axis = Math.abs(dx) > Math.abs(dy) * 1.6 ? 'x' : 'y';
     if (swipe.axis === 'y') { swipe.on = false; return; }
   }
+  const dir = dx < 0 ? 1 : -1; // 1 = siguiente (entra por la derecha), -1 = anterior
+  const target = VIEWS[VIEWS.indexOf(ui.view) + dir];
+  if (dir !== swipe.dir) { dropPeek(); swipe.dir = dir; if (target) swipe.peek = makePeek(target); }
   swipe.dx = dx;
-  const i = VIEWS.indexOf(ui.view);
-  const blocked = (dx > 0 && i === 0) || (dx < 0 && i === VIEWS.length - 1);
-  appEl.style.transition = '';
-  appEl.style.transform = `translateX(${dx * (blocked ? 0.08 : 0.35)}px)`;
-  appEl.style.opacity = String(1 - Math.min(0.35, Math.abs(dx) / window.innerWidth * (blocked ? 0.1 : 0.6)));
+  if (!target) { setX(appEl, dx * 0.12); return; } // primera o última: solo un pequeño rebote
+  setX(appEl, dx);
+  setX(swipe.peek, dir * W() + dx);
 }, { passive: true });
-document.addEventListener('touchend', () => {
-  if (!swipe.on || swipe.axis !== 'x') { swipe.on = false; return; }
+function swipeEnd() {
+  if (!swipe.on) return;
   swipe.on = false;
-  const i = VIEWS.indexOf(ui.view);
-  const dir = swipe.dx < 0 ? 1 : -1;
-  const next = VIEWS[i + dir];
-  if (Math.abs(swipe.dx) < window.innerWidth * 0.25 || !next) return swipeReset(true);
-  go(next);
-  appEl.style.transition = '';
-  appEl.style.transform = `translateX(${dir * 40}px)`; appEl.style.opacity = '0.4';
-  requestAnimationFrame(() => requestAnimationFrame(() => swipeReset(true)));
-}, { passive: true });
-document.addEventListener('touchcancel', () => { if (swipe.on) { swipe.on = false; swipeReset(true); } }, { passive: true });
+  if (swipe.axis !== 'x') return;
+  const target = VIEWS[VIEWS.indexOf(ui.view) + swipe.dir];
+  const ok = target && Math.abs(swipe.dx) >= W() * 0.25;
+  if (!ok) {
+    setX(appEl, 0, 200);
+    if (swipe.peek) { const pk = swipe.peek; swipe.peek = null; setX(pk, swipe.dir * W(), 200); setTimeout(() => pk.remove(), 220); }
+    setTimeout(() => setX(appEl, 0), 220);
+    return;
+  }
+  swipe.busy = true;
+  setX(appEl, -swipe.dir * W(), 220);
+  setX(swipe.peek, 0, 220);
+  setTimeout(() => {
+    setX(appEl, 0);
+    go(target);           // pinta la pantalla real (idéntica a la que ha entrado)
+    dropPeek();
+    swipe.busy = false;
+  }, 230);
+}
+document.addEventListener('touchend', swipeEnd, { passive: true });
+document.addEventListener('touchcancel', swipeEnd, { passive: true });
 
 const actions = {
   pickDay: b => { ui.dayId = b.dataset.day; render(); window.scrollTo({ top: 0 }); },
