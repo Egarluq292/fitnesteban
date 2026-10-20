@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.2.1';
+const APP_VERSION = '4.2.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -454,6 +454,7 @@ function variantOf(e) {
 }
 function draftOf(dayId) {
   if (!state.drafts[dayId]) state.drafts[dayId] = { sets: {}, counts: {}, done: {}, habits: {} };
+  if (!state.drafts[dayId].open) state.drafts[dayId].open = {};
   return state.drafts[dayId];
 }
 function draftHasData(dayId) {
@@ -557,6 +558,10 @@ function renderExerciseCard(e, idx, day, d) {
   const n = setCount(e, key, d);
   const tone = TONE[c.tone];
   const doneArr = d.done[key] || [];
+  const isOpen = !!d.open?.[key];
+  const doneCount = Array.from({ length: n }, (_, i) => !!doneArr[i]).filter(Boolean).length;
+  const logged = Array.from({ length: n }, (_, i) => d.sets[key]?.[i]?.r).filter(r => r !== undefined && r !== '').length;
+  const plan = c.weight !== null && c.weight !== undefined ? `${n} × ${c.weight ? fmtKg(c.weight) : 'peso corporal'}` : `${n} series`;
   let rows = '';
   for (let i = 0; i < n; i++) {
     const w = cellValue(d, key, i, 'w', c);
@@ -600,12 +605,16 @@ function renderExerciseCard(e, idx, day, d) {
       <p class="text-xs mt-1 opacity-90 leading-relaxed">${esc(c.text)}</p>
       ${c.last ? `<p class="text-[11px] mt-1.5 opacity-70">Última vez: ${esc(c.last)}</p>` : ''}
     </div>
-    <div class="mt-3 space-y-1.5">${rows}</div>
+    <button class="sets-toggle ${isOpen ? 'sets-toggle-open' : ''} ${doneCount === n ? 'sets-toggle-done' : ''}" data-act="toggleSets" data-key="${esc(key)}" type="button" aria-expanded="${isOpen}">
+      <span class="font-bold">${doneCount === n ? '✅' : '📝'} ${isOpen ? 'Ocultar series' : 'Registrar series'}</span>
+      <span class="flex items-center gap-2 text-mute">${doneCount ? `${doneCount}/${n} hechas` : logged ? `${logged}/${n} apuntadas` : esc(plan)}<span class="chev">▾</span></span>
+    </button>
+    ${isOpen ? `<div class="mt-2 space-y-1.5">${rows}</div>
     <div class="flex items-center justify-between mt-3">
       <button class="btn-mini text-rose-300" data-act="setCount" data-key="${esc(key)}" data-ex="${esc(e.id)}" data-delta="-1" type="button">− Serie</button>
       <span class="text-[11px] text-mute">${n} ${n === 1 ? 'serie' : 'series'} hoy</span>
       <button class="btn-mini text-emerald-300" data-act="setCount" data-key="${esc(key)}" data-ex="${esc(e.id)}" data-delta="1" type="button">+ Serie</button>
-    </div>
+    </div>` : ''}
   </article>`;
 }
 
@@ -1662,6 +1671,11 @@ const actions = {
     const f = findEx(b.dataset.ex); if (!f) return;
     const d = draftOf(currentDay().id);
     d.counts[b.dataset.key] = clamp(setCount(f.ex, b.dataset.key, d) + parseInt(b.dataset.delta, 10), 1, 10);
+    persist(); render();
+  },
+  toggleSets: b => {
+    const d = draftOf(currentDay().id);
+    d.open[b.dataset.key] = !d.open[b.dataset.key];
     persist(); render();
   },
   doneSet: b => markSetDone(b.dataset.ex, b.dataset.key, parseInt(b.dataset.i, 10)),
