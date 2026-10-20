@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.2.2';
+const APP_VERSION = '4.3.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -317,6 +317,7 @@ const ui = {
   progEx: null,
   showKey: false,
   aiOpen: false,
+  blocksOpen: false,
   cardio: { type: 'bike', minutes: '', intensity: 'media', date: todayISO(), weight: '', est: null, busy: false }
 };
 function guessMealType() {
@@ -607,7 +608,7 @@ function renderExerciseCard(e, idx, day, d) {
     </div>
     <button class="sets-toggle ${isOpen ? 'sets-toggle-open' : ''} ${doneCount === n ? 'sets-toggle-done' : ''}" data-act="toggleSets" data-key="${esc(key)}" type="button" aria-expanded="${isOpen}">
       <span class="font-bold">${doneCount === n ? '✅' : '📝'} ${isOpen ? 'Ocultar series' : 'Registrar series'}</span>
-      <span class="flex items-center gap-2 text-mute">${doneCount ? `${doneCount}/${n} hechas` : logged ? `${logged}/${n} apuntadas` : esc(plan)}<span class="chev">▾</span></span>
+      <span class="flex items-center gap-2 text-mute">${doneCount ? `${doneCount}/${n} hechas` : logged ? `${logged}/${n} apuntadas` : esc(plan)}<span class="tri"></span></span>
     </button>
     ${isOpen ? `<div class="mt-2 space-y-1.5">${rows}</div>
     <div class="flex items-center justify-between mt-3">
@@ -1079,7 +1080,7 @@ function renderDiet() {
   <section class="card p-4 mt-3 space-y-3">
     <h3 class="section-title">➕ Añadir comida</h3>
     <div class="flex flex-wrap gap-1.5">${typeChips}</div>
-    <textarea class="field" id="mealDesc" rows="2" placeholder="Ej: 200 g de pechuga a la plancha y 150 g de arroz">${esc(ui.mealDesc)}</textarea>
+    <textarea class="field" id="mealDesc" rows="2" placeholder="${ui.img ? 'Opcional: añade lo que sepas para afinar (ej: 150 g de arroz, aceite de oliva)' : 'Ej: 200 g de pechuga a la plancha y 150 g de arroz'}">${esc(ui.mealDesc)}</textarea>
     ${ui.img ? `<div class="relative rounded-xl overflow-hidden border border-line">
         <img src="${ui.img}" alt="Foto del plato" class="w-full max-h-56 object-cover" />
         <button class="absolute top-2 right-2 iconbtn bg-ink/80" data-act="clearImg" type="button" aria-label="Quitar foto">✕</button>
@@ -1111,11 +1112,64 @@ function renderDiet() {
   </section>`;
 }
 
+/* ---------- Raciones (tras «Estimar macros con IA») ---------- */
+const SIZES = [['s', 'P'], ['m', 'M'], ['l', 'G']];
+function itemMacros(it) {
+  const f = (it.grams || 0) / 100;
+  return { kcal: it.per100.kcal * f, prot: it.per100.prot * f, carbs: it.per100.carbs * f, fat: it.per100.fat * f };
+}
+function recalcFromItems(ai) {
+  if (!ai.items?.length) return;
+  const t = ai.items.reduce((a, it) => { const m = itemMacros(it); a.kcal += m.kcal; a.prot += m.prot; a.carbs += m.carbs; a.fat += m.fat; return a; }, { kcal: 0, prot: 0, carbs: 0, fat: 0 });
+  Object.assign(ai, { kcal: Math.round(t.kcal), prot: Math.round(t.prot), carbs: Math.round(t.carbs), fat: Math.round(t.fat) });
+}
+function syncResultFields() {
+  const ai = ui.aiResult; if (!ai) return;
+  for (const k of ['kcal', 'prot', 'carbs', 'fat']) { const el = document.querySelector(`[data-ai="${k}"]`); if (el) el.value = Math.round(ai[k]); }
+  (ai.items || []).forEach((it, i) => { const el = document.querySelector(`[data-item-kcal="${i}"]`); if (el) el.textContent = `${Math.round(itemMacros(it).kcal)} kcal`; });
+}
+function renderPortions(ai) {
+  const items = ai.items || [];
+  if (!items.length) return '';
+  const pending = items.filter(it => !it.fromDesc).length;
+  const row = (it, i) => {
+    const kc = `<span class="text-mute" data-item-kcal="${i}">${Math.round(itemMacros(it).kcal)} kcal</span>`;
+    if (it.fromDesc) return `<div class="portion">
+      <div class="flex items-center justify-between gap-2 text-xs">
+        <span class="font-semibold truncate">${esc(it.name)} <span class="text-mute font-normal">· ${Math.round(it.grams)} g, según tu descripción</span></span>
+        <span class="flex items-center gap-2 shrink-0">${kc}<button class="underline text-brand" data-act="portionEdit" data-i="${i}" type="button">cambiar</button></span>
+      </div></div>`;
+    return `<div class="portion">
+      <div class="flex items-center justify-between gap-2 text-xs">
+        <span class="font-semibold truncate">${esc(it.name)}</span>
+        <span class="flex items-center gap-2 shrink-0">${kc}<button class="text-mute px-1" data-act="portionDel" data-i="${i}" type="button" aria-label="Quitar alimento">✕</button></span>
+      </div>
+      <div class="seg mt-1.5">
+        ${SIZES.map(([k, l]) => `<button class="seg-btn ${it.sel === k ? 'seg-on' : ''}" data-act="portion" data-i="${i}" data-size="${k}" type="button">${l}<span>${Math.round(it.sizes[k])} g</span></button>`).join('')}
+        ${it.sel === 'x'
+          ? `<label class="seg-btn seg-on seg-input"><input inputmode="numeric" data-portion-g="${i}" value="${Math.round(it.grams)}" aria-label="Gramos de ${esc(it.name)}" /><span>g</span></label>`
+          : `<button class="seg-btn" data-act="portion" data-i="${i}" data-size="x" type="button">Otra<span>… g</span></button>`}
+      </div>
+    </div>`;
+  };
+  const body = items.map(row).join('');
+  if (!pending) {
+    return `<details class="portions"><summary class="flex items-center justify-between cursor-pointer text-xs text-mute">
+      <span>⚖️ Raciones según tu descripción (${items.length})</span><span class="tri"></span></summary>
+      <div class="space-y-1.5 mt-2">${body}</div></details>`;
+  }
+  return `<div class="portions">
+    <div class="flex items-center justify-between text-xs text-mute mb-2"><span>⚖️ ¿Qué cantidad había? <span class="text-[10px]">(P pequeña · M mediana · G grande)</span></span></div>
+    <div class="space-y-1.5">${body}</div>
+  </div>`;
+}
+
 function renderMealResult(ai) {
   const calc = Math.round(ai.prot * 4 + ai.carbs * 4 + ai.fat * 9);
   const mismatch = ai.kcal > 0 && Math.abs(calc - ai.kcal) / ai.kcal > 0.15;
   return `<div class="border-t border-line pt-3 space-y-3">
     ${ai.note ? `<div class="text-xs text-mute bg-ink rounded-xl p-2.5 border border-line">🤖 ${esc(ai.note)}</div>` : ''}
+    ${renderPortions(ai)}
     <label class="lbl">Descripción<input class="field mt-1" data-ai="desc" value="${esc(ai.desc)}" /></label>
     <div class="grid grid-cols-4 gap-2">
       <label class="lbl text-amber-300">kcal<input class="field mt-1 text-center" inputmode="decimal" data-ai="kcal" value="${Math.round(ai.kcal)}" /></label>
@@ -1181,19 +1235,39 @@ async function analyzeMeal() {
   if (!state.settings.apiKey) { ui.view = 'settings'; render(); return toast('Primero pega tu clave de Gemini', 'warn'); }
   ui.aiBusy = true; render();
   try {
-    const prompt = `Eres un nutricionista deportivo. Estima los macronutrientes de esta comida a partir de la foto y/o la descripción.
-Si la descripción da cantidades, úsalas. Si no, estima raciones habituales en España según la foto. No inventes ingredientes que no se vean ni se mencionen.
-Responde SOLO con JSON válido con estas claves:
-{"dish_name": "nombre breve", "calories": número, "protein": número (g), "carbs": número (g), "fat": número (g), "confidence": "alta" | "media" | "baja", "explanation": "desglose breve por ingrediente, máximo 2 frases"}
+    const prompt = `Eres un nutricionista deportivo. Analiza esta comida a partir de la foto y/o la descripción del usuario y descomponla en alimentos.
+Reglas:
+- La descripción del usuario manda: si da cantidades (gramos, unidades, cucharadas…), úsalas para ese alimento y marca "from_description": true.
+- Si un alimento no tiene cantidad en la descripción, estímala por la foto o por raciones habituales en España y marca "from_description": false.
+- Para cada alimento da tres raciones en gramos: pequeña, mediana y grande. La MEDIANA debe ser tu estimación más probable de lo que hay en el plato. Si from_description es true, "grams" es la cantidad indicada.
+- Incluye aceite o salsas solo si se ven o se mencionan. No inventes alimentos.
+- Los valores por 100 g deben referirse al alimento tal como se come (cocinado si está cocinado).
+Responde SOLO con JSON válido:
+{"dish_name": "nombre breve", "confidence": "alta" | "media" | "baja", "explanation": "una frase breve",
+ "items": [{"name": "nombre corto del alimento", "from_description": true|false, "grams": número, "small_g": número, "medium_g": número, "large_g": número,
+            "per100": {"kcal": número, "protein": número, "carbs": número, "fat": número}}],
+ "calories": total, "protein": total, "carbs": total, "fat": total}
 Descripción del usuario: ${desc ? JSON.stringify(desc) : '(sin descripción, usa solo la foto)'}`;
     const parts = [{ text: prompt }];
     if (ui.img) parts.push({ inlineData: { mimeType: 'image/jpeg', data: ui.img.split(',')[1] } });
     const res = parseJSONLoose(await callGemini(parts));
+    const items = (Array.isArray(res.items) ? res.items : []).map(it => {
+      const per = it.per100 || {};
+      const m = num(it.medium_g) || num(it.grams) || 100;
+      const fromDesc = !!it.from_description && num(it.grams) > 0;
+      return {
+        name: String(it.name || 'Alimento').slice(0, 40), fromDesc,
+        sizes: { s: num(it.small_g) || Math.round(m * 0.65), m, l: num(it.large_g) || Math.round(m * 1.4) },
+        sel: fromDesc ? 'x' : 'm', grams: fromDesc ? num(it.grams) : m,
+        per100: { kcal: num(per.kcal) || 0, prot: num(per.protein) || 0, carbs: num(per.carbs) || 0, fat: num(per.fat) || 0 }
+      };
+    }).filter(it => it.per100.kcal > 0 || it.per100.prot > 0);
     ui.aiResult = {
-      desc: desc || res.dish_name || ui.mealType,
+      desc: desc || res.dish_name || ui.mealType, items,
       kcal: num(res.calories) || 0, prot: num(res.protein) || 0, carbs: num(res.carbs) || 0, fat: num(res.fat) || 0,
       note: `${res.dish_name || 'Comida'}${res.confidence ? ` (confianza ${res.confidence})` : ''}: ${res.explanation || ''}`
     };
+    recalcFromItems(ui.aiResult);
   } catch (e) {
     toast('IA: ' + e.message, 'error');
   } finally {
@@ -1319,7 +1393,7 @@ function renderProgress() {
       <div class="flex justify-between text-[11px] text-mute"><span>Cintura</span><span>${delta(cPts, 'cm')}</span></div>
       ${lineChart(cPts, { color: '#fbbf24', unit: ' cm', label: 'la cintura' })}
     </div>
-    ${bm.length ? `<details class="text-xs"><summary class="text-mute cursor-pointer">Ver registros (${bm.length})</summary>
+    ${bm.length ? `<details class="text-xs"><summary class="text-mute cursor-pointer flex items-center justify-between"><span>Ver registros (${bm.length})</span><span class="tri"></span></summary>
       <div class="space-y-1 mt-2">${bm.slice().reverse().map(m => `<div class="flex items-center justify-between bg-ink rounded-lg px-2.5 py-1.5">
         <span class="text-mute">${fmtDate(m.date)}</span><span>${m.weight !== null ? fmtNum(m.weight) + ' kg' : '—'}</span><span class="text-amber-300">${m.waist !== null ? fmtNum(m.waist) + ' cm' : '—'}</span>
         <button class="iconbtn iconbtn-sm" data-act="delMetric" data-id="${esc(m.id)}" type="button" aria-label="Borrar">✕</button></div>`).join('')}</div></details>` : ''}
@@ -1334,7 +1408,7 @@ function renderProgress() {
     <h3 class="section-title">📚 Historial de sesiones</h3>
     <div class="space-y-2 mt-3">
       ${hist.length ? hist.map(s => `<details class="bg-ink rounded-xl border border-line">
-        <summary class="px-3 py-2.5 flex justify-between items-center cursor-pointer text-sm"><span class="font-semibold truncate">${esc(s.dayTitle || s.dayId)}</span><span class="text-[11px] text-mute shrink-0 ml-2">${fmtDate(s.date)}</span></summary>
+        <summary class="px-3 py-2.5 flex justify-between items-center cursor-pointer text-sm"><span class="font-semibold truncate">${esc(s.dayTitle || s.dayId)}</span><span class="flex items-center gap-2 text-[11px] text-mute shrink-0 ml-2">${fmtDate(s.date)}<span class="tri"></span></span></summary>
         <div class="px-3 pb-3 space-y-1 text-[11px]">
           ${s.exercises.map(e => `<div><strong>${esc(e.name)}:</strong> <span class="font-mono text-mute">${e.sets.map(x => `${fmtNum(x.w)}×${x.r}`).join(', ')}</span></div>`).join('')}
           ${s.habits?.length ? `<div class="text-emerald-300 mt-1">✓ ${s.habits.map(esc).join(' · ')}</div>` : ''}
@@ -1356,7 +1430,7 @@ function renderSettings() {
   <details class="card p-4 group" id="aiBox" ${ui.aiOpen ? 'open' : ''}>
     <summary class="flex items-center justify-between cursor-pointer select-none">
       <h3 class="section-title">🤖 IA de nutrición (Gemini)</h3>
-      <span class="flex items-center gap-2 text-[11px] ${st.apiKey ? 'text-emerald-300' : 'text-amber-300'}">${st.apiKey ? 'Configurada ✓' : 'Sin configurar'}<span class="text-mute transition group-open:rotate-180">▾</span></span>
+      <span class="flex items-center gap-2 text-[11px] ${st.apiKey ? 'text-emerald-300' : 'text-amber-300'}">${st.apiKey ? 'Configurada ✓' : 'Sin configurar'}<span class="tri"></span></span>
     </summary>
     <div class="space-y-3 mt-3">
     <p class="text-xs text-mute leading-relaxed">La clave se guarda <strong class="text-white">solo en este móvil</strong> y no va en el código ni en las copias de seguridad. Créala en <a class="text-brand underline" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>.</p>
@@ -1387,8 +1461,12 @@ function renderSettings() {
     <button class="btn-primary w-full" data-act="saveGoals" type="button">Guardar objetivos</button>
   </section>
 
-  <section class="card p-4 mt-3 space-y-3">
-    <h3 class="section-title">🗓️ Bloques de entrenamiento</h3>
+  <details class="card p-4 mt-3" id="blocksBox" ${ui.blocksOpen ? 'open' : ''}>
+    <summary class="flex items-center justify-between cursor-pointer select-none">
+      <h3 class="section-title">🗓️ Bloques de entrenamiento</h3>
+      <span class="flex items-center gap-2 text-[11px] text-mute">${state.plan.programs.length} bloques<span class="tri"></span></span>
+    </summary>
+    <div class="space-y-3 mt-3">
     ${state.plan.programs.map(p => `<div class="space-y-1.5">
       <div class="flex items-center justify-between">
         <div class="text-sm font-extrabold ${p.id === prog().id ? 'text-brand' : ''}">${progLabel(p)}${p.id === prog().id ? ' <span class="text-[10px] font-semibold">· activo</span>' : ''}</div>
@@ -1406,7 +1484,8 @@ function renderSettings() {
       <button class="btn-ghost" data-act="resetPlan" type="button">Restaurar bloques</button>
     </div>
     <p class="text-[11px] text-mute">Los días se añaden desde Entreno con «＋ Día» (en el bloque activo) y los ejercicios con el botón ✎ de cada uno.</p>
-  </section>
+    </div>
+  </details>
 
   <section class="card p-4 mt-3 space-y-3">
     <h3 class="section-title">✅ Hábitos del remate</h3>
@@ -1688,6 +1767,15 @@ const actions = {
   clearImg: () => { ui.img = null; render(); },
   analyze: () => analyzeMeal(),
   manualMeal: () => { ui.aiResult = { desc: ui.mealDesc.trim() || ui.mealType, kcal: 0, prot: 0, carbs: 0, fat: 0, note: '' }; render(); },
+  portion: b => {
+    const it = ui.aiResult?.items?.[+b.dataset.i]; if (!it) return;
+    it.sel = b.dataset.size;
+    if (it.sel !== 'x') it.grams = it.sizes[it.sel];
+    recalcFromItems(ui.aiResult); render();
+    if (it.sel === 'x') setTimeout(() => document.querySelector(`[data-portion-g="${b.dataset.i}"]`)?.select(), 0);
+  },
+  portionEdit: b => { const it = ui.aiResult?.items?.[+b.dataset.i]; if (!it) return; it.fromDesc = false; it.sel = 'x'; render(); },
+  portionDel: b => { const a = ui.aiResult; if (!a?.items) return; a.items.splice(+b.dataset.i, 1); recalcFromItems(a); if (!a.items.length) { a.kcal = a.prot = a.carbs = a.fat = 0; } render(); },
   fixKcal: () => { const a = ui.aiResult; a.kcal = Math.round(a.prot * 4 + a.carbs * 4 + a.fat * 9); render(); },
   cancelMeal: () => { ui.aiResult = null; render(); },
   confirmMeal: () => {
@@ -1788,6 +1876,10 @@ app.addEventListener('input', e => {
   if (t.dataset.in) setDraftCell(t.dataset.key, parseInt(t.dataset.i, 10), t.dataset.in, t.value);
   else if (t.id === 'mealDesc') ui.mealDesc = t.value;
   else if (t.dataset.ai && ui.aiResult) ui.aiResult[t.dataset.ai] = t.dataset.ai === 'desc' ? t.value : (num(t.value) ?? 0);
+  else if (t.dataset.portionG !== undefined && ui.aiResult?.items) {
+    const it = ui.aiResult.items[+t.dataset.portionG];
+    if (it) { it.grams = Math.max(0, num(t.value) ?? 0); recalcFromItems(ui.aiResult); syncResultFields(); }
+  }
 });
 app.addEventListener('change', e => {
   const t = e.target;
@@ -1797,7 +1889,7 @@ app.addEventListener('change', e => {
   } else if (t.dataset.actChange === 'progEx') { ui.progEx = t.value; render(); }
   else if (t.id === 'cdDate') { keepCardioInputs(); ui.cardio.est = null; render(); }
 });
-app.addEventListener('toggle', e => { if (e.target.id === 'aiBox') ui.aiOpen = e.target.open; }, true);
+app.addEventListener('toggle', e => { if (e.target.id === 'aiBox') ui.aiOpen = e.target.open; if (e.target.id === 'blocksBox') ui.blocksOpen = e.target.open; }, true);
 app.addEventListener('focusin', e => { if (e.target.classList?.contains('field-set')) setTimeout(() => e.target.select?.(), 0); });
 
 async function onMealImage(e) {
