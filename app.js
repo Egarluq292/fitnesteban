@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.3.0';
+const APP_VERSION = '4.4.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -318,6 +318,8 @@ const ui = {
   showKey: false,
   aiOpen: false,
   blocksOpen: false,
+  editing: null,
+  mealSearch: '',
   cardio: { type: 'bike', minutes: '', intensity: 'media', date: todayISO(), weight: '', est: null, busy: false }
 };
 function guessMealType() {
@@ -990,16 +992,36 @@ function mealsOf(date) { return state.meals[date] || []; }
 function totalsOf(date) {
   return mealsOf(date).reduce((a, m) => ({ kcal: a.kcal + m.kcal, prot: a.prot + m.prot, carbs: a.carbs + m.carbs, fat: a.fat + m.fat }), { kcal: 0, prot: 0, carbs: 0, fat: 0 });
 }
-function recentMeals() {
-  const seen = new Set(); const out = [];
-  const dates = Object.keys(state.meals).sort().reverse();
-  for (const dt of dates) for (const m of [...state.meals[dt]].reverse()) {
+/* Agrupa todo el historial por descripción: cuántas veces, en qué tipo y cuál fue la última */
+function mealGroups() {
+  const g = new Map();
+  for (const dt of Object.keys(state.meals).sort()) for (const m of state.meals[dt]) {
     const k = normName(m.desc);
-    if (!k || seen.has(k)) continue;
-    seen.add(k); out.push(m);
-    if (out.length >= 10) return out;
+    if (!k) continue;
+    const e = g.get(k) || { key: k, count: 0, byType: {}, lastDate: '', last: null };
+    e.count++; e.byType[m.type] = (e.byType[m.type] || 0) + 1;
+    if (dt >= e.lastDate) { e.lastDate = dt; e.last = m; }
+    g.set(k, e);
   }
-  return out;
+  return [...g.values()];
+}
+function mealPicks() {
+  const groups = mealGroups();
+  const q = normName(ui.mealSearch || '');
+  if (q) {
+    return { mode: 'search', list: groups.filter(e => e.key.includes(q)).sort((a, b) => b.count - a.count || (a.lastDate < b.lastDate ? 1 : -1)).slice(0, 20) };
+  }
+  const t = ui.mealType;
+  const byFreq = (a, b, ka, kb) => kb - ka || (a.lastDate < b.lastDate ? 1 : a.lastDate > b.lastDate ? -1 : 0);
+  const ofType = groups.filter(e => e.byType[t]).sort((a, b) => byFreq(a, b, a.byType[t], b.byType[t]));
+  const rest = groups.filter(e => !e.byType[t]).sort((a, b) => byFreq(a, b, a.count, b.count));
+  return { mode: 'top', list: [...ofType, ...rest].slice(0, 10), ofType: ofType.length };
+}
+function renderPickList() {
+  const { mode, list } = mealPicks();
+  ui._picks = list;
+  if (!list.length) return `<p class="text-xs text-mute">${mode === 'search' ? 'Nada encontrado en tu historial.' : 'Aún no hay comidas registradas.'}</p>`;
+  return list.map((e, i) => `<button class="chip chip-sm text-left" data-act="repeatMeal" data-i="${i}" type="button">${esc((e.last.desc || e.last.type).slice(0, 34))} <span class="text-mute">· ${Math.round(e.last.kcal)}${e.count > 1 ? ` · ×${e.count}` : ''}</span></button>`).join('');
 }
 function bar(label, val, target, color) {
   const pct = target ? Math.min(100, Math.round(val / target * 100)) : 0;
@@ -1028,7 +1050,7 @@ function renderDiet() {
   else advice = `Llevas ${Math.round(t.kcal)} kcal consumidas.${cardioTxt} Te has pasado ${-leftK} kcal. Sin drama: mañana vuelve a tu objetivo, no compenses de más.`;
 
   const typeChips = MEAL_TYPES.map(tp => `<button class="chip chip-sm ${ui.mealType === tp ? 'chip-on' : ''}" data-act="mealType" data-type="${tp}" type="button">${tp}</button>`).join('');
-  const recents = recentMeals();
+  const hasHistory = Object.keys(state.meals).length > 0;
   const grouped = MEAL_TYPES.map(tp => {
     const items = mealsOf(date).filter(m => (m.type || 'Otro') === tp);
     if (!items.length) return '';
@@ -1037,9 +1059,10 @@ function renderDiet() {
       <div class="flex justify-between text-[11px] uppercase tracking-wider text-mute font-bold mb-1.5"><span>${tp}</span><span>${Math.round(sub)} kcal</span></div>
       ${items.map(m => `<div class="meal">
         <div class="min-w-0 flex-1">
-          <div class="text-sm font-semibold truncate">${esc(m.desc || tp)}</div>
+          <div class="text-sm font-semibold truncate ${ui.editing?.id === m.id ? 'text-brand' : ''}">${ui.editing?.id === m.id ? '✏️ ' : ''}${esc(m.desc || tp)}</div>
           <div class="text-[11px] text-mute font-mono mt-0.5">${Math.round(m.kcal)} kcal · P ${Math.round(m.prot)} · C ${Math.round(m.carbs)} · G ${Math.round(m.fat)}</div>
         </div>
+        <button class="iconbtn iconbtn-sm" data-act="editMeal" data-id="${esc(m.id)}" type="button" aria-label="Editar">✎</button>
         <button class="iconbtn iconbtn-sm" data-act="delMeal" data-id="${esc(m.id)}" type="button" aria-label="Borrar">✕</button>
       </div>`).join('')}
     </div>`;
@@ -1077,10 +1100,10 @@ function renderDiet() {
     <p class="text-xs text-mute mt-3 leading-relaxed">${esc(advice)}</p>
   </section>
 
-  <section class="card p-4 mt-3 space-y-3">
-    <h3 class="section-title">➕ Añadir comida</h3>
+  <section class="card p-4 mt-3 space-y-3 ${ui.editing ? 'border-brand/50' : ''}" id="mealCard">
+    ${ui.editing ? `<div class="flex items-center justify-between"><h3 class="section-title">✏️ Editar comida</h3><span class="text-[11px] text-mute">${esc(fmtDate(ui.editing.date))}</span></div>` : '<h3 class="section-title">➕ Añadir comida</h3>'}
     <div class="flex flex-wrap gap-1.5">${typeChips}</div>
-    <textarea class="field" id="mealDesc" rows="2" placeholder="${ui.img ? 'Opcional: añade lo que sepas para afinar (ej: 150 g de arroz, aceite de oliva)' : 'Ej: 200 g de pechuga a la plancha y 150 g de arroz'}">${esc(ui.mealDesc)}</textarea>
+    ${ui.editing ? '' : `<textarea class="field" id="mealDesc" rows="2" placeholder="${ui.img ? 'Opcional: añade lo que sepas para afinar (ej: 150 g de arroz, aceite de oliva)' : 'Ej: 200 g de pechuga a la plancha y 150 g de arroz'}">${esc(ui.mealDesc)}</textarea>
     ${ui.img ? `<div class="relative rounded-xl overflow-hidden border border-line">
         <img src="${ui.img}" alt="Foto del plato" class="w-full max-h-56 object-cover" />
         <button class="absolute top-2 right-2 iconbtn bg-ink/80" data-act="clearImg" type="button" aria-label="Quitar foto">✕</button>
@@ -1094,16 +1117,15 @@ function renderDiet() {
       ${ui.aiBusy ? '<span class="spinner"></span> Analizando…' : '⚡ Estimar macros con IA'}
     </button>
     ${!ai ? `<p class="text-center"><button class="text-xs text-mute underline" data-act="manualMeal" type="button">o introduce los macros a mano</button></p>` : ''}
-    ${!state.settings.apiKey ? `<p class="text-[11px] text-amber-300">Para usar la IA, pega tu clave de Gemini en <button class="underline" data-act="goSettings" type="button">Ajustes</button>.</p>` : ''}
+    ${!state.settings.apiKey ? `<p class="text-[11px] text-amber-300">Para usar la IA, pega tu clave de Gemini en <button class="underline" data-act="goSettings" type="button">Ajustes</button>.</p>` : ''}`}
     ${ai ? renderMealResult(ai) : ''}
   </section>
 
-  ${recents.length ? `<section class="card p-4 mt-3">
-    <h3 class="section-title">⏱ Repetir comida reciente</h3>
-    <p class="text-[11px] text-mute mt-1">Se añade como «${esc(ui.mealType)}» al día mostrado.</p>
-    <div class="flex flex-wrap gap-1.5 mt-2.5">
-      ${recents.map((m, i) => `<button class="chip chip-sm text-left" data-act="repeatMeal" data-i="${i}" type="button">${esc((m.desc || m.type).slice(0, 34))} <span class="text-mute">· ${Math.round(m.kcal)}</span></button>`).join('')}
-    </div>
+  ${hasHistory && !ui.editing ? `<section class="card p-4 mt-3">
+    <h3 class="section-title">⭐ Tus comidas habituales</h3>
+    <p class="text-[11px] text-mute mt-1">Las 10 que más repites en «${esc(ui.mealType)}». Al tocar una podrás ajustar cantidades antes de añadirla.</p>
+    <input class="field mt-2.5 py-2 text-xs" id="mealSearch" type="search" autocomplete="off" placeholder="🔍 Buscar en todo tu historial…" value="${esc(ui.mealSearch || '')}" />
+    <div class="flex flex-wrap gap-1.5 mt-2.5" id="mealPicks">${renderPickList()}</div>
   </section>` : ''}
 
   <section class="card p-4 mt-3">
@@ -1168,7 +1190,8 @@ function renderMealResult(ai) {
   const calc = Math.round(ai.prot * 4 + ai.carbs * 4 + ai.fat * 9);
   const mismatch = ai.kcal > 0 && Math.abs(calc - ai.kcal) / ai.kcal > 0.15;
   return `<div class="border-t border-line pt-3 space-y-3">
-    ${ai.note ? `<div class="text-xs text-mute bg-ink rounded-xl p-2.5 border border-line">🤖 ${esc(ai.note)}</div>` : ''}
+    ${ai.note ? `<div class="text-xs text-mute bg-ink rounded-xl p-2.5 border border-line">${ai.noteIcon || '🤖'} ${esc(ai.note)}</div>` : ''}
+    ${!ai.items?.length && (ui.editing || ai.repeated) ? '<p class="text-[11px] text-mute">Esta comida se registró sin desglose por alimentos: puedes editar los totales.</p>' : ''}
     ${renderPortions(ai)}
     <label class="lbl">Descripción<input class="field mt-1" data-ai="desc" value="${esc(ai.desc)}" /></label>
     <div class="grid grid-cols-4 gap-2">
@@ -1180,7 +1203,7 @@ function renderMealResult(ai) {
     ${mismatch ? `<p class="text-[11px] text-amber-300">Ojo: los macros suman ${calc} kcal, no ${Math.round(ai.kcal)}. <button class="underline" data-act="fixKcal" type="button">Usar ${calc}</button></p>` : ''}
     <div class="grid grid-cols-3 gap-2">
       <button class="btn-ghost" data-act="cancelMeal" type="button">Cancelar</button>
-      <button class="btn-primary col-span-2" data-act="confirmMeal" type="button">✅ Registrar</button>
+      <button class="btn-primary col-span-2" data-act="confirmMeal" type="button">${ui.editing ? '💾 Guardar cambios' : '✅ Registrar'}</button>
     </div>
   </div>`;
 }
@@ -1275,9 +1298,20 @@ Descripción del usuario: ${desc ? JSON.stringify(desc) : '(sin descripción, us
   }
 }
 
+function mealRecord(m, id) {
+  const rec = { id, type: m.type || ui.mealType, desc: m.desc || '', kcal: r2(m.kcal || 0), prot: r2(m.prot || 0), carbs: r2(m.carbs || 0), fat: r2(m.fat || 0) };
+  if (m.items?.length) rec.items = m.items.map(it => ({ name: it.name, sizes: { ...it.sizes }, sel: it.sel, grams: r2(it.grams || 0), fromDesc: !!it.fromDesc, per100: { ...it.per100 } }));
+  return rec;
+}
+function loadMealIntoPanel(m, extra = {}) {
+  ui.aiResult = { desc: m.desc, kcal: m.kcal, prot: m.prot, carbs: m.carbs, fat: m.fat, items: m.items ? clone(m.items).map(it => ({ ...it, fromDesc: false })) : [], ...extra };
+  ui.mealType = m.type || ui.mealType;
+  render();
+  setTimeout(() => $('#mealCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30);
+}
 function addMeal(date, m) {
   if (!state.meals[date]) state.meals[date] = [];
-  state.meals[date].push({ id: uid('f_'), type: m.type || ui.mealType, desc: m.desc || '', kcal: r2(m.kcal || 0), prot: r2(m.prot || 0), carbs: r2(m.carbs || 0), fat: r2(m.fat || 0) });
+  state.meals[date].push(mealRecord(m, uid('f_')));
   persist();
 }
 
@@ -1777,27 +1811,44 @@ const actions = {
   portionEdit: b => { const it = ui.aiResult?.items?.[+b.dataset.i]; if (!it) return; it.fromDesc = false; it.sel = 'x'; render(); },
   portionDel: b => { const a = ui.aiResult; if (!a?.items) return; a.items.splice(+b.dataset.i, 1); recalcFromItems(a); if (!a.items.length) { a.kcal = a.prot = a.carbs = a.fat = 0; } render(); },
   fixKcal: () => { const a = ui.aiResult; a.kcal = Math.round(a.prot * 4 + a.carbs * 4 + a.fat * 9); render(); },
-  cancelMeal: () => { ui.aiResult = null; render(); },
+  cancelMeal: () => { ui.aiResult = null; ui.editing = null; render(); },
   confirmMeal: () => {
     const a = ui.aiResult; if (!a) return;
     if (!a.kcal && !a.prot && !a.carbs && !a.fat) return toast('Pon al menos algún valor', 'warn');
+    if (ui.editing) {
+      const list = state.meals[ui.editing.date] || [];
+      const idx = list.findIndex(m => m.id === ui.editing.id);
+      if (idx < 0) { ui.editing = null; return toast('No encuentro esa comida', 'error'); }
+      list[idx] = mealRecord({ ...a, type: ui.mealType }, list[idx].id);
+      persist();
+      ui.editing = null; ui.aiResult = null;
+      render(); return toast('Comida actualizada ✓');
+    }
     addMeal(ui.dietDate, { ...a, type: ui.mealType });
     ui.aiResult = null; ui.img = null; ui.mealDesc = '';
     render(); toast('Comida registrada ✓');
   },
   repeatMeal: b => {
-    const m = recentMeals()[parseInt(b.dataset.i, 10)]; if (!m) return;
-    addMeal(ui.dietDate, { ...m, type: ui.mealType });
-    render(); toast(`Añadido: ${m.desc}`);
+    const e = (ui._picks || [])[parseInt(b.dataset.i, 10)]; if (!e) return;
+    ui.editing = null; ui.img = null;
+    const keepType = ui.mealType;
+    loadMealIntoPanel(e.last, { repeated: true, noteIcon: '⭐', note: `Repetida (la registraste ${e.count} ${e.count === 1 ? 'vez' : 'veces'}, última el ${fmtDateShort(e.lastDate)}). Ajusta cantidades si hace falta y pulsa Registrar.` });
+    ui.mealType = keepType; render();
+  },
+  editMeal: b => {
+    const m = mealsOf(ui.dietDate).find(x => x.id === b.dataset.id); if (!m) return;
+    ui.editing = { date: ui.dietDate, id: m.id }; ui.img = null;
+    loadMealIntoPanel(m, { noteIcon: '✏️', note: m.items?.length ? 'Cambia la ración de cada alimento o los totales.' : '' });
   },
   delMeal: b => {
     if (!confirm('¿Borrar esta comida?')) return;
+    if (ui.editing?.id === b.dataset.id) { ui.editing = null; ui.aiResult = null; }
     state.meals[ui.dietDate] = mealsOf(ui.dietDate).filter(m => m.id !== b.dataset.id);
     if (!state.meals[ui.dietDate].length) delete state.meals[ui.dietDate];
     persist(); render();
   },
-  dietPrev: () => { ui.dietDate = addDays(ui.dietDate, -1); render(); },
-  dietNext: () => { if (ui.dietDate < todayISO()) { ui.dietDate = addDays(ui.dietDate, 1); render(); } },
+  dietPrev: () => { ui.editing = null; ui.aiResult = null; ui.dietDate = addDays(ui.dietDate, -1); render(); },
+  dietNext: () => { if (ui.dietDate < todayISO()) { ui.editing = null; ui.aiResult = null; ui.dietDate = addDays(ui.dietDate, 1); render(); } },
   goSettings: () => go('settings'),
 
   saveMetric: () => {
@@ -1875,6 +1926,7 @@ app.addEventListener('input', e => {
   const t = e.target;
   if (t.dataset.in) setDraftCell(t.dataset.key, parseInt(t.dataset.i, 10), t.dataset.in, t.value);
   else if (t.id === 'mealDesc') ui.mealDesc = t.value;
+  else if (t.id === 'mealSearch') { ui.mealSearch = t.value; const box = $('#mealPicks'); if (box) box.innerHTML = renderPickList(); }
   else if (t.dataset.ai && ui.aiResult) ui.aiResult[t.dataset.ai] = t.dataset.ai === 'desc' ? t.value : (num(t.value) ?? 0);
   else if (t.dataset.portionG !== undefined && ui.aiResult?.items) {
     const it = ui.aiResult.items[+t.dataset.portionG];
