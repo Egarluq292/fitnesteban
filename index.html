@@ -27,10 +27,13 @@
           <div id="headerSub" class="text-[10px] text-mute mt-1 truncate">Gym · Nutrición · Coach</div>
         </div>
       </div>
-      <button id="timerPill" type="button" class="timer-pill" aria-label="Temporizador de descanso">
-        <svg viewBox="0 0 24 24" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>
-        <span id="timerDisplay" class="font-mono">Descanso</span>
-      </button>
+      <div class="flex items-center gap-2 shrink-0">
+        <button id="helpBtn" type="button" class="help-btn" aria-label="Guía de la app">?</button>
+        <button id="timerPill" type="button" class="timer-pill" aria-label="Temporizador de descanso">
+          <svg viewBox="0 0 24 24" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>
+          <span id="timerDisplay" class="font-mono">Descanso</span>
+        </button>
+      </div>
     </div>
     <div class="h-0.5 bg-transparent"><div id="timerBar" class="h-0.5 bg-brand transition-[width] duration-200" style="width:0%"></div></div>
   </header>

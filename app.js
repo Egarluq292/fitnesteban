@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.4.0';
+const APP_VERSION = '4.5.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -155,7 +155,7 @@ const isStandalone = () => window.matchMedia('(display-mode: standalone)').match
 
 /* ---------- Estado ---------- */
 function defaultSettings() {
-  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, pinHash: '' };
+  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, pinHash: '', lastSeenVersion: '' };
 }
 function defaultState() {
   return { version: 4, plan: clone(DEFAULT_PLAN), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], settings: defaultSettings(), drafts: {} };
@@ -1014,13 +1014,12 @@ function mealPicks() {
   const t = ui.mealType;
   const byFreq = (a, b, ka, kb) => kb - ka || (a.lastDate < b.lastDate ? 1 : a.lastDate > b.lastDate ? -1 : 0);
   const ofType = groups.filter(e => e.byType[t]).sort((a, b) => byFreq(a, b, a.byType[t], b.byType[t]));
-  const rest = groups.filter(e => !e.byType[t]).sort((a, b) => byFreq(a, b, a.count, b.count));
-  return { mode: 'top', list: [...ofType, ...rest].slice(0, 10), ofType: ofType.length };
+  return { mode: 'top', list: ofType.slice(0, 10) };
 }
 function renderPickList() {
   const { mode, list } = mealPicks();
   ui._picks = list;
-  if (!list.length) return `<p class="text-xs text-mute">${mode === 'search' ? 'Nada encontrado en tu historial.' : 'Aún no hay comidas registradas.'}</p>`;
+  if (!list.length) return `<p class="text-xs text-mute">${mode === 'search' ? 'Nada encontrado en tu historial.' : `Aún no has registrado ninguna comida como «${esc(ui.mealType)}». Usa el buscador para encontrar otras.`}</p>`;
   return list.map((e, i) => `<button class="chip chip-sm text-left" data-act="repeatMeal" data-i="${i}" type="button">${esc((e.last.desc || e.last.type).slice(0, 34))} <span class="text-mute">· ${Math.round(e.last.kcal)}${e.count > 1 ? ` · ×${e.count}` : ''}</span></button>`).join('');
 }
 function bar(label, val, target, color) {
@@ -1123,7 +1122,7 @@ function renderDiet() {
 
   ${hasHistory && !ui.editing ? `<section class="card p-4 mt-3">
     <h3 class="section-title">⭐ Tus comidas habituales</h3>
-    <p class="text-[11px] text-mute mt-1">Las 10 que más repites en «${esc(ui.mealType)}». Al tocar una podrás ajustar cantidades antes de añadirla.</p>
+    <p class="text-[11px] text-mute mt-1">Las que más repites en «${esc(ui.mealType)}» (hasta 10). Al tocar una podrás ajustar cantidades antes de añadirla.</p>
     <input class="field mt-2.5 py-2 text-xs" id="mealSearch" type="search" autocomplete="off" placeholder="🔍 Buscar en todo tu historial…" value="${esc(ui.mealSearch || '')}" />
     <div class="flex flex-wrap gap-1.5 mt-2.5" id="mealPicks">${renderPickList()}</div>
   </section>` : ''}
@@ -1729,6 +1728,111 @@ $('#timerPill').addEventListener('click', openTimerSheet);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { if (timer.endAt) { tickTimer(); wakeOn(); } if (ui.dietDate > todayISO()) ui.dietDate = todayISO(); } });
 
 /* =========================================================================
+   GUÍA Y NOVEDADES
+   ========================================================================= */
+const CHANGELOG = [
+  ['4.5.0', ['Botón «?» arriba: guía de la app por secciones.', 'Tras cada actualización verás esta ventana de novedades (una sola vez).']],
+  ['4.4.1', ['«Comidas habituales» muestra solo las del tipo elegido (Desayuno, Comida…), sin rellenar con otras.']],
+  ['4.4.0', ['Editar comidas con ✎: cambia raciones por alimento, totales, descripción o tipo.', '«Comidas habituales»: tus platos más repetidos + buscador en todo el historial.']],
+  ['4.3.0', ['Raciones P / M / G / Otra por alimento tras estimar con IA.', 'La descripción manda sobre la foto para afinar cantidades.', 'Bloques de entrenamiento plegables en Ajustes y triángulos más visibles.']],
+  ['4.2.2', ['Registro de series plegado en cada ejercicio, con resumen de progreso.']],
+  ['4.2.1', ['PIN de seguridad para «Borrar todo» e «Importar», con copia automática antes de borrar.', 'Apartado de IA plegado en Ajustes.']],
+  ['4.2.0', ['Botón «▶ Técnica» en cada ejercicio (búsqueda en YouTube o tu vídeo fijado).']],
+  ['4.1.0', ['Bloque 🔥 CARDIO: bicicleta y caminata con calorías estimadas, reflejadas en Dieta.']]
+];
+const cmpVer = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0); } return 0; };
+
+const GUIDE = [
+  ['🏋️ Entreno: bloques y días', [
+    'Arriba eliges el <b>bloque</b> (PPT, FULL BODY, FREE, 🔥 CARDIO) y debajo el <b>día</b>. El punto ● marca el día que te toca según tu rotación; ✓ el que ya hiciste hoy.',
+    'Cada bloque lleva su propia rotación: al guardar PUSH, el siguiente que te propone es PULL, y así sucesivamente.',
+    '«＋ Bloque» y «＋ Día» crean nuevos. El ✎ del bloque o del día permite renombrar, reordenar (◀ ▶) o eliminar. El historial nunca se borra al eliminar.'
+  ]],
+  ['🧭 Cómo decide el coach el peso', [
+    '<b>Doble progresión</b>: cada ejercicio tiene un rango de reps (p. ej. 8–10). Mantienes el peso y sumas reps; cuando llegas al máximo en <b>todas</b> las series, te dice que subas el incremento (p. ej. +2 kg).',
+    'Si no llegas al mínimo <b>dos sesiones seguidas</b> con el mismo peso → baja un 10 %. Tres sesiones sin sumar reps → aviso de estancamiento.',
+    'Si hace 14 días o más que no haces un ejercicio → vuelta con −10 %.',
+    '«Sesión de calibración» = aún no tiene datos de ese ejercicio (o de esa variante, o de ese bloque). Busca un peso exigente con 1–2 reps en recámara.'
+  ]],
+  ['📝 Registrar una sesión', [
+    'Abre «Registrar series» en cada ejercicio. El peso sugerido ya viene puesto; apunta las reps y pulsa ✓: arranca el descanso de ese ejercicio (vibra y pita al acabar).',
+    'Todo se guarda solo mientras escribes: puedes cerrar la app a mitad de sesión.',
+    '⇄ cambia de variante, ✎ edita series, rango, descanso, incremento y vídeo. «▶ Técnica» abre YouTube.',
+    'Al final, «Guardar sesión»: verás resumen, volumen y récords personales (1RM estimado).'
+  ]],
+  ['🔥 Cardio', [
+    'Elige bicicleta o caminata, minutos e intensidad. «Calcular con IA» estima calorías <b>netas</b> (lo que gastas por encima del reposo) usando tu último peso.',
+    'La app compara con un cálculo estándar (MET) y te avisa si la IA se desvía mucho. Puedes corregir el número antes de registrar.',
+    'El finisher de bici de los hábitos <b>no suma calorías</b>: si lo haces, regístralo aquí.'
+  ]],
+  ['🥗 Dieta y raciones', [
+    'Foto (cámara o galería) y/o descripción. Lo que escribas <b>manda</b>: «200 g de pollo» fija esa cantidad.',
+    'Tras «Estimar macros con IA», ajusta cada alimento con <b>P / M / G</b> (pequeña, mediana, grande) u «Otra» con los gramos exactos. ✕ quita un alimento que la IA vio por error.',
+    'Consumidas · Cardio · Neto: el cardio se muestra pero <b>no amplía</b> lo que te queda por comer, salvo que lo actives en Ajustes.',
+    '✎ en una comida la edita; ⭐ «Comidas habituales» repite tus platos más frecuentes de ese tipo, y el buscador encuentra cualquiera del historial.'
+  ]],
+  ['📈 Progreso', [
+    'Peso y cintura en ayunas: mejor el mismo día de la semana y a la misma hora. Mantén el peso al día: lo usa el cálculo de cardio.',
+    '«Fuerza por ejercicio» dibuja tu 1RM estimado (o reps totales en ejercicios sin peso).',
+    'En el historial puedes borrar una sesión mal guardada: el coach dejará de tenerla en cuenta.'
+  ]],
+  ['🔒 Datos, copias y PIN', [
+    'Tus datos viven <b>solo en este móvil</b>. Exporta una copia cada semana (Ajustes → Copias) y guárdala en Drive. La app te avisa si pasan más de 7 días.',
+    'La copia no incluye la clave de Gemini ni el PIN. Al importar se conservan los actuales.',
+    'Con PIN activo, «Borrar todo» e «Importar» lo piden. Antes de borrar se descarga una copia automáticamente.',
+    'Ábrela siempre desde el icono instalado, no desde Chrome.'
+  ]],
+  ['🔄 Actualizar la app', [
+    'Cuando subes una versión nueva a GitHub aparece «Hay una versión nueva» → Actualizar. Comprueba el número en Ajustes → Aplicación.',
+    'Tras actualizar verás una vez las novedades. Puedes volver a verlas desde esta guía.'
+  ]]
+];
+
+function renderNews(fromVer) {
+  const list = CHANGELOG.filter(([v]) => !fromVer || cmpVer(v, fromVer) > 0).slice(0, 4);
+  return list.map(([v, items]) => `<div class="mt-3 first:mt-0">
+      <div class="text-xs font-extrabold text-brand">Versión ${v}</div>
+      <ul class="mt-1 space-y-1 text-sm text-slate-300 list-disc pl-5">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
+    </div>`).join('');
+}
+function openNews(fromVer) {
+  openModal(`
+    <div class="flex items-center gap-2"><span class="text-2xl">🎉</span><h3 class="modal-title">Novedades</h3><span class="text-xs text-mute ml-auto">v${APP_VERSION}</span></div>
+    <div>${renderNews(fromVer)}</div>
+    <button class="btn-primary w-full mt-4" data-close type="button">Entendido</button>
+  `);
+}
+function openGuide() {
+  openModal(`
+    <div class="flex items-center gap-2"><img src="icons/logo-128.png" alt="" class="w-8 h-8 rounded-full" /><h3 class="modal-title">Guía de FITNESTEBAN</h3></div>
+    <p class="text-xs text-mute -mt-1">Toca cada apartado para desplegarlo.</p>
+    <div class="space-y-2">
+      ${GUIDE.map(([title, items]) => `<details class="guide-item">
+        <summary class="flex items-center justify-between cursor-pointer select-none text-sm font-bold">${title}<span class="tri"></span></summary>
+        <ul class="mt-2 space-y-1.5 text-[13px] text-slate-300 leading-relaxed list-disc pl-5">${items.map(i => `<li>${i}</li>`).join('')}</ul>
+      </details>`).join('')}
+    </div>
+    <div class="grid grid-cols-2 gap-2 mt-3">
+      <button class="btn-ghost" data-mact="news" type="button">🎉 Novedades</button>
+      <button class="btn-primary" data-close type="button">Cerrar</button>
+    </div>
+    <p class="text-[11px] text-mute text-center">Versión ${APP_VERSION}</p>
+  `, { news: () => openNews(null) });
+}
+$('#helpBtn').addEventListener('click', openGuide);
+
+function maybeShowNews() {
+  const seen = state.settings.lastSeenVersion;
+  if (seen === APP_VERSION) return;
+  const markSeen = () => { state.settings.lastSeenVersion = APP_VERSION; persist(); };
+  const hasData = state.sessions.length || Object.keys(state.meals).length;
+  const from = seen || (hasData ? '4.4.1' : null); // sin registro previo: si ya usabas la app, vienes de la 4.4.1
+  if (!(from && cmpVer(APP_VERSION, from) > 0)) return markSeen();
+  // se marca como vista solo cuando de verdad se muestra (por si la app se recarga justo al arrancar)
+  setTimeout(() => { if ($('#modalRoot').classList.contains('open')) return; markSeen(); openNews(from); }, 600);
+}
+
+/* =========================================================================
    RENDER Y EVENTOS
    ========================================================================= */
 function render() {
@@ -1738,7 +1842,7 @@ function render() {
   else if (ui.view === 'progress') app.innerHTML = renderProgress();
   else app.innerHTML = renderSettings();
   document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('navbtn-on', b.dataset.view === ui.view));
-  const sub = { train: 'Entreno · coach de progresión', diet: 'Nutrición', progress: 'Tu progreso', settings: 'Ajustes' };
+  const sub = { train: 'Entreno · coach', diet: 'Nutrición', progress: 'Tu progreso', settings: 'Ajustes' };
   $('#headerSub').textContent = sub[ui.view];
 }
 
@@ -1976,7 +2080,8 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     });
   }).catch(err => console.warn('SW', err));
   let refreshing = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => { if (refreshing) return; refreshing = true; location.reload(); });
+  const hadController = !!navigator.serviceWorker.controller; // en la primera instalación no hace falta recargar
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (refreshing || !hadController) return; refreshing = true; location.reload(); });
   navigator.storage?.persist?.().catch(() => null);
 } else if (location.protocol === 'file:') {
   $('#topBanner').innerHTML = `<div class="banner-warn mt-3"><span>Estás abriendo el archivo directamente: sin modo app ni funcionamiento sin conexión. Publícala en una web https (ver LEEME).</span></div>`;
@@ -1985,3 +2090,4 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 /* ---------- Arranque ---------- */
 ui.dayId = nextDayId();
 render();
+maybeShowNews();
