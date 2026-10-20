@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.6.1';
+const APP_VERSION = '4.6.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -937,7 +937,7 @@ function personalRecords() {
 function renderRecords() {
   const recs = personalRecords();
   if (!recs.length) return '';
-  return `<details class="card p-4 mt-3">
+  return `<details class="card p-4 mt-3" ${openAttr('records')}>
     <summary class="flex items-center justify-between cursor-pointer select-none"><h3 class="section-title">🏆 Récords personales</h3><span class="flex items-center gap-2 text-[11px] text-mute">${recs.length} ejercicios<span class="tri"></span></span></summary>
     <div class="space-y-1.5 mt-3">
       ${recs.map(r => `<div class="bg-ink rounded-xl border border-line px-3 py-2">
@@ -1065,8 +1065,13 @@ Responde SOLO con JSON válido:
     finally { ui.reportBusy = false; }
   } else toast(state.settings.apiKey ? 'Sin conexión: guardo solo los datos.' : 'Sin clave de IA: guardo solo los datos.', 'warn');
   state.reports = [rep, ...state.reports.filter(x => x.date !== rep.date)].slice(0, 12);
+  openKeys.weekly = true; openKeys['rep_' + rep.id] = true;
   persist(); render();
 }
+/* Recuerda qué plegables abriste/cerraste para que no cambien al refrescar la pantalla */
+const openKeys = {};
+const openAttr = (key, def = false) => `data-open-key="${key}" ${(openKeys[key] ?? def) ? 'open' : ''}`;
+
 function renderReport(r, open) {
   const d = r.data;
   const chips = [
@@ -1074,7 +1079,7 @@ function renderReport(r, open) {
     d.cardio_minutos ? `🔥 ${d.cardio_minutos} min cardio` : null, d.cambio_peso_kg_semana !== null ? `⚖️ ${d.cambio_peso_kg_semana > 0 ? '+' : ''}${fmtNum(d.cambio_peso_kg_semana)} kg/sem` : null
   ].filter(Boolean);
   const list = (icon, arr) => arr?.length ? `<ul class="space-y-1 mt-1">${arr.map(x => `<li class="text-xs leading-relaxed">${icon} ${esc(x)}</li>`).join('')}</ul>` : '';
-  return `<details class="bg-ink rounded-xl border border-line px-3 py-2.5" ${open ? 'open' : ''}>
+  return `<details class="bg-ink rounded-xl border border-line px-3 py-2.5" ${openAttr('rep_' + r.id, open)}>
     <summary class="flex items-center justify-between cursor-pointer gap-2"><span class="text-xs font-bold truncate">${esc(fmtDate(r.date))} · ${esc(r.ai?.titular || 'Resumen de datos')}</span><span class="tri"></span></summary>
     <div class="flex flex-wrap gap-1 mt-2">${chips.map(c => `<span class="text-[10px] bg-panel border border-line rounded-full px-2 py-0.5 text-slate-300">${c}</span>`).join('')}</div>
     ${r.ai ? `${list('✅', r.ai.bien)}${list('⚠️', r.ai.mejorar)}
@@ -1086,14 +1091,17 @@ function renderWeeklyCard() {
   const last = state.reports[0];
   const isMonday = parseISO(todayISO()).getDay() === 1;
   const fresh = last && daysBetween(last.date, todayISO()) < 7;
-  return `<section class="card p-4 mt-3 space-y-2.5 ${isMonday && !fresh ? 'border-brand/50' : ''}">
-    <div class="flex items-center justify-between"><h3 class="section-title">🧠 Resumen semanal</h3>${isMonday && !fresh ? '<span class="text-[10px] font-bold text-brand">NUEVO</span>' : ''}</div>
+  return `<details class="card p-4 mt-3 ${isMonday && !fresh ? 'border-brand/50' : ''}" ${openAttr('weekly', false)}>
+    <summary class="flex items-center justify-between cursor-pointer select-none"><h3 class="section-title">🧠 Resumen semanal</h3>
+      <span class="flex items-center gap-2 text-[11px] text-mute">${isMonday && !fresh ? '<span class="font-bold text-brand">NUEVO</span>' : last ? esc(fmtDateShort(last.date)) : ''}<span class="tri"></span></span></summary>
+    <div class="space-y-2.5 mt-3">
     <p class="text-[11px] text-mute">Analiza los últimos 7 días: fuerza, dieta, cardio y tendencia de peso. Mejor cada lunes.</p>
     <button class="btn-primary w-full" data-act="report" type="button" ${ui.reportBusy ? 'disabled' : ''}>${ui.reportBusy ? '<span class="spinner"></span> Analizando la semana…' : last?.date === todayISO() ? '↻ Rehacer el resumen de hoy' : '🧠 Generar resumen de la semana'}</button>
     ${last ? renderReport(last, fresh) : ''}
-    ${state.reports.length > 1 ? `<details class="text-xs"><summary class="text-mute cursor-pointer flex items-center justify-between"><span>Anteriores (${state.reports.length - 1})</span><span class="tri"></span></summary>
+    ${state.reports.length > 1 ? `<details class="text-xs" ${openAttr('repsOld')}><summary class="text-mute cursor-pointer flex items-center justify-between"><span>Anteriores (${state.reports.length - 1})</span><span class="tri"></span></summary>
       <div class="space-y-1.5 mt-2">${state.reports.slice(1).map(r => renderReport(r, false)).join('')}</div></details>` : ''}
-  </section>`;
+    </div>
+  </details>`;
 }
 
 /* =========================================================================
@@ -1655,7 +1663,7 @@ function renderProgress() {
       <div class="flex justify-between text-[11px] text-mute"><span>Cintura</span><span>${delta(cPts, 'cm')}</span></div>
       ${lineChart(cPts, { color: '#fbbf24', unit: ' cm', label: 'la cintura' })}
     </div>
-    ${bm.length ? `<details class="text-xs"><summary class="text-mute cursor-pointer flex items-center justify-between"><span>Ver registros (${bm.length})</span><span class="tri"></span></summary>
+    ${bm.length ? `<details class="text-xs" ${openAttr('metrics')}><summary class="text-mute cursor-pointer flex items-center justify-between"><span>Ver registros (${bm.length})</span><span class="tri"></span></summary>
       <div class="space-y-1 mt-2">${bm.slice().reverse().map(m => `<div class="flex items-center justify-between bg-ink rounded-lg px-2.5 py-1.5">
         <span class="text-mute">${fmtDate(m.date)}</span><span>${m.weight !== null ? fmtNum(m.weight) + ' kg' : '—'}</span><span class="text-amber-300">${m.waist !== null ? fmtNum(m.waist) + ' cm' : '—'}</span>
         <button class="iconbtn iconbtn-sm" data-act="delMetric" data-id="${esc(m.id)}" type="button" aria-label="Borrar">✕</button></div>`).join('')}</div></details>` : ''}
@@ -1987,6 +1995,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.6.2', ['🧠 El resumen semanal ahora se pliega y recuerda si lo dejaste abierto o cerrado.']],
   ['4.6.1', ['📤 «Compartir copia» corregido en Android: ahora abre el menú de compartir.']],
   ['4.6.0', ['📤 Compartir copia en un toque (Drive, WhatsApp…), en Ajustes y en el aviso de Progreso.', '🧠 Resumen semanal con IA en Progreso: qué va bien, qué mejorar y 3 acciones.', '📉 Peso como tendencia (media de 7 días) con aviso si bajas demasiado rápido o te estancas.', '🏆 Récords personales por ejercicio.', '🔋 Semana de descarga sugerida solo si llevas 6+ semanas seguidas fuertes y hay estancamientos.']],
   ['4.5.0', ['Botón «?» arriba: guía de la app por secciones.', 'Tras cada actualización verás esta ventana de novedades (una sola vez).']],
@@ -2311,7 +2320,7 @@ app.addEventListener('change', e => {
   } else if (t.dataset.actChange === 'progEx') { ui.progEx = t.value; render(); }
   else if (t.id === 'cdDate') { keepCardioInputs(); ui.cardio.est = null; render(); }
 });
-app.addEventListener('toggle', e => { if (e.target.id === 'aiBox') ui.aiOpen = e.target.open; if (e.target.id === 'blocksBox') ui.blocksOpen = e.target.open; }, true);
+app.addEventListener('toggle', e => { if (e.target.id === 'aiBox') ui.aiOpen = e.target.open; if (e.target.id === 'blocksBox') ui.blocksOpen = e.target.open; const k = e.target.dataset?.openKey; if (k) openKeys[k] = e.target.open; }, true);
 app.addEventListener('focusin', e => { if (e.target.classList?.contains('field-set')) setTimeout(() => e.target.select?.(), 0); });
 
 async function onMealImage(e) {
