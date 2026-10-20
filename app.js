@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.7.0';
+const APP_VERSION = '4.8.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -155,7 +155,7 @@ const isStandalone = () => window.matchMedia('(display-mode: standalone)').match
 
 /* ---------- Estado ---------- */
 function defaultSettings() {
-  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, pinHash: '', lastSeenVersion: '', driveConnected: false, driveEmail: '', driveFolderId: '', autoDrive: true, lastDriveBackup: null };
+  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, minProtMeal: 25, pinHash: '', lastSeenVersion: '', driveConnected: false, driveEmail: '', driveFolderId: '', autoDrive: true, lastDriveBackup: null };
 }
 function defaultState() {
   return { version: 4, plan: clone(DEFAULT_PLAN), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {} };
@@ -1027,12 +1027,15 @@ function weekData() {
     const t = coach(e, key).tone;
     if (t === 'stall' || t === 'down') stalled.push(variant.name);
   }
-  let kc = 0, pr = 0, nd = 0, protOk = 0;
+  let kc = 0, pr = 0, nd = 0, protOk = 0, mealsTot = 0, mealsOk = 0;
+  const lowTypes = {};
   for (let i = 0; i < 7; i++) {
     const dt = addDays(to, -i);
     if (!mealsOf(dt).length) continue;
     const t = totalsOf(dt); kc += t.kcal; pr += t.prot; nd++;
     if (t.prot >= state.settings.targetProt * 0.9) protOk++;
+    const ps = protSpread(dt); mealsTot += ps.total; mealsOk += ps.ok;
+    for (const l of ps.low) lowTypes[l] = (lowTypes[l] || 0) + 1;
   }
   const cardio = state.cardio.filter(c => inRange(c.date));
   const wt = weightTrend();
@@ -1043,6 +1046,7 @@ function weekData() {
     ejercicios_que_suben: up, ejercicios_igual_o_bajan: flat, ejercicios_estancados_segun_coach: [...new Set(stalled)],
     dias_dieta_registrados: nd, kcal_media: nd ? Math.round(kc / nd) : null, objetivo_kcal: state.settings.targetKcal,
     proteina_media_g: nd ? Math.round(pr / nd) : null, objetivo_proteina_g: state.settings.targetProt, dias_proteina_cumplida: protOk,
+    comidas_con_proteina_suficiente: mealsTot ? `${mealsOk} de ${mealsTot} (mínimo ${minProt()} g por comida)` : null, comidas_con_proteina_baja_por_tipo: lowTypes,
     cardio_sesiones: cardio.length, cardio_minutos: cardio.reduce((a, c) => a + c.minutes, 0), cardio_kcal: cardio.reduce((a, c) => a + c.kcal, 0),
     peso_tendencia_kg: wt.ready ? wt.last.y : null, cambio_peso_kg_semana: wt.ready ? r2(wt.kgWeek) : null, cambio_cintura_cm_3_semanas: wt.ready ? wt.waistChange3 : null,
     habitos_cumplidos_en_sesiones: habits, semana_de_descarga: deloadActive()
@@ -1285,7 +1289,7 @@ function renderDiet() {
     if (!items.length) return '';
     const sub = items.reduce((a, m) => a + m.kcal, 0);
     return `<div class="mt-3 first:mt-0">
-      <div class="flex justify-between text-[11px] uppercase tracking-wider text-mute font-bold mb-1.5"><span>${tp}</span><span>${Math.round(sub)} kcal</span></div>
+      <div class="flex justify-between text-[11px] uppercase tracking-wider text-mute font-bold mb-1.5"><span>${tp}</span><span>${Math.round(sub)} kcal${PROT_TYPES.includes(tp) ? (() => { const pg = Math.round(items.reduce((a, m) => a + (m.prot || 0), 0)); return ` · <span class="${pg >= minProt() ? 'text-emerald-300' : 'text-amber-300'}">🥩 ${pg} g${pg >= minProt() ? ' ✓' : ' baja'}</span>`; })() : ''}</span></div>
       ${items.map(m => `<div class="meal">
         <div class="min-w-0 flex-1">
           <div class="text-sm font-semibold truncate ${ui.editing?.id === m.id ? 'text-brand' : ''}">${ui.editing?.id === m.id ? '✏️ ' : ''}${esc(m.desc || tp)}</div>
@@ -1326,7 +1330,8 @@ function renderDiet() {
       <div class="bg-ink rounded-xl border border-line py-2"><div class="text-[10px] text-mute font-bold uppercase">🔥 Cardio</div><div class="font-black text-amber-300">${burned ? '−' + burned : '0'}</div></div>
       <div class="bg-ink rounded-xl border border-line py-2"><div class="text-[10px] text-mute font-bold uppercase">Neto</div><div class="font-black">${Math.round(t.kcal - burned)}</div></div>
     </div>
-    <p class="text-xs text-mute mt-3 leading-relaxed">${esc(advice)}</p>
+    ${(() => { const ps = protSpread(date); return ps.total ? `<p class="text-[11px] mt-3 ${ps.ok === ps.total ? 'text-emerald-300' : 'text-amber-300'}">🥩 Proteína repartida: ${ps.ok}/${ps.total} comidas con ${minProt()} g o más${ps.low.length ? ` · baja en ${esc(ps.low.join(', ').toLowerCase())}` : ' ✓'}</p>` : ''; })()}
+    <p class="text-xs text-mute mt-2 leading-relaxed">${esc(advice)}</p>
   </section>
 
   <section class="card p-4 mt-3 space-y-3 ${ui.editing ? 'border-brand/50' : ''}" id="mealCard">
@@ -1363,6 +1368,29 @@ function renderDiet() {
   </section>`;
 }
 
+/* ---------- Proteína por comida ---------- */
+const PROT_TYPES = ['Desayuno', 'Comida', 'Puente', 'Cena']; // «Otro» (picoteos) no cuenta
+const minProt = () => state.settings.minProtMeal || 25;
+function protByType(date, excludeId = null) {
+  const out = {};
+  for (const m of mealsOf(date)) { if (m.id === excludeId || !PROT_TYPES.includes(m.type)) continue; out[m.type] = (out[m.type] || 0) + (m.prot || 0); }
+  return out;
+}
+function protSpread(date) {
+  const by = protByType(date);
+  const types = Object.keys(by);
+  return { total: types.length, ok: types.filter(t => by[t] >= minProt()).length, low: types.filter(t => by[t] < minProt()), by };
+}
+function protHintHTML() {
+  const ai = ui.aiResult; if (!ai || !PROT_TYPES.includes(ui.mealType)) return '';
+  const date = ui.editing?.date || ui.dietDate;
+  const prev = protByType(date, ui.editing?.id)[ui.mealType] || 0;
+  const tot = Math.round(prev + (ai.prot || 0));
+  const ok = tot >= minProt();
+  return `<span class="${ok ? 'text-emerald-300' : 'text-amber-300'}">🥩 ${esc(ui.mealType)}: ${tot} g de proteína${prev ? ` (con lo ya registrado)` : ''} ${ok ? '✓' : `· mínimo ${minProt()} g por comida`}</span>`;
+}
+function syncProtHint() { const el = $('#protHint'); if (el) el.innerHTML = protHintHTML(); }
+
 /* ---------- Raciones (tras «Estimar macros con IA») ---------- */
 const SIZES = [['s', 'P'], ['m', 'M'], ['l', 'G']];
 function itemMacros(it) {
@@ -1378,6 +1406,7 @@ function syncResultFields() {
   const ai = ui.aiResult; if (!ai) return;
   for (const k of ['kcal', 'prot', 'carbs', 'fat']) { const el = document.querySelector(`[data-ai="${k}"]`); if (el) el.value = Math.round(ai[k]); }
   (ai.items || []).forEach((it, i) => { const el = document.querySelector(`[data-item-kcal="${i}"]`); if (el) el.textContent = `${Math.round(itemMacros(it).kcal)} kcal`; });
+  syncProtHint();
 }
 function renderPortions(ai) {
   const items = ai.items || [];
@@ -1429,6 +1458,7 @@ function renderMealResult(ai) {
       <label class="lbl text-emerald-300">Carb<input class="field mt-1 text-center" inputmode="decimal" data-ai="carbs" value="${Math.round(ai.carbs)}" /></label>
       <label class="lbl text-rose-300">Grasa<input class="field mt-1 text-center" inputmode="decimal" data-ai="fat" value="${Math.round(ai.fat)}" /></label>
     </div>
+    <p class="text-[11px]" id="protHint">${protHintHTML()}</p>
     ${mismatch ? `<p class="text-[11px] text-amber-300">Ojo: los macros suman ${calc} kcal, no ${Math.round(ai.kcal)}. <button class="underline" data-act="fixKcal" type="button">Usar ${calc}</button></p>` : ''}
     <div class="grid grid-cols-3 gap-2">
       <button class="btn-ghost" data-act="cancelMeal" type="button">Cancelar</button>
@@ -1729,6 +1759,7 @@ function renderSettings() {
       <label class="lbl">Carb g<input class="field mt-1 text-center" id="tC" inputmode="numeric" value="${st.targetCarbs}" /></label>
       <label class="lbl">Grasa g<input class="field mt-1 text-center" id="tF" inputmode="numeric" value="${st.targetFat}" /></label>
     </div>
+    <label class="lbl">Proteína mínima por comida (g)<input class="field mt-1" id="tPM" inputmode="numeric" value="${st.minProtMeal || 25}" /></label>
     <p class="text-[11px] ${Math.abs(sumK - st.targetKcal) > st.targetKcal * 0.05 ? 'text-amber-300' : 'text-mute'}">Tus macros suman ${sumK} kcal (objetivo ${st.targetKcal}).</p>
     <label class="habit"><input type="checkbox" id="tEat" ${st.eatBackCardio ? 'checked' : ''} /><span class="text-xs">Sumar las calorías del cardio a lo que puedo comer <span class="text-mute">(desactivado = déficit más fiable)</span></span></label>
     <button class="btn-primary w-full" data-act="saveGoals" type="button">Guardar objetivos</button>
@@ -2189,6 +2220,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.8.0', ['🥩 Proteína por comida: cada desayuno, comida, puente y cena te indica si llega al mínimo (25 g por defecto, ajustable en Ajustes → Objetivos). El resumen semanal lo tiene en cuenta.']],
   ['4.7.0', ['☁️ Copias en Google Drive: conéctalo en Ajustes → Copias. Guarda en la carpeta «FITNESTEBAN – copias», copia automática semanal y restaurar desde Drive.']],
   ['4.6.2', ['🧠 El resumen semanal ahora se pliega y recuerda si lo dejaste abierto o cerrado.']],
   ['4.6.1', ['📤 «Compartir copia» corregido en Android: ahora abre el menú de compartir.']],
@@ -2231,6 +2263,7 @@ const GUIDE = [
   ['🥗 Dieta y raciones', [
     'Foto (cámara o galería) y/o descripción. Lo que escribas <b>manda</b>: «200 g de pollo» fija esa cantidad.',
     'Tras «Estimar macros con IA», ajusta cada alimento con <b>P / M / G</b> (pequeña, mediana, grande) u «Otra» con los gramos exactos. ✕ quita un alimento que la IA vio por error.',
+    '🥩 <b>Proteína por comida</b>: en recomposición importa repartirla. Cada toma principal (desayuno, comida, puente, cena) debería llegar al mínimo (25 g por defecto). «Otro» (picoteos) no cuenta. Al registrar verás si la toma llega, sumando lo ya registrado en ese tipo.',
     'Consumidas · Cardio · Neto: el cardio se muestra pero <b>no amplía</b> lo que te queda por comer, salvo que lo actives en Ajustes.',
     '✎ en una comida la edita; ⭐ «Comidas habituales» repite tus platos más frecuentes de ese tipo, y el buscador encuentra cualquiera del historial.'
   ]],
@@ -2449,6 +2482,7 @@ const actions = {
     const g = { targetKcal: v('#tK'), targetProt: v('#tP'), targetCarbs: v('#tC'), targetFat: v('#tF') };
     if (Object.values(g).some(x => !(x > 0))) return toast('Revisa los objetivos', 'warn');
     g.eatBackCardio = $('#tEat').checked;
+    const pm = parseInt($('#tPM').value, 10); if (pm > 0 && pm <= 100) g.minProtMeal = pm;
     Object.assign(state.settings, g); persist(); render(); toast('Objetivos guardados ✓');
   },
   saveHabits: () => { state.settings.habits = $('#habitsTxt').value.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 8); persist(); render(); toast('Hábitos guardados ✓'); },
@@ -2506,7 +2540,7 @@ app.addEventListener('input', e => {
   if (t.dataset.in) setDraftCell(t.dataset.key, parseInt(t.dataset.i, 10), t.dataset.in, t.value);
   else if (t.id === 'mealDesc') ui.mealDesc = t.value;
   else if (t.id === 'mealSearch') { ui.mealSearch = t.value; const box = $('#mealPicks'); if (box) box.innerHTML = renderPickList(); }
-  else if (t.dataset.ai && ui.aiResult) ui.aiResult[t.dataset.ai] = t.dataset.ai === 'desc' ? t.value : (num(t.value) ?? 0);
+  else if (t.dataset.ai && ui.aiResult) { ui.aiResult[t.dataset.ai] = t.dataset.ai === 'desc' ? t.value : (num(t.value) ?? 0); if (t.dataset.ai === 'prot') syncProtHint(); }
   else if (t.dataset.portionG !== undefined && ui.aiResult?.items) {
     const it = ui.aiResult.items[+t.dataset.portionG];
     if (it) { it.grams = Math.max(0, num(t.value) ?? 0); recalcFromItems(ui.aiResult); syncResultFields(); }
