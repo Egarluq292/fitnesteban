@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.2.0';
+const APP_VERSION = '4.2.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -155,7 +155,7 @@ const isStandalone = () => window.matchMedia('(display-mode: standalone)').match
 
 /* ---------- Estado ---------- */
 function defaultSettings() {
-  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false };
+  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, pinHash: '' };
 }
 function defaultState() {
   return { version: 4, plan: clone(DEFAULT_PLAN), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], settings: defaultSettings(), drafts: {} };
@@ -316,6 +316,7 @@ const ui = {
   aiResult: null,
   progEx: null,
   showKey: false,
+  aiOpen: false,
   cardio: { type: 'bike', minutes: '', intensity: 'media', date: todayISO(), weight: '', est: null, busy: false }
 };
 function guessMealType() {
@@ -1343,8 +1344,12 @@ function renderSettings() {
   const sumK = Math.round(st.targetProt * 4 + st.targetCarbs * 4 + st.targetFat * 9);
   const backupAge = st.lastBackup ? daysBetween(st.lastBackup, todayISO()) : null;
   return `
-  <section class="card p-4 space-y-3">
-    <h3 class="section-title">🤖 IA de nutrición (Gemini)</h3>
+  <details class="card p-4 group" id="aiBox" ${ui.aiOpen ? 'open' : ''}>
+    <summary class="flex items-center justify-between cursor-pointer select-none">
+      <h3 class="section-title">🤖 IA de nutrición (Gemini)</h3>
+      <span class="flex items-center gap-2 text-[11px] ${st.apiKey ? 'text-emerald-300' : 'text-amber-300'}">${st.apiKey ? 'Configurada ✓' : 'Sin configurar'}<span class="text-mute transition group-open:rotate-180">▾</span></span>
+    </summary>
+    <div class="space-y-3 mt-3">
     <p class="text-xs text-mute leading-relaxed">La clave se guarda <strong class="text-white">solo en este móvil</strong> y no va en el código ni en las copias de seguridad. Créala en <a class="text-brand underline" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>.</p>
     <label class="lbl">Clave API
       <div class="flex gap-2 mt-1">
@@ -1357,7 +1362,8 @@ function renderSettings() {
       <button class="btn-ghost" data-act="testKey" type="button">Probar conexión</button>
       <button class="btn-primary" data-act="saveKey" type="button">Guardar</button>
     </div>
-  </section>
+    </div>
+  </details>
 
   <section class="card p-4 mt-3 space-y-3">
     <h3 class="section-title">🎯 Objetivos diarios</h3>
@@ -1410,6 +1416,15 @@ function renderSettings() {
   </section>
 
   <section class="card p-4 mt-3 space-y-3">
+    <h3 class="section-title">🔒 PIN de seguridad</h3>
+    <p class="text-xs text-mute">${st.pinHash ? 'PIN activo ✓. Se pide para «Borrar todo» e «Importar» (que sustituye tus datos).' : 'Sin PIN. Si lo activas, se pedirá para «Borrar todo» e «Importar».'}</p>
+    <div class="grid grid-cols-2 gap-2">
+      <button class="btn-ghost" data-act="pinSet" type="button">${st.pinHash ? 'Cambiar PIN' : 'Crear PIN'}</button>
+      ${st.pinHash ? '<button class="btn-ghost" data-act="pinRemove" type="button">Quitar PIN</button>' : ''}
+    </div>
+  </section>
+
+  <section class="card p-4 mt-3 space-y-3">
     <h3 class="section-title">📱 Aplicación</h3>
     ${deferredInstall ? `<button class="btn-primary w-full" data-act="install" type="button">Instalar en la pantalla de inicio</button>` : `<p class="text-xs text-mute">${isStandalone() ? 'Instalada como app ✓' : 'Para instalar: menú ⋮ del navegador → «Instalar aplicación» o «Añadir a pantalla de inicio».'}</p>`}
     <div class="grid grid-cols-2 gap-2">
@@ -1420,9 +1435,75 @@ function renderSettings() {
   </section>`;
 }
 
+/* ---------- PIN ---------- */
+async function hashPin(pin) {
+  const data = new TextEncoder().encode('fitnesteban:' + pin);
+  if (crypto?.subtle) {
+    const buf = await crypto.subtle.digest('SHA-256', data);
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  let h = 5381; for (const b of data) h = ((h << 5) + h + b) >>> 0; return 'djb2-' + h.toString(16);
+}
+const pinField = (name, label) => `<label class="lbl">${label}<input class="field mt-1 text-center text-2xl tracking-[0.5em] font-black" name="${name}" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" /></label>`;
+const pinVal = (root, name) => mval(root, name).trim();
+
+/* Pide el PIN (o la palabra BORRAR si no hay PIN) y ejecuta onOk si es correcto */
+function guardModal({ title, text, danger, word, onOk }) {
+  const hasPin = !!state.settings.pinHash;
+  let fails = 0;
+  openModal(`
+    <h3 class="modal-title">${title}</h3>
+    <p class="text-sm text-mute">${text}</p>
+    ${hasPin ? pinField('pin', 'Introduce tu PIN') : `<label class="lbl">Escribe <strong class="text-white">${word}</strong> para confirmar<input class="field mt-1" name="word" autocomplete="off" autocapitalize="characters" /></label>`}
+    <div class="grid grid-cols-3 gap-2 mt-2">
+      <button class="btn-ghost" data-close type="button">Cancelar</button>
+      <button class="${danger ? 'btn-danger' : 'btn-primary'} col-span-2" data-mact="ok" type="button">${danger || 'Continuar'}</button>
+    </div>
+  `, {
+    autofocus: true,
+    ok: async root => {
+      if (hasPin) {
+        const pin = pinVal(root, 'pin');
+        if (!pin) return toast('Introduce el PIN', 'warn');
+        if (await hashPin(pin) !== state.settings.pinHash) {
+          fails++;
+          root.querySelector('[name="pin"]').value = '';
+          if (fails >= 5) { closeModal(); return toast('Demasiados intentos. Vuelve a intentarlo más tarde.', 'error'); }
+          return toast(`PIN incorrecto (${fails}/5)`, 'error');
+        }
+      } else if (mval(root, 'word').trim().toUpperCase() !== word) return toast(`Escribe ${word} exactamente`, 'warn');
+      closeModal();
+      onOk();
+    }
+  });
+}
+
+function pinSetModal() {
+  const hasPin = !!state.settings.pinHash;
+  openModal(`
+    <h3 class="modal-title">${hasPin ? 'Cambiar PIN' : 'Crear PIN'}</h3>
+    <p class="text-xs text-mute">De 4 a 8 cifras. Protege contra borrados accidentales: si lo olvidas, tus datos siguen intactos, pero no podrás borrar ni importar desde la app.</p>
+    ${hasPin ? pinField('old', 'PIN actual') : ''}
+    ${pinField('p1', 'Nuevo PIN')}
+    ${pinField('p2', 'Repite el nuevo PIN')}
+    <button class="btn-primary w-full mt-2" data-mact="save" type="button">Guardar PIN</button>
+  `, {
+    autofocus: true,
+    save: async root => {
+      if (hasPin && await hashPin(pinVal(root, 'old')) !== state.settings.pinHash) return toast('El PIN actual no es correcto', 'error');
+      const p1 = pinVal(root, 'p1'), p2 = pinVal(root, 'p2');
+      if (!/^\d{4,8}$/.test(p1)) return toast('El PIN debe tener de 4 a 8 cifras', 'warn');
+      if (p1 !== p2) return toast('Los dos PIN no coinciden', 'warn');
+      state.settings.pinHash = await hashPin(p1);
+      persist(); closeModal(); render(); toast('PIN guardado ✓');
+    }
+  });
+}
+
 function exportBackup() {
   const data = clone(state);
   data.settings.apiKey = '';
+  delete data.settings.pinHash;
   data.drafts = {};
   data.exportedAt = new Date().toISOString();
   const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
@@ -1446,6 +1527,7 @@ function importBackup(file) {
       const msg = `Copia con ${incoming.sessions.length} sesiones, ${Object.keys(incoming.meals).length} días de dieta y ${incoming.bodyMetrics.length} mediciones.\n\nVa a SUSTITUIR los datos actuales (${state.sessions.length} sesiones). ¿Continuar?`;
       if (!confirm(msg)) return;
       incoming.settings.apiKey = state.settings.apiKey;
+      incoming.settings.pinHash = state.settings.pinHash || '';
       delete incoming.exportedAt;
       state = incoming;
       ui.dayId = nextDayId();
@@ -1653,19 +1735,31 @@ const actions = {
     persist(); render(); toast('Plan restaurado');
   },
   export: () => exportBackup(),
-  import: () => $('#importInput').click(),
+  import: () => {
+    if (!state.settings.pinHash) return $('#importInput').click();
+    guardModal({ title: 'Importar copia', text: 'Importar sustituye todos tus datos actuales por los de la copia.', word: 'IMPORTAR', onOk: () => $('#importInput').click() });
+  },
   install: async () => { if (!deferredInstall) return; deferredInstall.prompt(); await deferredInstall.userChoice.catch(() => null); deferredInstall = null; render(); },
   checkUpdate: async () => {
     if (!swReg) return toast('El modo app solo funciona desde una web https', 'warn');
     try { await swReg.update(); if (swReg.waiting) showUpdate(swReg.waiting); else toast('Ya tienes la última versión'); } catch { toast('No se pudo comprobar', 'error'); }
   },
-  wipe: () => {
-    if (!confirm('¿Borrar TODOS los datos de la app en este móvil? Esto no se puede deshacer.')) return;
-    if (prompt('Escribe BORRAR para confirmar') !== 'BORRAR') return;
-    const key = state.settings.apiKey;
-    state = defaultState(); state.settings.apiKey = key; ui.dayId = nextDayId();
-    persist(); render(); toast('Datos borrados');
-  }
+  wipe: () => guardModal({
+    title: 'Borrar todos los datos',
+    text: `Se borrarán ${state.sessions.length} sesiones, ${Object.keys(state.meals).length} días de dieta, el cardio, las mediciones y tu plan. Antes se descargará automáticamente una copia de seguridad.`,
+    danger: 'Borrar todo', word: 'BORRAR',
+    onOk: () => {
+      exportBackup();
+      const key = state.settings.apiKey, pin = state.settings.pinHash;
+      state = defaultState(); state.settings.apiKey = key; state.settings.pinHash = pin; ui.dayId = nextDayId();
+      persist(); render(); toast('Datos borrados. Copia descargada por si acaso.');
+    }
+  }),
+  pinSet: () => pinSetModal(),
+  pinRemove: () => guardModal({
+    title: 'Quitar PIN', text: 'Borrar todo e Importar volverán a pedir solo una palabra de confirmación.', word: 'QUITAR',
+    onOk: () => { state.settings.pinHash = ''; persist(); render(); toast('PIN quitado'); }
+  }),
 };
 
 const app = $('#app');
@@ -1689,6 +1783,7 @@ app.addEventListener('change', e => {
   } else if (t.dataset.actChange === 'progEx') { ui.progEx = t.value; render(); }
   else if (t.id === 'cdDate') { keepCardioInputs(); ui.cardio.est = null; render(); }
 });
+app.addEventListener('toggle', e => { if (e.target.id === 'aiBox') ui.aiOpen = e.target.open; }, true);
 app.addEventListener('focusin', e => { if (e.target.classList?.contains('field-set')) setTimeout(() => e.target.select?.(), 0); });
 
 async function onMealImage(e) {
