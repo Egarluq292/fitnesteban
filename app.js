@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.8.0';
+const APP_VERSION = '4.8.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -155,7 +155,7 @@ const isStandalone = () => window.matchMedia('(display-mode: standalone)').match
 
 /* ---------- Estado ---------- */
 function defaultSettings() {
-  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, minProtMeal: 25, pinHash: '', lastSeenVersion: '', driveConnected: false, driveEmail: '', driveFolderId: '', autoDrive: true, lastDriveBackup: null };
+  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, minProtMeal: 25, pinHash: '', lastSeenVersion: '', driveConnected: false, driveEmail: '', driveFolderId: '', autoDrive: true, lastDriveBackup: null, swipeNav: true };
 }
 function defaultState() {
   return { version: 4, plan: clone(DEFAULT_PLAN), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {} };
@@ -1835,6 +1835,7 @@ function renderSettings() {
 
   <section class="card p-4 mt-3 space-y-3">
     <h3 class="section-title">📱 Aplicación</h3>
+    <label class="habit"><input type="checkbox" id="swipeNav" ${st.swipeNav !== false ? 'checked' : ''} /><span class="text-xs">Cambiar de pestaña deslizando el dedo a izquierda o derecha</span></label>
     ${deferredInstall ? `<button class="btn-primary w-full" data-act="install" type="button">Instalar en la pantalla de inicio</button>` : `<p class="text-xs text-mute">${isStandalone() ? 'Instalada como app ✓' : 'Para instalar: menú ⋮ del navegador → «Instalar aplicación» o «Añadir a pantalla de inicio».'}</p>`}
     <div class="grid grid-cols-2 gap-2">
       <button class="btn-ghost" data-act="checkUpdate" type="button">Buscar actualización</button>
@@ -2220,6 +2221,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.8.1', ['👆 Cambia de pestaña deslizando el dedo a izquierda o derecha (se puede desactivar en Ajustes → Aplicación).']],
   ['4.8.0', ['🥩 Proteína por comida: cada desayuno, comida, puente y cena te indica si llega al mínimo (25 g por defecto, ajustable en Ajustes → Objetivos). El resumen semanal lo tiene en cuenta.']],
   ['4.7.0', ['☁️ Copias en Google Drive: conéctalo en Ajustes → Copias. Guarda en la carpeta «FITNESTEBAN – copias», copia automática semanal y restaurar desde Drive.']],
   ['4.6.2', ['🧠 El resumen semanal ahora se pliega y recuerda si lo dejaste abierto o cerrado.']],
@@ -2351,6 +2353,55 @@ function go(view) {
   window.scrollTo({ top: 0 });
 }
 document.querySelectorAll('.navbtn').forEach(b => b.addEventListener('click', () => go(b.dataset.view)));
+
+/* ---------- Deslizar entre pestañas ----------
+   Solo con un gesto claramente horizontal y largo; nunca desde los bordes (gesto «atrás» de Android),
+   ni sobre filas deslizables, campos, gráficas o ventanas abiertas. No da la vuelta. */
+const VIEWS = ['train', 'diet', 'progress', 'settings'];
+const swipe = { on: false, axis: null, x0: 0, y0: 0, dx: 0 };
+const appEl = document.getElementById('app');
+const NO_SWIPE = '.chips-row, input, textarea, select, svg, .seg, .modal-sheet, [data-noswipe]';
+function swipeReset(animate) {
+  appEl.style.transition = animate ? 'transform .2s ease, opacity .2s ease' : '';
+  appEl.style.transform = ''; appEl.style.opacity = '';
+}
+document.addEventListener('touchstart', e => {
+  swipe.on = false; swipe.axis = null;
+  if (state.settings.swipeNav === false || e.touches.length !== 1 || $('#modalRoot').classList.contains('open')) return;
+  const t = e.touches[0], edge = 28;
+  if (t.clientX < edge || t.clientX > window.innerWidth - edge) return;
+  if (!appEl.contains(e.target) || e.target.closest(NO_SWIPE)) return;
+  Object.assign(swipe, { on: true, x0: t.clientX, y0: t.clientY, dx: 0 });
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  if (!swipe.on) return;
+  const t = e.touches[0];
+  const dx = t.clientX - swipe.x0, dy = t.clientY - swipe.y0;
+  if (!swipe.axis) {
+    if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+    swipe.axis = Math.abs(dx) > Math.abs(dy) * 1.6 ? 'x' : 'y';
+    if (swipe.axis === 'y') { swipe.on = false; return; }
+  }
+  swipe.dx = dx;
+  const i = VIEWS.indexOf(ui.view);
+  const blocked = (dx > 0 && i === 0) || (dx < 0 && i === VIEWS.length - 1);
+  appEl.style.transition = '';
+  appEl.style.transform = `translateX(${dx * (blocked ? 0.08 : 0.35)}px)`;
+  appEl.style.opacity = String(1 - Math.min(0.35, Math.abs(dx) / window.innerWidth * (blocked ? 0.1 : 0.6)));
+}, { passive: true });
+document.addEventListener('touchend', () => {
+  if (!swipe.on || swipe.axis !== 'x') { swipe.on = false; return; }
+  swipe.on = false;
+  const i = VIEWS.indexOf(ui.view);
+  const dir = swipe.dx < 0 ? 1 : -1;
+  const next = VIEWS[i + dir];
+  if (Math.abs(swipe.dx) < window.innerWidth * 0.25 || !next) return swipeReset(true);
+  go(next);
+  appEl.style.transition = '';
+  appEl.style.transform = `translateX(${dir * 40}px)`; appEl.style.opacity = '0.4';
+  requestAnimationFrame(() => requestAnimationFrame(() => swipeReset(true)));
+}, { passive: true });
+document.addEventListener('touchcancel', () => { if (swipe.on) { swipe.on = false; swipeReset(true); } }, { passive: true });
 
 const actions = {
   pickDay: b => { ui.dayId = b.dataset.day; render(); window.scrollTo({ top: 0 }); },
@@ -2552,6 +2603,7 @@ app.addEventListener('change', e => {
     const h = state.settings.habits[parseInt(t.dataset.habit, 10)];
     draftOf(currentDay().id).habits[h] = t.checked; persist();
   } else if (t.dataset.actChange === 'progEx') { ui.progEx = t.value; render(); }
+  else if (t.id === 'swipeNav') { state.settings.swipeNav = t.checked; persist(); }
   else if (t.id === 'autoDrive') { state.settings.autoDrive = t.checked; persist(); }
   else if (t.id === 'cdDate') { keepCardioInputs(); ui.cardio.est = null; render(); }
 });
