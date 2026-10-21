@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.12.0';
+const APP_VERSION = '4.12.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -563,9 +563,6 @@ function renderTrain() {
       </div>
       <button class="iconbtn" data-act="editDay" type="button" aria-label="Editar día">✎</button>
     </div>
-    ${draftHasData(day.id) ? `<div id="wipInline" class="mt-3 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2.5 py-1.5 flex justify-between items-center gap-2">
-      <span>Sesión en curso${d.startedAt ? ` · ⏱ ${sessionMinutes(d)} min` : ''} · se guarda sola</span>
-      <button data-act="discardDraft" class="underline" type="button">Descartar</button></div>` : ''}
   </section>
 
   <div class="space-y-3 mt-3">
@@ -579,7 +576,10 @@ function renderTrain() {
     ${habits}
   </section>` : ''}
 
-  <button class="btn-save w-full mt-4" data-act="saveSession" type="button">Guardar sesión</button>
+  <div class="flex gap-2 mt-4" id="saveRow">
+    ${draftHasData(day.id) ? '<button class="btn-abandon" data-act="abandon" type="button">Abandonar</button>' : ''}
+    <button class="btn-save flex-1" data-act="saveSession" type="button">Guardar sesión</button>
+  </div>
   `;
 }
 
@@ -601,7 +601,7 @@ function renderExerciseCard(e, idx, day, d) {
     const target = c.targets[i] ?? c.targets[c.targets.length - 1] ?? `${e.minReps}`;
     const done = !!doneArr[i];
     rows += `
-      <div class="setrow ${done ? 'is-done' : ''}">
+      <div class="setrow ${done ? 'is-done' : ''}" id="set-${esc(e.id)}-${i}">
         <span class="w-7 text-xs font-bold text-mute">S${i + 1}</span>
         <div class="relative flex-1">
           <input class="field field-set" inputmode="decimal" autocomplete="off" data-in="w" data-key="${esc(key)}" data-i="${i}" value="${esc(w)}" placeholder="${e.bw ? 'PC' : 'kg'}" aria-label="${e.bw ? 'Lastre' : 'Peso'} serie ${i + 1}" />
@@ -671,14 +671,15 @@ function setDraftCell(key, i, field, value) {
   if (!d.sets[key]) d.sets[key] = [];
   if (!d.sets[key][i]) d.sets[key][i] = {};
   d.sets[key][i][field] = value;
-  if (field === 'r' && value !== '') touchSession(d);
+  if (field === 'r' && value !== '') touchSession(d, key.replace(/_v\d+$/, ''));
   persistSoon();
 }
 
 /* ---------- Duración: estimada (plan) y real (cronometrada sola) ---------- */
 const PAUSE_MS = 20 * 60000; // pausas de más de 20 min no cuentan
 /* Marca actividad en la sesión en curso: arranca el reloj con la primera serie y suma solo el tiempo activo */
-function touchSession(d) {
+function touchSession(d, exId) {
+  if (exId) d.lastEx = exId;
   const now = Date.now();
   if (!d.startedAt) { d.startedAt = now; d.lastAt = now; d.activeMs = 0; return; }
   const gap = now - (d.lastAt || now);
@@ -720,7 +721,7 @@ function markSetDone(exId, key, i) {
     const cell = d.sets[key][i];
     if ((cell.r === undefined || cell.r === '') && typeof c.targets[i] === 'number') cell.r = String(c.targets[i]);
     if (cell.w === undefined && c.weight !== null) cell.w = fmtNum(c.weight);
-    touchSession(d);
+    touchSession(d, exId);
     if (num(cell.r) > 0) startTimer(f.ex.rest);
     else toast('Apunta las repeticiones de la serie', 'warn');
   }
@@ -2622,6 +2623,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.12.1', ['⏱ La franja del entreno en curso está siempre arriba (también en Entreno) y te lleva directa a la serie que toca.', '🗑️ «Abandonar» se mueve junto a «Guardar sesión», con confirmación.']],
   ['4.12.0', ['🤸 Ejercicios con peso corporal: el peso pasa a ser lastre (vacío = PC).', '⏱ Franja fija de «entreno en curso» en todas las pestañas.', '📸 Tarjeta para compartir al terminar la sesión.', '🏋️ kcal del gym estimadas: Dieta muestra Comidas · Cardio · Gym · Neto.']],
   ['4.11.3', ['✨ Nueva marca en la cabecera: FITNE en blanco, la S partida en diagonal y TEBAN en cian, igual en cualquier móvil.']],
   ['4.11.1', ['↺ «Igual que S1»: copia el peso y las reps de la serie anterior con un toque.']],
@@ -2665,7 +2667,8 @@ const GUIDE = [
     'Abre «Registrar series» en cada ejercicio. El peso sugerido ya viene puesto; apunta las reps y pulsa ✓: arranca el descanso de ese ejercicio (vibra y pita al acabar).',
     'Todo se guarda solo mientras escribes: puedes cerrar la app a mitad de sesión.',
     '🤸 <b>Peso corporal</b>: activa «Con peso corporal» en el ✎ del ejercicio (dominadas, fondos…). El campo de peso pasa a ser el <b>lastre</b>: vacío = solo tu peso (PC). El 1RM y los récords suman tu último peso registrado.',
-    '⏱ Mientras hay un entreno en curso, una franja ámbar fija bajo la cabecera muestra el tiempo en cualquier pestaña; tócala para volver.',
+    '⏱ Con un entreno en curso, una franja ámbar fija bajo la cabecera muestra el tiempo y la serie que toca, en cualquier pestaña. Tócala y te lleva directa a esa serie.',
+    '🗑️ «Abandonar» (junto a «Guardar sesión») borra lo apuntado en el entreno de hoy, siempre con confirmación.',
     '📸 Al guardar la sesión, «Tarjeta» crea una imagen para compartir en redes (también desde Progreso → Historial).',
     '↺ <b>Igual que la serie anterior</b>: bajo cada serie (desde la S2) puedes copiar el peso y las reps de la anterior con un toque; después pulsa ✓.',
     '⇄ cambia de variante, ✎ edita series, rango, descanso, incremento y vídeo. «▶ Técnica» abre YouTube.',
@@ -2775,37 +2778,50 @@ function activeWip() {
   }
   return best;
 }
-let wipObserver = null, wipInlineVisible = false;
-function watchWipInline() {
-  wipObserver?.disconnect(); wipInlineVisible = false;
-  const el = document.getElementById('wipInline');
-  if (el && 'IntersectionObserver' in window) {
-    const top = document.querySelector('header')?.getBoundingClientRect().height || 60;
-    wipObserver = new IntersectionObserver(([en]) => { wipInlineVisible = en.isIntersecting; updateWipBar(); }, { rootMargin: `-${Math.round(top)}px 0px 0px 0px` });
-    wipObserver.observe(el);
-    wipInlineVisible = true;
+/* Serie en curso: la primera sin ✓ del último ejercicio tocado (o de los siguientes) */
+function wipTarget(w) {
+  const day = allDays().find(x => x.id === w.dayId); if (!day || !day.exercises.length) return null;
+  const exs = day.exercises, d = w.d;
+  const start = Math.max(0, exs.findIndex(e => e.id === d.lastEx));
+  for (let k = 0; k < exs.length; k++) {
+    const e = exs[(start + k) % exs.length];
+    const { key, variant } = variantOf(e);
+    const n = setCount(e, key, d), done = d.done?.[key] || [];
+    for (let i = 0; i < n; i++) if (!done[i]) return { exId: e.id, key, i, name: variant.name };
   }
-  updateWipBar();
+  return { save: true };
 }
+function watchWipInline() { updateWipBar(); }
 function updateWipBar() {
   const bar = $('#wipBar'); if (!bar) return;
   const w = activeWip();
-  const sameDay = w && ui.view === 'train' && currentDay().id === w.dayId;
-  if (!w || (sameDay && wipInlineVisible)) { if (!bar.classList.contains('hidden')) { bar.classList.add('hidden'); bar.innerHTML = ''; } return; }
+  if (!w) { if (!bar.classList.contains('hidden')) { bar.classList.add('hidden'); bar.innerHTML = ''; } return; }
   const day = allDays().find(x => x.id === w.dayId);
-  const mins = sessionMinutes(w.d);
+  const mins = sessionMinutes(w.d), t = wipTarget(w);
+  const where = !t ? '' : t.save ? 'Todo hecho · guardar' : `${t.name} · S${t.i + 1}`;
   bar.innerHTML = `<button class="wip-bar" data-wip="${esc(w.dayId)}" type="button">
-      <span class="flex items-center gap-2 min-w-0"><span class="wip-dot"></span><span class="truncate"><strong>${esc(day?.label || 'Entreno')}</strong> en curso${mins ? ` · ⏱ ${mins} min` : ''}</span></span>
-      <span class="shrink-0">${sameDay ? 'Subir ▲' : 'Volver ›'}</span></button>`;
+      <span class="flex items-center gap-2 min-w-0"><span class="wip-dot"></span><span class="truncate"><strong>${esc(day?.label || 'Entreno')}</strong>${mins ? ` · ⏱ ${mins} min` : ''}${where ? ` · <span class="text-amber-100">${esc(where)}</span>` : ''}</span></span>
+      <span class="tri shrink-0"></span></button>`;
   bar.classList.remove('hidden');
 }
-$('#wipBar')?.addEventListener('click', e => {
-  const b = e.target.closest('[data-wip]'); if (!b) return;
+function goToWip() {
   const w = activeWip(); if (!w) return;
-  if (ui.view === 'train' && currentDay().id === w.dayId) { document.getElementById('wipInline')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
   const pr = programOfDay(w.dayId); if (pr) state.plan.active = pr.id;
-  ui.dayId = w.dayId; go('train');
-});
+  ui.dayId = w.dayId;
+  const t = wipTarget(w);
+  if (t && !t.save) { w.d.open = w.d.open || {}; w.d.open[t.key] = true; }
+  if (ui.view !== 'train') go('train'); else render();
+  setTimeout(() => {
+    const el = t && !t.save ? document.getElementById(`set-${t.exId}-${t.i}`) : document.getElementById('saveRow');
+    if (!el) return;
+    const top = (document.querySelector('header')?.getBoundingClientRect().height || 100);
+    const y = el.getBoundingClientRect().top + window.scrollY - top - (window.innerHeight - top) / 3;
+    window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 1600);
+  }, 60);
+}
+$('#wipBar')?.addEventListener('click', e => { if (e.target.closest('[data-wip]')) goToWip(); });
 setInterval(updateWipBar, 30000);
 
 function go(view) {
@@ -2938,7 +2954,7 @@ const actions = {
     const w = cellValue(d, key, i - 1, 'w', c), r = cellValue(d, key, i - 1, 'r', c);
     if (!d.sets[key]) d.sets[key] = [];
     d.sets[key][i] = { ...(d.sets[key][i] || {}), w: String(w), r: String(r) };
-    touchSession(d);
+    touchSession(d, f.ex.id);
     persist(); render();
   },
   shareSession: b => openShareCard(b.dataset.id),
@@ -2963,7 +2979,17 @@ const actions = {
     persist(); render();
   },
   doneSet: b => markSetDone(b.dataset.ex, b.dataset.key, parseInt(b.dataset.i, 10)),
-  discardDraft: () => { if (confirm('¿Descartar lo apuntado en esta sesión?')) { delete state.drafts[currentDay().id]; persist(); render(); } },
+  abandon: () => {
+    const day = currentDay(), d = state.drafts[day.id]; if (!d) return;
+    const n = Object.values(d.sets || {}).reduce((a, arr) => a + (arr || []).filter(c => c && c.r !== undefined && c.r !== '').length, 0);
+    openModal(`
+      <div class="text-center"><div class="text-3xl">⚠️</div><h3 class="modal-title mt-1">¿Abandonar el entreno?</h3></div>
+      <p class="text-sm text-mute text-center">Se borrarán las <strong class="text-white">${n} ${n === 1 ? 'serie apuntada' : 'series apuntadas'}</strong> de ${esc(day.label)}. No se puede deshacer.</p>
+      <button class="btn-primary w-full mt-2" data-close type="button">Seguir entrenando</button>
+      <button class="btn-danger w-full" data-mact="yes" type="button">Abandonar y borrar</button>`, {
+      yes: () => { delete state.drafts[day.id]; persist(); closeModal(); render(); toast('Entreno abandonado'); }
+    });
+  },
   saveSession: () => saveSession(),
 
   mealType: b => { ui.mealType = b.dataset.type; render(); },
