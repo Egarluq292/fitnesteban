@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.13.0';
+const APP_VERSION = '4.13.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2763,6 +2763,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.13.1', ['⚡ El Coach está arriba, junto al «?» y el cronómetro: tres botones iguales. La barra inferior vuelve a sus 4 pestañas.', '⏱ Al terminar el descanso, el cronómetro dice «¡Ya!».']],
   ['4.13.0', ['⚡ Coach IA: nuevo botón con el rayo arriba, junto al «?». Pregúntale sobre tu entreno o tu dieta y responde con tus datos (plan, sesiones, comidas de hoy, peso…), sin salir de la app.', '⏱ El temporizador de descanso, en reposo, es solo el icono; al arrancar muestra la cuenta atrás.']],
   ['4.12.2', ['🔒 La clave de Gemini queda bloqueada: para cambiarla pide tu PIN (o una confirmación) y «Probar conexión» ya no guarda nada.']],
   ['4.12.1', ['⏱ La franja del entreno en curso está siempre arriba (también en Entreno) y te lleva directa a la serie que toca.', '🗑️ «Abandonar» se mueve junto a «Guardar sesión», con confirmación.']],
