@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.12.1';
+const APP_VERSION = '4.12.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -319,6 +319,9 @@ const ui = {
   progEx: null,
   showKey: false,
   aiOpen: false,
+  keyUnlocked: false,
+  keyDraft: null,
+  modelDraft: null,
   blocksOpen: false,
   editing: null,
   reportBusy: false,
@@ -2139,17 +2142,29 @@ function renderSettings() {
     </summary>
     <div class="space-y-3 mt-3">
     <p class="text-xs text-mute leading-relaxed">La clave se guarda <strong class="text-white">solo en este móvil</strong> y no va en el código ni en las copias de seguridad. Créala en <a class="text-brand underline" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>.</p>
-    <label class="lbl">Clave API
+    ${st.apiKey && !ui.keyUnlocked ? `
+    <div class="lbl">Clave API</div>
+    <div class="flex items-center gap-2 -mt-1">
+      <div class="field flex-1 font-mono text-mute select-none">🔒 ${esc(maskKey(st.apiKey))}</div>
+    </div>
+    <div class="text-[11px] text-mute -mt-1">Modelo: <span class="font-mono">${esc(st.model || DEFAULT_MODEL)}</span></div>
+    <div class="grid grid-cols-2 gap-2">
+      <button class="btn-ghost" data-act="testKey" type="button">Probar conexión</button>
+      <button class="btn-ghost" data-act="unlockKey" type="button">🔓 Cambiar clave</button>
+    </div>
+    <p class="text-[11px] text-mute">Bloqueada para que no se modifique sin querer. Para cambiarla te pedirá ${st.pinHash ? 'tu PIN' : 'una confirmación'}.</p>` : `
+    <label class="lbl">${st.apiKey ? 'Nueva clave API' : 'Clave API'}
       <div class="flex gap-2 mt-1">
-        <input class="field flex-1 font-mono" id="apiKey" type="${ui.showKey ? 'text' : 'password'}" autocomplete="off" spellcheck="false" value="${esc(st.apiKey)}" placeholder="AIza…" />
+        <input class="field flex-1 font-mono" id="apiKey" type="${ui.showKey ? 'text' : 'password'}" autocomplete="off" spellcheck="false" value="${esc(ui.keyDraft ?? '')}" placeholder="AQ.… o AIza…" />
         <button class="iconbtn" data-act="toggleKey" type="button" aria-label="Mostrar u ocultar">${ui.showKey ? '🙈' : '👁'}</button>
       </div>
     </label>
-    <label class="lbl">Modelo<input class="field mt-1 font-mono" id="apiModel" value="${esc(st.model)}" placeholder="${DEFAULT_MODEL}" /></label>
+    <label class="lbl">Modelo<input class="field mt-1 font-mono" id="apiModel" value="${esc(ui.modelDraft ?? st.model)}" placeholder="${DEFAULT_MODEL}" /></label>
     <div class="grid grid-cols-2 gap-2">
-      <button class="btn-ghost" data-act="testKey" type="button">Probar conexión</button>
-      <button class="btn-primary" data-act="saveKey" type="button">Guardar</button>
+      <button class="btn-ghost" data-act="testKey" type="button">Probar</button>
+      <button class="btn-primary" data-act="saveKey" type="button">Guardar y bloquear</button>
     </div>
+    ${st.apiKey ? '<button class="btn-ghost w-full" data-act="cancelKey" type="button">Cancelar (mantener la clave actual)</button>' : ''}`}
     </div>
   </details>
 
@@ -2322,6 +2337,9 @@ function backupText() {
   return JSON.stringify(data, null, 1);
 }
 function markBackup(msg) { state.settings.lastBackup = todayISO(); persist(); render(); toast(msg); }
+const maskKey = k => (k.length > 10 ? `${k.slice(0, 4)}••••••••${k.slice(-4)}` : '••••••••');
+function keepKeyDraft() { const k = $('#apiKey'), m = $('#apiModel'); if (k) ui.keyDraft = k.value; if (m) ui.modelDraft = m.value; }
+
 function exportBackup() {
   const blob = new Blob([backupText()], { type: 'application/json' });
   const a = document.createElement('a');
@@ -2623,6 +2641,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.12.2', ['🔒 La clave de Gemini queda bloqueada: para cambiarla pide tu PIN (o una confirmación) y «Probar conexión» ya no guarda nada.']],
   ['4.12.1', ['⏱ La franja del entreno en curso está siempre arriba (también en Entreno) y te lleva directa a la serie que toca.', '🗑️ «Abandonar» se mueve junto a «Guardar sesión», con confirmación.']],
   ['4.12.0', ['🤸 Ejercicios con peso corporal: el peso pasa a ser lastre (vacío = PC).', '⏱ Franja fija de «entreno en curso» en todas las pestañas.', '📸 Tarjeta para compartir al terminar la sesión.', '🏋️ kcal del gym estimadas: Dieta muestra Comidas · Cardio · Gym · Neto.']],
   ['4.11.3', ['✨ Nueva marca en la cabecera: FITNE en blanco, la S partida en diagonal y TEBAN en cian, igual en cualquier móvil.']],
@@ -3063,14 +3082,33 @@ const actions = {
   delMetric: b => { if (!confirm('¿Borrar esta medición?')) return; state.bodyMetrics = state.bodyMetrics.filter(m => m.id !== b.dataset.id); persist(); render(); },
   delSession: b => { if (!confirm('¿Borrar esta sesión del historial? El coach dejará de tenerla en cuenta.')) return; state.sessions = state.sessions.filter(s => s.id !== b.dataset.id); persist(); render(); },
 
-  toggleKey: () => { state.settings.apiKey = $('#apiKey').value.trim(); ui.showKey = !ui.showKey; render(); },
-  saveKey: () => { state.settings.apiKey = $('#apiKey').value.trim(); state.settings.model = $('#apiModel').value.trim() || DEFAULT_MODEL; persist(); toast('Clave guardada en este móvil ✓'); },
+  toggleKey: () => { keepKeyDraft(); ui.showKey = !ui.showKey; render(); },
+  unlockKey: () => guardModal({
+    title: 'Cambiar la clave de Gemini', text: 'La clave actual seguirá funcionando hasta que guardes una nueva.', word: 'CAMBIAR',
+    onOk: () => { ui.keyUnlocked = true; ui.keyDraft = ''; ui.modelDraft = null; ui.aiOpen = true; render(); setTimeout(() => $('#apiKey')?.focus(), 50); }
+  }),
+  cancelKey: () => { ui.keyUnlocked = false; ui.keyDraft = null; ui.modelDraft = null; ui.showKey = false; render(); },
+  saveKey: () => {
+    keepKeyDraft();
+    const k = (ui.keyDraft || '').trim();
+    if (!k) return toast('Pega la clave antes de guardar', 'warn');
+    if (!/^(AQ\.|AIza)/.test(k) && !confirm('Esta clave no empieza por «AQ.» ni por «AIza». ¿Guardarla igualmente?')) return;
+    state.settings.apiKey = k; state.settings.model = (ui.modelDraft || '').trim() || state.settings.model || DEFAULT_MODEL;
+    ui.keyUnlocked = false; ui.keyDraft = null; ui.modelDraft = null; ui.showKey = false;
+    persist(); render(); toast('Clave guardada y bloqueada 🔒');
+  },
   testKey: async b => {
-    state.settings.apiKey = $('#apiKey').value.trim(); state.settings.model = $('#apiModel').value.trim() || DEFAULT_MODEL; persist();
+    const editing = !!$('#apiKey');
+    if (editing) keepKeyDraft();
+    const saved = { key: state.settings.apiKey, model: state.settings.model };
+    if (editing) {
+      if (!(ui.keyDraft || '').trim()) return toast('Pega una clave para probarla', 'warn');
+      state.settings.apiKey = ui.keyDraft.trim(); state.settings.model = (ui.modelDraft || '').trim() || saved.model || DEFAULT_MODEL;
+    }
     b.disabled = true; b.textContent = 'Probando…';
-    try { const r = parseJSONLoose(await callGemini([{ text: 'Responde exactamente este JSON: {"ok": true}' }], { timeout: 20000 })); toast(r.ok ? 'Conexión correcta ✓' : 'Responde, pero raro', r.ok ? 'ok' : 'warn'); }
+    try { const r = parseJSONLoose(await callGemini([{ text: 'Responde exactamente este JSON: {"ok": true}' }], { timeout: 20000 })); toast(r.ok ? (editing ? 'Funciona ✓ Ahora pulsa «Guardar y bloquear»' : 'Conexión correcta ✓') : 'Responde, pero raro', r.ok ? 'ok' : 'warn'); }
     catch (e) { toast('Falla: ' + e.message, 'error'); }
-    finally { b.disabled = false; b.textContent = 'Probar conexión'; }
+    finally { state.settings.apiKey = saved.key; state.settings.model = saved.model; b.disabled = false; b.textContent = editing ? 'Probar' : 'Probar conexión'; }
   },
   saveGoals: () => {
     const v = id => parseInt($(id).value, 10);
