@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.10.0';
+const APP_VERSION = '4.10.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1322,7 +1322,7 @@ const DOT = { green: 'bg-emerald-400', amber: 'bg-amber-400', red: 'bg-rose-500'
 function dayActivity(date) {
   return { sessions: sortedSessions().filter(s => s.date === date && s.exercises.length), cardio: state.cardio.filter(c => c.date === date) };
 }
-function renderCalendar() {
+function renderCalMonth() {
   const m0 = ui.calMonth;
   const first = parseISO(m0);
   const y = first.getFullYear(), mo = first.getMonth();
@@ -1331,7 +1331,7 @@ function renderCalendar() {
   const today = todayISO();
   let logged = 0, green = 0, sess = 0, cmin = 0;
   const cells = [];
-  for (let i = 0; i < lead; i++) cells.push('<div></div>');
+  for (let i = 0; i < lead; i++) cells.push('<div class="h-[44px]"></div>');
   for (let d = 1; d <= days; d++) {
     const iso = toISO(new Date(y, mo, d));
     const future = iso > today;
@@ -1346,6 +1346,7 @@ function renderCalendar() {
       </span>
     </button>`);
   }
+  while (cells.length < 42) cells.push('<div class="h-[44px]"></div>');
   const prevOk = true, nextOk = toISO(new Date(y, mo + 1, 1)) <= today;
   return `
     <div class="flex items-center justify-between">
@@ -1362,7 +1363,11 @@ function renderCalendar() {
       <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>pasado</span>
       <span>🏋️ pesas</span><span>🔥 cardio</span>
     </div>
-    ${renderCalDetail(ui.calSel)}
+`;
+}
+function renderCalendar() {
+  return `<div id="calMonth">${renderCalMonth()}</div>
+    <div id="calDetail">${renderCalDetail(ui.calSel)}</div>
     <div class="grid grid-cols-2 gap-2 mt-1">
       <button class="btn-ghost" data-mact="calToday" type="button">Hoy</button>
       <button class="btn-ghost" data-close type="button">Cerrar</button>
@@ -1394,19 +1399,53 @@ function renderCalDetail(date) {
     <button class="btn-primary w-full py-2.5" data-mact="calGo" type="button">🍽️ Ver comidas de este día</button>
   </div>`;
 }
+const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function calSwapDetail() {
+  const box = $('#calDetail'); if (!box) return;
+  box.innerHTML = renderCalDetail(ui.calSel);
+  if (!reduceMotion()) box.firstElementChild?.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 180, easing: 'ease-out' });
+}
+function calMarkSelected() {
+  document.querySelectorAll('#calMonth .cal-day').forEach(b => b.classList.toggle('cal-sel', b.dataset.d === ui.calSel));
+}
+let calAnimating = false;
+function calSlideMonth(dir) {
+  const box = $('#calMonth'); if (!box) return;
+  if (reduceMotion()) { box.innerHTML = renderCalMonth(); return; }
+  calAnimating = true;
+  const out = box.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: `translateX(${-dir * 40}px)` }], { duration: 140, easing: 'ease-in', fill: 'forwards' });
+  out.onfinish = () => {
+    box.innerHTML = renderCalMonth();
+    out.cancel();
+    const inn = box.animate([{ opacity: 0, transform: `translateX(${dir * 40}px)` }, { opacity: 1, transform: 'none' }], { duration: 200, easing: 'cubic-bezier(.2,.7,.3,1)' });
+    inn.onfinish = () => { calAnimating = false; };
+  };
+}
 function openCalendar() {
   ui.calSel = ui.dietDate;
   ui.calMonth = ui.dietDate.slice(0, 8) + '01';
-  const reopen = () => openModal(renderCalendar(), handlers);
-  const shift = n => { const d = parseISO(ui.calMonth); ui.calMonth = toISO(new Date(d.getFullYear(), d.getMonth() + n, 1)); reopen(); };
+  const shift = n => {
+    if (calAnimating) return;
+    const d = parseISO(ui.calMonth);
+    const next = toISO(new Date(d.getFullYear(), d.getMonth() + n, 1));
+    if (next > todayISO()) return;
+    ui.calMonth = next;
+    calSlideMonth(n);
+  };
   const handlers = {
     calPrev: () => shift(-1),
     calNext: () => shift(1),
-    calDay: (root, b) => { ui.calSel = b.dataset.d; reopen(); },
-    calToday: () => { ui.calSel = todayISO(); ui.calMonth = todayISO().slice(0, 8) + '01'; reopen(); },
+    calDay: (root, b) => { if (b.dataset.d === ui.calSel) return; ui.calSel = b.dataset.d; calMarkSelected(); calSwapDetail(); },
+    calToday: () => {
+      const t = todayISO(), m = t.slice(0, 8) + '01';
+      const dir = m > ui.calMonth ? 1 : m < ui.calMonth ? -1 : 0;
+      ui.calSel = t;
+      if (dir) { ui.calMonth = m; calSlideMonth(dir); } else calMarkSelected();
+      calSwapDetail();
+    },
     calGo: () => { ui.editing = null; ui.aiResult = null; ui.dietDate = ui.calSel; closeModal(); render(); window.scrollTo({ top: 0 }); }
   };
-  reopen();
+  openModal(renderCalendar(), handlers);
 }
 
 function renderDiet() {
@@ -2365,6 +2404,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.10.1', ['📅 Calendario más fluido: el mes se desliza al cambiarlo y el detalle del día aparece suavemente, sin que la ventana salte.']],
   ['4.10.0', ['⏱ Duración de los entrenos: estimada antes de empezar (según series, reps y descansos) y real, medida sola desde la primera serie ✓ hasta guardar (las pausas de más de 20 min no cuentan).']],
   ['4.9.0', ['📅 Calendario en Dieta: toca la fecha. Cada día muestra cómo fue la dieta (punto de color) y si entrenaste (🏋️) o hiciste cardio (🔥); al tocar un día ves el detalle.']],
   ['4.8.2', ['👆 Al deslizar, la pantalla siguiente entra acompañando al dedo; arreglado el parpadeo de la barra inferior.']],
