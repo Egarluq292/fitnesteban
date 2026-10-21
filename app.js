@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.11.0';
+const APP_VERSION = '4.11.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -593,6 +593,11 @@ function renderExerciseCard(e, idx, day, d) {
         </div>
         <button class="checkbtn" data-act="doneSet" data-ex="${esc(e.id)}" data-key="${esc(key)}" data-i="${i}" type="button" aria-label="Serie hecha">✓</button>
       </div>`;
+    if (i > 0 && !done) {
+      const pw = num(cellValue(d, key, i - 1, 'w', c)), pr = num(cellValue(d, key, i - 1, 'r', c));
+      const same = String(num(w) ?? '') === String(pw ?? '') && String(num(r) ?? '') === String(pr ?? '');
+      if (pr > 0 && !same) rows += `<button class="copy-set" data-act="copySet" data-ex="${esc(e.id)}" data-key="${esc(key)}" data-i="${i}" type="button">↺ igual que S${i} (${pw ? fmtNum(pw) : '0'} × ${pr})</button>`;
+    }
   }
   return `
   <article class="card p-4" id="ex-${esc(e.id)}">
@@ -2469,6 +2474,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.11.1', ['↺ «Igual que S1»: copia el peso y las reps de la serie anterior con un toque.']],
   ['4.11.0', ['🎯 Anillos en Dieta: calorías fuera; proteína, carbohidratos y grasas dentro. Si te pasas, el exceso da una segunda vuelta.', '🎨 Cada macro con su color en toda la app: kcal ámbar, P cian, C verde, G rosa.', '🏠 La app se abre en la dieta de hoy (o en Entreno si tienes un entreno a medias). Toca el logo para volver aquí.']],
   ['4.10.2', ['📅 En el calendario, el mes y los botones «Hoy» y «Cerrar» quedan siempre a la vista; solo se desplaza el contenido del medio.']],
   ['4.10.1', ['📅 Calendario más fluido: el mes se desliza al cambiarlo y el detalle del día aparece suavemente, sin que la ventana salte.']],
@@ -2508,6 +2514,7 @@ const GUIDE = [
   ['📝 Registrar una sesión', [
     'Abre «Registrar series» en cada ejercicio. El peso sugerido ya viene puesto; apunta las reps y pulsa ✓: arranca el descanso de ese ejercicio (vibra y pita al acabar).',
     'Todo se guarda solo mientras escribes: puedes cerrar la app a mitad de sesión.',
+    '↺ <b>Igual que la serie anterior</b>: bajo cada serie (desde la S2) puedes copiar el peso y las reps de la anterior con un toque; después pulsa ✓.',
     '⇄ cambia de variante, ✎ edita series, rango, descanso, incremento y vídeo. «▶ Técnica» abre YouTube.',
     '⏱ Bajo el título del día ves la <b>duración estimada</b>. La <b>real</b> se mide sola desde tu primera serie ✓ hasta «Guardar sesión»; si paras más de 20 min, esa pausa no cuenta. Tras 2 sesiones verás tu media real.',
     'Al final, «Guardar sesión»: verás resumen, volumen y récords personales (1RM estimado).'
@@ -2724,6 +2731,16 @@ const actions = {
     const f = findEx(b.dataset.ex); if (!f) return;
     const d = draftOf(currentDay().id);
     d.counts[b.dataset.key] = clamp(setCount(f.ex, b.dataset.key, d) + parseInt(b.dataset.delta, 10), 1, 10);
+    persist(); render();
+  },
+  copySet: b => {
+    const f = findEx(b.dataset.ex); if (!f) return;
+    const key = b.dataset.key, i = parseInt(b.dataset.i, 10);
+    const d = draftOf(currentDay().id), c = coachFor(f.ex, key);
+    const w = cellValue(d, key, i - 1, 'w', c), r = cellValue(d, key, i - 1, 'r', c);
+    if (!d.sets[key]) d.sets[key] = [];
+    d.sets[key][i] = { ...(d.sets[key][i] || {}), w: String(w), r: String(r) };
+    touchSession(d);
     persist(); render();
   },
   toggleSets: b => {
