@@ -2607,7 +2607,7 @@ function tickTimer() {
   const leftMs = timer.endAt - Date.now();
   if (leftMs <= 0) {
     clearInterval(timer.int); timer.endAt = 0;
-    $('#timerDisplay').textContent = '¡A darle!'; $('#timerBar').style.width = '0%';
+    $('#timerDisplay').textContent = '¡Ya!'; $('#timerBar').style.width = '0%';
     $('#timerPill').classList.remove('timer-run'); $('#timerPill').classList.add('timer-ready');
     try { navigator.vibrate?.([250, 120, 250, 120, 400]); } catch { /* nada */ }
     beep(); wakeOff();
@@ -2763,7 +2763,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
-  ['4.13.0', ['⚡ Coach IA: nuevo botón «Coach» en el centro de la barra inferior. Pregúntale sobre tu entreno o tu dieta y responde con tus datos (plan, sesiones, comidas de hoy, peso…), sin salir de la app.', '⏱ El temporizador de descanso, en reposo, es solo el icono; al arrancar muestra la cuenta atrás.']],
+  ['4.13.0', ['⚡ Coach IA: nuevo botón con el rayo arriba, junto al «?». Pregúntale sobre tu entreno o tu dieta y responde con tus datos (plan, sesiones, comidas de hoy, peso…), sin salir de la app.', '⏱ El temporizador de descanso, en reposo, es solo el icono; al arrancar muestra la cuenta atrás.']],
   ['4.12.2', ['🔒 La clave de Gemini queda bloqueada: para cambiarla pide tu PIN (o una confirmación) y «Probar conexión» ya no guarda nada.']],
   ['4.12.1', ['⏱ La franja del entreno en curso está siempre arriba (también en Entreno) y te lleva directa a la serie que toca.', '🗑️ «Abandonar» se mueve junto a «Guardar sesión», con confirmación.']],
   ['4.12.0', ['🤸 Ejercicios con peso corporal: el peso pasa a ser lastre (vacío = PC).', '⏱ Franja fija de «entreno en curso» en todas las pestañas.', '📸 Tarjeta para compartir al terminar la sesión.', '🏋️ kcal del gym estimadas: Dieta muestra Comidas · Cardio · Gym · Neto.']],
@@ -2833,7 +2833,7 @@ const GUIDE = [
     '✎ en una comida la edita; ⭐ «Comidas habituales» repite tus platos más frecuentes de ese tipo, y el buscador encuentra cualquiera del historial.'
   ]],
   ['⚡ Coach IA', [
-    'El botón ⚡ <b>Coach</b> del centro de la barra inferior abre un chat con Gemini que <b>lee tus datos</b>: plan y recomendación del coach en cada ejercicio, últimas 8 sesiones, comidas de hoy y lo que te queda, dieta de la semana, cardio y medidas.',
+    'El botón ⚡ de arriba (junto al «?») abre un chat con Gemini que <b>lee tus datos</b>: plan y recomendación del coach en cada ejercicio, últimas 8 sesiones, comidas de hoy y lo que te queda, dieta de la semana, cardio y medidas.',
     'Cada vez que lo abres empieza de cero (respuestas con tus datos de ese momento). «Ver la última conversación» recupera la anterior.',
     'Usa tu misma clave y el mismo límite gratuito que la estimación de comidas. Nunca se envían la clave ni el PIN.'
   ]],
