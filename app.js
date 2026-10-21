@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.10.2';
+const APP_VERSION = '4.11.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -306,7 +306,7 @@ if (state._migrated) { delete state._migrated; persist(); }
 
 /* ---------- Estado de interfaz ---------- */
 const ui = {
-  view: 'train',
+  view: 'diet',
   dayId: null,
   dietDate: todayISO(),
   mealType: guessMealType(),
@@ -1122,7 +1122,7 @@ const openAttr = (key, def = false) => `data-open-key="${key}" ${(openKeys[key] 
 function renderReport(r, open) {
   const d = r.data;
   const chips = [
-    `🏋️ ${d.sesiones_fuerza} sesiones`, d.kcal_media !== null ? `🍽️ ${d.kcal_media} kcal/día` : null, d.proteina_media_g !== null ? `🥩 ${d.proteina_media_g} g prot` : null,
+    `🏋️ ${d.sesiones_fuerza} sesiones`, d.kcal_media !== null ? `<span class="${MAC.kcal.text}">${d.kcal_media} kcal/día</span>` : null, d.proteina_media_g !== null ? `<span class="${MAC.prot.text}">P ${d.proteina_media_g} g</span>` : null,
     d.cardio_minutos ? `🔥 ${d.cardio_minutos} min cardio` : null, d.cambio_peso_kg_semana !== null ? `⚖️ ${d.cambio_peso_kg_semana > 0 ? '+' : ''}${fmtNum(d.cambio_peso_kg_semana)} kg/sem` : null
   ].filter(Boolean);
   const list = (icon, arr) => arr?.length ? `<ul class="space-y-1 mt-1">${arr.map(x => `<li class="text-xs leading-relaxed">${icon} ${esc(x)}</li>`).join('')}</ul>` : '';
@@ -1296,8 +1296,65 @@ function renderPickList() {
   const { mode, list } = mealPicks();
   ui._picks = list;
   if (!list.length) return `<p class="text-xs text-mute">${mode === 'search' ? 'Nada encontrado en tu historial.' : `Aún no has registrado ninguna comida como «${esc(ui.mealType)}». Usa el buscador para encontrar otras.`}</p>`;
-  return list.map((e, i) => `<button class="chip chip-sm text-left" data-act="repeatMeal" data-i="${i}" type="button">${esc((e.last.desc || e.last.type).slice(0, 34))} <span class="text-mute">· ${Math.round(e.last.kcal)}${e.count > 1 ? ` · ×${e.count}` : ''}</span></button>`).join('');
+  return list.map((e, i) => `<button class="chip chip-sm text-left" data-act="repeatMeal" data-i="${i}" type="button">${esc((e.last.desc || e.last.type).slice(0, 34))} <span class="text-mute">· <span class="${MAC.kcal.text}">${Math.round(e.last.kcal)}</span>${e.count > 1 ? ` · ×${e.count}` : ''}</span></button>`).join('');
 }
+/* ---------- Colores fijos de cada macro (mismos en toda la app) ---------- */
+const MAC = {
+  kcal: { hex: '#fbbf24', text: 'text-amber-300', name: 'Calorías' },
+  prot: { hex: '#00d2df', text: 'text-brand', name: 'Proteína', short: 'P' },
+  carbs: { hex: '#34d399', text: 'text-emerald-300', name: 'Carbohidratos', short: 'C' },
+  fat: { hex: '#fb7185', text: 'text-rose-300', name: 'Grasas', short: 'G' }
+};
+const SEP = '<span class="text-mute"> · </span>';
+/* «350 kcal · P 30 · C 40 · G 10» con cada parte en su color */
+function macroLine(m) {
+  return `<span class="${MAC.kcal.text}">${Math.round(m.kcal || 0)} kcal</span>${SEP}<span class="${MAC.prot.text}">P ${Math.round(m.prot || 0)}</span>${SEP}<span class="${MAC.carbs.text}">C ${Math.round(m.carbs || 0)}</span>${SEP}<span class="${MAC.fat.text}">G ${Math.round(m.fat || 0)}</span>`;
+}
+
+/* Anillos concéntricos: kcal fuera; proteína, carbohidratos y grasas dentro.
+   Pasado el 100 %, el exceso da una segunda vuelta más intensa sobre el anillo ya lleno. */
+function ringsSVG(vals, animate) {
+  const size = 176, c = size / 2, sw = 8.5, step = 11;
+  const rings = vals.map((v, i) => {
+    const r = c - sw / 2 - 1 - i * step, C = 2 * Math.PI * r;
+    const pct = v.target > 0 ? v.val / v.target : 0;
+    const main = Math.min(1, pct), extra = Math.min(1, Math.max(0, pct - 1));
+    const arc = (frac, extraStyle = '') => `<circle cx="${c}" cy="${c}" r="${r.toFixed(1)}" fill="none" stroke="${v.hex}" stroke-width="${sw}" stroke-linecap="round"
+        class="${animate ? 'ring-anim' : ''}" style="stroke-dasharray:${C.toFixed(1)} ${C.toFixed(1)};stroke-dashoffset:${(C * (1 - frac)).toFixed(1)};--full:${C.toFixed(1)};${extraStyle}" transform="rotate(-90 ${c} ${c})"/>`;
+    return `<circle cx="${c}" cy="${c}" r="${r.toFixed(1)}" fill="none" stroke="${v.hex}" stroke-opacity="0.16" stroke-width="${sw}"/>
+      ${main > 0.004 ? arc(main, extra > 0 ? 'opacity:.38' : '') : ''}
+      ${extra > 0.004 ? `<circle cx="${c}" cy="${c}" r="${r.toFixed(1)}" fill="none" stroke="#05080a" stroke-width="${sw + 3}" stroke-linecap="round" style="stroke-dasharray:${(C * extra).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 ${c} ${c})"/>${arc(extra)}` : ''}`;
+  }).join('');
+  return `<svg viewBox="0 0 ${size} ${size}" class="w-full h-auto" role="img" aria-label="Anillos de calorías, proteína, carbohidratos y grasas">${rings}</svg>`;
+}
+function ringsCard(t, st, budget, eatBack) {
+  const vals = [
+    { k: 'kcal', val: t.kcal, target: budget, hex: MAC.kcal.hex },
+    { k: 'prot', val: t.prot, target: st.targetProt, hex: MAC.prot.hex },
+    { k: 'carbs', val: t.carbs, target: st.targetCarbs, hex: MAC.carbs.hex },
+    { k: 'fat', val: t.fat, target: st.targetFat, hex: MAC.fat.hex }
+  ];
+  const anim = !!ui._animRings; ui._animRings = false;
+  const over = (val, target) => val > target ? `<span class="ml-1.5 text-[10px] font-bold rounded px-1.5 py-px bg-white/10 text-white">+${Math.round(val - target)}</span>` : '';
+  const row = k => { const v = vals.find(x => x.k === k), m = MAC[k];
+    return `<div>
+      <div class="flex items-center gap-1.5 text-[11px] font-semibold ${m.text}"><span class="w-2 h-2 rounded-full" style="background:${m.hex}"></span>${m.name}</div>
+      <div class="mt-0.5 leading-tight"><span class="text-lg font-black ${m.text}">${Math.round(v.val)}</span><span class="text-xs text-mute font-semibold"> / ${v.target} g</span>${over(v.val, v.target)}</div>
+    </div>`; };
+  return `<div class="flex items-center gap-4">
+    <div class="relative shrink-0 w-[48%] max-w-[190px]">
+      ${ringsSVG(vals, anim)}
+      <div class="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+        <div class="text-[21px] font-black leading-none ${MAC.kcal.text}">${Math.round(t.kcal)}</div>
+        <div class="text-[10px] text-mute font-semibold mt-1">/ ${budget} kcal${eatBack ? '*' : ''}</div>
+        ${t.kcal > budget ? `<div class="text-[10px] font-bold mt-0.5 text-white">+${Math.round(t.kcal - budget)}</div>` : ''}
+      </div>
+    </div>
+    <div class="flex-1 min-w-0 space-y-2.5">${row('prot')}${row('carbs')}${row('fat')}</div>
+  </div>
+  ${eatBack ? '<p class="text-[10px] text-mute mt-2">* Incluye las calorías del cardio de hoy.</p>' : ''}`;
+}
+
 function bar(label, val, target, color) {
   const pct = target ? Math.min(100, Math.round(val / target * 100)) : 0;
   const over = target && val > target * 1.05;
@@ -1394,7 +1451,8 @@ function renderCalDetail(date) {
     <div class="font-extrabold text-sm capitalize">${esc(fmtDate(date))}</div>
     <div>
       <div class="text-[11px] font-bold uppercase tracking-wider text-brand">🍽️ Dieta</div>
-      ${nMeals ? `<div class="text-xs mt-0.5 flex items-center gap-1.5">${ds ? `<span class="w-2 h-2 rounded-full ${DOT[ds.c]}"></span>` : ''}<span>${Math.round(t.kcal)} / ${st.targetKcal} kcal · 🥩 ${Math.round(t.prot)} / ${st.targetProt} g · ${nMeals} ${nMeals === 1 ? 'comida' : 'comidas'}</span></div>
+      ${nMeals ? `<div class="text-xs mt-0.5 flex items-center gap-1.5">${ds ? `<span class="w-2 h-2 rounded-full ${DOT[ds.c]}"></span>` : ''}<span><span class="${MAC.kcal.text}">${Math.round(t.kcal)}</span> / ${st.targetKcal} kcal${SEP}<span class="${MAC.prot.text}">P ${Math.round(t.prot)}</span> / ${st.targetProt} g${SEP}${nMeals} ${nMeals === 1 ? 'comida' : 'comidas'}</span></div>
+        <div class="text-[11px] mt-0.5"><span class="${MAC.carbs.text}">C ${Math.round(t.carbs)}</span>${SEP}<span class="${MAC.fat.text}">G ${Math.round(t.fat)}</span></div>
         <div class="text-[11px] text-mute">${esc(ds?.label || '')}</div>`
         : '<div class="text-xs text-mute mt-0.5">Sin comidas registradas.</div>'}
     </div>
@@ -1490,11 +1548,11 @@ function renderDiet() {
     if (!items.length) return '';
     const sub = items.reduce((a, m) => a + m.kcal, 0);
     return `<div class="mt-3 first:mt-0">
-      <div class="flex justify-between text-[11px] uppercase tracking-wider text-mute font-bold mb-1.5"><span>${tp}</span><span>${Math.round(sub)} kcal${PROT_TYPES.includes(tp) ? (() => { const pg = Math.round(items.reduce((a, m) => a + (m.prot || 0), 0)); return ` · <span class="${pg >= minProt() ? 'text-emerald-300' : 'text-amber-300'}">🥩 ${pg} g${pg >= minProt() ? ' ✓' : ' baja'}</span>`; })() : ''}</span></div>
+      <div class="flex justify-between text-[11px] uppercase tracking-wider text-mute font-bold mb-1.5"><span>${tp}</span><span><span class="${MAC.kcal.text}">${Math.round(sub)} kcal</span>${PROT_TYPES.includes(tp) ? (() => { const pg = Math.round(items.reduce((a, m) => a + (m.prot || 0), 0)); return `<span class="text-mute"> · </span><span class="${MAC.prot.text}">P ${pg} g</span>${pg >= minProt() ? '<span class="text-emerald-300"> ✓</span>' : '<span class="ml-1 normal-case rounded px-1.5 py-px bg-white/10 text-white">baja</span>'}`; })() : ''}</span></div>
       ${items.map(m => `<div class="meal">
         <div class="min-w-0 flex-1">
           <div class="text-sm font-semibold truncate ${ui.editing?.id === m.id ? 'text-brand' : ''}">${ui.editing?.id === m.id ? '✏️ ' : ''}${esc(m.desc || tp)}</div>
-          <div class="text-[11px] text-mute font-mono mt-0.5">${Math.round(m.kcal)} kcal · P ${Math.round(m.prot)} · C ${Math.round(m.carbs)} · G ${Math.round(m.fat)}</div>
+          <div class="text-[11px] font-mono mt-0.5">${macroLine(m)}</div>
         </div>
         <button class="iconbtn iconbtn-sm" data-act="editMeal" data-id="${esc(m.id)}" type="button" aria-label="Editar">✎</button>
         <button class="iconbtn iconbtn-sm" data-act="delMeal" data-id="${esc(m.id)}" type="button" aria-label="Borrar">✕</button>
@@ -1514,22 +1572,11 @@ function renderDiet() {
   </div>
 
   <section class="card p-4 mt-3">
-    <div class="flex items-end justify-between">
-      <div><div class="text-[11px] text-mute font-bold uppercase tracking-wider">Calorías</div>
-        <div class="text-3xl font-black">${Math.round(t.kcal)}<span class="text-sm text-mute font-semibold"> / ${budget}</span></div></div>
-      <div class="text-right"><div class="text-[11px] text-mute font-bold uppercase tracking-wider">Proteína</div>
-        <div class="text-3xl font-black text-brand">${Math.round(t.prot)}<span class="text-sm text-mute font-semibold"> / ${st.targetProt} g</span></div></div>
-    </div>
-    <div class="space-y-2.5 mt-4">
-      ${bar('Proteína', t.prot, st.targetProt, { text: 'text-brand', bg: 'bg-brand' })}
-      ${bar(st.eatBackCardio && burned ? 'Calorías (+cardio)' : 'Calorías', t.kcal, budget, { text: 'text-amber-300', bg: 'bg-amber-400' })}
-      ${bar('Carbohidratos', t.carbs, st.targetCarbs, { text: 'text-emerald-300', bg: 'bg-emerald-400' })}
-      ${bar('Grasas', t.fat, st.targetFat, { text: 'text-rose-300', bg: 'bg-rose-400' })}
-    </div>
+    ${ringsCard(t, st, budget, st.eatBackCardio && burned > 0)}
     <div class="grid grid-cols-3 gap-2 mt-4 text-center">
-      <div class="bg-ink rounded-xl border border-line py-2"><div class="text-[10px] text-mute font-bold uppercase">Consumidas</div><div class="font-black">${Math.round(t.kcal)}</div></div>
+      <div class="bg-ink rounded-xl border border-line py-2"><div class="text-[10px] text-mute font-bold uppercase">Consumidas</div><div class="font-black ${MAC.kcal.text}">${Math.round(t.kcal)}</div></div>
       <div class="bg-ink rounded-xl border border-line py-2"><div class="text-[10px] text-mute font-bold uppercase">🔥 Cardio</div><div class="font-black text-amber-300">${burned ? '−' + burned : '0'}</div></div>
-      <div class="bg-ink rounded-xl border border-line py-2"><div class="text-[10px] text-mute font-bold uppercase">Neto</div><div class="font-black">${Math.round(t.kcal - burned)}</div></div>
+      <div class="bg-ink rounded-xl border border-line py-2"><div class="text-[10px] text-mute font-bold uppercase">Neto</div><div class="font-black ${MAC.kcal.text}">${Math.round(t.kcal - burned)}</div></div>
     </div>
     ${(() => { const ps = protSpread(date); return ps.total ? `<p class="text-[11px] mt-3 ${ps.ok === ps.total ? 'text-emerald-300' : 'text-amber-300'}">🥩 Proteína repartida: ${ps.ok}/${ps.total} comidas con ${minProt()} g o más${ps.low.length ? ` · baja en ${esc(ps.low.join(', ').toLowerCase())}` : ' ✓'}</p>` : ''; })()}
     <p class="text-xs text-mute mt-2 leading-relaxed">${esc(advice)}</p>
@@ -1614,7 +1661,7 @@ function renderPortions(ai) {
   if (!items.length) return '';
   const pending = items.filter(it => !it.fromDesc).length;
   const row = (it, i) => {
-    const kc = `<span class="text-mute" data-item-kcal="${i}">${Math.round(itemMacros(it).kcal)} kcal</span>`;
+    const kc = `<span class="${MAC.kcal.text}" data-item-kcal="${i}">${Math.round(itemMacros(it).kcal)} kcal</span>`;
     if (it.fromDesc) return `<div class="portion">
       <div class="flex items-center justify-between gap-2 text-xs">
         <span class="font-semibold truncate">${esc(it.name)} <span class="text-mute font-normal">· ${Math.round(it.grams)} g, según tu descripción</span></span>
@@ -1871,8 +1918,8 @@ function renderProgress() {
 
   <section class="grid grid-cols-3 gap-2">
     <div class="stat"><div class="stat-v">${w.sessionsWeek}</div><div class="stat-l">sesiones esta semana</div></div>
-    <div class="stat"><div class="stat-v">${w.avgK ?? '—'}</div><div class="stat-l">kcal media 7 días${w.avgK ? ` · obj. ${st.targetKcal}` : ''}</div></div>
-    <div class="stat"><div class="stat-v ${w.avgP !== null && w.avgP < st.targetProt * 0.9 ? 'text-amber-300' : ''}">${w.avgP ?? '—'}</div><div class="stat-l">g prot media${w.avgP ? ` · obj. ${st.targetProt}` : ''}</div></div>
+    <div class="stat"><div class="stat-v ${MAC.kcal.text}">${w.avgK ?? '—'}</div><div class="stat-l">kcal media 7 días${w.avgK ? ` · obj. ${st.targetKcal}` : ''}</div></div>
+    <div class="stat"><div class="stat-v ${MAC.prot.text}">${w.avgP ?? '—'}</div><div class="stat-l">g prot media${w.avgP ? ` · obj. ${st.targetProt}` : ''}${w.avgP !== null && w.avgP < st.targetProt * 0.9 ? '<br><span class="text-amber-300 font-bold">por debajo</span>' : ''}</div></div>
   </section>
 
   ${renderWeeklyCard()}
@@ -1955,10 +2002,10 @@ function renderSettings() {
   <section class="card p-4 mt-3 space-y-3">
     <h3 class="section-title">🎯 Objetivos diarios</h3>
     <div class="grid grid-cols-4 gap-2">
-      <label class="lbl">kcal<input class="field mt-1 text-center" id="tK" inputmode="numeric" value="${st.targetKcal}" /></label>
-      <label class="lbl">Prot g<input class="field mt-1 text-center" id="tP" inputmode="numeric" value="${st.targetProt}" /></label>
-      <label class="lbl">Carb g<input class="field mt-1 text-center" id="tC" inputmode="numeric" value="${st.targetCarbs}" /></label>
-      <label class="lbl">Grasa g<input class="field mt-1 text-center" id="tF" inputmode="numeric" value="${st.targetFat}" /></label>
+      <label class="lbl ${MAC.kcal.text}">kcal<input class="field mt-1 text-center" id="tK" inputmode="numeric" value="${st.targetKcal}" /></label>
+      <label class="lbl ${MAC.prot.text}">Prot g<input class="field mt-1 text-center" id="tP" inputmode="numeric" value="${st.targetProt}" /></label>
+      <label class="lbl ${MAC.carbs.text}">Carb g<input class="field mt-1 text-center" id="tC" inputmode="numeric" value="${st.targetCarbs}" /></label>
+      <label class="lbl ${MAC.fat.text}">Grasa g<input class="field mt-1 text-center" id="tF" inputmode="numeric" value="${st.targetFat}" /></label>
     </div>
     <label class="lbl">Proteína mínima por comida (g)<input class="field mt-1" id="tPM" inputmode="numeric" value="${st.minProtMeal || 25}" /></label>
     <p class="text-[11px] ${Math.abs(sumK - st.targetKcal) > st.targetKcal * 0.05 ? 'text-amber-300' : 'text-mute'}">Tus macros suman ${sumK} kcal (objetivo ${st.targetKcal}).</p>
@@ -2422,6 +2469,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.11.0', ['🎯 Anillos en Dieta: calorías fuera; proteína, carbohidratos y grasas dentro. Si te pasas, el exceso da una segunda vuelta.', '🎨 Cada macro con su color en toda la app: kcal ámbar, P cian, C verde, G rosa.', '🏠 La app se abre en la dieta de hoy (o en Entreno si tienes un entreno a medias). Toca el logo para volver aquí.']],
   ['4.10.2', ['📅 En el calendario, el mes y los botones «Hoy» y «Cerrar» quedan siempre a la vista; solo se desplaza el contenido del medio.']],
   ['4.10.1', ['📅 Calendario más fluido: el mes se desliza al cambiarlo y el detalle del día aparece suavemente, sin que la ventana salte.']],
   ['4.10.0', ['⏱ Duración de los entrenos: estimada antes de empezar (según series, reps y descansos) y real, medida sola desde la primera serie ✓ hasta guardar (las pausas de más de 20 min no cuentan).']],
@@ -2474,6 +2522,7 @@ const GUIDE = [
     'Tras «Estimar macros con IA», ajusta cada alimento con <b>P / M / G</b> (pequeña, mediana, grande) u «Otra» con los gramos exactos. ✕ quita un alimento que la IA vio por error.',
     '🥩 <b>Proteína por comida</b>: en recomposición importa repartirla. Cada toma principal (desayuno, comida, puente, cena) debería llegar al mínimo (25 g por defecto). «Otro» (picoteos) no cuenta. Al registrar verás si la toma llega, sumando lo ya registrado en ese tipo.',
     'Consumidas · Cardio · Neto: el cardio se muestra pero <b>no amplía</b> lo que te queda por comer, salvo que lo actives en Ajustes.',
+    '🎯 La app se abre en la <b>dieta de hoy</b>: anillo exterior = kcal (ámbar); dentro, proteína (cian), carbohidratos (verde) y grasas (rosa). Si te pasas, el exceso da una segunda vuelta y sale una etiqueta «+…». Con un entreno a medias (últimas 3 h) se abre en Entreno. El <b>logo</b> siempre te trae aquí.',
     '📅 Toca la <b>fecha</b> de Dieta para abrir el calendario del mes: punto verde/ámbar/rojo según la dieta, 🏋️ si hubo pesas y 🔥 si hubo cardio. Al tocar un día ves el detalle y puedes ir a sus comidas.',
     '✎ en una comida la edita; ⭐ «Comidas habituales» repite tus platos más frecuentes de ese tipo, y el buscador encuentra cualquiera del historial.'
   ]],
@@ -2555,6 +2604,7 @@ function render() {
 }
 
 function go(view) {
+  if (view === 'diet' && ui.view !== 'diet') ui._animRings = true;
   ui.view = view;
   if (view === 'settings' && navigator.onLine) loadGis().catch(() => null);
   render();
@@ -2886,8 +2936,32 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   $('#topBanner').innerHTML = `<div class="banner-warn mt-3"><span>Estás abriendo el archivo directamente: sin modo app ni funcionamiento sin conexión. Publícala en una web https (ver LEEME).</span></div>`;
 }
 
-/* ---------- Arranque ---------- */
+/* ---------- Arranque ----------
+   Se abre en Dieta (anillos del día). Excepción: si hay un entreno a medias de las últimas 3 horas, se abre en Entreno. */
+function workoutInProgress() {
+  const now = Date.now();
+  for (const [dayId, d] of Object.entries(state.drafts || {})) {
+    if (d?.lastAt && now - d.lastAt < 3 * 3600000 && draftHasData(dayId)) {
+      const pr = programOfDay(dayId);
+      if (pr) return { prog: pr.id, day: dayId };
+    }
+  }
+  return null;
+}
+function goHome() {
+  closeModal();
+  ui.editing = null; ui.aiResult = null;
+  ui.dietDate = todayISO();
+  if (ui.view === 'diet') { ui._animRings = true; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  else go('diet');
+}
+$('#homeBtn').addEventListener('click', goHome);
 ui.dayId = nextDayId();
+{
+  const wip = workoutInProgress();
+  if (wip) { state.plan.active = wip.prog; ui.dayId = wip.day; ui.view = 'train'; }
+  else ui._animRings = true;
+}
 render();
 maybeShowNews();
 setTimeout(() => maybeAutoDriveBackup(), 1500);

@@ -20,13 +20,13 @@
 
   <header class="sticky top-0 z-30 bg-ink/90 backdrop-blur border-b border-line pt-safe">
     <div class="max-w-xl mx-auto flex items-center justify-between px-4 h-14">
-      <div class="flex items-center gap-2.5 min-w-0">
+      <button id="homeBtn" type="button" class="flex items-center gap-2.5 min-w-0 text-left rounded-xl active:opacity-70" aria-label="Ir al inicio: dieta de hoy">
         <img src="icons/logo-128.png" alt="" class="w-9 h-9 rounded-full ring-1 ring-brand/40" />
-        <div class="leading-none min-w-0">
-          <div class="font-black italic tracking-tight text-[17px]">FITNES<span class="text-brand">TEBAN</span></div>
-          <div id="headerSub" class="text-[10px] text-mute mt-1 truncate">Gym · Nutrición · Coach</div>
-        </div>
-      </div>
+        <span class="block leading-none min-w-0">
+          <span class="block font-black italic tracking-tight text-[17px]">FITNES<span class="text-brand">TEBAN</span></span>
+          <span id="headerSub" class="block text-[10px] text-mute mt-1 truncate">Gym · Nutrición · Coach</span>
+        </span>
+      </button>
       <div class="flex items-center gap-2 shrink-0">
         <button id="helpBtn" type="button" class="help-btn" aria-label="Guía de la app">?</button>
         <button id="timerPill" type="button" class="timer-pill" aria-label="Temporizador de descanso">
