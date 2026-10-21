@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.12.2';
+const APP_VERSION = '4.13.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -158,7 +158,7 @@ function defaultSettings() {
   return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, minProtMeal: 25, pinHash: '', lastSeenVersion: '', driveConnected: false, driveEmail: '', driveFolderId: '', autoDrive: true, lastDriveBackup: null, swipeNav: true };
 }
 function defaultState() {
-  return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {} };
+  return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {}, chat: null };
 }
 const safeUrl = u => { const t = String(u || '').trim(); return /^https:\/\/[^\s"'<>]+$/i.test(t) ? t : ''; };
 const videoUrl = v => v.video || `https://www.youtube.com/results?search_query=${encodeURIComponent(v.name + ' técnica correcta')}`;
@@ -220,6 +220,7 @@ function normalize(s) {
   out.plan = normalizePlan(out.plan);
   for (const k of ['selectedVariants', 'memory', 'meals', 'drafts']) if (!out[k] || typeof out[k] !== 'object' || Array.isArray(out[k])) out[k] = {};
   for (const k of ['sessions', 'bodyMetrics', 'cardio', 'reports']) if (!Array.isArray(out[k])) out[k] = [];
+  if (!out.chat || typeof out.chat !== 'object' || !Array.isArray(out.chat.msgs)) out.chat = null;
   out.version = 4;
   return out;
 }
@@ -1890,7 +1891,7 @@ function parseJSONLoose(text) {
   throw new Error('Respuesta de la IA ilegible');
 }
 
-async function callGemini(parts, { json = true, timeout = 45000 } = {}) {
+async function callGemini(parts, { json = true, timeout = 45000, contents = null, system = null, temperature = 0.2 } = {}) {
   const s = state.settings;
   if (!s.apiKey) throw new Error('Falta la clave de Gemini (Ajustes).');
   if (!navigator.onLine) throw new Error('Sin conexión a internet.');
@@ -1900,7 +1901,7 @@ async function callGemini(parts, { json = true, timeout = 45000 } = {}) {
     const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(s.model || DEFAULT_MODEL)}:generateContent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': s.apiKey },
-      body: JSON.stringify({ contents: [{ parts }], generationConfig: json ? { responseMimeType: 'application/json', temperature: 0.2 } : { temperature: 0.2 } }),
+      body: JSON.stringify({ contents: contents || [{ parts }], ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), generationConfig: json ? { responseMimeType: 'application/json', temperature } : { temperature } }),
       signal: ctrl.signal
     });
     const data = await resp.json().catch(() => ({}));
@@ -2638,9 +2639,131 @@ $('#timerPill').addEventListener('click', openTimerSheet);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { if (timer.endAt) { tickTimer(); wakeOn(); } if (ui.dietDate > todayISO()) ui.dietDate = todayISO(); } });
 
 /* =========================================================================
+   COACH IA (chat con tus datos)
+   ========================================================================= */
+const CHAT_CHIPS = ['¿Cómo voy esta semana?', '¿Qué ceno hoy para cuadrar macros?', '¿Por qué me estanco y qué cambio?', '¿Qué entreno hoy?'];
+function chatContext() {
+  const T = todayISO(), st = state.settings;
+  const setTxt = (exId, x) => (isBwEx(exId) ? (x.w ? `PC+${x.w}` : 'PC') : `${x.w}kg`) + `x${x.r}`;
+  const t = totalsOf(T), burn = exerciseBurnOf(T), budget = st.targetKcal + (st.eatBackCardio ? burn : 0);
+  const days7 = Array.from({ length: 7 }, (_, i) => addDays(T, -i)).filter(d => mealsOf(d).length).map(d => { const x = totalsOf(d); return { fecha: d, kcal: Math.round(x.kcal), P: Math.round(x.prot), C: Math.round(x.carbs), G: Math.round(x.fat) }; });
+  const plan = prog().days.map(day => ({
+    dia: day.label, titulo: day.title,
+    ejercicios: day.exercises.map(e => { const { key, variant } = variantOf(e); const c = coachFor(e, key); return { nombre: variant.name, series: e.sets, reps: `${e.minReps}-${e.maxReps}`, peso_corporal: !!e.bw, coach_app: `${c.title}. ${c.text}` }; })
+  }));
+  const last = sortedSessions().slice(-8).reverse().map(s => ({ fecha: s.date, dia: s.dayTitle, min: s.durationMin || null, descarga: !!s.deload,
+    ejercicios: s.exercises.map(e => `${e.name}: ${e.sets.map(x => setTxt(e.exId, x)).join(', ')}`) }));
+  const w = activeWip();
+  return {
+    hoy: T, dia_semana: parseISO(T).toLocaleDateString('es-ES', { weekday: 'long' }), hora: new Date().toTimeString().slice(0, 5),
+    objetivos: { kcal: st.targetKcal, proteina_g: st.targetProt, carbos_g: st.targetCarbs, grasa_g: st.targetFat, proteina_min_por_comida_g: minProt(), sumar_ejercicio_al_margen: !!st.eatBackCardio },
+    dieta_hoy: { comidas: mealsOf(T).map(m => ({ tipo: m.type, que: m.desc, kcal: Math.round(m.kcal), P: Math.round(m.prot), C: Math.round(m.carbs), G: Math.round(m.fat) })),
+      total: { kcal: Math.round(t.kcal), P: Math.round(t.prot), C: Math.round(t.carbs), G: Math.round(t.fat) },
+      quedan: { kcal: Math.round(budget - t.kcal), P: Math.round(st.targetProt - t.prot), C: Math.round(st.targetCarbs - t.carbs), G: Math.round(st.targetFat - t.fat) },
+      quemado_ejercicio_kcal: Math.round(burn) },
+    dieta_ultimos_7_dias: days7,
+    resumen_semana: weekData(),
+    programa_activo: prog().name, plan_y_recomendacion_del_coach: plan,
+    ultimas_sesiones: last,
+    entreno_en_curso: w ? { dia: allDays().find(d => d.id === w.dayId)?.label, minutos: sessionMinutes(w.d) } : null,
+    cardio_14_dias: state.cardio.filter(c => c.date >= addDays(T, -13)).map(c => ({ fecha: c.date, tipo: CARDIO_TYPES[c.type]?.label || c.type, min: c.minutes, intensidad: c.intensity, kcal: c.kcal })),
+    medidas_corporales: [...state.bodyMetrics].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8).map(m => ({ fecha: m.date, peso: m.weight, cintura: m.waist })),
+    semana_de_descarga: deloadActive()
+  };
+}
+function chatSystem() {
+  return `Eres el coach de FITNESTEBAN, la app de entreno y dieta de Esteban (hombre adulto, objetivo: RECOMPOSICIÓN corporal: perder grasa manteniendo o ganando músculo).
+Responde en español de España, directo y breve (máx. ~120 palabras salvo que pida más detalle). Puedes usar **negritas** y listas cortas con "- ".
+Reglas:
+- Básate en SUS DATOS de abajo. Cita números concretos (kg, reps, g, kcal, fechas). Si faltan datos para responder, dilo y pide el dato concreto.
+- El campo "coach_app" es lo que la app le recomienda en cada ejercicio (doble progresión). No lo contradigas sin explicar por qué.
+- "quedan" = lo que le falta hoy para sus objetivos (negativo = se ha pasado). Para comidas, propone platos normales de España con cantidades en gramos y sus macros aproximados.
+- Nada de frases motivacionales vacías. Si menciona dolor, lesión o algo médico, recomienda consultar a un profesional y no diagnostiques.
+DATOS (JSON, null = sin dato):
+${JSON.stringify(chatContext())}`;
+}
+function mdLite(t) {
+  const lines = esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').split('\n');
+  let out = '', inList = false;
+  for (const l of lines) {
+    const m = l.match(/^\s*(?:[-*•]|\d+[.)])\s+(.*)/);
+    if (m) { if (!inList) { out += '<ul class="chat-ul">'; inList = true; } out += `<li>${m[1]}</li>`; continue; }
+    if (inList) { out += '</ul>'; inList = false; }
+    out += l.trim() ? `<p>${l}</p>` : '';
+  }
+  return out + (inList ? '</ul>' : '');
+}
+function chatBodyHTML() {
+  const c = ui.chat;
+  if (!state.settings.apiKey) return `<div class="text-center text-sm text-mute mt-8">Necesitas tu clave de Gemini.<br><button class="btn-ghost mt-3" data-mact="toKey" type="button">Ir a Ajustes → IA</button></div>`;
+  if (!c.msgs.length) return `
+    <div class="text-center mt-2"><div class="text-4xl">💬</div>
+      <p class="text-sm text-mute mt-2 leading-relaxed">Pregúntame lo que quieras sobre tu entreno o tu dieta. Leo tu plan, tus últimas sesiones, lo que llevas comido y tu peso.</p></div>
+    <div class="flex flex-col gap-2 mt-4">${CHAT_CHIPS.map((q, i) => `<button class="chat-chip" data-mact="chip" data-i="${i}" type="button">${esc(q)}</button>`).join('')}</div>
+    ${state.chat?.msgs?.length ? `<button class="w-full text-xs text-brand underline mt-5" data-mact="lastChat" type="button">Ver la última conversación (${fmtChatDate(state.chat.at)})</button>` : ''}`;
+  return c.msgs.map((m, i) => m.role === 'user'
+    ? `<div class="chat-me">${esc(m.text)}</div>`
+    : `<div class="chat-ai${m.error ? ' chat-err' : ''}">${mdLite(m.text)}${m.error && i === c.msgs.length - 1 ? '<button class="text-xs text-brand underline mt-1" data-mact="retry" type="button">Reintentar</button>' : ''}</div>`).join('')
+    + (c.busy ? '<div class="chat-ai chat-typing"><span></span><span></span><span></span></div>' : '');
+}
+function fmtChatDate(ts) {
+  const d = new Date(ts), iso = toISO(d), T = todayISO();
+  return iso === T ? `hoy ${d.toTimeString().slice(0, 5)}` : iso === addDays(T, -1) ? 'ayer' : d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+}
+function refreshChat() {
+  const b = $('#chatBody'); if (!b) return;
+  b.innerHTML = chatBodyHTML();
+  b.scrollTop = b.scrollHeight;
+  const send = $('#chatSend'); if (send) send.disabled = !!ui.chat.busy;
+  const nb = $('#chatNew'); if (nb) nb.classList.toggle('invisible', !ui.chat.msgs.length);
+}
+async function chatSend(text) {
+  const c = ui.chat; text = String(text || '').trim();
+  if (!text || c.busy) return;
+  c.msgs = c.msgs.filter(m => !m.error);
+  c.msgs.push({ role: 'user', text }); c.busy = true; refreshChat();
+  try {
+    const contents = c.msgs.slice(-12).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
+    const reply = await callGemini(null, { json: false, contents, system: chatSystem(), temperature: 0.4, timeout: 60000 });
+    c.msgs.push({ role: 'model', text: reply.trim() });
+    state.chat = { at: Date.now(), msgs: c.msgs.filter(m => !m.error).slice(-30) }; persist();
+  } catch (e) {
+    c.msgs.push({ role: 'model', text: 'No he podido responder: ' + e.message, error: true });
+  } finally { c.busy = false; refreshChat(); }
+}
+function openChat() {
+  ui.chat = { msgs: [], busy: false };
+  openModal(`
+    <div class="cal-head flex items-center gap-2 pb-3">
+      <span class="text-xl">💬</span><div class="min-w-0"><h3 class="modal-title leading-tight">Coach IA</h3><p class="text-[11px] text-mute">Responde con tus datos · Gemini</p></div>
+      <button id="chatNew" class="ml-auto text-xs text-brand border border-line rounded-full px-3 py-1 invisible" data-mact="new" type="button">Nueva</button>
+      <button class="w-8 h-8 rounded-full border border-line text-mute" data-close type="button" aria-label="Cerrar">✕</button>
+    </div>
+    <div id="chatBody" class="cal-body space-y-2.5"></div>
+    <div class="cal-foot"><form id="chatForm" class="flex gap-2 items-end">
+      <textarea id="chatInput" rows="1" class="field flex-1 resize-none max-h-28 py-2.5" placeholder="Pregunta al coach…" enterkeyhint="send"></textarea>
+      <button id="chatSend" class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button>
+    </form></div>`, {
+    sheetClass: 'sheet-fixed',
+    chip: (r, b) => chatSend(CHAT_CHIPS[+b.dataset.i]),
+    lastChat: () => { ui.chat.msgs = state.chat.msgs.map(m => ({ ...m })); refreshChat(); },
+    new: () => { ui.chat = { msgs: [], busy: false }; refreshChat(); },
+    retry: () => { const lastQ = [...ui.chat.msgs].reverse().find(m => m.role === 'user'); if (lastQ) { ui.chat.msgs = ui.chat.msgs.filter(m => !m.error); ui.chat.msgs.pop(); chatSend(lastQ.text); } },
+    toKey: () => { closeModal(); ui.aiOpen = true; go('settings'); }
+  });
+  refreshChat();
+  const inp = $('#chatInput');
+  const grow = () => { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 112) + 'px'; };
+  inp.addEventListener('input', grow);
+  $('#chatForm').addEventListener('submit', e => { e.preventDefault(); const v = inp.value; inp.value = ''; grow(); chatSend(v); });
+}
+$('#chatBtn')?.addEventListener('click', openChat);
+
+/* =========================================================================
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.13.0', ['⚡ Coach IA: nuevo botón «Coach» en el centro de la barra inferior. Pregúntale sobre tu entreno o tu dieta y responde con tus datos (plan, sesiones, comidas de hoy, peso…), sin salir de la app.', '⏱ El temporizador de descanso, en reposo, es solo el icono; al arrancar muestra la cuenta atrás.']],
   ['4.12.2', ['🔒 La clave de Gemini queda bloqueada: para cambiarla pide tu PIN (o una confirmación) y «Probar conexión» ya no guarda nada.']],
   ['4.12.1', ['⏱ La franja del entreno en curso está siempre arriba (también en Entreno) y te lleva directa a la serie que toca.', '🗑️ «Abandonar» se mueve junto a «Guardar sesión», con confirmación.']],
   ['4.12.0', ['🤸 Ejercicios con peso corporal: el peso pasa a ser lastre (vacío = PC).', '⏱ Franja fija de «entreno en curso» en todas las pestañas.', '📸 Tarjeta para compartir al terminar la sesión.', '🏋️ kcal del gym estimadas: Dieta muestra Comidas · Cardio · Gym · Neto.']],
@@ -2708,6 +2831,11 @@ const GUIDE = [
     '🎯 La app se abre en la <b>dieta de hoy</b>: anillo exterior = kcal (ámbar); dentro, proteína (cian), carbohidratos (verde) y grasas (rosa). Si te pasas, el exceso da una segunda vuelta y sale una etiqueta «+…». Con un entreno a medias (últimas 3 h) se abre en Entreno. El <b>logo</b> siempre te trae aquí.',
     '📅 Toca la <b>fecha</b> de Dieta para abrir el calendario del mes: punto verde/ámbar/rojo según la dieta, 🏋️ si hubo pesas y 🔥 si hubo cardio. Al tocar un día ves el detalle y puedes ir a sus comidas.',
     '✎ en una comida la edita; ⭐ «Comidas habituales» repite tus platos más frecuentes de ese tipo, y el buscador encuentra cualquiera del historial.'
+  ]],
+  ['⚡ Coach IA', [
+    'El botón ⚡ <b>Coach</b> del centro de la barra inferior abre un chat con Gemini que <b>lee tus datos</b>: plan y recomendación del coach en cada ejercicio, últimas 8 sesiones, comidas de hoy y lo que te queda, dieta de la semana, cardio y medidas.',
+    'Cada vez que lo abres empieza de cero (respuestas con tus datos de ese momento). «Ver la última conversación» recupera la anterior.',
+    'Usa tu misma clave y el mismo límite gratuito que la estimación de comidas. Nunca se envían la clave ni el PIN.'
   ]],
   ['📈 Progreso', [
     'Peso y cintura en ayunas, a la misma hora. La línea del peso es la <b>media de 7 días</b>: el peso diario oscila 1–2 kg por agua y sal. Con 8+ días de pesajes verás la tendencia semanal y si va bien para recomposición (bajar 0,25–1 % por semana o mantener peso bajando cintura).',
@@ -2850,7 +2978,7 @@ function go(view) {
   render();
   window.scrollTo({ top: 0 });
 }
-document.querySelectorAll('.navbtn').forEach(b => b.addEventListener('click', () => go(b.dataset.view)));
+document.querySelectorAll('.navbtn[data-view]').forEach(b => b.addEventListener('click', () => go(b.dataset.view)));
 
 /* ---------- Deslizar entre pestañas ----------
    La pantalla siguiente entra desde el lado siguiendo el dedo.
