@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.13.6';
+const APP_VERSION = '4.13.8';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -831,11 +831,9 @@ async function buildShareCard(s) {
     ctx.save(); ctx.beginPath(); ctx.arc(140, 150, 70, 0, Math.PI * 2); ctx.clip(); ctx.drawImage(logo, 70, 80, 140, 140); ctx.restore();
   } catch { /* sin logo */ }
   try {
-    const svg = $('#homeBtn svg').cloneNode(true);
-    const vb = svg.viewBox.baseVal, mh = Math.round(600 * vb.height / vb.width);
-    svg.setAttribute('width', '600'); svg.setAttribute('height', String(mh));
-    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: 'image/svg+xml' }));
-    const img = await loadImg(url); ctx.drawImage(img, 240, 120, 600, mh); URL.revokeObjectURL(url);
+    const img = await loadImg('icons/marca.svg');
+    const mh = Math.round(600 * img.naturalHeight / img.naturalWidth);
+    ctx.drawImage(img, 240, 154 - mh / 2, 600, mh);
   } catch { ctx.fillStyle = '#fff'; ctx.font = `italic 900 60px ${F}`; ctx.fillText('FITNESTEBAN', 240, 175); }
   const st = sessionStats(s);
   const day = allDays().find(d => d.id === s.dayId);
@@ -851,7 +849,7 @@ async function buildShareCard(s) {
     [s.durationMin ? `${s.durationMin}` : '—', 'minutos'],
     [`${st.nSets}`, 'series'],
     [st.vol >= 1000 ? `${fmtNum(Math.round(st.vol / 100) / 10)} t` : `${st.vol} kg`, 'volumen'],
-    [st.kcal ? `~${st.kcal}` : `${s.exercises.length}`, st.kcal ? 'kcal netas' : 'ejercicios']
+    [st.kcal ? `~${st.kcal}` : `${s.exercises.length}`, st.kcal ? 'kcal netas' : (s.exercises.length === 1 ? 'ejercicio' : 'ejercicios')]
   ];
   tiles.forEach(([v, l], i) => {
     const x = 70 + (i % 2) * 480, y = 660 + Math.floor(i / 2) * 230;
@@ -2764,6 +2762,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.13.8', ['✨ Logo nuevo FS en la cabecera, la tarjeta de compartir y el icono de la app, y la marca FITNESTEBAN con su mismo estilo: plata, cian con brillo y la S partida por un hueco limpio.']],
   ['4.13.6', ['✨ La cabecera y la tarjeta de compartir estrenan el logo de la S partida.']],
   ['4.13.4', ['📱 Icono nuevo de la app: la S partida en blanco y cian, dentro de un círculo oscuro con luz.']],
   ['4.13.2', ['✨ Marca renovada: la S de FITNESTEBAN se parte en diagonal en dos mitades, blanca y cian.']],
