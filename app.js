@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.13.1';
+const APP_VERSION = '4.13.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -832,9 +832,10 @@ async function buildShareCard(s) {
   } catch { /* sin logo */ }
   try {
     const svg = $('#homeBtn svg').cloneNode(true);
-    svg.setAttribute('width', '600'); svg.setAttribute('height', String(Math.round(600 * 1554 / 14102)));
+    const vb = svg.viewBox.baseVal, mh = Math.round(600 * vb.height / vb.width);
+    svg.setAttribute('width', '600'); svg.setAttribute('height', String(mh));
     const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: 'image/svg+xml' }));
-    const img = await loadImg(url); ctx.drawImage(img, 240, 120, 600, Math.round(600 * 1554 / 14102)); URL.revokeObjectURL(url);
+    const img = await loadImg(url); ctx.drawImage(img, 240, 120, 600, mh); URL.revokeObjectURL(url);
   } catch { ctx.fillStyle = '#fff'; ctx.font = `italic 900 60px ${F}`; ctx.fillText('FITNESTEBAN', 240, 175); }
   const st = sessionStats(s);
   const day = allDays().find(d => d.id === s.dayId);
@@ -2763,6 +2764,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.13.2', ['✨ Marca renovada: la S de FITNESTEBAN se parte en diagonal en dos mitades, blanca y cian.']],
   ['4.13.1', ['⚡ El Coach está arriba, junto al «?» y el cronómetro: tres botones iguales. La barra inferior vuelve a sus 4 pestañas.', '⏱ Al terminar el descanso, el cronómetro dice «¡Ya!».']],
   ['4.13.0', ['⚡ Coach IA: nuevo botón con el rayo arriba, junto al «?». Pregúntale sobre tu entreno o tu dieta y responde con tus datos (plan, sesiones, comidas de hoy, peso…), sin salir de la app.', '⏱ El temporizador de descanso, en reposo, es solo el icono; al arrancar muestra la cuenta atrás.']],
   ['4.12.2', ['🔒 La clave de Gemini queda bloqueada: para cambiarla pide tu PIN (o una confirmación) y «Probar conexión» ya no guarda nada.']],
