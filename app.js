@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.13.5';
+const APP_VERSION = '4.13.6';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2764,7 +2764,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
-  ['4.13.5', ['✨ La cabecera también estrena el logo de la S partida.']],
+  ['4.13.6', ['✨ La cabecera y la tarjeta de compartir estrenan el logo de la S partida.']],
   ['4.13.4', ['📱 Icono nuevo de la app: la S partida en blanco y cian, dentro de un círculo oscuro con luz.']],
   ['4.13.2', ['✨ Marca renovada: la S de FITNESTEBAN se parte en diagonal en dos mitades, blanca y cian.']],
   ['4.13.1', ['⚡ El Coach está arriba, junto al «?» y el cronómetro: tres botones iguales. La barra inferior vuelve a sus 4 pestañas.', '⏱ Al terminar el descanso, el cronómetro dice «¡Ya!».']],
