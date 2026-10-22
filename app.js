@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.13.2';
+const APP_VERSION = '4.13.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -827,7 +827,7 @@ async function buildShareCard(s) {
   ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
   // logo + marca
   try {
-    const logo = await loadImg('icons/icon-512.png');
+    const logo = await loadImg('icons/logo-512.png');
     ctx.save(); ctx.beginPath(); ctx.arc(140, 150, 70, 0, Math.PI * 2); ctx.clip(); ctx.drawImage(logo, 70, 80, 140, 140); ctx.restore();
   } catch { /* sin logo */ }
   try {
@@ -2764,6 +2764,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.13.3', ['📱 Icono nuevo de la app: la S partida en blanco y cian sobre fondo oscuro con luz.']],
   ['4.13.2', ['✨ Marca renovada: la S de FITNESTEBAN se parte en diagonal en dos mitades, blanca y cian.']],
   ['4.13.1', ['⚡ El Coach está arriba, junto al «?» y el cronómetro: tres botones iguales. La barra inferior vuelve a sus 4 pestañas.', '⏱ Al terminar el descanso, el cronómetro dice «¡Ya!».']],
   ['4.13.0', ['⚡ Coach IA: nuevo botón con el rayo arriba, junto al «?». Pregúntale sobre tu entreno o tu dieta y responde con tus datos (plan, sesiones, comidas de hoy, peso…), sin salir de la app.', '⏱ El temporizador de descanso, en reposo, es solo el icono; al arrancar muestra la cuenta atrás.']],
