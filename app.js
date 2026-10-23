@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.18.2';
+const APP_VERSION = '4.19.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -986,7 +986,7 @@ function editProgModal(progId) {
   openModal(`
     <h3 class="modal-title">${isNew ? 'Nuevo bloque' : 'Editar bloque'}</h3>
     <label class="lbl">Nombre del bloque<input class="field mt-1" name="name" maxlength="16" value="${esc(p.name)}" placeholder="TORSO-PIERNA" /></label>
-    ${!isNew && p.type === 'cardio' ? '<p class="text-[11px] text-mute">Bloque de cardio: registra bicicleta y caminata. Se puede renombrar, no eliminar.</p>' : !isNew && p.type === 'retos' ? '<p class="text-[11px] text-mute">Bloque de retos: dominadas, flexiones, fondos, sentadillas, burpees y plancha por niveles. Se puede renombrar, no eliminar.</p>' : isNew ? '<p class="text-[11px] text-mute">Se crea con un día vacío. Añade días con «＋ Día» y ejercicios con «＋ Añadir ejercicio».</p>' : `<p class="text-[11px] text-mute">${p.days.length} días: ${esc(p.days.map(d => d.label).join(' · '))}</p>`}
+    ${!isNew && p.type === 'cardio' ? '<p class="text-[11px] text-mute">Bloque de cardio: registra bicicleta y caminata. Se puede renombrar, no eliminar.</p>' : !isNew && p.type === 'retos' ? '<p class="text-[11px] text-mute">Bloque de retos: dominadas, flexiones, fondos, sentadillas, burpees, plancha y rueda abdominal por niveles. Se puede renombrar, no eliminar.</p>' : isNew ? '<p class="text-[11px] text-mute">Se crea con un día vacío. Añade días con «＋ Día» y ejercicios con «＋ Añadir ejercicio».</p>' : `<p class="text-[11px] text-mute">${p.days.length} días: ${esc(p.days.map(d => d.label).join(' · '))}</p>`}
     <div class="flex gap-2 mt-4">
       ${!isNew ? `<button class="btn-ghost" data-mact="left" type="button" aria-label="Mover a la izquierda">◀</button><button class="btn-ghost" data-mact="right" type="button" aria-label="Mover a la derecha">▶</button>` : ''}
       <button class="btn-primary flex-1" data-mact="save" type="button">Guardar</button>
@@ -1369,9 +1369,24 @@ const RETOS = {
   dips:    { name: 'Fondos',            icon: '🤸', unit: 'reps', step: 2,  min: 2,  max: 100, rest: 75, met: 8,   secRep: 2.5 },
   squat:   { name: 'Sentadillas',       icon: '🦵', unit: 'reps', step: 5,  min: 5,  max: 200, rest: 60, met: 5.5, secRep: 2.5 },
   burpee:  { name: 'Burpees',           icon: '⚡', unit: 'reps', step: 2,  min: 2,  max: 100, rest: 75, met: 8,   secRep: 4 },
-  plank:   { name: 'Plancha abdominal', icon: '🧱', unit: 's',    step: 10, min: 10, max: 180, rest: 45, met: 3.8, secRep: 1 }
+  plank:   { name: 'Plancha abdominal', icon: '🧱', unit: 's',    step: 10, min: 10, max: 180, rest: 45, met: 3.8, secRep: 1 },
+  abwheel: { name: 'Rueda abdominal',   icon: '🛞', unit: 'reps', step: 1,  min: 1,  max: 30,  rest: 90, met: 5,   secRep: 5, sets: [1, 0.7, 0.6],
+             tag: 'Fase 1 · de rodillas', note: 'Bajada lenta (3 s), pelvis metida y sin arquear la espalda. Cuenta solo las repeticiones con recorrido completo.' },
+  abwheel2:{ name: 'Rueda abdominal de pie', icon: '🛞', unit: 'reps', step: 1, min: 1, max: 15, rest: 120, met: 6, secRep: 6, sets: [1, 0.7, 0.6],
+             tag: 'Fase 2 · de pie', needs: 'abwheel', note: 'De pie, abdomen apretado y sin arquear la espalda. Si no llegas al recorrido completo, rueda hasta una pared o un tope y ve alejándolo.' }
 };
 const RETO_IDS = Object.keys(RETOS);
+/* Si aún no llegas al nivel mínimo, una variante más fácil para ir ganando fuerza */
+const RETO_EASY = {
+  pullup: 'Dominadas negativas: sube con un salto o un banco y baja muy despacio (3–5 s). Cuando hagas 1 completa, sigue con el reto.',
+  pushup: 'Flexiones con las rodillas apoyadas o con las manos en un banco/pared. Haz las series de nivel 3 así hasta que te salgan 3 completas.',
+  dips: 'Fondos en banco (manos detrás, en el borde) o fondos negativos: bajar despacio y subir con ayuda de las piernas.',
+  squat: 'Sentadilla a un banco o silla: siéntate despacio y levántate sin impulso.',
+  burpee: 'Burpees sin salto ni flexión: bajar, piernas atrás, volver y ponerse de pie.',
+  plank: 'Plancha con las rodillas apoyadas, manteniendo el cuerpo recto de rodillas a cabeza.',
+  abwheel: 'Rueda de rodillas rodando solo hasta una pared o un tope cercano; ve alejándolo según ganes control.',
+  abwheel2: 'Rueda de pie rodando hasta una pared o tope; ve alejándolo poco a poco.'
+};
 const RETO_FEEL = [['hard', '😣', 'Me ha costado'], ['ok', '🙂', 'Bien'], ['easy', '😎', 'Voy sobrado']];
 const retoU = (r, n) => r.unit === 's' ? `${n} s` : `${n}`;
 function retoOf(id) { return state.retos[id] || null; }
@@ -1379,9 +1394,12 @@ function snapLevel(r, v) { return clamp(Math.round(v / r.step) * r.step, r.min, 
 /* Series de un nivel: el nivel es la 1.ª serie; en niveles altos 100 · 54 · 50 · 50 · 46 %. En el nivel mínimo, 3 series iguales. */
 function retoSets(id, level) {
   const r = RETOS[id];
+  if (r.sets) return r.sets.map(f => Math.max(r.step, Math.round(level * f / r.step) * r.step));
   if (level <= r.min) return [level, level, level];
   return [1, 0.54, 0.5, 0.5, 0.46].map(f => Math.max(r.step, Math.round(level * f / r.step) * r.step));
 }
+/* Fase 2 bloqueada hasta completar el nivel máximo de la fase 1 */
+function retoLocked(id) { const need = RETOS[id].needs; if (!need) return false; const r = RETOS[need]; return !(retoOf(need)?.history || []).some(h => h.level >= r.max && h.completed); }
 function retoLastDate(id) { const h = retoOf(id)?.history || []; return h.length ? h[h.length - 1].date : null; }
 function retoDueTest(id) { const st = retoOf(id); if (!st) return false; const lastT = st.tests.length ? st.tests[st.tests.length - 1].date : ''; return st.history.filter(h => h.date > lastT).length >= 6; }
 function retoRestInfo(id) {
@@ -1432,9 +1450,12 @@ function renderRetos() {
   if (ui.retoId && RETOS[ui.retoId]) return renderRetoDetail(ui.retoId);
   const cards = RETO_IDS.map(id => {
     const r = RETOS[id], st = retoOf(id);
+    if (retoLocked(id)) return `<button class="reto-card opacity-60" data-act="retoOpen" data-reto="${id}" type="button">
+        <span class="reto-ic">🔒</span>
+        <span class="min-w-0 flex-1 text-left"><span class="block font-extrabold">${r.name}</span><span class="block text-[11px] text-mute">${esc(r.tag)} · se desbloquea al completar el nivel ${RETOS[r.needs].max} de rodillas</span></span></button>`;
     if (!st) return `<button class="reto-card" data-act="retoOpen" data-reto="${id}" type="button">
         <span class="reto-ic">${r.icon}</span>
-        <span class="min-w-0 flex-1 text-left"><span class="block font-extrabold">${r.name}</span><span class="block text-[11px] text-mute">Sin empezar · niveles ${retoU(r, r.min)}–${retoU(r, r.max)}</span></span>
+        <span class="min-w-0 flex-1 text-left"><span class="block font-extrabold">${r.name}</span><span class="block text-[11px] text-mute">${r.tag ? esc(r.tag) + ' · ' : ''}Sin empezar · niveles ${retoU(r, r.min)}–${retoU(r, r.max)}</span></span>
         <span class="tri -rotate-90 shrink-0"></span></button>`;
     const pct = Math.round((st.level - r.min) / (r.max - r.min) * 100), rest = retoRestInfo(id), ready = !rest;
     return `<button class="reto-card ${ready ? 'reto-ready' : ''}" data-act="retoOpen" data-reto="${id}" type="button">
@@ -1455,11 +1476,15 @@ function renderRetos() {
 function renderRetoDetail(id) {
   const r = RETOS[id], st = retoOf(id);
   const back = `<button class="text-xs text-brand flex items-center gap-1 mb-2" data-act="retoBack" type="button">‹ Todos los retos</button>`;
+  const note = r.note ? `<p class="text-[11px] text-cyan-100 bg-brand/10 border border-brand/30 rounded-lg px-2.5 py-1.5 mt-3">💡 ${esc(r.note)}</p>` : '';
+  if (retoLocked(id)) return `${back}<section class="card p-4 mt-1 space-y-2">
+      <div class="flex items-center gap-3"><span class="reto-ic text-3xl">🔒</span><div><h2 class="font-extrabold text-lg">${r.name}</h2><p class="text-[11px] text-mute">${esc(r.tag)}</p></div></div>
+      <p class="text-sm text-mute">Se desbloquea cuando completes el nivel ${RETOS[r.needs].max} de ${esc(RETOS[r.needs].name.toLowerCase())} de rodillas. Ahí empieza lo difícil de verdad.</p>${note}</section>`;
   if (!st) return `${back}<section class="card p-4 mt-1 space-y-3">
-      <div class="flex items-center gap-3"><span class="reto-ic text-3xl">${r.icon}</span><div><h2 class="font-extrabold text-lg">${r.name}</h2><p class="text-[11px] text-mute">Niveles de ${retoU(r, r.min)} a ${retoU(r, r.max)}</p></div></div>
+      <div class="flex items-center gap-3"><span class="reto-ic text-3xl">${r.icon}</span><div><h2 class="font-extrabold text-lg">${r.name}</h2><p class="text-[11px] text-mute">${r.tag ? esc(r.tag) + ' · ' : ''}Niveles de ${retoU(r, r.min)} a ${retoU(r, r.max)}</p></div></div>${note}
       <label class="lbl">${r.unit === 's' ? '¿Cuántos segundos aguantas seguidos?' : '¿Cuántas haces seguidas, sin parar?'}
         <input class="field mt-1 text-center text-2xl font-black" id="retoMax" inputmode="numeric" placeholder="${r.unit === 's' ? 'Ej: 45' : 'Ej: 8'}" /></label>
-      <p class="text-[11px] text-mute">Empiezas un poco por debajo (≈70 %) para tener margen de subir. Tu máximo queda como marca a batir.</p>
+      <p class="text-[11px] text-mute">Haz la prueba ahora, con buena técnica y sin parar. Empiezas un poco por debajo (≈70 %) para tener margen de subir; tu máximo queda como marca a batir. Si no llegas a ${retoU(r, r.min)}, pon lo que hagas (aunque sea 0) y te doy una variante más fácil.</p>
       <button class="btn-primary w-full" data-act="retoStart" data-reto="${id}" type="button">Empezar reto</button>
     </section>`;
   const d = retoDraft(id), rest = retoRestInfo(id), pct = Math.round((st.level - r.min) / (r.max - r.min) * 100);
@@ -1478,10 +1503,11 @@ function renderRetoDetail(id) {
   return `${back}<section class="card p-4 mt-1">
     <div class="flex items-center gap-3"><span class="reto-ic text-3xl">${r.icon}</span>
       <div class="flex-1 min-w-0"><h2 class="font-extrabold text-lg leading-tight">${r.name}</h2>
-      <p class="text-[11px] text-mute">Mejor marca: <strong class="text-white">${retoU(r, st.best)}</strong> · ${st.history.length} sesiones</p></div>
+      <p class="text-[11px] text-mute">${r.tag ? esc(r.tag) + ' · ' : ''}Mejor marca: <strong class="text-white">${retoU(r, st.best)}</strong> · ${st.history.length} sesiones</p></div>
       <div class="text-right"><div class="text-[10px] text-mute">NIVEL</div><div class="text-2xl font-black text-brand leading-none">${st.level}</div></div></div>
     <span class="reto-bar mt-3"><span style="width:${Math.max(3, pct)}%"></span></span>
     <div class="flex justify-between text-[10px] text-mute mt-1"><span>${retoU(r, r.min)}</span><span>Meta: ${retoU(r, r.max)}</span></div>
+    ${note}
     ${rest?.warn ? `<p class="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2.5 py-1.5 mt-3">⏸ ${esc(rest.text)}</p>` : ''}
     ${rest?.done ? `<p class="text-[11px] text-emerald-300 mt-3">✓ Ya lo hiciste hoy. Vuelve en 48 h.</p>` : `
     <div class="mt-3 space-y-1.5">${rows}</div>
@@ -1522,7 +1548,7 @@ function retoFinish(id) {
       st.draft = null; persist(); setTimeout(silentDriveBackup, 1500);
       const msg = st.level > before ? `Subes a nivel ${st.level}` : st.level < before ? `Bajamos a nivel ${st.level} para consolidar` : `Repites nivel ${st.level}`;
       openModal(`<div class="text-center"><div class="text-4xl">${st.level >= r.max && before < r.max ? '🏆' : RETO_FEEL.find(f => f[0] === feel)[1]}</div>
-        <h3 class="modal-title mt-1">${st.level >= r.max && before < r.max ? '¡Reto completado!' : esc(msg)}</h3>
+        <h3 class="modal-title mt-1">${completed && before >= r.max && Object.values(RETOS).some(x => x.needs === id) ? '¡Fase superada! Se desbloquea la siguiente' : st.level >= r.max && before < r.max ? '¡Nivel máximo alcanzado!' : esc(msg)}</h3>
         <p class="text-sm text-mute mt-1">${!completed && feel !== 'hard' ? 'Como no completaste todas las series, cuenta como «me ha costado». ' : ''}Próxima sesión (en 48 h): <strong class="text-white">${retoSets(id, st.level).join(' + ')}${r.unit === 's' ? ' s' : ''}</strong></p>
         <p class="text-[11px] text-mute mt-1">~${retoKcal(id, got, T)} kcal netas, sumadas al gym de hoy en Dieta.</p></div>
         <button class="btn-primary w-full mt-3" data-close type="button">Hecho</button>`);
@@ -3074,6 +3100,8 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.19.1', ['🌱 Retos para cualquier nivel: si en la prueba inicial no llegas al mínimo, empiezas en el nivel más bajo con una variante más fácil. La rueda abdominal empieza ahora en 1.']],
+  ['4.19.0', ['🛞 Nuevo reto: rueda abdominal en dos fases. De rodillas (1–30, 3 series con bajada lenta) y, al completarla, de pie (1–15).']],
   ['4.18.2', ['⚡ El botón del Coach IA es ahora un rayo cian metalizado, como TEBAN.']],
   ['4.18.1', ['☁️ Copias más seguras con varios dispositivos: cada copia indica de qué dispositivo es y hasta cuándo llegan sus datos, y la copia automática ya no sube datos más antiguos que los que hay en Drive (te ofrece restaurar).']],
   ['4.18.0', ['🏆 Entreno se abre en RETOS, con una tarjeta «Hoy te toca…» para ir a tu sesión en un toque (salvo con un entreno en curso). Los retos que ya han descansado 48 h salen resaltados.']],
@@ -3084,7 +3112,7 @@ const CHANGELOG = [
   ['4.16.1', ['✨ En Entreno, al deslizar, el resalte cian pasa de un bloque a otro con el dedo y la pantalla se funde suavemente con la del bloque nuevo, sin desplazarse.']],
   ['4.16.0', ['👆 El modo de deslizar «Día en Dieta · bloque en Entreno»: en Entreno, deslizar cambia de bloque (RETOS, PPT, FULL BODY…). Se desactiva solo mientras tienes un entreno en curso.']],
   ['4.15.1', ['🏆 En RETOS, «Paralelas» pasa a llamarse «Fondos».']],
-  ['4.15.0', ['🏆 Nuevo bloque RETOS en Entreno: dominadas, flexiones, fondos, sentadillas, burpees y plancha por niveles. Al acabar cada sesión eliges cómo te has sentido y el coach ajusta la siguiente.']],
+  ['4.15.0', ['🏆 Nuevo bloque RETOS en Entreno: dominadas, flexiones, fondos, sentadillas, burpees, plancha y rueda abdominal por niveles. Al acabar cada sesión eliges cómo te has sentido y el coach ajusta la siguiente.']],
   ['4.14.0', ['👆 Nuevo en Ajustes → Aplicación: el gesto de deslizar puede cambiar de pestaña, cambiar de día en Dieta (como las flechas ‹ ›) o estar desactivado.']],
   ['4.13.8', ['✨ Logo nuevo FS en la cabecera, la tarjeta de compartir y el icono de la app, y la marca FITNESTEBAN con su mismo estilo: plata, cian con brillo y la S partida por un hueco limpio.']],
   ['4.13.6', ['✨ La cabecera y la tarjeta de compartir estrenan el logo de la S partida.']],
@@ -3146,9 +3174,10 @@ const GUIDE = [
     'Al final, «Guardar sesión»: verás resumen, volumen y récords personales (1RM estimado).'
   ]],
   ['🏆 Retos', [
-    'En Entreno → bloque <b>🏆 RETOS</b>: dominadas, flexiones, fondos, sentadillas, burpees y plancha. Al empezar dices cuántas haces seguidas y la app te coloca en un nivel (≈70 % de tu máximo).',
+    'En Entreno → bloque <b>🏆 RETOS</b>: dominadas, flexiones, fondos, sentadillas, burpees, plancha y rueda abdominal. Al empezar dices cuántas haces seguidas y la app te coloca en un nivel (≈70 % de tu máximo).',
     'El nivel es la 1.ª serie; el resto se calcula sola (en niveles altos: 100 · 54 · 50 · 50 · 46 %). Marca cada serie con ✓ (arranca el descanso); en la plancha, ▶ cronometra la serie.',
     'Al terminar, elige 😣 Me ha costado (repites; si pasa dos veces, bajas un nivel), 🙂 Bien (+1 nivel) o 😎 Voy sobrado (+2). Si no completas las series, cuenta como «me ha costado».',
+    '🛞 <b>Rueda abdominal</b>: 3 series (100 · 70 · 60 %) con bajada lenta. Fase 1 de rodillas hasta 30; al completar el nivel 30 se desbloquea la fase 2, de pie (1–15).',
     'Deja 48 h entre sesiones del mismo reto. Cada 6 sesiones te propone un test de máximo. Las kcal se suman al gym del día en Dieta.'
   ]],
   ['🔥 Cardio', [
@@ -3672,7 +3701,17 @@ const actions = {
   goToday: b => { state.plan.active = b.dataset.prog; ui.dayId = b.dataset.day; ui.retoId = null; persist(); render(); window.scrollTo({ top: 0 }); },
   retoOpen: b => { ui.retoId = b.dataset.reto; render(); window.scrollTo({ top: 0 }); },
   retoBack: () => { ui.retoId = null; render(); window.scrollTo({ top: 0 }); },
-  retoStart: b => { const v = parseInt($('#retoMax')?.value, 10); if (!(v > 0)) return toast('Pon cuántas haces seguidas', 'warn'); retoStartFrom(b.dataset.reto, v); persist(); render(); toast(`Empiezas en nivel ${state.retos[b.dataset.reto].level}`); },
+  retoStart: b => {
+    const id = b.dataset.reto, r = RETOS[id], v = parseInt($('#retoMax')?.value, 10);
+    if (!(v >= 0) || $('#retoMax')?.value === '') return toast('Pon cuántas haces seguidas (0 si ninguna)', 'warn');
+    retoStartFrom(id, v); persist(); render();
+    if (v < r.min) openModal(`<div class="text-center"><div class="text-3xl">🌱</div><h3 class="modal-title mt-1">Empiezas en el nivel ${r.min}</h3></div>
+      <p class="text-sm text-mute">Es el nivel más bajo de este reto y aún no llegas a él. Mientras tanto, haz las series con esta variante más fácil:</p>
+      <p class="text-sm text-cyan-100 bg-brand/10 border border-brand/30 rounded-lg px-3 py-2">💡 ${esc(RETO_EASY[id] || '')}</p>
+      <p class="text-[11px] text-mute">Cuando te salgan las ${retoU(r, r.min)} completas, márcalas como siempre y el reto seguirá subiendo.</p>
+      <button class="btn-primary w-full" data-close type="button">Entendido</button>`);
+    else toast(`Empiezas en nivel ${state.retos[id].level}`);
+  },
   retoDone: b => { const id = b.dataset.reto, i = +b.dataset.i, d = retoDraft(id); d.done[i] = !d.done[i]; if (d.done[i] && d.got[i] === '') d.got[i] = String(d.target[i]); persist(); render(); if (d.done[i] && d.done.some(x => !x)) startTimer(RETOS[id].rest); },
   retoHold: b => { const id = b.dataset.reto, d = retoDraft(id), i = +b.dataset.i; const sec = parseInt(d.got[i], 10) || d.target[i]; startTimer(sec); toast(`Aguanta ${sec} s`); },
   retoFinish: b => retoFinish(b.dataset.reto),
