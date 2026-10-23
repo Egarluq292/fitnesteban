@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.16.0';
+const APP_VERSION = '4.16.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -533,7 +533,7 @@ function renderProgHeader() {
   const progRow = state.plan.programs.map(p => `<button class="prog ${p.id === prog().id ? 'prog-on' : ''}" data-act="pickProg" data-prog="${esc(p.id)}" type="button">${progLabel(p)}</button>`).join('')
     + `<button class="prog prog-add" data-act="addProg" type="button" aria-label="Añadir bloque">＋ Bloque</button>`;
   return `<div class="flex items-center gap-2 -mx-4 px-4 mb-2.5">
-    <div class="chips-row flex-1">${progRow}</div>
+    <div class="chips-row flex-1 relative" id="progRow">${progRow}</div>
     <button class="iconbtn iconbtn-sm shrink-0" data-act="editProg" type="button" aria-label="Editar bloque">✎</button>
   </div>`;
 }
@@ -2949,6 +2949,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.16.1', ['✨ En Entreno, al deslizar, el resalte cian pasa de un bloque a otro con el dedo y la pantalla se funde suavemente con la del bloque nuevo, sin desplazarse.']],
   ['4.16.0', ['👆 El modo de deslizar «Día en Dieta · bloque en Entreno»: en Entreno, deslizar cambia de bloque (RETOS, PPT, FULL BODY…). Se desactiva solo mientras tienes un entreno en curso.']],
   ['4.15.1', ['🏆 En RETOS, «Paralelas» pasa a llamarse «Fondos».']],
   ['4.15.0', ['🏆 Nuevo bloque RETOS en Entreno: dominadas, flexiones, fondos, sentadillas, burpees y plancha por niveles. Al acabar cada sesión eliges cómo te has sentido y el coach ajusta la siguiente.']],
@@ -3115,6 +3116,18 @@ function render() {
   const sub = { train: 'Entreno · coach', diet: 'Nutrición', progress: 'Tu progreso', settings: 'Ajustes' };
   $('#headerSub').textContent = sub[ui.view];
   watchWipInline();
+  if (ui.view === 'train') fixProgRow();
+}
+/* Mantiene a la vista el bloque activo en la fila de bloques (la fila se repinta en cada render) */
+function fixProgRow() {
+  const row = $('#progRow'), on = row?.querySelector('.prog-on');
+  if (!row || !on) { ui._progScroll = null; return; }
+  const want = on.offsetLeft - (row.clientWidth - on.offsetWidth) / 2;
+  if (typeof ui._progScroll === 'number') {
+    row.scrollLeft = ui._progScroll; ui._progScroll = null;
+    const l = on.offsetLeft, r = l + on.offsetWidth;
+    if (l < row.scrollLeft + 8 || r > row.scrollLeft + row.clientWidth - 8) row.scrollTo({ left: want, behavior: 'smooth' });
+  } else row.scrollLeft = Math.max(0, want);
 }
 
 /* ---------- Franja fija «Sesión en curso» bajo la cabecera ---------- */
@@ -3224,6 +3237,61 @@ function swipeTarget(dir) {
   const v = VIEWS[VIEWS.indexOf(ui.view) + dir];
   return v ? { view: v } : null;
 }
+/* Entreno: el resalte cian viaja de un bloque a otro con el dedo y el contenido se funde (sin desplazar la pantalla) */
+const pf = { ind: null, row: null, cur: null, tgt: null, content: [] };
+const EASE = 'cubic-bezier(.2,.7,.3,1)';
+function progFadeSetup(target) {
+  progFadeClear();
+  const row = $('#progRow'); if (!row) return;
+  pf.row = row; pf.cur = row.querySelector('.prog-on');
+  pf.tgt = target ? [...row.querySelectorAll('[data-prog]')].find(b => b.dataset.prog === target.prog) : null;
+  pf.content = [...appEl.children].slice(1);
+  if (!pf.cur) return;
+  const ind = document.createElement('div'); ind.className = 'prog-ind';
+  ind.style.height = pf.cur.offsetHeight + 'px'; ind.style.top = pf.cur.offsetTop + 'px';
+  row.appendChild(ind); pf.ind = ind;
+  pf.cur.classList.add('prog-ghost');
+  progInd(0);
+  if (pf.tgt) {
+    const l = pf.tgt.offsetLeft, r = l + pf.tgt.offsetWidth;
+    if (l < row.scrollLeft + 8 || r > row.scrollLeft + row.clientWidth - 8) row.scrollTo({ left: l - (row.clientWidth - pf.tgt.offsetWidth) / 2, behavior: 'smooth' });
+  }
+}
+function progInd(p, ms = 0, nudge = 0) {
+  if (!pf.ind) return;
+  const a = pf.cur, b = pf.tgt || pf.cur;
+  const x = a.offsetLeft + (b.offsetLeft - a.offsetLeft) * p + nudge, w = a.offsetWidth + (b.offsetWidth - a.offsetWidth) * p;
+  pf.ind.style.transition = ms ? `transform ${ms}ms ${EASE}, width ${ms}ms ${EASE}` : '';
+  pf.ind.style.width = w + 'px'; pf.ind.style.transform = `translateX(${x}px)`;
+  a.classList.toggle('prog-lit', p <= 0.5);
+  if (pf.tgt) pf.tgt.classList.toggle('prog-lit', p > 0.5);
+}
+function progContent(op, ms = 0) { for (const c of pf.content) { c.style.transition = ms ? `opacity ${ms}ms ease` : ''; c.style.opacity = op; } }
+function progFadeMove(dx, target) {
+  const p = target ? Math.min(1, Math.abs(dx) / (W() * 0.45)) : 0;
+  progInd(p, 0, target ? 0 : -Math.sign(dx) * Math.min(10, Math.abs(dx) * 0.05));
+  progContent(1 - 0.75 * p);
+}
+function progFadeClear() {
+  pf.ind?.remove(); pf.cur?.classList.remove('prog-ghost', 'prog-lit'); pf.tgt?.classList.remove('prog-lit');
+  for (const c of pf.content) { c.style.transition = ''; c.style.opacity = ''; }
+  Object.assign(pf, { ind: null, row: null, cur: null, tgt: null, content: [] });
+}
+function progFadeEnd(target, ok) {
+  if (!ok) { progInd(0, 200); progContent(1, 200); setTimeout(progFadeClear, 220); return; }
+  swipe.busy = true;
+  progInd(1, 200); progContent(0, 160);
+  const keep = pf.row?.scrollLeft;
+  setTimeout(() => {
+    state.plan.active = target.prog; ui.dayId = nextDayId(); ui.retoId = null; persist();
+    pf.content = []; pf.ind = null; pf.cur = null; pf.tgt = null;
+    ui._progScroll = keep; render(); window.scrollTo({ top: 0 });
+    const fresh = [...appEl.children].slice(1);
+    for (const c of fresh) { c.style.transition = ''; c.style.opacity = '0'; }
+    requestAnimationFrame(() => requestAnimationFrame(() => { for (const c of fresh) { c.style.transition = 'opacity 260ms ease'; c.style.opacity = '1'; } }));
+    setTimeout(() => { for (const c of fresh) { c.style.transition = ''; c.style.opacity = ''; } swipe.busy = false; }, 300);
+  }, 170);
+}
 function makeProgPeek(id) {
   const pa = state.plan.active, pd = ui.dayId, pr = ui.retoId;
   state.plan.active = id; ui.dayId = nextDayId(); ui.retoId = null;
@@ -3268,6 +3336,10 @@ document.addEventListener('touchmove', e => {
   }
   const dir = dx < 0 ? 1 : -1; // 1 = siguiente (entra por la derecha), -1 = anterior
   const target = swipeTarget(dir);
+  if (ui.view === 'train' && swipeMode() === 'dietDay') {
+    if (dir !== swipe.dir) { swipe.dir = dir; progFadeSetup(target); }
+    swipe.dx = dx; progFadeMove(dx, target); return;
+  }
   if (dir !== swipe.dir) { dropPeek(); swipe.dir = dir; if (target) swipe.peek = target.view ? makePeek(target.view) : target.prog ? makeProgPeek(target.prog) : makeDayPeek(target.date); }
   swipe.dx = dx;
   if (!target) { setX(appEl, dx * 0.12); return; } // primera o última: solo un pequeño rebote
@@ -3280,6 +3352,7 @@ function swipeEnd() {
   if (swipe.axis !== 'x') return;
   const target = swipeTarget(swipe.dir);
   const ok = target && Math.abs(swipe.dx) >= W() * 0.25;
+  if (ui.view === 'train' && swipeMode() === 'dietDay') return progFadeEnd(target, ok);
   if (!ok) {
     setX(appEl, 0, 200);
     if (swipe.peek) { const pk = swipe.peek; swipe.peek = null; setX(pk, swipe.dir * W(), 200); setTimeout(() => pk.remove(), 220); }
