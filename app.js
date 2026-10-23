@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.14.0';
+const APP_VERSION = '4.15.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -108,10 +108,11 @@ const FULLBODY_DAYS = [
 const DEFAULT_PLAN = {
   active: 'ppt',
   programs: [
+    { id: 'retos', name: 'RETOS', icon: '🏆', type: 'retos', days: [] },
     { id: 'ppt', name: 'PPT', days: PPT_DAYS },
     { id: 'fullbody', name: 'FULL BODY', days: FULLBODY_DAYS },
-    { id: 'free', name: 'FREE', days: FREE_DAYS },
-    { id: 'cardio', name: 'CARDIO', icon: '🔥', type: 'cardio', days: [] }
+    { id: 'cardio', name: 'CARDIO', icon: '🔥', type: 'cardio', days: [] },
+    { id: 'free', name: 'FREE', days: FREE_DAYS }
   ]
 };
 
@@ -158,7 +159,7 @@ function defaultSettings() {
   return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, minProtMeal: 25, pinHash: '', lastSeenVersion: '', driveConnected: false, driveEmail: '', driveFolderId: '', autoDrive: true, lastDriveBackup: null, swipeNav: true, swipeMode: '' };
 }
 function defaultState() {
-  return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {}, chat: null };
+  return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {}, chat: null, retos: {} };
 }
 const safeUrl = u => { const t = String(u || '').trim(); return /^https:\/\/[^\s"'<>]+$/i.test(t) ? t : ''; };
 const videoUrl = v => v.video || `https://www.youtube.com/results?search_query=${encodeURIComponent(v.name + ' técnica correcta')}`;
@@ -203,13 +204,14 @@ function normalizePlan(plan) {
     programs.push({ id: 'free', name: 'FREE', days: [freeDay || clone(FREE_DAYS[0])] });
   }
   if (!programs.some(p => p.type === 'cardio')) programs.push(clone(DEFAULT_PLAN.programs.find(p => p.type === 'cardio')));
+  if (!programs.some(p => p.type === 'retos')) programs.push(clone(DEFAULT_PLAN.programs.find(p => p.type === 'retos')));
   programs = programs.map(p => ({
     id: p.id || uid('p_'), name: String(p.name || 'BLOQUE').slice(0, 16), icon: p.icon || '',
-    type: p.type === 'cardio' ? 'cardio' : 'strength',
-    days: p.type === 'cardio' ? [] : (p.days || []).map(normalizeDay)
+    type: p.type === 'cardio' || p.type === 'retos' ? p.type : 'strength',
+    days: p.type === 'cardio' || p.type === 'retos' ? [] : (p.days || []).map(normalizeDay)
   }));
-  for (const p of programs) if (p.type !== 'cardio' && !p.days.length) p.days.push(normalizeDay({ label: 'DÍA 1', title: 'Día 1' }));
-  const active = programs.some(p => p.id === plan?.active) ? plan.active : programs[0].id;
+  for (const p of programs) if (p.type === 'strength' && !p.days.length) p.days.push(normalizeDay({ label: 'DÍA 1', title: 'Día 1' }));
+  const active = programs.some(p => p.id === plan?.active) ? plan.active : (programs.find(p => p.type === 'strength') || programs[0]).id;
   return { active, programs };
 }
 function normalize(s) {
@@ -220,6 +222,14 @@ function normalize(s) {
   out.plan = normalizePlan(out.plan);
   for (const k of ['selectedVariants', 'memory', 'meals', 'drafts']) if (!out[k] || typeof out[k] !== 'object' || Array.isArray(out[k])) out[k] = {};
   for (const k of ['sessions', 'bodyMetrics', 'cardio', 'reports']) if (!Array.isArray(out[k])) out[k] = [];
+  // 4.15: orden de bloques RETOS · PPT · FULL BODY · CARDIO · FREE (una sola vez; luego manda tu orden)
+  if (!out.settings.blockOrder415) {
+    const rank = p => p.type === 'retos' ? 0 : p.id === 'ppt' ? 1 : p.id === 'fullbody' ? 2 : p.type === 'cardio' ? 3 : p.id === 'free' ? 4 : 5;
+    out.plan.programs = out.plan.programs.map((p, i) => ({ p, i })).sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i).map(x => x.p);
+    out.settings.blockOrder415 = true;
+  }
+  if (!out.retos || typeof out.retos !== 'object' || Array.isArray(out.retos)) out.retos = {};
+  for (const k of Object.keys(out.retos)) { const r = out.retos[k]; if (!r || !Array.isArray(r.history)) { delete out.retos[k]; continue; } if (!Array.isArray(r.tests)) r.tests = []; }
   if (!out.chat || typeof out.chat !== 'object' || !Array.isArray(out.chat.msgs)) out.chat = null;
   out.version = 4;
   return out;
@@ -310,6 +320,7 @@ if (state._migrated) { delete state._migrated; persist(); }
 /* ---------- Estado de interfaz ---------- */
 const ui = {
   view: 'diet',
+  retoId: null,
   dayId: null,
   dietDate: todayISO(),
   mealType: guessMealType(),
@@ -529,6 +540,7 @@ function renderProgHeader() {
 
 function renderTrain() {
   if (prog().type === 'cardio') return renderProgHeader() + renderCardio();
+  if (prog().type === 'retos') return renderProgHeader() + renderRetos();
   const day = currentDay();
   const d = draftOf(day.id);
   const next = nextDayId();
@@ -943,12 +955,12 @@ function editProgModal(progId) {
   openModal(`
     <h3 class="modal-title">${isNew ? 'Nuevo bloque' : 'Editar bloque'}</h3>
     <label class="lbl">Nombre del bloque<input class="field mt-1" name="name" maxlength="16" value="${esc(p.name)}" placeholder="TORSO-PIERNA" /></label>
-    ${!isNew && p.type === 'cardio' ? '<p class="text-[11px] text-mute">Bloque de cardio: registra bicicleta y caminata. Se puede renombrar, no eliminar.</p>' : isNew ? '<p class="text-[11px] text-mute">Se crea con un día vacío. Añade días con «＋ Día» y ejercicios con «＋ Añadir ejercicio».</p>' : `<p class="text-[11px] text-mute">${p.days.length} días: ${esc(p.days.map(d => d.label).join(' · '))}</p>`}
+    ${!isNew && p.type === 'cardio' ? '<p class="text-[11px] text-mute">Bloque de cardio: registra bicicleta y caminata. Se puede renombrar, no eliminar.</p>' : !isNew && p.type === 'retos' ? '<p class="text-[11px] text-mute">Bloque de retos: dominadas, flexiones, paralelas, sentadillas, burpees y plancha por niveles. Se puede renombrar, no eliminar.</p>' : isNew ? '<p class="text-[11px] text-mute">Se crea con un día vacío. Añade días con «＋ Día» y ejercicios con «＋ Añadir ejercicio».</p>' : `<p class="text-[11px] text-mute">${p.days.length} días: ${esc(p.days.map(d => d.label).join(' · '))}</p>`}
     <div class="flex gap-2 mt-4">
       ${!isNew ? `<button class="btn-ghost" data-mact="left" type="button" aria-label="Mover a la izquierda">◀</button><button class="btn-ghost" data-mact="right" type="button" aria-label="Mover a la derecha">▶</button>` : ''}
       <button class="btn-primary flex-1" data-mact="save" type="button">Guardar</button>
     </div>
-    ${!isNew && p.type !== 'cardio' && state.plan.programs.length > 1 ? `<button class="btn-danger w-full mt-3" data-mact="del" type="button">Eliminar este bloque</button><p class="text-[11px] text-mute mt-2">Eliminar un bloque no borra el historial de sesiones ya guardadas.</p>` : ''}
+    ${!isNew && p.type === 'strength' && state.plan.programs.length > 1 ? `<button class="btn-danger w-full mt-3" data-mact="del" type="button">Eliminar este bloque</button><p class="text-[11px] text-mute mt-2">Eliminar un bloque no borra el historial de sesiones ya guardadas.</p>` : ''}
   `, {
     autofocus: isNew,
     save: root => {
@@ -1314,8 +1326,177 @@ function gymKcalInfo(s) {
   return { kcal: Math.max(0, Math.round((met - 1) * bw * mins / 60)), met, mins, bw, nSets, vol };
 }
 const gymKcalOf = s => gymKcalInfo(s)?.kcal || 0;
-function gymOf(date) { return state.sessions.filter(s => s.date === date).reduce((a, s) => a + gymKcalOf(s), 0); }
+function gymOf(date) { return state.sessions.filter(s => s.date === date).reduce((a, s) => a + gymKcalOf(s), 0) + retosKcalOf(date); }
 function exerciseBurnOf(date) { return burnedOf(date) + gymOf(date); }
+
+/* =========================================================================
+   RETOS: niveles según tus repeticiones máximas seguidas
+   ========================================================================= */
+const RETOS = {
+  pullup:  { name: 'Dominadas',         icon: '🧗', unit: 'reps', step: 1,  min: 1,  max: 50,  rest: 90, met: 8,   secRep: 3 },
+  pushup:  { name: 'Flexiones',         icon: '💪', unit: 'reps', step: 3,  min: 3,  max: 150, rest: 60, met: 8,   secRep: 2 },
+  dips:    { name: 'Paralelas',         icon: '🤸', unit: 'reps', step: 2,  min: 2,  max: 100, rest: 75, met: 8,   secRep: 2.5 },
+  squat:   { name: 'Sentadillas',       icon: '🦵', unit: 'reps', step: 5,  min: 5,  max: 200, rest: 60, met: 5.5, secRep: 2.5 },
+  burpee:  { name: 'Burpees',           icon: '⚡', unit: 'reps', step: 2,  min: 2,  max: 100, rest: 75, met: 8,   secRep: 4 },
+  plank:   { name: 'Plancha abdominal', icon: '🧱', unit: 's',    step: 10, min: 10, max: 180, rest: 45, met: 3.8, secRep: 1 }
+};
+const RETO_IDS = Object.keys(RETOS);
+const RETO_FEEL = [['hard', '😣', 'Me ha costado'], ['ok', '🙂', 'Bien'], ['easy', '😎', 'Voy sobrado']];
+const retoU = (r, n) => r.unit === 's' ? `${n} s` : `${n}`;
+function retoOf(id) { return state.retos[id] || null; }
+function snapLevel(r, v) { return clamp(Math.round(v / r.step) * r.step, r.min, r.max); }
+/* Series de un nivel: el nivel es la 1.ª serie; en niveles altos 100 · 54 · 50 · 50 · 46 %. En el nivel mínimo, 3 series iguales. */
+function retoSets(id, level) {
+  const r = RETOS[id];
+  if (level <= r.min) return [level, level, level];
+  return [1, 0.54, 0.5, 0.5, 0.46].map(f => Math.max(r.step, Math.round(level * f / r.step) * r.step));
+}
+function retoLastDate(id) { const h = retoOf(id)?.history || []; return h.length ? h[h.length - 1].date : null; }
+function retoDueTest(id) { const st = retoOf(id); if (!st) return false; const lastT = st.tests.length ? st.tests[st.tests.length - 1].date : ''; return st.history.filter(h => h.date > lastT).length >= 6; }
+function retoRestInfo(id) {
+  const last = retoLastDate(id), T = todayISO();
+  if (!last) return null;
+  if (last === T) return { done: true, text: '✓ Hecho hoy' };
+  if (last === addDays(T, -1)) return { warn: true, text: 'Hecho ayer · hoy toca descanso' };
+  return null;
+}
+function retoKcal(id, sets, date) {
+  const r = RETOS[id], kg = bodyweightAt(date) || latestWeight();
+  if (!kg) return 0;
+  const work = sets.reduce((a, n) => a + n, 0) * r.secRep, rest = Math.max(0, sets.length - 1) * r.rest;
+  return Math.round(((r.met - 1) * kg * work + 0.3 * kg * rest) / 3600);
+}
+function retosKcalOf(date) { let k = 0; for (const id of RETO_IDS) for (const h of retoOf(id)?.history || []) if (h.date === date) k += h.kcal || 0; return k; }
+function retoDraft(id) {
+  const st = retoOf(id), T = todayISO();
+  if (!st.draft || st.draft.date !== T || st.draft.level !== st.level) {
+    const sets = retoSets(id, st.level);
+    st.draft = { date: T, level: st.level, target: sets, got: sets.map(() => ''), done: sets.map(() => false) };
+  }
+  return st.draft;
+}
+
+function renderRetos() {
+  if (ui.retoId && RETOS[ui.retoId]) return renderRetoDetail(ui.retoId);
+  const cards = RETO_IDS.map(id => {
+    const r = RETOS[id], st = retoOf(id);
+    if (!st) return `<button class="reto-card" data-act="retoOpen" data-reto="${id}" type="button">
+        <span class="reto-ic">${r.icon}</span>
+        <span class="min-w-0 flex-1 text-left"><span class="block font-extrabold">${r.name}</span><span class="block text-[11px] text-mute">Sin empezar · niveles ${retoU(r, r.min)}–${retoU(r, r.max)}</span></span>
+        <span class="tri -rotate-90 shrink-0"></span></button>`;
+    const pct = Math.round((st.level - r.min) / (r.max - r.min) * 100), rest = retoRestInfo(id);
+    return `<button class="reto-card" data-act="retoOpen" data-reto="${id}" type="button">
+        <span class="reto-ic">${r.icon}</span>
+        <span class="min-w-0 flex-1 text-left">
+          <span class="flex items-baseline justify-between gap-2"><span class="font-extrabold truncate">${r.name}</span><span class="text-xs font-black text-brand shrink-0">Nivel ${st.level}</span></span>
+          <span class="block text-[11px] text-slate-300 mt-0.5 truncate">Próxima: ${retoSets(id, st.level).join(' + ')}${r.unit === 's' ? ' s' : ''}</span>
+          <span class="reto-bar mt-1.5"><span style="width:${Math.max(3, pct)}%"></span></span>
+          <span class="flex justify-between text-[10px] mt-1"><span class="${rest?.warn ? 'text-amber-300' : rest?.done ? 'text-emerald-300' : 'text-mute'}">${rest ? esc(rest.text) : retoDueTest(id) ? '🎯 Toca test de máximo' : `Mejor marca: ${retoU(r, st.best)}`}</span><span class="text-mute">${retoU(r, r.max)}</span></span>
+        </span></button>`;
+  }).join('');
+  return `<section class="card p-4 mt-1">
+    <h2 class="font-extrabold text-lg">🏆 Retos</h2>
+    <p class="text-[11px] text-mute mt-1">Cada reto empieza según tus repeticiones máximas seguidas. Al terminar cada sesión dime cómo te has sentido y ajusto la siguiente.</p>
+    <div class="space-y-2 mt-3">${cards}</div>
+  </section>`;
+}
+function renderRetoDetail(id) {
+  const r = RETOS[id], st = retoOf(id);
+  const back = `<button class="text-xs text-brand flex items-center gap-1 mb-2" data-act="retoBack" type="button">‹ Todos los retos</button>`;
+  if (!st) return `${back}<section class="card p-4 mt-1 space-y-3">
+      <div class="flex items-center gap-3"><span class="reto-ic text-3xl">${r.icon}</span><div><h2 class="font-extrabold text-lg">${r.name}</h2><p class="text-[11px] text-mute">Niveles de ${retoU(r, r.min)} a ${retoU(r, r.max)}</p></div></div>
+      <label class="lbl">${r.unit === 's' ? '¿Cuántos segundos aguantas seguidos?' : '¿Cuántas haces seguidas, sin parar?'}
+        <input class="field mt-1 text-center text-2xl font-black" id="retoMax" inputmode="numeric" placeholder="${r.unit === 's' ? 'Ej: 45' : 'Ej: 8'}" /></label>
+      <p class="text-[11px] text-mute">Empiezas un poco por debajo (≈70 %) para tener margen de subir. Tu máximo queda como marca a batir.</p>
+      <button class="btn-primary w-full" data-act="retoStart" data-reto="${id}" type="button">Empezar reto</button>
+    </section>`;
+  const d = retoDraft(id), rest = retoRestInfo(id), pct = Math.round((st.level - r.min) / (r.max - r.min) * 100);
+  const rows = d.target.map((t, i) => `<div class="setrow ${d.done[i] ? 'is-done' : ''}" id="reto-set-${i}">
+      <span class="w-7 text-xs font-bold text-mute">S${i + 1}</span>
+      <span class="text-[11px] text-mute w-16 shrink-0">obj. <strong class="text-white text-sm">${retoU(r, t)}</strong></span>
+      <div class="relative flex-1">
+        <input class="field field-set text-brand" data-reto="${id}" data-reto-got="${i}" inputmode="numeric" autocomplete="off" value="${esc(d.got[i] !== '' ? d.got[i] : '')}" placeholder="${t}" aria-label="Hechas en la serie ${i + 1}" />
+        <span class="unit">${r.unit === 's' ? 's' : 'reps'}</span>
+      </div>
+      ${r.unit === 's' ? `<button class="checkbtn" data-act="retoHold" data-reto="${id}" data-i="${i}" type="button" aria-label="Cronometrar">▶</button>` : ''}
+      <button class="checkbtn" data-act="retoDone" data-reto="${id}" data-i="${i}" type="button" aria-label="Serie hecha">✓</button>
+    </div>`).join('');
+  const hist = st.history.slice(-8).reverse().map(h => `<div class="flex items-center justify-between bg-ink rounded-lg px-2.5 py-1.5 text-xs">
+      <span class="text-mute">${esc(fmtDate(h.date))}</span><span>Nivel ${h.level}</span><span>${h.got.join('+')}</span><span>${(RETO_FEEL.find(f => f[0] === h.feel) || ['', ''])[1]}</span></div>`).join('');
+  return `${back}<section class="card p-4 mt-1">
+    <div class="flex items-center gap-3"><span class="reto-ic text-3xl">${r.icon}</span>
+      <div class="flex-1 min-w-0"><h2 class="font-extrabold text-lg leading-tight">${r.name}</h2>
+      <p class="text-[11px] text-mute">Mejor marca: <strong class="text-white">${retoU(r, st.best)}</strong> · ${st.history.length} sesiones</p></div>
+      <div class="text-right"><div class="text-[10px] text-mute">NIVEL</div><div class="text-2xl font-black text-brand leading-none">${st.level}</div></div></div>
+    <span class="reto-bar mt-3"><span style="width:${Math.max(3, pct)}%"></span></span>
+    <div class="flex justify-between text-[10px] text-mute mt-1"><span>${retoU(r, r.min)}</span><span>Meta: ${retoU(r, r.max)}</span></div>
+    ${rest?.warn ? `<p class="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2.5 py-1.5 mt-3">⏸ ${esc(rest.text)}</p>` : ''}
+    ${rest?.done ? `<p class="text-[11px] text-emerald-300 mt-3">✓ Ya lo hiciste hoy. Vuelve en 48 h.</p>` : `
+    <div class="mt-3 space-y-1.5">${rows}</div>
+    <p class="text-[11px] text-mute mt-2">${r.unit === 's' ? '▶ cronometra la serie; ✓ la marca y arranca el descanso.' : 'Si haces menos, corrige el número antes de marcar ✓.'} Descanso: ${r.rest} s.</p>
+    <button class="btn-save w-full mt-3" data-act="retoFinish" data-reto="${id}" type="button">Terminar sesión</button>`}
+  </section>
+  <section class="card p-4 mt-3">
+    <div class="flex items-center justify-between"><h3 class="section-title">Historial</h3>
+      <button class="text-xs ${retoDueTest(id) ? 'text-amber-300 font-bold' : 'text-brand'} underline" data-act="retoTest" data-reto="${id}" type="button">${retoDueTest(id) ? '🎯 Toca test de máximo' : 'Test de máximo'}</button></div>
+    <div class="space-y-1 mt-2">${hist || '<p class="text-xs text-mute">Aún no hay sesiones.</p>'}</div>
+    <button class="text-[11px] text-mute underline mt-3" data-act="retoReset" data-reto="${id}" type="button">Reiniciar este reto</button>
+  </section>`;
+}
+function retoStartFrom(id, max) {
+  const r = RETOS[id];
+  const best = clamp(Math.round(max), 0, r.max * 2);
+  const level = clamp(Math.floor(best * 0.7 / r.step) * r.step, r.min, r.max);
+  state.retos[id] = { level, best, startedAt: todayISO(), history: [], tests: [{ date: todayISO(), max: best }], hardStreak: 0, draft: null };
+}
+function retoFinish(id) {
+  const r = RETOS[id], st = retoOf(id), d = retoDraft(id);
+  const got = d.target.map((t, i) => { const v = parseInt(d.got[i], 10); return Number.isFinite(v) ? v : (d.done[i] ? t : 0); });
+  if (!got.some(v => v > 0)) return toast('Apunta al menos una serie', 'warn');
+  const completed = got.every((v, i) => v >= d.target[i]);
+  openModal(`
+    <div class="text-center"><h3 class="modal-title">¿Cómo te has sentido?</h3>
+    <p class="text-xs text-mute mt-1">${r.icon} ${r.name} · nivel ${st.level}${completed ? '' : ' · <span class="text-amber-300">no completaste todas las series</span>'}</p></div>
+    <div class="grid grid-cols-3 gap-2 mt-3">${RETO_FEEL.map(([k, e, l]) => `<button class="feel-btn" data-mact="feel" data-feel="${k}" type="button"><span class="text-4xl">${e}</span><span>${l}</span></button>`).join('')}</div>`, {
+    feel: (root, b) => {
+      let feel = b.dataset.feel;
+      const eff = completed ? feel : 'hard';
+      const before = st.level;
+      if (eff === 'hard') { st.hardStreak = (st.hardStreak || 0) + 1; if (st.hardStreak >= 2) { st.level = snapLevel(r, st.level - r.step); st.hardStreak = 0; } }
+      else { st.hardStreak = 0; st.level = snapLevel(r, st.level + (eff === 'easy' ? 2 : 1) * r.step); }
+      st.best = Math.max(st.best, got[0]);
+      const T = todayISO();
+      st.history.push({ date: T, level: before, target: d.target, got, feel, completed, kcal: retoKcal(id, got, T) });
+      st.draft = null; persist();
+      const msg = st.level > before ? `Subes a nivel ${st.level}` : st.level < before ? `Bajamos a nivel ${st.level} para consolidar` : `Repites nivel ${st.level}`;
+      openModal(`<div class="text-center"><div class="text-4xl">${st.level >= r.max && before < r.max ? '🏆' : RETO_FEEL.find(f => f[0] === feel)[1]}</div>
+        <h3 class="modal-title mt-1">${st.level >= r.max && before < r.max ? '¡Reto completado!' : esc(msg)}</h3>
+        <p class="text-sm text-mute mt-1">${!completed && feel !== 'hard' ? 'Como no completaste todas las series, cuenta como «me ha costado». ' : ''}Próxima sesión (en 48 h): <strong class="text-white">${retoSets(id, st.level).join(' + ')}${r.unit === 's' ? ' s' : ''}</strong></p>
+        <p class="text-[11px] text-mute mt-1">~${retoKcal(id, got, T)} kcal netas, sumadas al gym de hoy en Dieta.</p></div>
+        <button class="btn-primary w-full mt-3" data-close type="button">Hecho</button>`);
+      render();
+    }
+  });
+}
+function retoTestModal(id) {
+  const r = RETOS[id], st = retoOf(id);
+  openModal(`<h3 class="modal-title">🎯 Test de máximo · ${r.name}</h3>
+    <p class="text-xs text-mute">Calienta bien y haz ${r.unit === 's' ? 'una plancha hasta no poder más' : 'todas las que puedas seguidas'}. Mejor en un día de descanso del reto.</p>
+    <label class="lbl">${r.unit === 's' ? 'Segundos aguantados' : 'Repeticiones seguidas'}<input class="field mt-1 text-center text-2xl font-black" name="max" inputmode="numeric" /></label>
+    <button class="btn-primary w-full" data-mact="save" type="button">Guardar test</button>`, {
+    autofocus: true,
+    save: root => {
+      const v = parseInt(mval(root, 'max'), 10);
+      if (!(v > 0)) return toast('Pon un número', 'warn');
+      st.tests.push({ date: todayISO(), max: v });
+      const prevBest = st.best; st.best = Math.max(st.best, v);
+      const fromTest = clamp(Math.floor(v * 0.7 / r.step) * r.step, r.min, r.max);
+      const up = fromTest > st.level; if (up) { st.level = fromTest; st.draft = null; }
+      persist(); closeModal(); render();
+      toast(`${v > prevBest ? '🔥 Nueva mejor marca. ' : ''}${up ? `Subes a nivel ${st.level}` : `Sigues en nivel ${st.level}`}`);
+    }
+  });
+}
 
 function renderCardio() {
   const c = ui.cardio;
@@ -2193,7 +2374,7 @@ function renderSettings() {
         <div class="text-sm font-extrabold ${p.id === prog().id ? 'text-brand' : ''}">${progLabel(p)}${p.id === prog().id ? ' <span class="text-[10px] font-semibold">· activo</span>' : ''}</div>
         <button class="iconbtn iconbtn-sm" data-act="editProgId" data-prog="${esc(p.id)}" type="button" aria-label="Editar bloque">✎</button>
       </div>
-      ${p.type === 'cardio' ? '<p class="text-[11px] text-mute bg-ink rounded-xl border border-line px-3 py-2">Bicicleta y caminata con estimación de calorías.</p>' : ''}
+      ${p.type === 'cardio' ? '<p class="text-[11px] text-mute bg-ink rounded-xl border border-line px-3 py-2">Bicicleta y caminata con estimación de calorías.</p>' : p.type === 'retos' ? '<p class="text-[11px] text-mute bg-ink rounded-xl border border-line px-3 py-2">Retos por niveles con ajuste según cómo te sientas.</p>' : ''}
       ${p.days.map(d => `<div class="flex items-center justify-between bg-ink rounded-xl border border-line px-3 py-2">
         <div class="min-w-0"><div class="text-sm font-bold">${esc(d.label)} <span class="text-mute font-normal text-xs">· ${d.exercises.length} ejercicios${d.rotation ? '' : ' · fuera de rotación'}</span></div>
         <div class="text-[11px] text-mute truncate">${esc(d.title)}</div></div>
@@ -2672,7 +2853,8 @@ function chatContext() {
     entreno_en_curso: w ? { dia: allDays().find(d => d.id === w.dayId)?.label, minutos: sessionMinutes(w.d) } : null,
     cardio_14_dias: state.cardio.filter(c => c.date >= addDays(T, -13)).map(c => ({ fecha: c.date, tipo: CARDIO_TYPES[c.type]?.label || c.type, min: c.minutes, intensidad: c.intensity, kcal: c.kcal })),
     medidas_corporales: [...state.bodyMetrics].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8).map(m => ({ fecha: m.date, peso: m.weight, cintura: m.waist })),
-    semana_de_descarga: deloadActive()
+    semana_de_descarga: deloadActive(),
+    retos: RETO_IDS.filter(id => state.retos[id]).map(id => { const r = RETOS[id], st = state.retos[id]; return { reto: r.name, unidad: r.unit, nivel: st.level, meta: r.max, mejor_marca: st.best, proxima_sesion: retoSets(id, st.level), ultimas: st.history.slice(-3).map(h => ({ fecha: h.date, hecho: h.got, sensacion: h.feel })) }; })
   };
 }
 function chatSystem() {
@@ -2767,6 +2949,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.15.0', ['🏆 Nuevo bloque RETOS en Entreno: dominadas, flexiones, paralelas, sentadillas, burpees y plancha por niveles. Al acabar cada sesión eliges cómo te has sentido y el coach ajusta la siguiente.']],
   ['4.14.0', ['👆 Nuevo en Ajustes → Aplicación: el gesto de deslizar puede cambiar de pestaña, cambiar de día en Dieta (como las flechas ‹ ›) o estar desactivado.']],
   ['4.13.8', ['✨ Logo nuevo FS en la cabecera, la tarjeta de compartir y el icono de la app, y la marca FITNESTEBAN con su mismo estilo: plata, cian con brillo y la S partida por un hueco limpio.']],
   ['4.13.6', ['✨ La cabecera y la tarjeta de compartir estrenan el logo de la S partida.']],
@@ -2826,6 +3009,12 @@ const GUIDE = [
     '⇄ cambia de variante, ✎ edita series, rango, descanso, incremento y vídeo. «▶ Técnica» abre YouTube.',
     '⏱ Bajo el título del día ves la <b>duración estimada</b>. La <b>real</b> se mide sola desde tu primera serie ✓ hasta «Guardar sesión»; si paras más de 20 min, esa pausa no cuenta. Tras 2 sesiones verás tu media real.',
     'Al final, «Guardar sesión»: verás resumen, volumen y récords personales (1RM estimado).'
+  ]],
+  ['🏆 Retos', [
+    'En Entreno → bloque <b>🏆 RETOS</b>: dominadas, flexiones, paralelas, sentadillas, burpees y plancha. Al empezar dices cuántas haces seguidas y la app te coloca en un nivel (≈70 % de tu máximo).',
+    'El nivel es la 1.ª serie; el resto se calcula sola (en niveles altos: 100 · 54 · 50 · 50 · 46 %). Marca cada serie con ✓ (arranca el descanso); en la plancha, ▶ cronometra la serie.',
+    'Al terminar, elige 😣 Me ha costado (repites; si pasa dos veces, bajas un nivel), 🙂 Bien (+1 nivel) o 😎 Voy sobrado (+2). Si no completas las series, cuenta como «me ha costado».',
+    'Deja 48 h entre sesiones del mismo reto. Cada 6 sesiones te propone un test de máximo. Las kcal se suman al gym del día en Dieta.'
   ]],
   ['🔥 Cardio', [
     'Elige bicicleta o caminata, minutos e intensidad. «Calcular con IA» estima calorías <b>netas</b> (lo que gastas por encima del reposo) usando tu último peso.',
@@ -3227,6 +3416,14 @@ const actions = {
     persist(); render();
   },
   openCal: () => openCalendar(),
+  retoOpen: b => { ui.retoId = b.dataset.reto; render(); window.scrollTo({ top: 0 }); },
+  retoBack: () => { ui.retoId = null; render(); window.scrollTo({ top: 0 }); },
+  retoStart: b => { const v = parseInt($('#retoMax')?.value, 10); if (!(v > 0)) return toast('Pon cuántas haces seguidas', 'warn'); retoStartFrom(b.dataset.reto, v); persist(); render(); toast(`Empiezas en nivel ${state.retos[b.dataset.reto].level}`); },
+  retoDone: b => { const id = b.dataset.reto, i = +b.dataset.i, d = retoDraft(id); d.done[i] = !d.done[i]; if (d.done[i] && d.got[i] === '') d.got[i] = String(d.target[i]); persist(); render(); if (d.done[i] && d.done.some(x => !x)) startTimer(RETOS[id].rest); },
+  retoHold: b => { const id = b.dataset.reto, d = retoDraft(id), i = +b.dataset.i; const sec = parseInt(d.got[i], 10) || d.target[i]; startTimer(sec); toast(`Aguanta ${sec} s`); },
+  retoFinish: b => retoFinish(b.dataset.reto),
+  retoTest: b => retoTestModal(b.dataset.reto),
+  retoReset: b => { const id = b.dataset.reto; openModal(`<h3 class="modal-title">¿Reiniciar ${esc(RETOS[id].name)}?</h3><p class="text-sm text-mute">Se borran su nivel y su historial. Volverás a empezar con un test.</p><button class="btn-danger w-full" data-mact="yes" type="button">Reiniciar</button><button class="btn-ghost w-full" data-close type="button">Cancelar</button>`, { yes: () => { delete state.retos[id]; persist(); closeModal(); render(); } }); },
   swipeMode: b => { state.settings.swipeMode = b.dataset.mode; persist(); render(); },
   dietPrev: () => { ui.editing = null; ui.aiResult = null; ui.dietDate = addDays(ui.dietDate, -1); render(); },
   dietNext: () => { if (ui.dietDate < todayISO()) { ui.editing = null; ui.aiResult = null; ui.dietDate = addDays(ui.dietDate, 1); render(); } },
@@ -3335,6 +3532,7 @@ app.addEventListener('click', e => {
 app.addEventListener('input', e => {
   const t = e.target;
   if (t.dataset.in) setDraftCell(t.dataset.key, parseInt(t.dataset.i, 10), t.dataset.in, t.value);
+  else if (t.dataset.retoGot !== undefined) { const d = retoDraft(t.dataset.reto); d.got[+t.dataset.retoGot] = t.value.replace(/[^0-9]/g, ''); persistSoon(); }
   else if (t.id === 'mealDesc') ui.mealDesc = t.value;
   else if (t.id === 'mealSearch') { ui.mealSearch = t.value; const box = $('#mealPicks'); if (box) box.innerHTML = renderPickList(); }
   else if (t.dataset.ai && ui.aiResult) { ui.aiResult[t.dataset.ai] = t.dataset.ai === 'desc' ? t.value : (num(t.value) ?? 0); if (t.dataset.ai === 'prot') syncProtHint(); }
