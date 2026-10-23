@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.17.0';
+const APP_VERSION = '4.18.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -522,10 +522,10 @@ function cellValue(d, key, i, field, c) {
   if (field === 'w' && c.weight !== null && c.weight !== undefined) return fmtNum(c.weight);
   return '';
 }
-function nextDayId() {
-  if (!prog().days.length) return null;
-  const rot = prog().days.filter(d => d.rotation && d.exercises.length);
-  if (!rot.length) return prog().days[0].id;
+function nextDayId(pr = prog()) {
+  if (!pr.days.length) return null;
+  const rot = pr.days.filter(d => d.rotation && d.exercises.length);
+  if (!rot.length) return pr.days[0].id;
   const ss = sortedSessions();
   for (let i = ss.length - 1; i >= 0; i--) {
     const idx = rot.findIndex(d => d.id === ss[i].dayId);
@@ -1386,6 +1386,27 @@ function retoDraft(id) {
   return st.draft;
 }
 
+/* Bloque de fuerza que sigues: el de tu última sesión (o PPT) */
+function mainStrengthProg() {
+  const ss = sortedSessions();
+  for (let i = ss.length - 1; i >= 0; i--) { const pr = programOfDay(ss[i].dayId); if (pr && pr.type === 'strength' && pr.id !== 'free') return pr; }
+  return state.plan.programs.find(p => p.id === 'ppt') || state.plan.programs.find(p => p.type === 'strength');
+}
+function todayCardHTML() {
+  const pr = mainStrengthProg(); if (!pr) return '';
+  const T = todayISO();
+  const doneSess = sortedSessions().filter(x => x.date === T && programOfDay(x.dayId)?.id === pr.id).pop();
+  if (doneSess) {
+    const dd = pr.days.find(d => d.id === doneSess.dayId);
+    return `<div class="today-card today-done"><span class="text-2xl">✅</span><span class="flex-1 min-w-0"><span class="block text-[11px] text-mute">HOY</span><span class="block font-extrabold">Ya entrenaste ${esc(dd?.label || 'hoy')} · ${esc(pr.name)}</span></span></div>`;
+  }
+  const day = pr.days.find(d => d.id === nextDayId(pr)); if (!day || !day.exercises.length) return '';
+  const mins = estimateMinutes(day, state.drafts[day.id] || { sets: {}, counts: {}, done: {} });
+  return `<button class="today-card" data-act="goToday" data-prog="${esc(pr.id)}" data-day="${esc(day.id)}" type="button">
+      <span class="text-2xl">🏋️</span>
+      <span class="flex-1 min-w-0 text-left"><span class="block text-[11px] text-mute">HOY TE TOCA</span><span class="block font-extrabold truncate">${esc(day.label)} · ${esc(pr.name)}</span><span class="block text-[11px] text-mute truncate">${day.exercises.length} ejercicios${mins ? ` · ⏱ ~${mins} min` : ''}</span></span>
+      <span class="text-brand font-black text-lg shrink-0">›</span></button>`;
+}
 function renderRetos() {
   if (ui.retoId && RETOS[ui.retoId]) return renderRetoDetail(ui.retoId);
   const cards = RETO_IDS.map(id => {
@@ -1394,17 +1415,17 @@ function renderRetos() {
         <span class="reto-ic">${r.icon}</span>
         <span class="min-w-0 flex-1 text-left"><span class="block font-extrabold">${r.name}</span><span class="block text-[11px] text-mute">Sin empezar · niveles ${retoU(r, r.min)}–${retoU(r, r.max)}</span></span>
         <span class="tri -rotate-90 shrink-0"></span></button>`;
-    const pct = Math.round((st.level - r.min) / (r.max - r.min) * 100), rest = retoRestInfo(id);
-    return `<button class="reto-card" data-act="retoOpen" data-reto="${id}" type="button">
+    const pct = Math.round((st.level - r.min) / (r.max - r.min) * 100), rest = retoRestInfo(id), ready = !rest;
+    return `<button class="reto-card ${ready ? 'reto-ready' : ''}" data-act="retoOpen" data-reto="${id}" type="button">
         <span class="reto-ic">${r.icon}</span>
         <span class="min-w-0 flex-1 text-left">
           <span class="flex items-baseline justify-between gap-2"><span class="font-extrabold truncate">${r.name}</span><span class="text-xs font-black text-brand shrink-0">Nivel ${st.level}</span></span>
           <span class="block text-[11px] text-slate-300 mt-0.5 truncate">Próxima: ${retoSets(id, st.level).join(' + ')}${r.unit === 's' ? ' s' : ''}</span>
           <span class="reto-bar mt-1.5"><span style="width:${Math.max(3, pct)}%"></span></span>
-          <span class="flex justify-between text-[10px] mt-1"><span class="${rest?.warn ? 'text-amber-300' : rest?.done ? 'text-emerald-300' : 'text-mute'}">${rest ? esc(rest.text) : retoDueTest(id) ? '🎯 Toca test de máximo' : `Mejor marca: ${retoU(r, st.best)}`}</span><span class="text-mute">${retoU(r, r.max)}</span></span>
+          <span class="flex justify-between text-[10px] mt-1"><span class="${rest?.warn ? 'text-amber-300' : rest?.done ? 'text-emerald-300' : 'text-brand font-bold'}">${rest ? esc(rest.text) : retoDueTest(id) ? '🎯 Listo · toca test de máximo' : '● Listo para hoy'}</span><span class="text-mute">${retoU(r, r.max)}</span></span>
         </span></button>`;
   }).join('');
-  return `<section class="card p-4 mt-1">
+  return `${todayCardHTML()}<section class="card p-4 mt-3">
     <h2 class="font-extrabold text-lg">🏆 Retos</h2>
     <p class="text-[11px] text-mute mt-1">Cada reto empieza según tus repeticiones máximas seguidas. Al terminar cada sesión dime cómo te has sentido y ajusto la siguiente.</p>
     <div class="space-y-2 mt-3">${cards}</div>
@@ -2839,6 +2860,12 @@ function openTimerSheet() {
   });
 }
 $('#timerPill').addEventListener('click', openTimerSheet);
+/* Entreno se abre en RETOS (con acceso directo a la sesión de hoy), salvo con un entreno en curso */
+function trainToRetos() {
+  if (activeWip()) return false;
+  const r = state.plan.programs.find(p => p.type === 'retos'); if (!r) return false;
+  state.plan.active = r.id; ui.retoId = null; ui.dayId = null; return true;
+}
 /* Dieta vuelve a «hoy» al regresar a la pestaña, tras 30 min fuera de la app o si ha cambiado el día,
    salvo que tengas una comida a medias (estimación o edición) en otro día */
 function dietPending() { return !!(ui.aiResult || ui.editing); }
@@ -2977,6 +3004,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.18.0', ['🏆 Entreno se abre en RETOS, con una tarjeta «Hoy te toca…» para ir a tu sesión en un toque (salvo con un entreno en curso). Los retos que ya han descansado 48 h salen resaltados.']],
   ['4.17.0', ['☁️ Copia en Drive diaria y, además, al guardar cada sesión o reto (se conservan las 45 últimas).', '🔎 En Ajustes → Aplicación ves la versión instalada y la publicada en GitHub, para saber si hay que actualizar.', '🛟 Red de seguridad: si algo falla, aviso con botón de copia en vez de pantalla en blanco, y copia local automática antes de cada actualización (Ajustes → Copias → «Volver a los datos de antes de actualizar»).']],
   ['4.16.4', ['📅 Dieta vuelve siempre a «Hoy» al regresar desde otra pestaña, y también al volver a la app tras 30 min o al cambiar de día (salvo que tengas una comida a medias).']],
   ['4.16.3', ['🎯 Los anillos de Dieta se animan siempre que aparece un día: al cambiar con las flechas, al deslizar o desde el calendario.']],
@@ -3244,6 +3272,7 @@ setInterval(updateWipBar, 30000);
 
 function go(view) {
   if (view === 'diet' && ui.view !== 'diet') { ui._animRings = true; dietBackToToday(); }
+  if (view === 'train' && ui.view !== 'train') trainToRetos();
   ui.view = view;
   if (view === 'settings' && navigator.onLine) loadGis().catch(() => null);
   if (view === 'settings') checkRemoteVersion();
@@ -3270,9 +3299,10 @@ function makePeek(view) {
   const prevView = ui.view;
   ui.view = view;
   let html = '';
-  const prevDate = ui.dietDate;
+  const prevDate = ui.dietDate, prevProg = state.plan.active, prevReto = ui.retoId, prevDay = ui.dayId;
   if (view === 'diet') { ui._animRings = true; dietBackToToday(); }
-  try { html = VIEW_HTML[view](); } finally { ui.view = prevView; ui._animRings = false; ui.dietDate = prevDate; }
+  if (view === 'train') trainToRetos();
+  try { html = VIEW_HTML[view](); } finally { ui.view = prevView; ui._animRings = false; ui.dietDate = prevDate; state.plan.active = prevProg; ui.retoId = prevReto; ui.dayId = prevDay; }
   const el = document.createElement('div');
   el.className = 'swipe-peek';
   el.style.top = appEl.getBoundingClientRect().top + 'px';
@@ -3567,6 +3597,7 @@ const actions = {
     persist(); render();
   },
   openCal: () => openCalendar(),
+  goToday: b => { state.plan.active = b.dataset.prog; ui.dayId = b.dataset.day; ui.retoId = null; persist(); render(); window.scrollTo({ top: 0 }); },
   retoOpen: b => { ui.retoId = b.dataset.reto; render(); window.scrollTo({ top: 0 }); },
   retoBack: () => { ui.retoId = null; render(); window.scrollTo({ top: 0 }); },
   retoStart: b => { const v = parseInt($('#retoMax')?.value, 10); if (!(v > 0)) return toast('Pon cuántas haces seguidas', 'warn'); retoStartFrom(b.dataset.reto, v); persist(); render(); toast(`Empiezas en nivel ${state.retos[b.dataset.reto].level}`); },
