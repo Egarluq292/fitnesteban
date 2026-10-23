@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.20.3';
+const APP_VERSION = '4.20.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3102,7 +3102,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
-  ['4.20.3', ['🔒 La sección Acceso de Ajustes va plegada y pide tu código personal para abrirla; se vuelve a cerrar al salir de Ajustes o de la app.']],
+  ['4.20.4', ['🔒 La sección Acceso de Ajustes va plegada y se abre con tu PIN (o con tu código personal si el dispositivo no tiene PIN). Se cierra sola al salir de Ajustes o de la app.']],
   ['4.20.2', ['🔑 Acceso privado: cada persona entra con su propio código. La lista pública solo contiene huellas; el administrador crea y quita códigos desde Ajustes → Acceso (con GitHub conectado y su PIN).']],
   ['4.19.1', ['🌱 Retos para cualquier nivel: si en la prueba inicial no llegas al mínimo, empiezas en el nivel más bajo con una variante más fácil. La rueda abdominal empieza ahora en 1.']],
   ['4.19.0', ['🛞 Nuevo reto: rueda abdominal en dos fases. De rodillas (1–30, 3 series con bajada lenta) y, al completarla, de pie (1–15).']],
@@ -3786,8 +3786,9 @@ const actions = {
   export: () => exportBackup(),
   newAccess: () => newAccessModal(),
   openAccess: () => {
+    if (state.settings.pinHash) return askPinOnly('🔑 Acceso', 'Escribe tu PIN para abrir esta sección.', () => { ui.accessOpen = true; render(); });
     let fails = 0;
-    openModal(`<h3 class="modal-title">🔑 Acceso</h3><p class="text-sm text-mute">Escribe tu código personal de acceso para abrir esta sección.</p>
+    openModal(`<h3 class="modal-title">🔑 Acceso</h3><p class="text-sm text-mute">Este dispositivo no tiene PIN: escribe tu código personal de acceso (o crea un PIN en Ajustes → Seguridad para usarlo aquí).</p>
       <input class="field mt-1 text-center text-2xl font-black tracking-[.2em] uppercase" name="code" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" />
       <button class="btn-primary w-full mt-2" data-mact="ok" type="button">Abrir</button>`, {
       autofocus: true,
@@ -4088,6 +4089,17 @@ async function ghEditAcl(pin, fn, message) {
   access.list = parseAcl(next); lsSet(ACL_KEY, { list: access.list, at: Date.now() });
 }
 function accessWho(x) { return state.accessNames?.[x.hash] || ''; }
+function askPinOnly(title, text, onOk) {
+  let fails = 0;
+  openModal(`<h3 class="modal-title">${title}</h3><p class="text-sm text-mute">${text}</p>${pinField('pin', 'Tu PIN')}<button class="btn-primary w-full mt-2" data-mact="ok" type="button">Abrir</button>`, {
+    autofocus: true,
+    ok: async root => {
+      const pin = pinVal(root, 'pin'); if (!pin) return toast('Introduce el PIN', 'warn');
+      if (await hashPin(pin) !== state.settings.pinHash) { fails++; root.querySelector('[name="pin"]').value = ''; if (fails >= 5) { closeModal(); return toast('Demasiados intentos', 'error'); } return toast(`PIN incorrecto (${fails}/5)`, 'error'); }
+      closeModal(); onOk();
+    }
+  });
+}
 function askPin({ title, text, onPin }) {
   if (!state.settings.pinHash) return toast('Primero crea un PIN en Ajustes → Seguridad', 'warn');
   let fails = 0;
