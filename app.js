@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.19.1';
+const APP_VERSION = '4.20.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -159,7 +159,7 @@ function defaultSettings() {
   return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, minProtMeal: 25, pinHash: '', lastSeenVersion: '', driveConnected: false, driveEmail: '', driveFolderId: '', autoDrive: true, lastDriveBackup: null, swipeNav: true, swipeMode: '' };
 }
 function defaultState() {
-  return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {}, chat: null, retos: {} };
+  return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {}, chat: null, retos: {}, accessNames: {} };
 }
 const safeUrl = u => { const t = String(u || '').trim(); return /^https:\/\/[^\s"'<>]+$/i.test(t) ? t : ''; };
 const videoUrl = v => v.video || `https://www.youtube.com/results?search_query=${encodeURIComponent(v.name + ' técnica correcta')}`;
@@ -228,6 +228,7 @@ function normalize(s) {
     out.plan.programs = out.plan.programs.map((p, i) => ({ p, i })).sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i).map(x => x.p);
     out.settings.blockOrder415 = true;
   }
+  if (!out.accessNames || typeof out.accessNames !== 'object' || Array.isArray(out.accessNames)) out.accessNames = {};
   if (!out.retos || typeof out.retos !== 'object' || Array.isArray(out.retos)) out.retos = {};
   for (const k of Object.keys(out.retos)) { const r = out.retos[k]; if (!r || !Array.isArray(r.history)) { delete out.retos[k]; continue; } if (!Array.isArray(r.tests)) r.tests = []; }
   if (!out.chat || typeof out.chat !== 'object' || !Array.isArray(out.chat.msgs)) out.chat = null;
@@ -2510,6 +2511,7 @@ function renderSettings() {
     </div>
   </section>
 
+  ${accessSectionHTML()}
   <section class="card p-4 mt-3 space-y-3">
     <h3 class="section-title">📱 Aplicación</h3>
     <div>
@@ -3100,6 +3102,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.20.2', ['🔑 Acceso privado: cada persona entra con su propio código. La lista pública solo contiene huellas; el administrador crea y quita códigos desde Ajustes → Acceso (con GitHub conectado y su PIN).']],
   ['4.19.1', ['🌱 Retos para cualquier nivel: si en la prueba inicial no llegas al mínimo, empiezas en el nivel más bajo con una variante más fácil. La rueda abdominal empieza ahora en 1.']],
   ['4.19.0', ['🛞 Nuevo reto: rueda abdominal en dos fases. De rodillas (1–30, 3 series con bajada lenta) y, al completarla, de pie (1–15).']],
   ['4.18.2', ['⚡ El botón del Coach IA es ahora un rayo cian metalizado, como TEBAN.']],
@@ -3779,6 +3782,18 @@ const actions = {
     persist(); render(); toast('Plan restaurado');
   },
   export: () => exportBackup(),
+  newAccess: () => newAccessModal(),
+  delAccess: b => delAccess(b.dataset.hash),
+  ghConnect: () => ghConnectModal(),
+  ghDisconnect: () => { if (!confirm('¿Desconectar GitHub? Se borra la llave guardada en este móvil.')) return; try { localStorage.removeItem(GH_KEY); } catch { /* nada */ } render(); toast('GitHub desconectado'); },
+  nameAccess: b => {
+    const h = b.dataset.hash, x = (access.list || []).find(y => y.hash === h); if (!x) return;
+    openModal(`<h3 class="modal-title">¿Quién es? <span class="text-mute font-mono text-sm">…${esc(h.slice(-4))}</span></h3><p class="text-xs text-mute">Solo se guarda en tu app y en tus copias.</p>
+      <label class="lbl">Nombre<input class="field mt-1" name="who" maxlength="24" value="${esc(state.accessNames[h] || '')}" /></label>
+      <button class="btn-primary w-full" data-mact="save" type="button">Guardar</button>`, {
+      autofocus: true, save: root => { const v = mval(root, 'who').trim(); if (v) state.accessNames[h] = v; else delete state.accessNames[h]; persist(); closeModal(); render(); }
+    });
+  },
   reloadApp: () => location.reload(),
   safeHome: () => { ui.view = 'diet'; ui.retoId = null; ui.editing = null; ui.aiResult = null; ui.dietDate = todayISO(); render(); },
   restorePrev: () => {
@@ -3935,6 +3950,211 @@ function showErrorBanner(msg) {
 window.addEventListener('error', e => { if (!e.filename || e.filename.includes(location.host)) showErrorBanner(e.message || 'error'); });
 window.addEventListener('unhandledrejection', e => { const m = e.reason?.message || String(e.reason || ''); if (/abort|network|fetch/i.test(m)) return; showErrorBanner(m || 'error'); });
 
+/* =========================================================================
+   ACCESO PRIVADO: un código distinto por persona (lista en acceso.txt del repositorio)
+   El código se guarda solo en este dispositivo; si su línea desaparece de acceso.txt, deja de funcionar.
+   ========================================================================= */
+const ACCESS_KEY = 'fitnesteban_access', ACL_KEY = 'fitnesteban_acl';
+const CODE_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const normCode = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+async function codeHash(c) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('fitnesteban|' + normCode(c)));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+}
+function parseAcl(text) {
+  return String(text).split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')).map(l => {
+    const p = l.split(/\s+/), admin = p.slice(1).some(t => t.toLowerCase() === 'admin');
+    return { hash: p[0].toLowerCase(), admin };
+  }).filter(x => /^[0-9a-f]{32}$/.test(x.hash));
+}
+const access = { list: null, me: null, ok: false };
+function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* nada */ } }
+async function accessCheck(list) {
+  const saved = lsGet(ACCESS_KEY);
+  if (!saved?.code || !list) return null;
+  const h = await codeHash(saved.code);
+  return list.find(x => x.hash === h) || null;
+}
+function lockScreen(mode, msg = '') {
+  let el = $('#lockScreen');
+  if (!el) { el = document.createElement('div'); el.id = 'lockScreen'; el.className = 'lock-screen'; document.body.appendChild(el); }
+  document.body.classList.add('overflow-hidden');
+  const logo = `<img src="icons/logo-128.png" alt="" class="w-20 h-20 rounded-full mx-auto" /><div class="mt-3 flex justify-center">${($('#homeBtn svg')?.outerHTML || '').replace('width="124.9"', 'width="200"').replace('height="14.4"', 'height="23"')}</div>`;
+  if (mode === 'wait') { el.innerHTML = `<div class="lock-box text-center">${logo}<p class="text-sm text-mute mt-6"><span class="spinner"></span> Comprobando acceso…</p></div>`; return; }
+  el.innerHTML = `<div class="lock-box">
+    <div class="text-center">${logo}<h1 class="font-extrabold text-lg mt-5">Acceso privado</h1>
+    <p class="text-sm text-mute mt-1">${msg || 'Esta app es personal. Escribe el código que te ha dado Esteban.'}</p></div>
+    <input class="field mt-5 text-center text-2xl font-black tracking-[.2em] uppercase" id="lockCode" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" />
+    <button class="btn-primary w-full mt-3" id="lockGo" type="button">Entrar</button>
+    <p class="text-[11px] text-mute text-center mt-4">Cada código es personal. Si lo compartes, dejará de funcionar para ti también.</p></div>`;
+  const go = async () => {
+    const v = $('#lockCode').value; if (normCode(v).length < 8) return toast('El código tiene 8 caracteres', 'warn');
+    $('#lockGo').disabled = true;
+    try {
+      const list = access.list || await fetchAcl();
+      const h = await codeHash(v), me = (list || []).find(x => x.hash === h);
+      if (!me) { toast(list ? 'Código no válido' : 'Sin conexión para comprobar el código', 'error'); $('#lockGo').disabled = false; return; }
+      lsSet(ACCESS_KEY, { code: normCode(v), at: Date.now() });
+      unlock(me); toast('Acceso concedido 👋');
+    } catch { $('#lockGo').disabled = false; }
+  };
+  $('#lockGo').onclick = go;
+  $('#lockCode').onkeydown = e => { if (e.key === 'Enter') go(); };
+  setTimeout(() => $('#lockCode')?.focus(), 100);
+}
+function unlock(me) {
+  access.me = me; access.ok = true;
+  $('#lockScreen')?.remove(); document.body.classList.remove('overflow-hidden');
+  if (ui.view === 'settings') render();
+}
+async function fetchAcl() {
+  try {
+    const r = await fetch('acceso.txt?v=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const list = parseAcl(await r.text());
+    access.list = list; lsSet(ACL_KEY, { list, at: Date.now() });
+    return list;
+  } catch { return null; }
+}
+async function accessBoot() {
+  const cached = lsGet(ACL_KEY);
+  if (cached?.list) access.list = cached.list;
+  const meCached = await accessCheck(access.list);
+  if (meCached) unlock(meCached); else lockScreen(access.list ? 'code' : 'wait');
+  const fresh = await fetchAcl();
+  if (!fresh) { if (!access.ok && !access.list) lockScreen('code', 'No hay conexión para comprobar el acceso. Conéctate y vuelve a abrir la app.'); return; }
+  const me = await accessCheck(fresh);
+  if (me) { if (!access.ok) unlock(me); else access.me = me; }
+  else lockScreen('code', lsGet(ACCESS_KEY)?.code ? 'Tu código ya no es válido. Pide uno nuevo a Esteban.' : '');
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { if (l && !(await accessCheck(l))) { access.ok = false; lockScreen('code', 'Tu código ya no es válido. Pide uno nuevo a Esteban.'); } }); });
+
+/* Gestión (solo administrador): crear el código de una persona y la línea para acceso.txt */
+function newCode() { const a = crypto.getRandomValues(new Uint8Array(8)); const s = [...a].map(x => CODE_ABC[x % CODE_ABC.length]).join(''); return s.slice(0, 4) + '-' + s.slice(4); }
+/* Gestión de accesos (solo administrador). En acceso.txt solo hay huellas; los nombres viven en tu app.
+   Crear y quitar códigos edita acceso.txt en GitHub con un token cifrado con tu PIN. */
+const GH_REPO = 'Egarluq292/fitnesteban', GH_FILE = 'acceso.txt', GH_KEY = 'fitnesteban_gh';
+const b64e = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const b64d = str => Uint8Array.from(atob(str), c => c.charCodeAt(0));
+const utf8b64 = t => btoa(unescape(encodeURIComponent(t)));
+const b64utf8 = b => decodeURIComponent(escape(atob(String(b).replace(/\s/g, ''))));
+async function pinKey(pin, salt) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode('fitnesteban-gh:' + pin), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 150000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function ghSaveToken(token, pin) {
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await pinKey(pin, salt), new TextEncoder().encode(token));
+  lsSet(GH_KEY, { salt: b64e(salt), iv: b64e(iv), ct: b64e(ct) });
+}
+async function ghToken(pin) {
+  const g = lsGet(GH_KEY); if (!g) throw new Error('GitHub no está conectado');
+  try { return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(g.iv) }, await pinKey(pin, b64d(g.salt)), b64d(g.ct))); }
+  catch { throw new Error('No se pudo abrir la llave de GitHub (¿cambiaste el PIN?). Vuelve a conectar GitHub.'); }
+}
+async function ghApi(token, method = 'GET', body = null) {
+  const r = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`, {
+    method, headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined, cache: 'no-store'
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(r.status === 401 ? 'El token no es válido o ha caducado' : r.status === 403 || r.status === 404 ? 'El token no tiene permiso sobre el repositorio (Contents: lectura y escritura)' : (d.message || 'GitHub respondió ' + r.status));
+  return d;
+}
+/* Edita acceso.txt: fn(lineas) → nuevas líneas */
+async function ghEditAcl(pin, fn, message) {
+  const token = await ghToken(pin);
+  const cur = await ghApi(token);
+  const text = b64utf8(cur.content || '');
+  const next = fn(text.replace(/\r/g, '').split('\n')).join('\n').replace(/\n*$/, '\n');
+  await ghApi(token, 'PUT', { message, content: utf8b64(next), sha: cur.sha });
+  access.list = parseAcl(next); lsSet(ACL_KEY, { list: access.list, at: Date.now() });
+}
+function accessWho(x) { return state.accessNames?.[x.hash] || ''; }
+function askPin({ title, text, onPin }) {
+  if (!state.settings.pinHash) return toast('Primero crea un PIN en Ajustes → Seguridad', 'warn');
+  let fails = 0;
+  openModal(`<h3 class="modal-title">${title}</h3><p class="text-sm text-mute">${text}</p>${pinField('pin', 'Tu PIN')}
+    <button class="btn-primary w-full mt-2" data-mact="ok" type="button">Continuar</button>`, {
+    autofocus: true,
+    ok: async root => {
+      const pin = pinVal(root, 'pin'); if (!pin) return toast('Introduce el PIN', 'warn');
+      if (await hashPin(pin) !== state.settings.pinHash) { fails++; root.querySelector('[name="pin"]').value = ''; if (fails >= 5) { closeModal(); return toast('Demasiados intentos', 'error'); } return toast(`PIN incorrecto (${fails}/5)`, 'error'); }
+      const btn = root.querySelector('[data-mact=ok]'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Un momento…';
+      try { await onPin(pin, root); } catch (e) { toast(e.message, 'error'); btn.disabled = false; btn.textContent = 'Continuar'; }
+    }
+  });
+}
+function accessSectionHTML() {
+  if (!access.me?.admin) return '';
+  const list = access.list || [], gh = !!lsGet(GH_KEY);
+  return `<section class="card p-4 mt-3 space-y-3">
+    <h3 class="section-title">🔑 Acceso</h3>
+    <p class="text-[11px] text-mute">${list.length} ${list.length === 1 ? 'persona' : 'personas'} con acceso. La lista pública (acceso.txt) solo contiene huellas: los nombres solo los ves tú aquí y van en tus copias de Drive.</p>
+    <div class="space-y-1">${list.map(x => `<div class="flex items-center justify-between gap-2 bg-ink rounded-lg px-2.5 py-1.5 text-xs">
+      <span class="min-w-0 truncate">${accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`}${x.hash === access.me.hash ? ' <span class="text-brand">(tú · admin)</span>' : x.admin ? ' <span class="text-mute">(admin)</span>' : ''}</span>
+      <span class="flex items-center gap-1.5 shrink-0"><button class="iconbtn iconbtn-sm" data-act="nameAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Poner nombre">✎</button>${x.hash === access.me.hash || !gh ? '' : `<button class="iconbtn iconbtn-sm text-rose-300" data-act="delAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Quitar acceso">🗑</button>`}</span></div>`).join('')}</div>
+    ${gh ? `<button class="btn-primary w-full" data-act="newAccess" type="button">＋ Crear código para alguien</button>
+      <p class="text-[11px] text-mute flex justify-between">GitHub conectado ✓ (token cifrado con tu PIN)<button class="underline" data-act="ghDisconnect" type="button">Desconectar</button></p>`
+    : `<p class="text-[11px] text-mute">Conecta GitHub para crear y quitar códigos con un botón, sin editar archivos.</p>
+      <button class="btn-primary w-full" data-act="ghConnect" type="button">Conectar GitHub</button>`}
+  </section>`;
+}
+function ghConnectModal() {
+  if (!state.settings.pinHash) return toast('Primero crea un PIN en Ajustes → Seguridad: protegerá la llave de GitHub', 'warn');
+  openModal(`<h3 class="modal-title">Conectar GitHub</h3>
+    <ol class="text-xs text-mute list-decimal pl-4 space-y-1">
+      <li>Abre <a class="text-brand underline" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub → nuevo token (fine-grained)</a>.</li>
+      <li>Nombre: FITNESTEBAN · Caducidad: 1 año.</li>
+      <li>Repository access: <strong class="text-white">Only select repositories → fitnesteban</strong>.</li>
+      <li>Permissions → Repository → <strong class="text-white">Contents: Read and write</strong>. Nada más.</li>
+      <li>Generate token, cópialo y pégalo aquí.</li>
+    </ol>
+    <label class="lbl">Token<input class="field mt-1 font-mono text-xs" name="tok" autocomplete="off" spellcheck="false" placeholder="github_pat_…" /></label>
+    ${pinField('pin', 'Tu PIN (cifra la llave)')}
+    <button class="btn-primary w-full" data-mact="ok" type="button">Comprobar y guardar</button>`, {
+    ok: async root => {
+      const tok = mval(root, 'tok').trim(), pin = pinVal(root, 'pin');
+      if (!tok) return toast('Pega el token', 'warn');
+      if (!pin || await hashPin(pin) !== state.settings.pinHash) return toast('PIN incorrecto', 'error');
+      const btn = root.querySelector('[data-mact=ok]'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Comprobando…';
+      try { await ghApi(tok); await ghSaveToken(tok, pin); closeModal(); render(); toast('GitHub conectado ✓'); }
+      catch (e) { toast(e.message, 'error'); btn.disabled = false; btn.textContent = 'Comprobar y guardar'; }
+    }
+  });
+}
+function newAccessModal() {
+  openModal(`<h3 class="modal-title">Nuevo código de acceso</h3>
+    <label class="lbl">¿Para quién es? (solo lo verás tú)<input class="field mt-1" name="who" maxlength="24" placeholder="Ej: Ana" /></label>
+    <button class="btn-primary w-full" data-mact="next" type="button">Continuar</button>`, {
+    autofocus: true,
+    next: root => {
+      const who = mval(root, 'who').trim().replace(/\s+/g, ' '); if (!who) return toast('Pon un nombre', 'warn');
+      askPin({ title: `Crear código para ${esc(who)}`, text: 'Tu PIN abre la llave de GitHub para añadir el código a la lista.', onPin: async pin => {
+        const code = newCode(), hash = await codeHash(code);
+        await ghEditAcl(pin, lines => [...lines.filter(l => l.trim()), hash], 'Acceso: nuevo código');
+        state.accessNames[hash] = who; persist(); render();
+        openModal(`<h3 class="modal-title">Código para ${esc(who)}</h3>
+          <div class="text-center text-3xl font-black tracking-[.2em] text-brand bg-ink border border-line rounded-xl py-3">${code}</div>
+          <button class="btn-primary w-full" data-mact="copy" type="button">📋 Copiar para enviárselo</button>
+          <p class="text-[11px] text-mute">Ya está en la lista. Funcionará en 1–2 minutos, cuando GitHub publique el cambio.</p>
+          <p class="text-[11px] text-amber-300">Apunta o envía el código ahora: por seguridad la app no lo guarda.</p>
+          <button class="btn-ghost w-full" data-close type="button">Hecho</button>`, {
+          copy: () => navigator.clipboard.writeText(code).then(() => toast('Código copiado')).catch(() => toast('Cópialo a mano', 'warn'))
+        });
+      } });
+    }
+  });
+}
+function delAccess(hash) {
+  const who = state.accessNames[hash] || 'Sin nombre …' + hash.slice(-4);
+  askPin({ title: `Quitar el acceso de ${esc(who)}`, text: 'Su código dejará de funcionar la próxima vez que abra la app con conexión (en 1–2 minutos, cuando GitHub publique el cambio). Sus datos se quedan en su móvil.', onPin: async pin => {
+    await ghEditAcl(pin, lines => lines.filter(l => !l.trim().toLowerCase().startsWith(hash)), 'Acceso: código retirado');
+    delete state.accessNames[hash]; persist(); closeModal(); render(); toast('Acceso retirado ✓');
+  } });
+}
+
 /* ---------- Arranque ----------
    Se abre en Dieta (anillos del día). Excepción: si hay un entreno a medias de las últimas 3 horas, se abre en Entreno. */
 function workoutInProgress() {
@@ -3962,5 +4182,6 @@ ui.dayId = nextDayId();
   else ui._animRings = true;
 }
 render();
+accessBoot();
 maybeShowNews();
 setTimeout(() => maybeAutoDriveBackup(), 1500);
