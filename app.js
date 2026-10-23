@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.15.1';
+const APP_VERSION = '4.16.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1658,7 +1658,7 @@ function ringsSVG(vals, animate) {
       ${main > 0.004 ? arc(main, extra > 0 ? 'opacity:.38' : '') : ''}
       ${extra > 0.004 ? `<circle cx="${c}" cy="${c}" r="${r.toFixed(1)}" fill="none" stroke="#05080a" stroke-width="${sw + 3}" stroke-linecap="round" style="stroke-dasharray:${(C * extra).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 ${c} ${c})"/>${arc(extra)}` : ''}`;
   }).join('');
-  return `<svg viewBox="0 0 ${size} ${size}" class="w-full h-auto" role="img" aria-label="Anillos de calorías, proteína, carbohidratos y grasas">${rings}</svg>`;
+  return `<svg viewBox="0 0 ${size} ${size}" class="w-full h-auto swipe-ok" role="img" aria-label="Anillos de calorías, proteína, carbohidratos y grasas">${rings}</svg>`;
 }
 function ringsCard(t, st, budget, eatBack) {
   const vals = [
@@ -2436,7 +2436,7 @@ function renderSettings() {
     <div>
       <div class="text-xs font-bold">Deslizar el dedo a izquierda o derecha</div>
       <div class="seg mt-1.5" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-        ${[['tabs', 'Cambia de pestaña'], ['dietDay', 'Cambia de día en Dieta'], ['off', 'Desactivado']].map(([k, l]) => `<button class="seg-btn py-2 px-1 ${swipeMode() === k ? 'seg-on' : ''}" data-act="swipeMode" data-mode="${k}" type="button">${l}</button>`).join('')}
+        ${[['tabs', 'Cambia de pestaña'], ['dietDay', 'Día en Dieta · bloque en Entreno'], ['off', 'Desactivado']].map(([k, l]) => `<button class="seg-btn py-2 px-1 ${swipeMode() === k ? 'seg-on' : ''}" data-act="swipeMode" data-mode="${k}" type="button">${l}</button>`).join('')}
       </div>
     </div>
     ${deferredInstall ? `<button class="btn-primary w-full" data-act="install" type="button">Instalar en la pantalla de inicio</button>` : `<p class="text-xs text-mute">${isStandalone() ? 'Instalada como app ✓' : 'Para instalar: menú ⋮ del navegador → «Instalar aplicación» o «Añadir a pantalla de inicio».'}</p>`}
@@ -2949,6 +2949,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.16.0', ['👆 El modo de deslizar «Día en Dieta · bloque en Entreno»: en Entreno, deslizar cambia de bloque (RETOS, PPT, FULL BODY…). Se desactiva solo mientras tienes un entreno en curso.']],
   ['4.15.1', ['🏆 En RETOS, «Paralelas» pasa a llamarse «Fondos».']],
   ['4.15.0', ['🏆 Nuevo bloque RETOS en Entreno: dominadas, flexiones, fondos, sentadillas, burpees y plancha por niveles. Al acabar cada sesión eliges cómo te has sentido y el coach ajusta la siguiente.']],
   ['4.14.0', ['👆 Nuevo en Ajustes → Aplicación: el gesto de deslizar puede cambiar de pestaña, cambiar de día en Dieta (como las flechas ‹ ›) o estar desactivado.']],
@@ -3029,7 +3030,7 @@ const GUIDE = [
     'Consumidas · Cardio · Neto: el cardio se muestra pero <b>no amplía</b> lo que te queda por comer, salvo que lo actives en Ajustes.',
     '🏋️ <b>Gym</b>: la app estima las kcal netas de cada sesión con la duración real, las series, los kilos y tu peso (MET 3,5 a 6). Salen en Dieta junto al cardio (Comidas · Cardio · Gym · Neto) y puedes corregirlas en Progreso → Historial → ajustar.',
     '🎯 La app se abre en la <b>dieta de hoy</b>: anillo exterior = kcal (ámbar); dentro, proteína (cian), carbohidratos (verde) y grasas (rosa). Si te pasas, el exceso da una segunda vuelta y sale una etiqueta «+…». Con un entreno a medias (últimas 3 h) se abre en Entreno. El <b>logo</b> siempre te trae aquí.',
-    '👆 Si en Ajustes → Aplicación eliges «Cambia de día en Dieta», deslizar el dedo a izquierda o derecha en Dieta pasa al día siguiente o anterior (como las flechas ‹ ›). Las pestañas se cambian con la barra de abajo.',
+    '👆 Si en Ajustes → Aplicación eliges «Día en Dieta · bloque en Entreno», deslizar el dedo en Dieta pasa al día siguiente o anterior (como las flechas ‹ ›) y en Entreno, al bloque siguiente o anterior (RETOS, PPT…). Con un entreno en curso, en Entreno no hace nada para no sacarte de la serie. Las pestañas se cambian con la barra de abajo.',
     '📅 Toca la <b>fecha</b> de Dieta para abrir el calendario del mes: punto verde/ámbar/rojo según la dieta, 🏋️ si hubo pesas y 🔥 si hubo cardio. Al tocar un día ves el detalle y puedes ir a sus comidas.',
     '✎ en una comida la edita; ⭐ «Comidas habituales» repite tus platos más frecuentes de ese tipo, y el buscador encuentra cualquiera del historial.'
   ]],
@@ -3189,7 +3190,7 @@ const VIEWS = ['train', 'diet', 'progress', 'settings'];
 const VIEW_HTML = { train: () => renderTrain(), diet: () => renderDiet(), progress: () => renderProgress(), settings: () => renderSettings() };
 const swipe = { on: false, axis: null, x0: 0, y0: 0, dx: 0, dir: 0, peek: null, busy: false };
 const appEl = document.getElementById('app');
-const NO_SWIPE = '.chips-row, input, textarea, select, svg, .seg, .modal-sheet, [data-noswipe]';
+const NO_SWIPE = '.chips-row, input, textarea, select, svg:not(.swipe-ok), .seg, .modal-sheet, [data-noswipe]';
 const W = () => window.innerWidth;
 function setX(el, x, ms = 0) {
   el.style.transition = ms ? `transform ${ms}ms cubic-bezier(.2,.7,.3,1)` : '';
@@ -3212,11 +3213,28 @@ function dropPeek() { swipe.peek?.remove(); swipe.peek = null; }
 function swipeMode() { const m = state.settings.swipeMode; return m || (state.settings.swipeNav === false ? 'off' : 'tabs'); }
 function swipeTarget(dir) {
   if (swipeMode() === 'dietDay') {
+    if (ui.view === 'train') {
+      if (activeWip()) return null;
+      const ps = state.plan.programs, np = ps[ps.findIndex(p => p.id === prog().id) + dir];
+      return np ? { prog: np.id } : null;
+    }
     const d = addDays(ui.dietDate, dir);
     return d <= todayISO() ? { date: d } : null;
   }
   const v = VIEWS[VIEWS.indexOf(ui.view) + dir];
   return v ? { view: v } : null;
+}
+function makeProgPeek(id) {
+  const pa = state.plan.active, pd = ui.dayId, pr = ui.retoId;
+  state.plan.active = id; ui.dayId = nextDayId(); ui.retoId = null;
+  let html = '';
+  try { html = renderTrain(); } finally { state.plan.active = pa; ui.dayId = pd; ui.retoId = pr; }
+  const el = document.createElement('div');
+  el.className = 'swipe-peek';
+  el.style.top = appEl.getBoundingClientRect().top + 'px';
+  el.innerHTML = `<div class="max-w-xl mx-auto px-4 pt-4">${html}</div>`;
+  document.body.appendChild(el);
+  return el;
 }
 function makeDayPeek(date) {
   const prev = ui.dietDate, pe = ui.editing, pa = ui.aiResult;
@@ -3233,7 +3251,7 @@ function makeDayPeek(date) {
 document.addEventListener('touchstart', e => {
   swipe.on = false; swipe.axis = null;
   const mode = swipeMode();
-  if (swipe.busy || mode === 'off' || (mode === 'dietDay' && ui.view !== 'diet') || e.touches.length !== 1 || $('#modalRoot').classList.contains('open')) return;
+  if (swipe.busy || mode === 'off' || (mode === 'dietDay' && !(ui.view === 'diet' || (ui.view === 'train' && !activeWip()))) || e.touches.length !== 1 || $('#modalRoot').classList.contains('open')) return;
   const t = e.touches[0], edge = 28;
   if (t.clientX < edge || t.clientX > W() - edge) return;
   if (!appEl.contains(e.target) || e.target.closest(NO_SWIPE)) return;
@@ -3250,7 +3268,7 @@ document.addEventListener('touchmove', e => {
   }
   const dir = dx < 0 ? 1 : -1; // 1 = siguiente (entra por la derecha), -1 = anterior
   const target = swipeTarget(dir);
-  if (dir !== swipe.dir) { dropPeek(); swipe.dir = dir; if (target) swipe.peek = target.view ? makePeek(target.view) : makeDayPeek(target.date); }
+  if (dir !== swipe.dir) { dropPeek(); swipe.dir = dir; if (target) swipe.peek = target.view ? makePeek(target.view) : target.prog ? makeProgPeek(target.prog) : makeDayPeek(target.date); }
   swipe.dx = dx;
   if (!target) { setX(appEl, dx * 0.12); return; } // primera o última: solo un pequeño rebote
   setX(appEl, dx);
@@ -3274,6 +3292,7 @@ function swipeEnd() {
   setTimeout(() => {
     setX(appEl, 0);
     if (target.view) go(target.view);           // pinta la pantalla real (idéntica a la que ha entrado)
+    else if (target.prog) { state.plan.active = target.prog; ui.dayId = nextDayId(); ui.retoId = null; persist(); render(); window.scrollTo({ top: 0 }); }
     else { ui.editing = null; ui.aiResult = null; ui.dietDate = target.date; render(); window.scrollTo({ top: 0 }); }
     dropPeek();
     swipe.busy = false;
