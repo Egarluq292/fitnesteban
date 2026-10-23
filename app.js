@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.16.3';
+const APP_VERSION = '4.16.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2821,7 +2821,17 @@ function openTimerSheet() {
   });
 }
 $('#timerPill').addEventListener('click', openTimerSheet);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { if (timer.endAt) { tickTimer(); wakeOn(); } if (ui.dietDate > todayISO()) ui.dietDate = todayISO(); } });
+/* Dieta vuelve a «hoy» al regresar a la pestaña, tras 30 min fuera de la app o si ha cambiado el día,
+   salvo que tengas una comida a medias (estimación o edición) en otro día */
+function dietPending() { return !!(ui.aiResult || ui.editing); }
+function dietBackToToday() { const T = todayISO(); if (ui.dietDate !== T && !dietPending()) { ui.dietDate = T; return true; } return false; }
+let hiddenAt = 0, hiddenDay = todayISO();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); hiddenDay = todayISO(); return; }
+  if (timer.endAt) { tickTimer(); wakeOn(); }
+  if (ui.dietDate > todayISO()) ui.dietDate = todayISO();
+  if (hiddenAt && (Date.now() - hiddenAt > 30 * 60000 || hiddenDay !== todayISO()) && dietBackToToday() && ui.view === 'diet' && !$('#modalRoot').classList.contains('open')) { ui._animRings = true; render(); window.scrollTo({ top: 0 }); }
+});
 
 /* =========================================================================
    COACH IA (chat con tus datos)
@@ -2949,6 +2959,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.16.4', ['📅 Dieta vuelve siempre a «Hoy» al regresar desde otra pestaña, y también al volver a la app tras 30 min o al cambiar de día (salvo que tengas una comida a medias).']],
   ['4.16.3', ['🎯 Los anillos de Dieta se animan siempre que aparece un día: al cambiar con las flechas, al deslizar o desde el calendario.']],
   ['4.16.2', ['✨ La fila de bloques de Entreno acompaña al dedo al deslizar y deja el bloque activo a la izquierda, sin saltos.']],
   ['4.16.1', ['✨ En Entreno, al deslizar, el resalte cian pasa de un bloque a otro con el dedo y la pantalla se funde suavemente con la del bloque nuevo, sin desplazarse.']],
@@ -3196,7 +3207,7 @@ $('#wipBar')?.addEventListener('click', e => { if (e.target.closest('[data-wip]'
 setInterval(updateWipBar, 30000);
 
 function go(view) {
-  if (view === 'diet' && ui.view !== 'diet') ui._animRings = true;
+  if (view === 'diet' && ui.view !== 'diet') { ui._animRings = true; dietBackToToday(); }
   ui.view = view;
   if (view === 'settings' && navigator.onLine) loadGis().catch(() => null);
   render();
@@ -3222,8 +3233,9 @@ function makePeek(view) {
   const prevView = ui.view;
   ui.view = view;
   let html = '';
-  if (view === 'diet') ui._animRings = true;
-  try { html = VIEW_HTML[view](); } finally { ui.view = prevView; ui._animRings = false; }
+  const prevDate = ui.dietDate;
+  if (view === 'diet') { ui._animRings = true; dietBackToToday(); }
+  try { html = VIEW_HTML[view](); } finally { ui.view = prevView; ui._animRings = false; ui.dietDate = prevDate; }
   const el = document.createElement('div');
   el.className = 'swipe-peek';
   el.style.top = appEl.getBoundingClientRect().top + 'px';
