@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.16.4';
+const APP_VERSION = '4.17.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -297,9 +297,10 @@ function migrateV3(old) {
   return normalize(st);
 }
 
+let bootRaw = null; // datos tal como estaban al arrancar (para la copia previa a una actualización)
 function loadState() {
   try {
-    const raw = localStorage.getItem(STORE_KEY);
+    const raw = localStorage.getItem(STORE_KEY); bootRaw = raw;
     if (raw) return normalize(JSON.parse(raw));
     const old = localStorage.getItem(OLD_KEY);
     if (old) { const m = migrateV3(JSON.parse(old)); m._migrated = true; return m; }
@@ -317,9 +318,17 @@ function persist() {
 function persistSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(persist, 350); }
 if (state._migrated) { delete state._migrated; persist(); }
 
+/* Copia local automática antes de cada actualización (se puede restaurar en Ajustes → Copias) */
+const PREV_KEY = 'fitnesteban_prev';
+function savePrevCopy(raw, ver) { if (!raw) return; try { localStorage.setItem(PREV_KEY, JSON.stringify({ ver, at: new Date().toISOString(), data: raw })); } catch { /* sin espacio: no es grave */ } }
+function prevCopy() { try { const p = JSON.parse(localStorage.getItem(PREV_KEY) || 'null'); return p && p.data ? p : null; } catch { return null; } }
+{ const seen = state.settings.lastSeenVersion; if (bootRaw && seen && seen !== APP_VERSION && prevCopy()?.ver !== seen) savePrevCopy(bootRaw, seen); }
+
 /* ---------- Estado de interfaz ---------- */
 const ui = {
   view: 'diet',
+  remoteVer: null,
+  remoteVerAt: 0,
   retoId: null,
   dayId: null,
   dietDate: todayISO(),
@@ -786,6 +795,7 @@ function saveSession() {
   state.sessions.push(session);
   delete state.drafts[day.id];
   if (!persist()) return;
+  setTimeout(silentDriveBackup, 1500);
   render();
 
   const rot = prog().days.filter(x => x.rotation && x.exercises.length);
@@ -1467,7 +1477,7 @@ function retoFinish(id) {
       st.best = Math.max(st.best, got[0]);
       const T = todayISO();
       st.history.push({ date: T, level: before, target: d.target, got, feel, completed, kcal: retoKcal(id, got, T) });
-      st.draft = null; persist();
+      st.draft = null; persist(); setTimeout(silentDriveBackup, 1500);
       const msg = st.level > before ? `Subes a nivel ${st.level}` : st.level < before ? `Bajamos a nivel ${st.level} para consolidar` : `Repites nivel ${st.level}`;
       openModal(`<div class="text-center"><div class="text-4xl">${st.level >= r.max && before < r.max ? '🏆' : RETO_FEEL.find(f => f[0] === feel)[1]}</div>
         <h3 class="modal-title mt-1">${st.level >= r.max && before < r.max ? '¡Reto completado!' : esc(msg)}</h3>
@@ -2410,14 +2420,15 @@ function renderSettings() {
           <button class="btn-ghost" data-act="driveRestore" type="button" ${ui.driveBusy ? 'disabled' : ''}>Restaurar de Drive</button>
           <button class="btn-ghost" data-act="driveDisconnect" type="button">Desconectar</button>
         </div>
-        <label class="habit"><input type="checkbox" id="autoDrive" ${st.autoDrive !== false ? 'checked' : ''} /><span class="text-xs">Copia automática semanal al abrir la app</span></label>`
-      : `<p class="text-[11px] text-mute">Guarda las copias directamente en una carpeta de tu Drive, con copia automática cada semana.</p>
+        <label class="habit"><input type="checkbox" id="autoDrive" ${st.autoDrive !== false ? 'checked' : ''} /><span class="text-xs">Copia automática diaria (al abrir la app) y al guardar cada sesión o reto</span></label>`
+      : `<p class="text-[11px] text-mute">Guarda las copias directamente en una carpeta de tu Drive, con copia automática diaria.</p>
         <button class="btn-primary w-full" data-act="driveConnect" type="button" ${ui.driveBusy ? 'disabled' : ''}>${ui.driveBusy ? '<span class="spinner"></span> Conectando…' : 'Conectar Google Drive'}</button>`}
     </div>
     <div class="grid grid-cols-2 gap-2">
       <button class="btn-ghost col-span-2" data-act="share" type="button">📤 Compartir copia (WhatsApp, correo…)</button>
       <button class="btn-ghost" data-act="export" type="button">⬇️ Descargar</button>
       <button class="btn-ghost" data-act="import" type="button">Importar</button>
+      ${(() => { const pc = prevCopy(); return pc ? `<button class="btn-ghost col-span-2 text-xs" data-act="restorePrev" type="button">↩️ Volver a los datos de antes de actualizar (v${esc(pc.ver)} · ${esc(new Date(pc.at).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))})</button>` : ''; })()}
     </div>
     <p class="text-[11px] text-mute">«Compartir» abre el menú del móvil para enviártela. Importar admite archivos .json y .txt de copias de FITNESTEBAN.</p>
   </section>
@@ -2440,6 +2451,7 @@ function renderSettings() {
       </div>
     </div>
     ${deferredInstall ? `<button class="btn-primary w-full" data-act="install" type="button">Instalar en la pantalla de inicio</button>` : `<p class="text-xs text-mute">${isStandalone() ? 'Instalada como app ✓' : 'Para instalar: menú ⋮ del navegador → «Instalar aplicación» o «Añadir a pantalla de inicio».'}</p>`}
+    ${versionStatusHTML()}
     <div class="grid grid-cols-2 gap-2">
       <button class="btn-ghost" data-act="checkUpdate" type="button">Buscar actualización</button>
       <button class="btn-danger" data-act="wipe" type="button">Borrar todo</button>
@@ -2590,7 +2602,7 @@ function importText(text) {
 const GOOGLE_CLIENT_ID = '534557412512-8med3prg1mchie6i4nsb7mmqtje97o6m.apps.googleusercontent.com';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const DRIVE_FOLDER = 'FITNESTEBAN – copias';
-const DRIVE_KEEP = 30; // copias que se conservan en Drive (las más antiguas se borran)
+const DRIVE_KEEP = 45; // copias que se conservan en Drive (las más antiguas se borran)
 const TOKEN_KEY = 'fitnesteban_gtoken'; // fuera del estado: nunca va en las copias
 
 let gisPromise = null;
@@ -2741,16 +2753,22 @@ async function driveRestoreList() {
   });
 }
 
-/* Al abrir la app: copia semanal automática */
+/* Tras guardar una sesión o un reto: copia en Drive sin preguntar (solo si Google ya dio permiso) */
+async function silentDriveBackup() {
+  const s = state.settings;
+  if (!s.driveConnected || s.autoDrive === false || !navigator.onLine || !storedToken()) return;
+  try { await driveUpload(false); toast('☁️ Copia en Drive ✓'); } catch { /* se reintentará al abrir la app */ }
+}
+/* Al abrir la app: copia diaria automática */
 async function maybeAutoDriveBackup() {
   const s = state.settings;
   if (!s.driveConnected || s.autoDrive === false || !navigator.onLine) return;
   const age = s.lastDriveBackup ? daysBetween(s.lastDriveBackup, todayISO()) : 99;
-  if (age < 7) return;
+  if (age < 1) return;
   if (storedToken()) {
-    try { await driveUpload(false); toast('Copia semanal guardada en Drive ✓'); render(); return; } catch { /* sigue: pide permiso */ }
+    try { await driveUpload(false); toast('Copia diaria guardada en Drive ✓'); render(); return; } catch { /* sigue: pide permiso */ }
   }
-  $('#topBanner').innerHTML = `<div class="banner-info mt-3"><span>☁️ Toca para guardar la copia semanal en Drive${s.lastDriveBackup ? ` (última hace ${age} días)` : ''}.</span><button class="btn-banner shrink-0" id="doDriveBackup" type="button">Guardar</button></div>`;
+  $('#topBanner').innerHTML = `<div class="banner-info mt-3"><span>☁️ Toca para guardar la copia diaria en Drive${s.lastDriveBackup ? ` (última hace ${age} ${age === 1 ? 'día' : 'días'})` : ''}.</span><button class="btn-banner shrink-0" id="doDriveBackup" type="button">Guardar</button></div>`;
   $('#doDriveBackup').onclick = () => driveBackupNow();
   loadGis().catch(() => null); // precarga para que la ventana de Google abra al instante
 }
@@ -2959,6 +2977,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.17.0', ['☁️ Copia en Drive diaria y, además, al guardar cada sesión o reto (se conservan las 45 últimas).', '🔎 En Ajustes → Aplicación ves la versión instalada y la publicada en GitHub, para saber si hay que actualizar.', '🛟 Red de seguridad: si algo falla, aviso con botón de copia en vez de pantalla en blanco, y copia local automática antes de cada actualización (Ajustes → Copias → «Volver a los datos de antes de actualizar»).']],
   ['4.16.4', ['📅 Dieta vuelve siempre a «Hoy» al regresar desde otra pestaña, y también al volver a la app tras 30 min o al cambiar de día (salvo que tengas una comida a medias).']],
   ['4.16.3', ['🎯 Los anillos de Dieta se animan siempre que aparece un día: al cambiar con las flechas, al deslizar o desde el calendario.']],
   ['4.16.2', ['✨ La fila de bloques de Entreno acompaña al dedo al deslizar y deja el bloque activo a la izquierda, sin saltos.']],
@@ -3061,7 +3080,7 @@ const GUIDE = [
     'En el historial puedes borrar una sesión mal guardada: el coach dejará de tenerla en cuenta.'
   ]],
   ['🔒 Datos, copias y PIN', [
-    'Tus datos viven <b>solo en este móvil</b>. Conecta <b>☁️ Google Drive</b> (Ajustes → Copias): cada semana, al abrir la app, se guarda una copia en la carpeta «FITNESTEBAN – copias» (si Google pide confirmar, verás un aviso arriba para hacerlo con un toque). Desde ahí también puedes restaurar. La app te avisa si pasan más de 7 días.',
+    'Tus datos viven <b>solo en este móvil</b>. Conecta <b>☁️ Google Drive</b> (Ajustes → Copias): cada día, al abrir la app, y al guardar cada sesión o reto, se guarda una copia en la carpeta «FITNESTEBAN – copias» (si Google pide confirmar, verás un aviso arriba para hacerlo con un toque). Desde ahí también puedes restaurar. La app te avisa si pasan más de 7 días.',
     'La copia no incluye la clave de Gemini ni el PIN. Al importar se conservan los actuales.',
     'Con PIN activo, «Borrar todo» e «Importar» lo piden. Antes de borrar se descarga una copia automáticamente.',
     'Ábrela siempre desde el icono instalado, no desde Chrome.'
@@ -3120,6 +3139,23 @@ function maybeShowNews() {
    RENDER Y EVENTOS
    ========================================================================= */
 function render() {
+  try { renderInner(); }
+  catch (e) {
+    console.error(e);
+    $('#app').innerHTML = `<section class="card p-4 mt-1 space-y-3 border-rose-500/40">
+      <h2 class="font-extrabold text-lg">⚠️ Algo ha fallado al mostrar esta pantalla</h2>
+      <p class="text-sm text-mute">Tus datos están guardados en el móvil. Haz una copia por si acaso y vuelve a Dieta o recarga.</p>
+      <p class="text-[11px] text-mute font-mono bg-ink rounded-lg p-2 break-words">${esc(String(e && e.message || e)).slice(0, 200)}</p>
+      <div class="grid grid-cols-2 gap-2">
+        ${state.settings.driveConnected ? '<button class="btn-primary col-span-2" data-act="driveBackup" type="button">☁️ Copia en Drive ahora</button>' : ''}
+        <button class="btn-ghost" data-act="export" type="button">⬇️ Descargar copia</button>
+        <button class="btn-ghost" data-act="safeHome" type="button">Ir a Dieta (hoy)</button>
+        <button class="btn-ghost col-span-2" data-act="reloadApp" type="button">Recargar la app</button>
+      </div>
+    </section>`;
+  }
+}
+function renderInner() {
   const app = $('#app');
   if (ui.view === 'train') app.innerHTML = renderTrain();
   else if (ui.view === 'diet') app.innerHTML = renderDiet();
@@ -3210,6 +3246,7 @@ function go(view) {
   if (view === 'diet' && ui.view !== 'diet') { ui._animRings = true; dietBackToToday(); }
   ui.view = view;
   if (view === 'settings' && navigator.onLine) loadGis().catch(() => null);
+  if (view === 'settings') checkRemoteVersion();
   render();
   window.scrollTo({ top: 0 });
 }
@@ -3600,6 +3637,19 @@ const actions = {
     persist(); render(); toast('Plan restaurado');
   },
   export: () => exportBackup(),
+  reloadApp: () => location.reload(),
+  safeHome: () => { ui.view = 'diet'; ui.retoId = null; ui.editing = null; ui.aiResult = null; ui.dietDate = todayISO(); render(); },
+  restorePrev: () => {
+    const pc = prevCopy(); if (!pc) return;
+    guardModal({ title: 'Volver a los datos de antes de actualizar', text: `Se sustituirán tus datos actuales por la copia guardada al actualizar desde la v${esc(pc.ver)}. Lo apuntado después se perderá.`, word: 'RESTAURAR', onOk: () => {
+      try {
+        const keep = { apiKey: state.settings.apiKey, pinHash: state.settings.pinHash, lastSeenVersion: APP_VERSION };
+        exportBackup();
+        state = normalize(JSON.parse(pc.data)); Object.assign(state.settings, keep);
+        persist(); render(); toast('Datos restaurados. Por si acaso, se descargó una copia de los de ahora.');
+      } catch (e) { toast('No se pudo restaurar: ' + e.message, 'error'); }
+    } });
+  },
   share: () => shareBackup(),
   driveConnect: () => driveConnect(),
   driveBackup: () => { if (!state.settings.driveConnected) return driveConnect(); driveBackupNow(); },
@@ -3615,6 +3665,7 @@ const actions = {
   },
   install: async () => { if (!deferredInstall) return; deferredInstall.prompt(); await deferredInstall.userChoice.catch(() => null); deferredInstall = null; render(); },
   checkUpdate: async () => {
+    checkRemoteVersion(true);
     if (!swReg) return toast('El modo app solo funciona desde una web https', 'warn');
     try { await swReg.update(); if (swReg.waiting) showUpdate(swReg.waiting); else toast('Ya tienes la última versión'); } catch { toast('No se pudo comprobar', 'error'); }
   },
@@ -3677,6 +3728,27 @@ $('#mealPhotoInput').addEventListener('change', onMealImage);
 $('#mealGalleryInput').addEventListener('change', onMealImage);
 $('#importInput').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) importBackup(f); });
 
+/* Versión publicada en GitHub (lee sw.js sin caché) */
+async function checkRemoteVersion(force = false) {
+  if (!force && Date.now() - ui.remoteVerAt < 5 * 60000) return;
+  ui.remoteVerAt = Date.now();
+  try {
+    const r = await fetch('sw.js?v=' + Date.now(), { cache: 'no-store' });
+    const m = (await r.text()).match(/fitnesteban-(\d+\.\d+\.\d+)/);
+    ui.remoteVer = m ? m[1] : 'error';
+  } catch { ui.remoteVer = navigator.onLine ? 'error' : 'offline'; }
+  if (ui.view === 'settings') render();
+}
+function versionStatusHTML() {
+  const v = ui.remoteVer;
+  if (!v) return '<p class="text-[11px] text-mute">Comprobando la versión publicada…</p>';
+  if (v === 'offline' || v === 'error') return `<p class="text-[11px] text-mute">Instalada: <strong class="text-white">${APP_VERSION}</strong> · ${v === 'offline' ? 'sin conexión para comprobar la publicada' : 'no se pudo leer la versión publicada'}</p>`;
+  const c = cmpVer(v, APP_VERSION);
+  if (c > 0) return `<div class="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2.5 py-2">Instalada: <strong>${APP_VERSION}</strong> · Publicada: <strong>${esc(v)}</strong>. Hay una versión nueva: pulsa «Buscar actualización» (o cierra y abre la app).</div>`;
+  if (c < 0) return `<p class="text-[11px] text-amber-300">Instalada: <strong>${APP_VERSION}</strong> · Publicada: <strong>${esc(v)}</strong>. GitHub aún no ha publicado esta versión (mira el ✓ en Actions).</p>`;
+  return `<p class="text-[11px] text-emerald-300">Instalada: <strong>${APP_VERSION}</strong> · Publicada: <strong>${esc(v)}</strong> ✓ Estás al día</p>`;
+}
+
 /* =========================================================================
    PWA: service worker, instalación, actualizaciones
    ========================================================================= */
@@ -3687,7 +3759,7 @@ window.addEventListener('appinstalled', () => { deferredInstall = null; toast('A
 
 function showUpdate(worker) {
   $('#topBanner').innerHTML = `<div class="banner-info mt-3"><span>Hay una versión nueva de la app.</span><button class="btn-banner shrink-0" id="doUpdate" type="button">Actualizar</button></div>`;
-  $('#doUpdate').onclick = () => worker.postMessage('SKIP_WAITING');
+  $('#doUpdate').onclick = () => { persist(); savePrevCopy(localStorage.getItem(STORE_KEY), APP_VERSION); worker.postMessage('SKIP_WAITING'); };
 }
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
@@ -3706,6 +3778,20 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 } else if (location.protocol === 'file:') {
   $('#topBanner').innerHTML = `<div class="banner-warn mt-3"><span>Estás abriendo el archivo directamente: sin modo app ni funcionamiento sin conexión. Publícala en una web https (ver LEEME).</span></div>`;
 }
+
+/* Aviso si algo falla fuera de la pantalla (botones, IA, Drive…): nunca se queda en blanco */
+let lastErrAt = 0;
+function showErrorBanner(msg) {
+  if (Date.now() - lastErrAt < 20000) return; lastErrAt = Date.now();
+  let b = $('#errBanner');
+  if (!b) { b = document.createElement('div'); b.id = 'errBanner'; b.className = 'max-w-xl mx-auto px-4'; $('#topBanner').after(b); }
+  b.innerHTML = `<div class="banner-warn mt-3 flex-wrap"><span class="flex-1 min-w-0">⚠️ Algo ha fallado (${esc(String(msg).slice(0, 80))}). Tus datos están guardados.</span>
+    <span class="flex gap-1.5 shrink-0"><button class="btn-banner" id="errCopy" type="button">${state.settings.driveConnected ? '☁️ Copia' : '⬇️ Copia'}</button><button class="btn-banner" id="errClose" type="button">✕</button></span></div>`;
+  $('#errCopy').onclick = () => { state.settings.driveConnected ? driveBackupNow() : exportBackup(); };
+  $('#errClose').onclick = () => b.remove();
+}
+window.addEventListener('error', e => { if (!e.filename || e.filename.includes(location.host)) showErrorBanner(e.message || 'error'); });
+window.addEventListener('unhandledrejection', e => { const m = e.reason?.message || String(e.reason || ''); if (/abort|network|fetch/i.test(m)) return; showErrorBanner(m || 'error'); });
 
 /* ---------- Arranque ----------
    Se abre en Dieta (anillos del día). Excepción: si hay un entreno a medias de las últimas 3 horas, se abre en Entreno. */
