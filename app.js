@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.18.0';
+const APP_VERSION = '4.18.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -310,8 +310,29 @@ function loadState() {
 
 let state = loadState();
 let saveTimer = null;
+/* Frescura de los datos: dataAt cambia solo cuando cambian tus datos (no al tocar ajustes ni al abrir la app) */
+function hashStr(t) { let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0; return h; }
+function dataSig() {
+  const retos = {}; for (const [k, r] of Object.entries(state.retos || {})) retos[k] = { level: r.level, best: r.best, history: r.history, tests: r.tests };
+  return hashStr(JSON.stringify([state.plan, state.sessions, state.meals, state.cardio, state.bodyMetrics, retos, state.reports, state.selectedVariants]));
+}
+function latestContentDate(st) {
+  let d = '';
+  for (const x of st.sessions || []) if (x.date > d) d = x.date;
+  for (const k of Object.keys(st.meals || {})) if ((st.meals[k] || []).length && k > d) d = k;
+  for (const x of st.cardio || []) if (x.date > d) d = x.date;
+  for (const x of st.bodyMetrics || []) if (x.date > d) d = x.date;
+  for (const r of Object.values(st.retos || {})) for (const h of r.history || []) if (h.date > d) d = h.date;
+  return d;
+}
+function dataAtOf(st) { if (st.dataAt) return st.dataAt; const d = latestContentDate(st); return d ? parseISO(d).getTime() + 12 * 3600000 : 0; }
 function persist() {
   clearTimeout(saveTimer);
+  try {
+    const sig = dataSig();
+    if (state._sig === undefined) { state._sig = sig; if (!state.dataAt) state.dataAt = dataAtOf(state); }
+    else if (sig !== state._sig) { state._sig = sig; state.dataAt = Date.now(); }
+  } catch { /* no es grave */ }
   try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); return true; }
   catch (e) { toast('No se pudo guardar en el móvil: ' + e.message, 'error'); return false; }
 }
@@ -2625,6 +2646,32 @@ const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const DRIVE_FOLDER = 'FITNESTEBAN – copias';
 const DRIVE_KEEP = 45; // copias que se conservan en Drive (las más antiguas se borran)
 const TOKEN_KEY = 'fitnesteban_gtoken'; // fuera del estado: nunca va en las copias
+const DEVICE_KEY = 'fitnesteban_device';  // identifica este móvil/PC (no va en las copias)
+function deviceId() { try { let d = localStorage.getItem(DEVICE_KEY); if (!d) { d = uid('dev_'); localStorage.setItem(DEVICE_KEY, d); } return d; } catch { return 'dev_x'; } }
+function deviceName() { const u = navigator.userAgent; return /iPhone|iPad/i.test(u) ? '📱 iPhone' : /Android/i.test(u) ? '📱 Android' : '💻 Ordenador'; }
+const fmtWhen = ms => { if (!ms) return '¿?'; const d = new Date(+ms); return `${fmtDate(toISO(d))} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+/* Resumen de la copia más reciente de Drive (de sus etiquetas o, en copias antiguas, leyendo el archivo) */
+async function driveNewest(files) {
+  const f = files[0]; if (!f) return null;
+  const ap = f.appProperties || {};
+  if (ap.dataAt) return { f, dataAt: +ap.dataAt, deviceId: ap.deviceId || '', device: ap.device || '' };
+  try {
+    const st = JSON.parse(await (await driveFetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`, {}, false)).text());
+    return { f, dataAt: dataAtOf(st), deviceId: '', device: '' };
+  } catch { return null; }
+}
+/* ¿Hay en Drive datos más recientes de OTRO dispositivo? (margen de 1 min) */
+async function driveHasNewer() {
+  const nw = await driveNewest(await driveList(false));
+  persist();
+  if (!nw) return null;
+  if (nw.deviceId && nw.deviceId === deviceId()) return null;
+  return nw.dataAt > (state.dataAt || dataAtOf(state)) + 60000 ? nw : null;
+}
+function newerBanner(nw) {
+  $('#topBanner').innerHTML = `<div class="banner-warn mt-3"><span>☁️ En Drive hay datos más recientes${nw.device ? ` (${esc(nw.device)})` : ''}, hasta ${esc(fmtWhen(nw.dataAt))}. Los de aquí llegan hasta ${esc(fmtWhen(state.dataAt))}. No subo copia para no pisarlos.</span><button class="btn-banner shrink-0" id="goRestore" type="button">Restaurar</button></div>`;
+  $('#goRestore').onclick = () => { $('#topBanner').innerHTML = ''; driveRestoreList(); };
+}
 
 let gisPromise = null;
 function loadGis() {
@@ -2689,7 +2736,7 @@ async function driveFolder(interactive) {
 async function driveList(interactive) {
   const folder = await driveFolder(interactive);
   const q = encodeURIComponent(`'${folder}' in parents and trashed=false`);
-  const r = await (await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime desc&fields=files(id,name,createdTime,size)&pageSize=100`, {}, interactive)).json();
+  const r = await (await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime desc&fields=files(id,name,createdTime,size,appProperties)&pageSize=100`, {}, interactive)).json();
   return r.files || [];
 }
 
@@ -2698,7 +2745,9 @@ async function driveUpload(interactive) {
   const now = new Date();
   const name = `fitnesteban_backup_${todayISO()}_${pad(now.getHours())}${pad(now.getMinutes())}.json`;
   const boundary = 'fb' + Math.random().toString(36).slice(2);
-  const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [folder], mimeType: 'application/json' })}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${backupText()}\r\n--${boundary}--`;
+  persist();
+  const appProperties = { dataAt: String(state.dataAt || dataAtOf(state)), deviceId: deviceId(), device: deviceName(), ses: String(state.sessions.length), days: String(Object.keys(state.meals).filter(k => state.meals[k]?.length).length) };
+  const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [folder], mimeType: 'application/json', appProperties })}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${backupText()}\r\n--${boundary}--`;
   await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
     method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body
   }, interactive);
@@ -2728,9 +2777,26 @@ async function driveConnect() {
     toast('Drive: ' + e.message, 'error');
   } finally { ui.driveBusy = false; render(); }
 }
-async function driveBackupNow() {
+async function driveBackupNow(force = false) {
   ui.driveBusy = true; render();
-  try { await driveUpload(true); toast('Copia guardada en Drive ✓'); $('#topBanner').innerHTML = ''; }
+  try {
+    if (!force) {
+      const nw = await driveHasNewer().catch(() => null);
+      if (nw) {
+        ui.driveBusy = false; render();
+        return openModal(`<h3 class="modal-title">⚠️ Drive tiene datos más recientes</h3>
+          <p class="text-sm text-mute">La última copia${nw.device ? ` (${esc(nw.device)})` : ''} llega hasta <strong class="text-white">${esc(fmtWhen(nw.dataAt))}</strong>. Los datos de este dispositivo llegan hasta <strong class="text-white">${esc(fmtWhen(state.dataAt))}</strong>.</p>
+          <p class="text-sm text-mute">Si subes ahora, la copia más reciente de Drive pasará a ser la de aquí, con datos más antiguos.</p>
+          <button class="btn-primary w-full" data-mact="restore" type="button">Restaurar la de Drive aquí</button>
+          <button class="btn-ghost w-full" data-mact="force" type="button">Subir la de aquí igualmente</button>
+          <button class="btn-ghost w-full" data-close type="button">Cancelar</button>`, {
+          restore: () => { closeModal(); driveRestoreList(); },
+          force: () => { closeModal(); driveBackupNow(true); }
+        });
+      }
+    }
+    await driveUpload(true); toast('Copia guardada en Drive ✓'); $('#topBanner').innerHTML = '';
+  }
   catch (e) { toast('Drive: ' + e.message, 'error'); }
   finally { ui.driveBusy = false; render(); }
 }
@@ -2750,12 +2816,16 @@ async function driveRestoreList() {
   finally { ui.driveBusy = false; render(); }
   if (!files.length) return toast('No hay copias en tu carpeta de Drive', 'warn');
   const label = f => { const d = new Date(f.createdTime); return `${fmtDate(toISO(d))} · ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  const best = files.reduce((m, f) => Math.max(m, +(f.appProperties?.dataAt || 0)), 0);
+  const info = f => { const ap = f.appProperties || {}; if (!ap.dataAt) return '<span class="block text-[11px] text-mute">Copia antigua (sin detalles)</span>';
+    const mine = ap.deviceId === deviceId();
+    return `<span class="block text-[11px] ${+ap.dataAt === best ? 'text-emerald-300' : 'text-mute'}">${esc(ap.device || '')}${mine ? ' (este)' : ''} · ${esc(ap.ses || '?')} sesiones · ${esc(ap.days || '?')} días · datos hasta ${esc(fmtWhen(ap.dataAt))}${+ap.dataAt === best ? ' · la más completa' : ''}</span>`; };
   openModal(`
     <h3 class="modal-title">Restaurar desde Drive</h3>
-    <p class="text-xs text-mute">Elige una copia. Sustituirá todos los datos actuales de la app.</p>
+    <p class="text-xs text-mute">Elige una copia. Sustituirá todos los datos actuales de la app. Fíjate en «datos hasta»: la más nueva no siempre es la más completa.</p>
     <div class="space-y-1.5 max-h-[50dvh] overflow-y-auto">
-      ${files.slice(0, 30).map((f, i) => `<button class="w-full text-left bg-ink border border-line rounded-xl px-3 py-2.5 flex justify-between items-center" data-mact="pick" data-i="${i}" type="button">
-        <span class="text-sm font-semibold">${esc(label(f))}</span><span class="text-[11px] text-mute">${f.size ? Math.round(f.size / 1024) + ' KB' : ''}</span></button>`).join('')}
+      ${files.slice(0, 30).map((f, i) => `<button class="w-full text-left bg-ink border ${f.appProperties?.dataAt && +f.appProperties.dataAt === best ? 'border-emerald-500/50' : 'border-line'} rounded-xl px-3 py-2.5 flex justify-between items-center gap-2" data-mact="pick" data-i="${i}" type="button">
+        <span class="min-w-0"><span class="block text-sm font-semibold">Subida ${esc(label(f))}</span>${info(f)}</span><span class="text-[11px] text-mute shrink-0">${f.size ? Math.round(f.size / 1024) + ' KB' : ''}</span></button>`).join('')}
     </div>
     <button class="btn-ghost w-full" data-close type="button">Cancelar</button>
   `, {
@@ -2778,7 +2848,7 @@ async function driveRestoreList() {
 async function silentDriveBackup() {
   const s = state.settings;
   if (!s.driveConnected || s.autoDrive === false || !navigator.onLine || !storedToken()) return;
-  try { await driveUpload(false); toast('☁️ Copia en Drive ✓'); } catch { /* se reintentará al abrir la app */ }
+  try { const nw = await driveHasNewer(); if (nw) return newerBanner(nw); await driveUpload(false); toast('☁️ Copia en Drive ✓'); } catch { /* se reintentará al abrir la app */ }
 }
 /* Al abrir la app: copia diaria automática */
 async function maybeAutoDriveBackup() {
@@ -2787,7 +2857,7 @@ async function maybeAutoDriveBackup() {
   const age = s.lastDriveBackup ? daysBetween(s.lastDriveBackup, todayISO()) : 99;
   if (age < 1) return;
   if (storedToken()) {
-    try { await driveUpload(false); toast('Copia diaria guardada en Drive ✓'); render(); return; } catch { /* sigue: pide permiso */ }
+    try { const nw = await driveHasNewer(); if (nw) return newerBanner(nw); await driveUpload(false); toast('Copia diaria guardada en Drive ✓'); render(); return; } catch { /* sigue: pide permiso */ }
   }
   $('#topBanner').innerHTML = `<div class="banner-info mt-3"><span>☁️ Toca para guardar la copia diaria en Drive${s.lastDriveBackup ? ` (última hace ${age} ${age === 1 ? 'día' : 'días'})` : ''}.</span><button class="btn-banner shrink-0" id="doDriveBackup" type="button">Guardar</button></div>`;
   $('#doDriveBackup').onclick = () => driveBackupNow();
@@ -3004,6 +3074,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.18.1', ['☁️ Copias más seguras con varios dispositivos: cada copia indica de qué dispositivo es y hasta cuándo llegan sus datos, y la copia automática ya no sube datos más antiguos que los que hay en Drive (te ofrece restaurar).']],
   ['4.18.0', ['🏆 Entreno se abre en RETOS, con una tarjeta «Hoy te toca…» para ir a tu sesión en un toque (salvo con un entreno en curso). Los retos que ya han descansado 48 h salen resaltados.']],
   ['4.17.0', ['☁️ Copia en Drive diaria y, además, al guardar cada sesión o reto (se conservan las 45 últimas).', '🔎 En Ajustes → Aplicación ves la versión instalada y la publicada en GitHub, para saber si hay que actualizar.', '🛟 Red de seguridad: si algo falla, aviso con botón de copia en vez de pantalla en blanco, y copia local automática antes de cada actualización (Ajustes → Copias → «Volver a los datos de antes de actualizar»).']],
   ['4.16.4', ['📅 Dieta vuelve siempre a «Hoy» al regresar desde otra pestaña, y también al volver a la app tras 30 min o al cambiar de día (salvo que tengas una comida a medias).']],
