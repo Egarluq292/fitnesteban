@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.16.1';
+const APP_VERSION = '4.16.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2949,6 +2949,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.16.2', ['✨ La fila de bloques de Entreno acompaña al dedo al deslizar y deja el bloque activo a la izquierda, sin saltos.']],
   ['4.16.1', ['✨ En Entreno, al deslizar, el resalte cian pasa de un bloque a otro con el dedo y la pantalla se funde suavemente con la del bloque nuevo, sin desplazarse.']],
   ['4.16.0', ['👆 El modo de deslizar «Día en Dieta · bloque en Entreno»: en Entreno, deslizar cambia de bloque (RETOS, PPT, FULL BODY…). Se desactiva solo mientras tienes un entreno en curso.']],
   ['4.15.1', ['🏆 En RETOS, «Paralelas» pasa a llamarse «Fondos».']],
@@ -3119,15 +3120,22 @@ function render() {
   if (ui.view === 'train') fixProgRow();
 }
 /* Mantiene a la vista el bloque activo en la fila de bloques (la fila se repinta en cada render) */
+/* El bloque activo se coloca a la izquierda de la fila (si se puede), dejando ver los siguientes */
+function progScrollFor(row, chip) {
+  const first = row.querySelector('[data-prog]');
+  return clamp(chip.offsetLeft - (first ? first.offsetLeft : 0), 0, Math.max(0, row.scrollWidth - row.clientWidth));
+}
 function fixProgRow() {
   const row = $('#progRow'), on = row?.querySelector('.prog-on');
   if (!row || !on) { ui._progScroll = null; return; }
-  const want = on.offsetLeft - (row.clientWidth - on.offsetWidth) / 2;
-  if (typeof ui._progScroll === 'number') {
-    row.scrollLeft = ui._progScroll; ui._progScroll = null;
-    const l = on.offsetLeft, r = l + on.offsetWidth;
-    if (l < row.scrollLeft + 8 || r > row.scrollLeft + row.clientWidth - 8) row.scrollTo({ left: want, behavior: 'smooth' });
-  } else row.scrollLeft = Math.max(0, want);
+  row.scrollLeft = typeof ui._progScroll === 'number' ? ui._progScroll : progScrollFor(row, on);
+  ui._progScroll = null;
+}
+function animScroll(row, to, ms) {
+  const from = row.scrollLeft, t0 = performance.now();
+  if (Math.abs(to - from) < 1) { row.scrollLeft = to; return; }
+  const step = now => { const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3); row.scrollLeft = from + (to - from) * e; if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
 }
 
 /* ---------- Franja fija «Sesión en curso» bajo la cabecera ---------- */
@@ -3238,7 +3246,7 @@ function swipeTarget(dir) {
   return v ? { view: v } : null;
 }
 /* Entreno: el resalte cian viaja de un bloque a otro con el dedo y el contenido se funde (sin desplazar la pantalla) */
-const pf = { ind: null, row: null, cur: null, tgt: null, content: [] };
+const pf = { ind: null, row: null, cur: null, tgt: null, content: [], s0: 0, s1: 0 };
 const EASE = 'cubic-bezier(.2,.7,.3,1)';
 function progFadeSetup(target) {
   progFadeClear();
@@ -3252,10 +3260,7 @@ function progFadeSetup(target) {
   row.appendChild(ind); pf.ind = ind;
   pf.cur.classList.add('prog-ghost');
   progInd(0);
-  if (pf.tgt) {
-    const l = pf.tgt.offsetLeft, r = l + pf.tgt.offsetWidth;
-    if (l < row.scrollLeft + 8 || r > row.scrollLeft + row.clientWidth - 8) row.scrollTo({ left: l - (row.clientWidth - pf.tgt.offsetWidth) / 2, behavior: 'smooth' });
-  }
+  pf.s0 = row.scrollLeft; pf.s1 = pf.tgt ? progScrollFor(row, pf.tgt) : pf.s0;
 }
 function progInd(p, ms = 0, nudge = 0) {
   if (!pf.ind) return;
@@ -3270,6 +3275,7 @@ function progContent(op, ms = 0) { for (const c of pf.content) { c.style.transit
 function progFadeMove(dx, target) {
   const p = target ? Math.min(1, Math.abs(dx) / (W() * 0.45)) : 0;
   progInd(p, 0, target ? 0 : -Math.sign(dx) * Math.min(10, Math.abs(dx) * 0.05));
+  if (pf.row) pf.row.scrollLeft = pf.s0 + (pf.s1 - pf.s0) * p;   // la fila acompaña al dedo, sin saltos
   progContent(1 - 0.75 * p);
 }
 function progFadeClear() {
@@ -3278,10 +3284,11 @@ function progFadeClear() {
   Object.assign(pf, { ind: null, row: null, cur: null, tgt: null, content: [] });
 }
 function progFadeEnd(target, ok) {
-  if (!ok) { progInd(0, 200); progContent(1, 200); setTimeout(progFadeClear, 220); return; }
+  if (!ok) { progInd(0, 200); progContent(1, 200); if (pf.row) animScroll(pf.row, pf.s0, 200); setTimeout(progFadeClear, 220); return; }
   swipe.busy = true;
   progInd(1, 200); progContent(0, 160);
-  const keep = pf.row?.scrollLeft;
+  if (pf.row) animScroll(pf.row, pf.s1, 170);
+  const keep = pf.s1;
   setTimeout(() => {
     state.plan.active = target.prog; ui.dayId = nextDayId(); ui.retoId = null; persist();
     pf.content = []; pf.ind = null; pf.cur = null; pf.tgt = null;
