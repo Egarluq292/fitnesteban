@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.16.2';
+const APP_VERSION = '4.16.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1852,7 +1852,7 @@ function openCalendar() {
       if (dir) { ui.calMonth = m; calSlideMonth(dir); } else calMarkSelected();
       calSwapDetail();
     },
-    calGo: () => { ui.editing = null; ui.aiResult = null; ui.dietDate = ui.calSel; closeModal(); render(); window.scrollTo({ top: 0 }); }
+    calGo: () => { ui.editing = null; ui.aiResult = null; ui.dietDate = ui.calSel; ui._animRings = true; closeModal(); render(); window.scrollTo({ top: 0 }); }
   };
   openModal(renderCalendar(), { ...handlers, sheetClass: 'sheet-fixed' });
 }
@@ -2949,6 +2949,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.16.3', ['🎯 Los anillos de Dieta se animan siempre que aparece un día: al cambiar con las flechas, al deslizar o desde el calendario.']],
   ['4.16.2', ['✨ La fila de bloques de Entreno acompaña al dedo al deslizar y deja el bloque activo a la izquierda, sin saltos.']],
   ['4.16.1', ['✨ En Entreno, al deslizar, el resalte cian pasa de un bloque a otro con el dedo y la pantalla se funde suavemente con la del bloque nuevo, sin desplazarse.']],
   ['4.16.0', ['👆 El modo de deslizar «Día en Dieta · bloque en Entreno»: en Entreno, deslizar cambia de bloque (RETOS, PPT, FULL BODY…). Se desactiva solo mientras tienes un entreno en curso.']],
@@ -3221,7 +3222,8 @@ function makePeek(view) {
   const prevView = ui.view;
   ui.view = view;
   let html = '';
-  try { html = VIEW_HTML[view](); } finally { ui.view = prevView; }
+  if (view === 'diet') ui._animRings = true;
+  try { html = VIEW_HTML[view](); } finally { ui.view = prevView; ui._animRings = false; }
   const el = document.createElement('div');
   el.className = 'swipe-peek';
   el.style.top = appEl.getBoundingClientRect().top + 'px';
@@ -3313,9 +3315,9 @@ function makeProgPeek(id) {
 }
 function makeDayPeek(date) {
   const prev = ui.dietDate, pe = ui.editing, pa = ui.aiResult;
-  ui.dietDate = date; ui.editing = null; ui.aiResult = null;
+  ui.dietDate = date; ui.editing = null; ui.aiResult = null; ui._animRings = true;
   let html = '';
-  try { html = renderDiet(); } finally { ui.dietDate = prev; ui.editing = pe; ui.aiResult = pa; }
+  try { html = renderDiet(); } finally { ui._animRings = false; ui.dietDate = prev; ui.editing = pe; ui.aiResult = pa; }
   const el = document.createElement('div');
   el.className = 'swipe-peek';
   el.style.top = appEl.getBoundingClientRect().top + 'px';
@@ -3373,7 +3375,7 @@ function swipeEnd() {
     setX(appEl, 0);
     if (target.view) go(target.view);           // pinta la pantalla real (idéntica a la que ha entrado)
     else if (target.prog) { state.plan.active = target.prog; ui.dayId = nextDayId(); ui.retoId = null; persist(); render(); window.scrollTo({ top: 0 }); }
-    else { ui.editing = null; ui.aiResult = null; ui.dietDate = target.date; render(); window.scrollTo({ top: 0 }); }
+    else { ui.editing = null; ui.aiResult = null; ui.dietDate = target.date; ui._animRings = true; render(); window.scrollTo({ top: 0 }); }
     dropPeek();
     swipe.busy = false;
   }, 230);
@@ -3525,8 +3527,8 @@ const actions = {
   retoTest: b => retoTestModal(b.dataset.reto),
   retoReset: b => { const id = b.dataset.reto; openModal(`<h3 class="modal-title">¿Reiniciar ${esc(RETOS[id].name)}?</h3><p class="text-sm text-mute">Se borran su nivel y su historial. Volverás a empezar con un test.</p><button class="btn-danger w-full" data-mact="yes" type="button">Reiniciar</button><button class="btn-ghost w-full" data-close type="button">Cancelar</button>`, { yes: () => { delete state.retos[id]; persist(); closeModal(); render(); } }); },
   swipeMode: b => { state.settings.swipeMode = b.dataset.mode; persist(); render(); },
-  dietPrev: () => { ui.editing = null; ui.aiResult = null; ui.dietDate = addDays(ui.dietDate, -1); render(); },
-  dietNext: () => { if (ui.dietDate < todayISO()) { ui.editing = null; ui.aiResult = null; ui.dietDate = addDays(ui.dietDate, 1); render(); } },
+  dietPrev: () => { ui.editing = null; ui.aiResult = null; ui.dietDate = addDays(ui.dietDate, -1); ui._animRings = true; render(); },
+  dietNext: () => { if (ui.dietDate < todayISO()) { ui.editing = null; ui.aiResult = null; ui.dietDate = addDays(ui.dietDate, 1); ui._animRings = true; render(); } },
   goSettings: () => go('settings'),
 
   saveMetric: () => {
