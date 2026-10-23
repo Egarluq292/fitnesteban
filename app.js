@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.18.1';
+const APP_VERSION = '4.18.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3074,6 +3074,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.18.2', ['⚡ El botón del Coach IA es ahora un rayo cian metalizado, como TEBAN.']],
   ['4.18.1', ['☁️ Copias más seguras con varios dispositivos: cada copia indica de qué dispositivo es y hasta cuándo llegan sus datos, y la copia automática ya no sube datos más antiguos que los que hay en Drive (te ofrece restaurar).']],
   ['4.18.0', ['🏆 Entreno se abre en RETOS, con una tarjeta «Hoy te toca…» para ir a tu sesión en un toque (salvo con un entreno en curso). Los retos que ya han descansado 48 h salen resaltados.']],
   ['4.17.0', ['☁️ Copia en Drive diaria y, además, al guardar cada sesión o reto (se conservan las 45 últimas).', '🔎 En Ajustes → Aplicación ves la versión instalada y la publicada en GitHub, para saber si hay que actualizar.', '🛟 Red de seguridad: si algo falla, aviso con botón de copia en vez de pantalla en blanco, y copia local automática antes de cada actualización (Ajustes → Copias → «Volver a los datos de antes de actualizar»).']],
