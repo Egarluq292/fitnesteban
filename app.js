@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.20.2';
+const APP_VERSION = '4.20.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2970,7 +2970,7 @@ function dietPending() { return !!(ui.aiResult || ui.editing); }
 function dietBackToToday() { const T = todayISO(); if (ui.dietDate !== T && !dietPending()) { ui.dietDate = T; return true; } return false; }
 let hiddenAt = 0, hiddenDay = todayISO();
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); hiddenDay = todayISO(); return; }
+  if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); hiddenDay = todayISO(); if (ui.accessOpen) { ui.accessOpen = false; if (ui.view === 'settings') render(); } return; }
   if (timer.endAt) { tickTimer(); wakeOn(); }
   if (ui.dietDate > todayISO()) ui.dietDate = todayISO();
   if (hiddenAt && (Date.now() - hiddenAt > 30 * 60000 || hiddenDay !== todayISO()) && dietBackToToday() && ui.view === 'diet' && !$('#modalRoot').classList.contains('open')) { ui._animRings = true; render(); window.scrollTo({ top: 0 }); }
@@ -3102,6 +3102,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.20.3', ['🔒 La sección Acceso de Ajustes va plegada y pide tu código personal para abrirla; se vuelve a cerrar al salir de Ajustes o de la app.']],
   ['4.20.2', ['🔑 Acceso privado: cada persona entra con su propio código. La lista pública solo contiene huellas; el administrador crea y quita códigos desde Ajustes → Acceso (con GitHub conectado y su PIN).']],
   ['4.19.1', ['🌱 Retos para cualquier nivel: si en la prueba inicial no llegas al mínimo, empiezas en el nivel más bajo con una variante más fácil. La rueda abdominal empieza ahora en 1.']],
   ['4.19.0', ['🛞 Nuevo reto: rueda abdominal en dos fases. De rodillas (1–30, 3 series con bajada lenta) y, al completarla, de pie (1–15).']],
@@ -3380,6 +3381,7 @@ function go(view) {
   ui.view = view;
   if (view === 'settings' && navigator.onLine) loadGis().catch(() => null);
   if (view === 'settings') checkRemoteVersion();
+  if (view !== 'settings') ui.accessOpen = false;
   render();
   window.scrollTo({ top: 0 });
 }
@@ -3783,6 +3785,20 @@ const actions = {
   },
   export: () => exportBackup(),
   newAccess: () => newAccessModal(),
+  openAccess: () => {
+    let fails = 0;
+    openModal(`<h3 class="modal-title">🔑 Acceso</h3><p class="text-sm text-mute">Escribe tu código personal de acceso para abrir esta sección.</p>
+      <input class="field mt-1 text-center text-2xl font-black tracking-[.2em] uppercase" name="code" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" />
+      <button class="btn-primary w-full mt-2" data-mact="ok" type="button">Abrir</button>`, {
+      autofocus: true,
+      ok: async root => {
+        const h = await codeHash(mval(root, 'code'));
+        if (h !== access.me?.hash) { fails++; root.querySelector('[name=code]').value = ''; if (fails >= 5) { closeModal(); return toast('Demasiados intentos', 'error'); } return toast(`Código incorrecto (${fails}/5)`, 'error'); }
+        ui.accessOpen = true; closeModal(); render();
+      }
+    });
+  },
+  closeAccess: () => { ui.accessOpen = false; render(); },
   delAccess: b => delAccess(b.dataset.hash),
   ghConnect: () => ghConnectModal(),
   ghDisconnect: () => { if (!confirm('¿Desconectar GitHub? Se borra la llave guardada en este móvil.')) return; try { localStorage.removeItem(GH_KEY); } catch { /* nada */ } render(); toast('GitHub desconectado'); },
@@ -4088,9 +4104,11 @@ function askPin({ title, text, onPin }) {
 }
 function accessSectionHTML() {
   if (!access.me?.admin) return '';
+  if (!ui.accessOpen) return `<section class="card p-0 mt-3"><button class="w-full flex items-center justify-between px-4 py-3.5" data-act="openAccess" type="button">
+      <h3 class="section-title">🔑 Acceso</h3><span class="flex items-center gap-2 text-[11px] text-mute">🔒 Protegido<span class="tri"></span></span></button></section>`;
   const list = access.list || [], gh = !!lsGet(GH_KEY);
   return `<section class="card p-4 mt-3 space-y-3">
-    <h3 class="section-title">🔑 Acceso</h3>
+    <button class="w-full flex items-center justify-between" data-act="closeAccess" type="button"><h3 class="section-title">🔑 Acceso</h3><span class="flex items-center gap-2 text-[11px] text-emerald-300">🔓 Abierto<span class="tri rotate-180"></span></span></button>
     <p class="text-[11px] text-mute">${list.length} ${list.length === 1 ? 'persona' : 'personas'} con acceso. La lista pública (acceso.txt) solo contiene huellas: los nombres solo los ves tú aquí y van en tus copias de Drive.</p>
     <div class="space-y-1">${list.map(x => `<div class="flex items-center justify-between gap-2 bg-ink rounded-lg px-2.5 py-1.5 text-xs">
       <span class="min-w-0 truncate">${accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`}${x.hash === access.me.hash ? ' <span class="text-brand">(tú · admin)</span>' : x.admin ? ' <span class="text-mute">(admin)</span>' : ''}</span>
