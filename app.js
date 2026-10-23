@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.15.0';
+const APP_VERSION = '4.15.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -955,7 +955,7 @@ function editProgModal(progId) {
   openModal(`
     <h3 class="modal-title">${isNew ? 'Nuevo bloque' : 'Editar bloque'}</h3>
     <label class="lbl">Nombre del bloque<input class="field mt-1" name="name" maxlength="16" value="${esc(p.name)}" placeholder="TORSO-PIERNA" /></label>
-    ${!isNew && p.type === 'cardio' ? '<p class="text-[11px] text-mute">Bloque de cardio: registra bicicleta y caminata. Se puede renombrar, no eliminar.</p>' : !isNew && p.type === 'retos' ? '<p class="text-[11px] text-mute">Bloque de retos: dominadas, flexiones, paralelas, sentadillas, burpees y plancha por niveles. Se puede renombrar, no eliminar.</p>' : isNew ? '<p class="text-[11px] text-mute">Se crea con un día vacío. Añade días con «＋ Día» y ejercicios con «＋ Añadir ejercicio».</p>' : `<p class="text-[11px] text-mute">${p.days.length} días: ${esc(p.days.map(d => d.label).join(' · '))}</p>`}
+    ${!isNew && p.type === 'cardio' ? '<p class="text-[11px] text-mute">Bloque de cardio: registra bicicleta y caminata. Se puede renombrar, no eliminar.</p>' : !isNew && p.type === 'retos' ? '<p class="text-[11px] text-mute">Bloque de retos: dominadas, flexiones, fondos, sentadillas, burpees y plancha por niveles. Se puede renombrar, no eliminar.</p>' : isNew ? '<p class="text-[11px] text-mute">Se crea con un día vacío. Añade días con «＋ Día» y ejercicios con «＋ Añadir ejercicio».</p>' : `<p class="text-[11px] text-mute">${p.days.length} días: ${esc(p.days.map(d => d.label).join(' · '))}</p>`}
     <div class="flex gap-2 mt-4">
       ${!isNew ? `<button class="btn-ghost" data-mact="left" type="button" aria-label="Mover a la izquierda">◀</button><button class="btn-ghost" data-mact="right" type="button" aria-label="Mover a la derecha">▶</button>` : ''}
       <button class="btn-primary flex-1" data-mact="save" type="button">Guardar</button>
@@ -1335,7 +1335,7 @@ function exerciseBurnOf(date) { return burnedOf(date) + gymOf(date); }
 const RETOS = {
   pullup:  { name: 'Dominadas',         icon: '🧗', unit: 'reps', step: 1,  min: 1,  max: 50,  rest: 90, met: 8,   secRep: 3 },
   pushup:  { name: 'Flexiones',         icon: '💪', unit: 'reps', step: 3,  min: 3,  max: 150, rest: 60, met: 8,   secRep: 2 },
-  dips:    { name: 'Paralelas',         icon: '🤸', unit: 'reps', step: 2,  min: 2,  max: 100, rest: 75, met: 8,   secRep: 2.5 },
+  dips:    { name: 'Fondos',            icon: '🤸', unit: 'reps', step: 2,  min: 2,  max: 100, rest: 75, met: 8,   secRep: 2.5 },
   squat:   { name: 'Sentadillas',       icon: '🦵', unit: 'reps', step: 5,  min: 5,  max: 200, rest: 60, met: 5.5, secRep: 2.5 },
   burpee:  { name: 'Burpees',           icon: '⚡', unit: 'reps', step: 2,  min: 2,  max: 100, rest: 75, met: 8,   secRep: 4 },
   plank:   { name: 'Plancha abdominal', icon: '🧱', unit: 's',    step: 10, min: 10, max: 180, rest: 45, met: 3.8, secRep: 1 }
@@ -2949,7 +2949,8 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
-  ['4.15.0', ['🏆 Nuevo bloque RETOS en Entreno: dominadas, flexiones, paralelas, sentadillas, burpees y plancha por niveles. Al acabar cada sesión eliges cómo te has sentido y el coach ajusta la siguiente.']],
+  ['4.15.1', ['🏆 En RETOS, «Paralelas» pasa a llamarse «Fondos».']],
+  ['4.15.0', ['🏆 Nuevo bloque RETOS en Entreno: dominadas, flexiones, fondos, sentadillas, burpees y plancha por niveles. Al acabar cada sesión eliges cómo te has sentido y el coach ajusta la siguiente.']],
   ['4.14.0', ['👆 Nuevo en Ajustes → Aplicación: el gesto de deslizar puede cambiar de pestaña, cambiar de día en Dieta (como las flechas ‹ ›) o estar desactivado.']],
   ['4.13.8', ['✨ Logo nuevo FS en la cabecera, la tarjeta de compartir y el icono de la app, y la marca FITNESTEBAN con su mismo estilo: plata, cian con brillo y la S partida por un hueco limpio.']],
   ['4.13.6', ['✨ La cabecera y la tarjeta de compartir estrenan el logo de la S partida.']],
@@ -3011,7 +3012,7 @@ const GUIDE = [
     'Al final, «Guardar sesión»: verás resumen, volumen y récords personales (1RM estimado).'
   ]],
   ['🏆 Retos', [
-    'En Entreno → bloque <b>🏆 RETOS</b>: dominadas, flexiones, paralelas, sentadillas, burpees y plancha. Al empezar dices cuántas haces seguidas y la app te coloca en un nivel (≈70 % de tu máximo).',
+    'En Entreno → bloque <b>🏆 RETOS</b>: dominadas, flexiones, fondos, sentadillas, burpees y plancha. Al empezar dices cuántas haces seguidas y la app te coloca en un nivel (≈70 % de tu máximo).',
     'El nivel es la 1.ª serie; el resto se calcula sola (en niveles altos: 100 · 54 · 50 · 50 · 46 %). Marca cada serie con ✓ (arranca el descanso); en la plancha, ▶ cronometra la serie.',
     'Al terminar, elige 😣 Me ha costado (repites; si pasa dos veces, bajas un nivel), 🙂 Bien (+1 nivel) o 😎 Voy sobrado (+2). Si no completas las series, cuenta como «me ha costado».',
     'Deja 48 h entre sesiones del mismo reto. Cada 6 sesiones te propone un test de máximo. Las kcal se suman al gym del día en Dieta.'
