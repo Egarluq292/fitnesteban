@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.21.1';
+const APP_VERSION = '4.21.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -159,7 +159,7 @@ function defaultSettings() {
   return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, minProtMeal: 25, pinHash: '', lastSeenVersion: '', driveConnected: false, driveEmail: '', driveFolderId: '', autoDrive: true, lastDriveBackup: null, swipeNav: true, swipeMode: '' };
 }
 function defaultState() {
-  return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {}, chat: null, retos: {}, accessNames: {} };
+  return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {}, chat: null, chats: [], retos: {}, accessNames: {} };
 }
 const safeUrl = u => { const t = String(u || '').trim(); return /^https:\/\/[^\s"'<>]+$/i.test(t) ? t : ''; };
 const videoUrl = v => v.video || `https://www.youtube.com/results?search_query=${encodeURIComponent(v.name + ' técnica correcta')}`;
@@ -232,6 +232,10 @@ function normalize(s) {
   if (!out.retos || typeof out.retos !== 'object' || Array.isArray(out.retos)) out.retos = {};
   for (const k of Object.keys(out.retos)) { const r = out.retos[k]; if (!r || !Array.isArray(r.history)) { delete out.retos[k]; continue; } if (!Array.isArray(r.tests)) r.tests = []; }
   if (!out.chat || typeof out.chat !== 'object' || !Array.isArray(out.chat.msgs)) out.chat = null;
+  if (!Array.isArray(out.chats)) out.chats = [];
+  if (out.chat && !out.chats.length) out.chats = [{ id: 'c_old', at: out.chat.at || Date.now(), msgs: out.chat.msgs }];
+  out.chat = null;
+  out.chats = out.chats.filter(c => c && Array.isArray(c.msgs) && c.msgs.length);
   out.version = 4;
   return out;
 }
@@ -3179,11 +3183,38 @@ function chatBodyHTML() {
     <div class="text-center mt-2"><div class="text-4xl">💬</div>
       <p class="text-sm text-mute mt-2 leading-relaxed">Pregúntame lo que quieras sobre tu entreno o tu dieta. Leo tu plan, tus últimas sesiones, lo que llevas comido y tu peso.</p></div>
     <div class="flex flex-col gap-2 mt-4">${CHAT_CHIPS.map((q, i) => `<button class="chat-chip" data-mact="chip" data-i="${i}" type="button">${esc(q)}</button>`).join('')}</div>
-    ${state.chat?.msgs?.length ? `<button class="w-full text-xs text-brand underline mt-5" data-mact="lastChat" type="button">Ver la última conversación (${fmtChatDate(state.chat.at)})</button>` : ''}`;
+    ${chatHistoryHTML()}`;
   return c.msgs.map((m, i) => m.role === 'user'
     ? `<div class="chat-me">${esc(m.text)}</div>`
     : `<div class="chat-ai${m.error ? ' chat-err' : ''}">${mdLite(m.text)}${m.error && i === c.msgs.length - 1 ? '<button class="text-xs text-brand underline mt-1" data-mact="retry" type="button">Reintentar</button>' : ''}${(m.meals || []).map((ml, j) => `<button class="chat-meal" data-mact="toDiet" data-m="${i}" data-o="${j}" type="button"><span>🍽️ Apuntar en Dieta</span><span class="text-[11px] opacity-80 truncate">${m.meals.length > 1 ? esc(ml.title) + ' · ' : ''}${esc(ml.type || 'comida que toca')} · ~${mealKcal(ml)} kcal</span></button>`).join('')}</div>`).join('')
     + (c.busy ? '<div class="chat-ai chat-typing"><span></span><span></span><span></span></div>' : '');
+}
+/* Historial: conversaciones de los últimos 7 días (máx. 20). Solo la conversación abierta se envía a Gemini. */
+const CHAT_DAYS = 7, CHAT_MAX = 20;
+function pruneChats() { const lim = Date.now() - CHAT_DAYS * 86400000; state.chats = (state.chats || []).filter(c => c.at >= lim).sort((a, b) => b.at - a.at).slice(0, CHAT_MAX); }
+function saveChatConv(c) {
+  if (!c.id) c.id = uid('c_');
+  const msgs = c.msgs.filter(m => !m.error).slice(-30);
+  state.chats = (state.chats || []).filter(x => x.id !== c.id);
+  state.chats.unshift({ id: c.id, at: Date.now(), msgs });
+  pruneChats(); persist();
+}
+function chatTitle(cv) { const u = cv.msgs.find(m => m.role === 'user'); return u ? u.text : 'Conversación'; }
+function chatHistoryHTML() {
+  pruneChats();
+  const list = state.chats || [];
+  if (!list.length) return '';
+  const shown = ui.histAll ? list : list.slice(0, 5);
+  return `<div class="mt-5 border-t border-line pt-3">
+    <button class="w-full flex items-center justify-between text-xs text-mute" data-mact="histToggle" type="button"><span>🕘 Conversaciones anteriores (${list.length})</span><span class="tri ${ui.histOpen ? 'rotate-180' : ''}"></span></button>
+    ${ui.histOpen ? `<div class="space-y-1 mt-2">${shown.map(cv => `<div class="flex items-center gap-1">
+        <button class="flex-1 min-w-0 text-left bg-ink border border-line rounded-lg px-2.5 py-2" data-mact="openConv" data-id="${esc(cv.id)}" type="button">
+          <span class="block text-[10px] text-mute">${esc(fmtChatDate(cv.at))}${cv.msgs.some(m => m.meals?.length) ? ' · 🍽️' : ''}</span>
+          <span class="block text-xs truncate">${esc(chatTitle(cv))}</span></button>
+        <button class="text-mute px-2 py-2" data-mact="delConv" data-id="${esc(cv.id)}" type="button" aria-label="Borrar conversación">✕</button></div>`).join('')}
+      ${!ui.histAll && list.length > 5 ? `<button class="w-full text-[11px] text-brand underline mt-1" data-mact="histMore" type="button">Ver ${list.length - 5} más</button>` : ''}
+      <p class="text-[10px] text-mute mt-1">Se guardan 7 días (máx. ${CHAT_MAX}).</p></div>` : ''}
+  </div>`;
 }
 function fmtChatDate(ts) {
   const d = new Date(ts), iso = toISO(d), T = todayISO();
@@ -3206,13 +3237,13 @@ async function chatSend(text) {
     const reply = await callGemini(null, { json: false, contents, system: chatSystem(), temperature: 0.4, timeout: 60000 });
     const { text: clean, meals } = chatMeals(reply);
     c.msgs.push({ role: 'model', text: clean, ...(meals.length ? { meals } : {}) });
-    state.chat = { at: Date.now(), msgs: c.msgs.filter(m => !m.error).slice(-30) }; persist();
+    saveChatConv(c);
   } catch (e) {
     c.msgs.push({ role: 'model', text: 'No he podido responder: ' + e.message, error: true });
   } finally { c.busy = false; refreshChat(); }
 }
 function openChat() {
-  ui.chat = { msgs: [], busy: false };
+  ui.chat = { msgs: [], busy: false }; ui.histOpen = false; ui.histAll = false;
   openModal(`
     <div class="cal-head flex items-center gap-2 pb-3">
       <span class="text-xl">💬</span><div class="min-w-0"><h3 class="modal-title leading-tight">Coach IA</h3><p class="text-[11px] text-mute">Responde con tus datos · Gemini</p></div>
@@ -3227,7 +3258,10 @@ function openChat() {
     sheetClass: 'sheet-fixed',
     chip: (r, b) => chatSend(CHAT_CHIPS[+b.dataset.i]),
     toDiet: (r, b) => { const ml = ui.chat.msgs[+b.dataset.m]?.meals?.[+b.dataset.o]; if (ml) mealFromChat(ml); },
-    lastChat: () => { ui.chat.msgs = state.chat.msgs.map(m => ({ ...m })); refreshChat(); },
+    histToggle: () => { ui.histOpen = !ui.histOpen; refreshChat(); },
+    histMore: () => { ui.histAll = true; refreshChat(); },
+    openConv: (r, b) => { const cv = state.chats.find(x => x.id === b.dataset.id); if (!cv) return; ui.chat = { id: cv.id, msgs: cv.msgs.map(m => ({ ...m })), busy: false }; refreshChat(); },
+    delConv: (r, b) => { state.chats = state.chats.filter(x => x.id !== b.dataset.id); persist(); refreshChat(); },
     new: () => { ui.chat = { msgs: [], busy: false }; refreshChat(); },
     retry: () => { const lastQ = [...ui.chat.msgs].reverse().find(m => m.role === 'user'); if (lastQ) { ui.chat.msgs = ui.chat.msgs.filter(m => !m.error); ui.chat.msgs.pop(); chatSend(lastQ.text); } },
     toKey: () => { closeModal(); ui.aiOpen = true; go('settings'); }
@@ -3244,6 +3278,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.21.2', ['🕘 El Coach IA guarda tus conversaciones de los últimos 7 días (hasta 20). Ábrelas desde «Conversaciones anteriores» y retómalas donde las dejaste.']],
   ['4.21.1', ['➕ «Añadir ingrediente» en cualquier comida cargada (estimada con foto o texto, propuesta por el Coach o al editarla): escribe «30 g de queso fresco» y la IA calcula sus macros, o añádelo a mano.']],
   ['4.21.0', ['🍽️ Cuando el Coach IA te propone una comida, aparece «Apuntar en Dieta»: abre la comida que toca con los alimentos ya cargados para que ajustes raciones y la registres.']],
   ['4.20.5', ['🤖 Si Gemini está saturado, la app reintenta sola y, si hace falta, usa otro modelo de Gemini. Los errores de la IA salen en español.']],
