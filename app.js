@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.21.2';
+const APP_VERSION = '4.22.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -156,7 +156,7 @@ const isStandalone = () => window.matchMedia('(display-mode: standalone)').match
 
 /* ---------- Estado ---------- */
 function defaultSettings() {
-  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, minProtMeal: 25, pinHash: '', lastSeenVersion: '', driveConnected: false, driveEmail: '', driveFolderId: '', autoDrive: true, lastDriveBackup: null, swipeNav: true, swipeMode: '' };
+  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, minProtMeal: 25, pinHash: '', lastSeenVersion: '', driveConnected: false, driveEmail: '', driveFolderId: '', autoDrive: true, lastDriveBackup: null, swipeNav: true, swipeMode: '', profile: null };
 }
 function defaultState() {
   return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {}, chat: null, chats: [], retos: {}, accessNames: {} };
@@ -1262,7 +1262,7 @@ function weekData() {
   const wt = weightTrend();
   const habits = sess.reduce((a, s) => a + (s.habits?.length || 0), 0);
   return {
-    periodo: `${from} a ${to}`, objetivo: 'recomposición corporal',
+    periodo: `${from} a ${to}`, objetivo: (GOALS[profileOf()?.goal] || GOALS.recomp)[0].toLowerCase(),
     sesiones_fuerza: sess.length, dias_entrenados: [...new Set(sess.map(s => s.dayTitle))],
     ejercicios_que_suben: up, ejercicios_igual_o_bajan: flat, ejercicios_estancados_segun_coach: [...new Set(stalled)],
     dias_dieta_registrados: nd, kcal_media: nd ? Math.round(kc / nd) : null, objetivo_kcal: state.settings.targetKcal,
@@ -1280,7 +1280,7 @@ async function generateReport() {
   if (state.settings.apiKey && navigator.onLine) {
     ui.reportBusy = true; render();
     try {
-      const prompt = `Eres entrenador personal y nutricionista deportivo. Analiza la última semana de un hombre adulto cuyo objetivo es la RECOMPOSICIÓN corporal (perder grasa manteniendo o ganando músculo).
+      const prompt = `Eres entrenador personal y nutricionista deportivo. Analiza la última semana de ${profileText()}.
 Datos (JSON, null = sin datos): ${JSON.stringify(data)}
 Reglas: básate SOLO en estos datos; si faltan datos importantes, dilo en "mejorar". Sé directo, concreto y breve, en español de España. Nada de frases motivacionales vacías.
 Responde SOLO con JSON válido:
@@ -2536,6 +2536,7 @@ function renderSettings() {
     </div>
   </details>
 
+  ${profileSectionHTML()}
   <section class="card p-4 mt-3 space-y-3">
     <h3 class="section-title">🎯 Objetivos diarios</h3>
     <div class="grid grid-cols-4 gap-2">
@@ -3084,6 +3085,51 @@ document.addEventListener('visibilitychange', () => {
   if (hiddenAt && (Date.now() - hiddenAt > 30 * 60000 || hiddenDay !== todayISO()) && dietBackToToday() && ui.view === 'diet' && !$('#modalRoot').classList.contains('open')) { ui._animRings = true; render(); window.scrollTo({ top: 0 }); }
 });
 
+/* ---------- Mi perfil: lo usan el Coach IA y el resumen semanal ---------- */
+const GOALS = { recomp: ['Recomposición', 'RECOMPOSICIÓN corporal (perder grasa manteniendo o ganando músculo)'], fat: ['Perder grasa', 'PERDER GRASA conservando el músculo'], muscle: ['Ganar músculo', 'GANAR MÚSCULO con el mínimo de grasa'], maint: ['Mantener', 'MANTENER peso y forma física, y salud'] };
+const SEXES = { h: 'Hombre', m: 'Mujer', x: 'Prefiero no decirlo' };
+function profileOf() { return state.settings.profile || null; }
+function profileText() {
+  const p = profileOf() || {};
+  const who = [p.sex === 'h' ? 'hombre' : p.sex === 'm' ? 'mujer' : 'persona', p.age ? `de ${p.age} años` : 'adulta'].join(' ');
+  return `${p.name || 'el usuario'} (${who}), objetivo: ${(GOALS[p.goal] || GOALS.recomp)[1]}`;
+}
+function profileModal(after) {
+  const p = profileOf() || { name: '', sex: '', age: '', goal: 'recomp' };
+  const seg = (name, opts, cur) => `<div class="seg" style="grid-template-columns:repeat(${name === 'goal' ? 2 : Object.keys(opts).length},minmax(0,1fr))">${Object.entries(opts).map(([k, v]) => `<button class="seg-btn py-2 ${cur === k ? 'seg-on' : ''}" data-mact="pick" data-f="${name}" data-v="${k}" type="button">${Array.isArray(v) ? v[0] : v}</button>`).join('')}</div>`;
+  const draft = { ...p };
+  const html = () => `<h3 class="modal-title">👤 Mi perfil</h3>
+    <p class="text-xs text-mute">El Coach IA y el resumen semanal lo usan para darte consejos a tu medida. Solo se guarda en este móvil y en tus copias.</p>
+    <label class="lbl">Nombre<input class="field mt-1" name="name" maxlength="24" value="${esc(draft.name || '')}" /></label>
+    <div><div class="lbl mb-1">Sexo</div>${seg('sex', SEXES, draft.sex)}</div>
+    <label class="lbl">Edad (opcional)<input class="field mt-1" name="age" inputmode="numeric" maxlength="3" value="${esc(draft.age || '')}" /></label>
+    <div><div class="lbl mb-1">Objetivo</div>${seg('goal', GOALS, draft.goal)}</div>
+    <button class="btn-primary w-full" data-mact="save" type="button">Guardar</button>`;
+  const keep = root => { draft.name = mval(root, 'name').trim(); draft.age = mval(root, 'age').replace(/\D/g, ''); };
+  const handlers = {
+    autofocus: !p.name,
+    pick: (root, b) => { keep(root); draft[b.dataset.f] = b.dataset.v; root.querySelector('.modal-sheet').innerHTML = html(); },
+    save: root => {
+      keep(root);
+      if (!draft.name) return toast('Pon tu nombre', 'warn');
+      if (!draft.sex) return toast('Elige una opción de sexo', 'warn');
+      state.settings.profile = { name: draft.name.slice(0, 24), sex: draft.sex, age: draft.age ? String(Math.min(110, +draft.age)) : '', goal: draft.goal || 'recomp' };
+      persist(); closeModal(); render(); toast('Perfil guardado ✓');
+      if (after) after();
+    }
+  };
+  openModal(html(), handlers);
+}
+function profileSectionHTML() {
+  const p = profileOf();
+  return `<section class="card p-4 mt-3">
+    <div class="flex items-center justify-between gap-3">
+      <div class="min-w-0"><h3 class="section-title">👤 Mi perfil</h3>
+        <p class="text-xs ${p ? 'text-slate-300' : 'text-amber-300'} mt-1 truncate">${p ? `${esc(p.name)} · ${esc(SEXES[p.sex] || '')}${p.age ? ` · ${esc(p.age)} años` : ''} · ${esc((GOALS[p.goal] || GOALS.recomp)[0])}` : 'Sin rellenar: el Coach IA no sabe a quién aconseja'}</p></div>
+      <button class="btn-ghost px-3 py-2 shrink-0" data-act="editProfile" type="button">${p ? 'Editar' : 'Rellenar'}</button>
+    </div></section>`;
+}
+
 /* =========================================================================
    COACH IA (chat con tus datos)
    ========================================================================= */
@@ -3119,7 +3165,7 @@ function chatContext() {
   };
 }
 function chatSystem() {
-  return `Eres el coach de FITNESTEBAN, la app de entreno y dieta de Esteban (hombre adulto, objetivo: RECOMPOSICIÓN corporal: perder grasa manteniendo o ganando músculo).
+  return `Eres el coach de FITNESTEBAN, la app de entreno y dieta de ${profileText()}. Dirígete a ${(profileOf()?.name) || 'la persona'} por su nombre si viene a cuento y adapta todos los consejos a su sexo, edad y objetivo.
 Responde en español de España, directo y breve (máx. ~120 palabras salvo que pida más detalle). Puedes usar **negritas** y listas cortas con "- ".
 Reglas:
 - Básate en SUS DATOS de abajo. Cita números concretos (kg, reps, g, kcal, fechas). Si faltan datos para responder, dilo y pide el dato concreto.
@@ -3243,6 +3289,7 @@ async function chatSend(text) {
   } finally { c.busy = false; refreshChat(); }
 }
 function openChat() {
+  if (!profileOf()) return profileModal(openChat);
   ui.chat = { msgs: [], busy: false }; ui.histOpen = false; ui.histAll = false;
   openModal(`
     <div class="cal-head flex items-center gap-2 pb-3">
@@ -3278,6 +3325,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.22.0', ['👤 Nuevo «Mi perfil» en Ajustes (nombre, sexo, edad y objetivo): el Coach IA y el resumen semanal te aconsejan a tu medida.', '📖 La guía «?» muestra tus propios bloques y días.']],
   ['4.21.2', ['🕘 El Coach IA guarda tus conversaciones de los últimos 7 días (hasta 20). Ábrelas desde «Conversaciones anteriores» y retómalas donde las dejaste.']],
   ['4.21.1', ['➕ «Añadir ingrediente» en cualquier comida cargada (estimada con foto o texto, propuesta por el Coach o al editarla): escribe «30 g de queso fresco» y la IA calcula sus macros, o añádelo a mano.']],
   ['4.21.0', ['🍽️ Cuando el Coach IA te propone una comida, aparece «Apuntar en Dieta»: abre la comida que toca con los alimentos ya cargados para que ajustes raciones y la registres.']],
@@ -3334,8 +3382,8 @@ const cmpVer = (a, b) => { const x = String(a).split('.').map(Number), y = Strin
 
 const GUIDE = [
   ['🏋️ Entreno: bloques y días', [
-    'Arriba eliges el <b>bloque</b> (PPT, FULL BODY, FREE, 🔥 CARDIO) y debajo el <b>día</b>. El punto ● marca el día que te toca según tu rotación; ✓ el que ya hiciste hoy.',
-    'Cada bloque lleva su propia rotación: al guardar PUSH, el siguiente que te propone es PULL, y así sucesivamente.',
+    'Arriba eliges el <b>bloque</b> ({{BLOQUES}}) y debajo el <b>día</b>. El punto ● marca el día que te toca según tu rotación; ✓ el que ya hiciste hoy.',
+    'Cada bloque lleva su propia rotación: {{ROTACION}}',
     '«＋ Bloque» y «＋ Día» crean nuevos. El ✎ del bloque o del día permite renombrar, reordenar (◀ ▶) o eliminar. El historial nunca se borra al eliminar.'
   ]],
   ['🧭 Cómo decide el coach el peso', [
@@ -3376,7 +3424,7 @@ const GUIDE = [
     'Consumidas · Cardio · Neto: el cardio se muestra pero <b>no amplía</b> lo que te queda por comer, salvo que lo actives en Ajustes.',
     '🏋️ <b>Gym</b>: la app estima las kcal netas de cada sesión con la duración real, las series, los kilos y tu peso (MET 3,5 a 6). Salen en Dieta junto al cardio (Comidas · Cardio · Gym · Neto) y puedes corregirlas en Progreso → Historial → ajustar.',
     '🎯 La app se abre en la <b>dieta de hoy</b>: anillo exterior = kcal (ámbar); dentro, proteína (cian), carbohidratos (verde) y grasas (rosa). Si te pasas, el exceso da una segunda vuelta y sale una etiqueta «+…». Con un entreno a medias (últimas 3 h) se abre en Entreno. El <b>logo</b> siempre te trae aquí.',
-    '👆 Si en Ajustes → Aplicación eliges «Día en Dieta · bloque en Entreno», deslizar el dedo en Dieta pasa al día siguiente o anterior (como las flechas ‹ ›) y en Entreno, al bloque siguiente o anterior (RETOS, PPT…). Con un entreno en curso, en Entreno no hace nada para no sacarte de la serie. Las pestañas se cambian con la barra de abajo.',
+    '👆 Si en Ajustes → Aplicación eliges «Día en Dieta · bloque en Entreno», deslizar el dedo en Dieta pasa al día siguiente o anterior (como las flechas ‹ ›) y en Entreno, al bloque siguiente o anterior de tu fila de bloques. Con un entreno en curso, en Entreno no hace nada para no sacarte de la serie. Las pestañas se cambian con la barra de abajo.',
     '📅 Toca la <b>fecha</b> de Dieta para abrir el calendario del mes: punto verde/ámbar/rojo según la dieta, 🏋️ si hubo pesas y 🔥 si hubo cardio. Al tocar un día ves el detalle y puedes ir a sus comidas.',
     '✎ en una comida la edita; ⭐ «Comidas habituales» repite tus platos más frecuentes de ese tipo, y el buscador encuentra cualquiera del historial.'
   ]],
@@ -3418,12 +3466,21 @@ function openNews(fromVer) {
     <button class="btn-primary w-full mt-4" data-close type="button">Entendido</button>
   `);
 }
+/* La guía usa los bloques y días de ESTE móvil */
+function guideData() {
+  const ps = state.plan.programs;
+  const blocks = ps.map(p => `${p.icon ? p.icon + ' ' : ''}${esc(p.name)}`).join(', ') || 'tus bloques';
+  const rp = ps.find(p => p.type === 'strength' && p.days.filter(d => d.rotation).length >= 2);
+  const rd = rp ? rp.days.filter(d => d.rotation) : [];
+  const rot = rp ? `en ${esc(rp.name)}, al guardar ${esc(rd[0].label)} el siguiente que te propone es ${esc(rd[1].label)}${rd[2] ? `, luego ${esc(rd[2].label)}` : ''}, y así sucesivamente.` : 'al guardar un día, el siguiente que te propone es el que le sigue dentro del bloque, y así sucesivamente.';
+  return GUIDE.map(([t, items]) => [t, items.map(x => x.replace('{{BLOQUES}}', blocks).replace('{{ROTACION}}', rot))]);
+}
 function openGuide() {
   openModal(`
     <div class="flex items-center gap-2"><img src="icons/logo-128.png" alt="" class="w-8 h-8 rounded-full" /><h3 class="modal-title">Guía de FITNESTEBAN</h3></div>
     <p class="text-xs text-mute -mt-1">Toca cada apartado para desplegarlo.</p>
     <div class="space-y-2">
-      ${GUIDE.map(([title, items]) => `<details class="guide-item">
+      ${guideData().map(([title, items]) => `<details class="guide-item">
         <summary class="flex items-center justify-between cursor-pointer select-none text-sm font-bold">${title}<span class="tri"></span></summary>
         <ul class="mt-2 space-y-1.5 text-[13px] text-slate-300 leading-relaxed list-disc pl-5">${items.map(i => `<li>${i}</li>`).join('')}</ul>
       </details>`).join('')}
@@ -3966,6 +4023,7 @@ const actions = {
     persist(); render(); toast('Plan restaurado');
   },
   export: () => exportBackup(),
+  editProfile: () => profileModal(),
   newAccess: () => newAccessModal(),
   openAccess: () => {
     if (state.settings.pinHash) return askPinOnly('🔑 Acceso', 'Escribe tu PIN para abrir esta sección.', () => { ui.accessOpen = true; render(); });
@@ -4205,6 +4263,7 @@ function lockScreen(mode, msg = '') {
 }
 function unlock(me) {
   access.me = me; access.ok = true;
+  if (me.admin && !state.settings.profile) { state.settings.profile = { name: 'Esteban', sex: 'h', age: '', goal: 'recomp' }; persist(); }
   $('#lockScreen')?.remove(); document.body.classList.remove('overflow-hidden');
   if (ui.view === 'settings') render();
 }
