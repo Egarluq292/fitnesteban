@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.20.4';
+const APP_VERSION = '4.20.5';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2150,28 +2150,65 @@ function parseJSONLoose(text) {
   throw new Error('Respuesta de la IA ilegible');
 }
 
-async function callGemini(parts, { json = true, timeout = 45000, contents = null, system = null, temperature = 0.2 } = {}) {
-  const s = state.settings;
-  if (!s.apiKey) throw new Error('Falta la clave de Gemini (Ajustes).');
-  if (!navigator.onLine) throw new Error('Sin conexión a internet.');
-  const ctrl = new AbortController();
-  const tm = setTimeout(() => ctrl.abort(), timeout);
+/* Gemini con reintentos: si el modelo está saturado (alta demanda) reintenta y, si sigue, prueba modelos alternativos */
+const GEMINI_FALLBACKS = ['gemini-flash-latest', 'gemini-2.5-flash'];
+const geminiWait = ms => new Promise(r => setTimeout(r, ms));
+function geminiErr(status, data) {
+  const msg = data?.error?.message || '', st = data?.error?.status || '';
+  const e = new Error(msg || `Error HTTP ${status}`); e.status = status;
+  e.busy = status === 503 || status === 500 || status === 504 || /high demand|overloaded|unavailable/i.test(msg);
+  e.quota = status === 429 || st === 'RESOURCE_EXHAUSTED';
+  e.noModel = status === 404 || /not found|is not supported/i.test(msg);
+  return e;
+}
+function geminiSpanish(e) {
+  if (e.busy) return new Error('Gemini está saturado ahora mismo (mucha demanda en Google). Prueba en unos minutos o introduce los macros a mano.');
+  if (e.quota) return new Error('Has llegado al límite gratuito de Gemini por ahora. Prueba más tarde o introduce los macros a mano.');
+  if (e.status === 400 && /api key|API_KEY/i.test(e.message)) return new Error('La clave de Gemini no es válida (Ajustes → IA).');
+  if (e.status === 403) return new Error('La clave de Gemini no tiene permiso o el proyecto tiene la facturación en un estado que lo impide.');
+  return e;
+}
+async function geminiOnce(model, body, timeout) {
+  const ctrl = new AbortController(), tm = setTimeout(() => ctrl.abort(), timeout);
   try {
-    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(s.model || DEFAULT_MODEL)}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': s.apiKey },
-      body: JSON.stringify({ contents: contents || [{ parts }], ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), generationConfig: json ? { responseMimeType: 'application/json', temperature } : { temperature } }),
-      signal: ctrl.signal
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': state.settings.apiKey }, body, signal: ctrl.signal
     });
     const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(data.error?.message || `Error HTTP ${resp.status}`);
+    if (!resp.ok) throw geminiErr(resp.status, data);
     const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
     if (!text) throw new Error('La IA no devolvió respuesta (bloqueo o cuota agotada).');
     return text;
   } catch (e) {
-    if (e.name === 'AbortError') throw new Error('La IA tardó demasiado. Prueba de nuevo.');
+    if (e.name === 'AbortError') { const t = new Error('La IA tardó demasiado. Prueba de nuevo.'); t.busy = true; throw t; }
     throw e;
   } finally { clearTimeout(tm); }
+}
+async function callGemini(parts, { json = true, timeout = 45000, contents = null, system = null, temperature = 0.2 } = {}) {
+  const s = state.settings;
+  if (!s.apiKey) throw new Error('Falta la clave de Gemini (Ajustes).');
+  if (!navigator.onLine) throw new Error('Sin conexión a internet.');
+  const body = JSON.stringify({ contents: contents || [{ parts }], ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), generationConfig: json ? { responseMimeType: 'application/json', temperature } : { temperature } });
+  const main = s.model || DEFAULT_MODEL;
+  const models = [main, ...GEMINI_FALLBACKS.filter(m => m !== main)];
+  let last = null;
+  for (let mi = 0; mi < models.length; mi++) {
+    const tries = mi === 0 ? 2 : 1;
+    for (let attempt = 0; attempt < tries; attempt++) {
+      try {
+        const text = await geminiOnce(models[mi], body, timeout);
+        if (mi > 0) toast(`Gemini principal saturado: respondió ${models[mi]}`, 'warn');
+        return text;
+      } catch (e) {
+        last = e;
+        if (e.noModel) break;                       // ese modelo no existe/no vale: siguiente
+        if (e.quota && !e.busy) break;              // cuota de ese modelo agotada: probar otro modelo
+        if (!e.busy) throw geminiSpanish(e);        // error de verdad (clave, petición…): no insistir
+        if (attempt < tries - 1) await geminiWait(1500);
+      }
+    }
+  }
+  throw geminiSpanish(last || new Error('Error desconocido de la IA'));
 }
 
 async function analyzeMeal() {
@@ -3102,6 +3139,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.20.5', ['🤖 Si Gemini está saturado, la app reintenta sola y, si hace falta, usa otro modelo de Gemini. Los errores de la IA salen en español.']],
   ['4.20.4', ['🔒 La sección Acceso de Ajustes va plegada y se abre con tu PIN (o con tu código personal si el dispositivo no tiene PIN). Se cierra sola al salir de Ajustes o de la app.']],
   ['4.20.2', ['🔑 Acceso privado: cada persona entra con su propio código. La lista pública solo contiene huellas; el administrador crea y quita códigos desde Ajustes → Acceso (con GitHub conectado y su PIN).']],
   ['4.19.1', ['🌱 Retos para cualquier nivel: si en la prueba inicial no llegas al mínimo, empiezas en el nivel más bajo con una variante más fácil. La rueda abdominal empieza ahora en 1.']],
