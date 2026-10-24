@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.20.5';
+const APP_VERSION = '4.21.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2071,16 +2071,81 @@ function syncResultFields() {
   (ai.items || []).forEach((it, i) => { const el = document.querySelector(`[data-item-kcal="${i}"]`); if (el) el.textContent = `${Math.round(itemMacros(it).kcal)} kcal`; });
   syncProtHint();
 }
+/* Añadir un ingrediente a la comida (texto → IA; sin IA, a mano) */
+function addIngHTML() {
+  return `<div class="flex gap-2 items-center">
+      <input class="field flex-1 text-sm py-2.5" id="addIng" autocomplete="off" value="${esc(ui.addIng || '')}" placeholder="＋ Ingrediente (ej. 30 g de queso)" ${ui.addIngBusy ? 'disabled' : ''} />
+      <button class="btn-ghost px-3 py-2.5 shrink-0" data-act="addIng" type="button" ${ui.addIngBusy ? 'disabled' : ''}>${ui.addIngBusy ? '<span class="spinner"></span>' : 'Añadir'}</button>
+    </div>
+    <button class="text-[11px] text-mute underline" data-act="addIngManual" type="button">o añadir un ingrediente a mano</button>`;
+}
+function ingFromAI(it) {
+  const per = it.per100 || {};
+  const m = num(it.medium_g) || num(it.grams) || 100;
+  const fromDesc = !!it.from_description && num(it.grams) > 0;
+  return { name: String(it.name || 'Alimento').slice(0, 40), fromDesc,
+    sizes: { s: num(it.small_g) || Math.round(m * 0.65), m, l: num(it.large_g) || Math.round(m * 1.4) },
+    sel: fromDesc ? 'x' : 'm', grams: fromDesc ? num(it.grams) : m,
+    per100: { kcal: num(per.kcal) || 0, prot: num(per.protein) || 0, carbs: num(per.carbs) || 0, fat: num(per.fat) || 0 } };
+}
+function pushIng(item) {
+  const a = ui.aiResult; if (!a) return;
+  if (!a.items) a.items = [];
+  // comida con macros a mano y sin alimentos: se conserva como «base» para no perder lo que había
+  if (!a.items.length && (a.kcal || a.prot || a.carbs || a.fat)) a.items.push({ name: 'Base (lo que ya tenía)', fromDesc: true, sizes: { s: 100, m: 100, l: 100 }, sel: 'x', grams: 100, per100: { kcal: a.kcal, prot: a.prot, carbs: a.carbs, fat: a.fat } });
+  a.items.push(item); recalcFromItems(a);
+}
+async function addIngredient() {
+  const txt = (ui.addIng || '').trim();
+  if (!txt) return toast('Escribe el ingrediente, por ejemplo «30 g de queso fresco»', 'warn');
+  if (!state.settings.apiKey || !navigator.onLine) return addIngManual(txt);
+  ui.addIngBusy = true; render();
+  try {
+    const prompt = `Eres nutricionista. Analiza SOLO este ingrediente que el usuario quiere añadir a su comida: ${JSON.stringify(txt)}.
+Si da cantidad, úsala ("from_description": true). Si no, estima una ración habitual en España ("from_description": false).
+Valores por 100 g del alimento tal como se come. Responde SOLO con JSON válido:
+{"name": "nombre corto", "from_description": true|false, "grams": número, "small_g": número, "medium_g": número, "large_g": número, "per100": {"kcal": número, "protein": número, "carbs": número, "fat": número}}`;
+    const r = parseJSONLoose(await callGemini([{ text: prompt }], { timeout: 30000 }));
+    const it = ingFromAI(Array.isArray(r.items) ? r.items[0] : r);
+    if (!(it.per100.kcal > 0 || it.per100.prot > 0)) throw new Error('no he podido estimar ese ingrediente');
+    pushIng(it); ui.addIng = ''; toast(`Añadido: ${it.name}`);
+  } catch (e) { toast('IA: ' + e.message + '. Puedes añadirlo a mano.', 'error'); }
+  finally { ui.addIngBusy = false; render(); }
+}
+function addIngManual(pre = '') {
+  openModal(`<h3 class="modal-title">Añadir ingrediente a mano</h3>
+    <label class="lbl">Nombre<input class="field mt-1" name="n" maxlength="40" value="${esc(pre)}" placeholder="Ej: Queso fresco" /></label>
+    <label class="lbl">Cantidad (g)<input class="field mt-1" name="g" inputmode="decimal" placeholder="Ej: 30" /></label>
+    <p class="text-[11px] text-mute">Macros de esa cantidad (no por 100 g):</p>
+    <div class="grid grid-cols-4 gap-2">
+      <label class="lbl ${MAC.kcal.text}">kcal<input class="field mt-1 text-center" name="k" inputmode="decimal" /></label>
+      <label class="lbl ${MAC.prot.text}">P<input class="field mt-1 text-center" name="p" inputmode="decimal" /></label>
+      <label class="lbl ${MAC.carbs.text}">C<input class="field mt-1 text-center" name="c" inputmode="decimal" /></label>
+      <label class="lbl ${MAC.fat.text}">G<input class="field mt-1 text-center" name="f" inputmode="decimal" /></label>
+    </div>
+    <button class="btn-primary w-full" data-mact="ok" type="button">Añadir</button>`, {
+    autofocus: true,
+    ok: root => {
+      const n = mval(root, 'n').trim() || 'Ingrediente', g = num(mval(root, 'g')) || 0;
+      const k = num(mval(root, 'k')) || 0, pp = num(mval(root, 'p')) || 0, c = num(mval(root, 'c')) || 0, f = num(mval(root, 'f')) || 0;
+      if (!g) return toast('Pon la cantidad en gramos', 'warn');
+      if (!(k || pp || c || f)) return toast('Pon al menos las kcal', 'warn');
+      const per = x => Math.round(x / g * 100 * 10) / 10;
+      pushIng({ name: n.slice(0, 40), fromDesc: true, sizes: { s: Math.round(g * 0.65), m: g, l: Math.round(g * 1.4) }, sel: 'x', grams: g, per100: { kcal: per(k), prot: per(pp), carbs: per(c), fat: per(f) } });
+      ui.addIng = ''; closeModal(); render(); toast(`Añadido: ${n}`);
+    }
+  });
+}
 function renderPortions(ai) {
   const items = ai.items || [];
-  if (!items.length) return '';
+  if (!items.length) return `<div class="portions space-y-1.5">${addIngHTML()}</div>`;
   const pending = items.filter(it => !it.fromDesc).length;
   const row = (it, i) => {
     const kc = `<span class="${MAC.kcal.text}" data-item-kcal="${i}">${Math.round(itemMacros(it).kcal)} kcal</span>`;
     if (it.fromDesc) return `<div class="portion">
       <div class="flex items-center justify-between gap-2 text-xs">
         <span class="font-semibold truncate">${esc(it.name)} <span class="text-mute font-normal">· ${Math.round(it.grams)} g, según tu descripción</span></span>
-        <span class="flex items-center gap-2 shrink-0">${kc}<button class="underline text-brand" data-act="portionEdit" data-i="${i}" type="button">cambiar</button></span>
+        <span class="flex items-center gap-2 shrink-0">${kc}<button class="underline text-brand" data-act="portionEdit" data-i="${i}" type="button">cambiar</button><button class="text-mute px-1" data-act="portionDel" data-i="${i}" type="button" aria-label="Quitar alimento">✕</button></span>
       </div></div>`;
     return `<div class="portion">
       <div class="flex items-center justify-between gap-2 text-xs">
@@ -2097,13 +2162,15 @@ function renderPortions(ai) {
   };
   const body = items.map(row).join('');
   if (!pending) {
-    return `<details class="portions"><summary class="flex items-center justify-between cursor-pointer text-xs text-mute">
+    return `<details class="portions" ${openAttr('portions')}><summary class="flex items-center justify-between cursor-pointer text-xs text-mute">
       <span>⚖️ Raciones según tu descripción (${items.length})</span><span class="tri"></span></summary>
-      <div class="space-y-1.5 mt-2">${body}</div></details>`;
+      <div class="space-y-1.5 mt-2">${body}</div></details>
+      <div class="space-y-1.5 mt-2">${addIngHTML()}</div>`;
   }
   return `<div class="portions">
     <div class="flex items-center justify-between text-xs text-mute mb-2"><span>⚖️ ¿Qué cantidad había? <span class="text-[10px]">(P pequeña · M mediana · G grande)</span></span></div>
     <div class="space-y-1.5">${body}</div>
+    <div class="space-y-1.5 mt-2.5">${addIngHTML()}</div>
   </div>`;
 }
 
@@ -3055,8 +3122,44 @@ Reglas:
 - El campo "coach_app" es lo que la app le recomienda en cada ejercicio (doble progresión). No lo contradigas sin explicar por qué.
 - "quedan" = lo que le falta hoy para sus objetivos (negativo = se ha pasado). Para comidas, propone platos normales de España con cantidades en gramos y sus macros aproximados.
 - Nada de frases motivacionales vacías. Si menciona dolor, lesión o algo médico, recomienda consultar a un profesional y no diagnostiques.
+- Cuando propongas una o varias comidas CONCRETAS (alimentos con cantidades), añade al final de tu respuesta un bloque oculto EXACTAMENTE con este formato (no lo menciones en el texto):
+\`\`\`comida
+{"opciones":[{"titulo":"nombre corto","tipo":"Desayuno|Comida|Puente|Cena|Otro","items":[{"nombre":"alimento","gramos":número,"por100":{"kcal":n,"p":n,"c":n,"g":n}}]}]}
+\`\`\`
+  Una opción por cada alternativa que propongas. Valores por 100 g del alimento tal como se come. Si no propones comida concreta, no añadas el bloque.
 DATOS (JSON, null = sin dato):
 ${JSON.stringify(chatContext())}`;
+}
+/* Comidas propuestas por el coach: bloque ```comida {json}``` al final de la respuesta → botones «Apuntar en Dieta» */
+function chatMeals(reply) {
+  let meals = [];
+  const text = String(reply).replace(/```comida\s*([\s\S]*?)```/gi, (_, js) => {
+    try {
+      const d = parseJSONLoose(js);
+      for (const o of (Array.isArray(d.opciones) ? d.opciones : [])) {
+        const items = (Array.isArray(o.items) ? o.items : []).map(it => {
+          const pr = it.por100 || {};
+          return { name: String(it.nombre || 'Alimento').slice(0, 40), grams: Math.max(1, Math.round(num(it.gramos) || 100)),
+            per100: { kcal: num(pr.kcal) || 0, prot: num(pr.p) || 0, carbs: num(pr.c) || 0, fat: num(pr.g) || 0 } };
+        }).filter(it => it.per100.kcal > 0 || it.per100.prot > 0);
+        if (items.length) meals.push({ title: String(o.titulo || 'Propuesta del coach').slice(0, 60), type: MEAL_TYPES.includes(o.tipo) ? o.tipo : '', items });
+      }
+    } catch { /* bloque ilegible: se ignora */ }
+    return '';
+  }).trim();
+  return { text, meals: meals.slice(0, 4) };
+}
+const mealKcal = m => Math.round(m.items.reduce((a, it) => a + it.per100.kcal * it.grams / 100, 0));
+function mealFromChat(m) {
+  const items = m.items.map(it => ({ name: it.name, fromDesc: false, sizes: { s: Math.round(it.grams * 0.65), m: it.grams, l: Math.round(it.grams * 1.4) }, sel: 'm', grams: it.grams, per100: { ...it.per100 } }));
+  ui.dietDate = todayISO(); ui.editing = null; ui.img = null;
+  ui.mealType = m.type || guessMealType(); ui.mealDesc = m.title;
+  ui.aiResult = { desc: m.title, items, kcal: 0, prot: 0, carbs: 0, fat: 0, note: '⚡ Propuesta del Coach IA: ajusta las raciones a lo que de verdad vayas a comer y pulsa Registrar.' };
+  recalcFromItems(ui.aiResult);
+  closeModal();
+  if (ui.view !== 'diet') { ui.view = 'diet'; ui._animRings = true; }
+  render();
+  setTimeout(() => $('#mealCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
 }
 function mdLite(t) {
   const lines = esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').split('\n');
@@ -3079,7 +3182,7 @@ function chatBodyHTML() {
     ${state.chat?.msgs?.length ? `<button class="w-full text-xs text-brand underline mt-5" data-mact="lastChat" type="button">Ver la última conversación (${fmtChatDate(state.chat.at)})</button>` : ''}`;
   return c.msgs.map((m, i) => m.role === 'user'
     ? `<div class="chat-me">${esc(m.text)}</div>`
-    : `<div class="chat-ai${m.error ? ' chat-err' : ''}">${mdLite(m.text)}${m.error && i === c.msgs.length - 1 ? '<button class="text-xs text-brand underline mt-1" data-mact="retry" type="button">Reintentar</button>' : ''}</div>`).join('')
+    : `<div class="chat-ai${m.error ? ' chat-err' : ''}">${mdLite(m.text)}${m.error && i === c.msgs.length - 1 ? '<button class="text-xs text-brand underline mt-1" data-mact="retry" type="button">Reintentar</button>' : ''}${(m.meals || []).map((ml, j) => `<button class="chat-meal" data-mact="toDiet" data-m="${i}" data-o="${j}" type="button"><span>🍽️ Apuntar en Dieta</span><span class="text-[11px] opacity-80 truncate">${m.meals.length > 1 ? esc(ml.title) + ' · ' : ''}${esc(ml.type || 'comida que toca')} · ~${mealKcal(ml)} kcal</span></button>`).join('')}</div>`).join('')
     + (c.busy ? '<div class="chat-ai chat-typing"><span></span><span></span><span></span></div>' : '');
 }
 function fmtChatDate(ts) {
@@ -3101,7 +3204,8 @@ async function chatSend(text) {
   try {
     const contents = c.msgs.slice(-12).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
     const reply = await callGemini(null, { json: false, contents, system: chatSystem(), temperature: 0.4, timeout: 60000 });
-    c.msgs.push({ role: 'model', text: reply.trim() });
+    const { text: clean, meals } = chatMeals(reply);
+    c.msgs.push({ role: 'model', text: clean, ...(meals.length ? { meals } : {}) });
     state.chat = { at: Date.now(), msgs: c.msgs.filter(m => !m.error).slice(-30) }; persist();
   } catch (e) {
     c.msgs.push({ role: 'model', text: 'No he podido responder: ' + e.message, error: true });
@@ -3122,6 +3226,7 @@ function openChat() {
     </form></div>`, {
     sheetClass: 'sheet-fixed',
     chip: (r, b) => chatSend(CHAT_CHIPS[+b.dataset.i]),
+    toDiet: (r, b) => { const ml = ui.chat.msgs[+b.dataset.m]?.meals?.[+b.dataset.o]; if (ml) mealFromChat(ml); },
     lastChat: () => { ui.chat.msgs = state.chat.msgs.map(m => ({ ...m })); refreshChat(); },
     new: () => { ui.chat = { msgs: [], busy: false }; refreshChat(); },
     retry: () => { const lastQ = [...ui.chat.msgs].reverse().find(m => m.role === 'user'); if (lastQ) { ui.chat.msgs = ui.chat.msgs.filter(m => !m.error); ui.chat.msgs.pop(); chatSend(lastQ.text); } },
@@ -3139,6 +3244,8 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.21.1', ['➕ «Añadir ingrediente» en cualquier comida cargada (estimada con foto o texto, propuesta por el Coach o al editarla): escribe «30 g de queso fresco» y la IA calcula sus macros, o añádelo a mano.']],
+  ['4.21.0', ['🍽️ Cuando el Coach IA te propone una comida, aparece «Apuntar en Dieta»: abre la comida que toca con los alimentos ya cargados para que ajustes raciones y la registres.']],
   ['4.20.5', ['🤖 Si Gemini está saturado, la app reintenta sola y, si hace falta, usa otro modelo de Gemini. Los errores de la IA salen en español.']],
   ['4.20.4', ['🔒 La sección Acceso de Ajustes va plegada y se abre con tu PIN (o con tu código personal si el dispositivo no tiene PIN). Se cierra sola al salir de Ajustes o de la app.']],
   ['4.20.2', ['🔑 Acceso privado: cada persona entra con su propio código. La lista pública solo contiene huellas; el administrador crea y quita códigos desde Ajustes → Acceso (con GitHub conectado y su PIN).']],
@@ -3702,6 +3809,8 @@ const actions = {
     if (it.sel === 'x') setTimeout(() => document.querySelector(`[data-portion-g="${b.dataset.i}"]`)?.select(), 0);
   },
   portionEdit: b => { const it = ui.aiResult?.items?.[+b.dataset.i]; if (!it) return; it.fromDesc = false; it.sel = 'x'; render(); },
+  addIng: () => addIngredient(),
+  addIngManual: () => addIngManual((ui.addIng || '').trim()),
   portionDel: b => { const a = ui.aiResult; if (!a?.items) return; a.items.splice(+b.dataset.i, 1); recalcFromItems(a); if (!a.items.length) { a.kcal = a.prot = a.carbs = a.fat = 0; } render(); },
   fixKcal: () => { const a = ui.aiResult; a.kcal = Math.round(a.prot * 4 + a.carbs * 4 + a.fat * 9); render(); },
   cancelMeal: () => { ui.aiResult = null; ui.editing = null; render(); },
@@ -3911,6 +4020,7 @@ app.addEventListener('input', e => {
   if (t.dataset.in) setDraftCell(t.dataset.key, parseInt(t.dataset.i, 10), t.dataset.in, t.value);
   else if (t.dataset.retoGot !== undefined) { const d = retoDraft(t.dataset.reto); d.got[+t.dataset.retoGot] = t.value.replace(/[^0-9]/g, ''); persistSoon(); }
   else if (t.id === 'mealDesc') ui.mealDesc = t.value;
+  else if (t.id === 'addIng') ui.addIng = t.value;
   else if (t.id === 'mealSearch') { ui.mealSearch = t.value; const box = $('#mealPicks'); if (box) box.innerHTML = renderPickList(); }
   else if (t.dataset.ai && ui.aiResult) { ui.aiResult[t.dataset.ai] = t.dataset.ai === 'desc' ? t.value : (num(t.value) ?? 0); if (t.dataset.ai === 'prot') syncProtHint(); }
   else if (t.dataset.portionG !== undefined && ui.aiResult?.items) {
