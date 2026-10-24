@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.23.1';
+const APP_VERSION = '4.24.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -159,7 +159,7 @@ function defaultSettings() {
   return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, minProtMeal: 25, pinHash: '', lastSeenVersion: '', driveConnected: false, driveEmail: '', driveFolderId: '', autoDrive: true, lastDriveBackup: null, swipeNav: true, swipeMode: '', profile: null };
 }
 function defaultState() {
-  return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {}, chat: null, chats: [], retos: {}, accessNames: {} };
+  return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {}, chat: null, chats: [], retos: {}, accessNames: {}, accessCodes: {} };
 }
 const safeUrl = u => { const t = String(u || '').trim(); return /^https:\/\/[^\s"'<>]+$/i.test(t) ? t : ''; };
 const videoUrl = v => v.video || `https://www.youtube.com/results?search_query=${encodeURIComponent(v.name + ' técnica correcta')}`;
@@ -229,6 +229,7 @@ function normalize(s) {
     out.settings.blockOrder415 = true;
   }
   if (!out.accessNames || typeof out.accessNames !== 'object' || Array.isArray(out.accessNames)) out.accessNames = {};
+  if (!out.accessCodes || typeof out.accessCodes !== 'object' || Array.isArray(out.accessCodes)) out.accessCodes = {};
   if (!out.retos || typeof out.retos !== 'object' || Array.isArray(out.retos)) out.retos = {};
   for (const k of Object.keys(out.retos)) { const r = out.retos[k]; if (!r || !Array.isArray(r.history)) { delete out.retos[k]; continue; } if (!Array.isArray(r.tests)) r.tests = []; }
   if (!out.chat || typeof out.chat !== 'object' || !Array.isArray(out.chat.msgs)) out.chat = null;
@@ -2678,7 +2679,7 @@ function guardModal({ title, text, danger, word, onOk }) {
         }
       } else if (mval(root, 'word').trim().toUpperCase() !== word) return toast(`Escribe ${word} exactamente`, 'warn');
       closeModal();
-      onOk();
+      onOk(pin);
     }
   });
 }
@@ -2699,6 +2700,7 @@ function pinSetModal() {
       const p1 = pinVal(root, 'p1'), p2 = pinVal(root, 'p2');
       if (!/^\d{4,8}$/.test(p1)) return toast('El PIN debe tener de 4 a 8 cifras', 'warn');
       if (p1 !== p2) return toast('Los dos PIN no coinciden', 'warn');
+      if (hasPin) await reencryptSecrets(pinVal(root, 'old'), p1);
       state.settings.pinHash = await hashPin(p1);
       persist(); closeModal(); render(); toast('PIN guardado ✓');
     }
@@ -3451,6 +3453,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.24.0', ['🔑 Acceso: los códigos nuevos quedan guardados (cifrados con tu PIN) para verlos o copiarlos cuando quieras. Nuevo botón 🔄 para dar un código nuevo a quien lo pierda, y envío directo por WhatsApp. Al cambiar el PIN se vuelven a cifrar los códigos y la llave de GitHub.']],
   ['4.23.1', ['🔑 Los códigos de acceso recién creados funcionan a la primera, sin esperar a que GitHub publique la lista.']],
   ['4.23.0', ['👋 Primeros pasos para quien instala la app: condiciones, perfil con objetivos calculados a su medida y guía para activar la clave de Gemini.']],
   ['4.22.1', ['📏 Altura en «Mi perfil». El Coach IA y el resumen semanal te avisan si tus objetivos de kcal o proteína no encajan con tu perfil.']],
@@ -4155,7 +4158,7 @@ const actions = {
   editProfile: () => profileModal(),
   newAccess: () => newAccessModal(),
   openAccess: () => {
-    if (state.settings.pinHash) return askPinOnly('🔑 Acceso', 'Escribe tu PIN para abrir esta sección.', () => { ui.accessOpen = true; render(); });
+    if (state.settings.pinHash) return askPinOnly('🔑 Acceso', 'Escribe tu PIN para abrir esta sección.', pin => { ui.accessOpen = true; ui.accessPin = pin; ui.accessReveal = {}; render(); });
     let fails = 0;
     openModal(`<h3 class="modal-title">🔑 Acceso</h3><p class="text-sm text-mute">Este dispositivo no tiene PIN: escribe tu código personal de acceso (o crea un PIN en Ajustes → Seguridad para usarlo aquí).</p>
       <input class="field mt-1 text-center text-2xl font-black tracking-[.2em] uppercase" name="code" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" />
@@ -4169,6 +4172,14 @@ const actions = {
     });
   },
   closeAccess: () => { ui.accessOpen = false; render(); },
+  showCode: async b => {
+    const h = b.dataset.hash;
+    if (ui.accessReveal?.[h]) { delete ui.accessReveal[h]; return render(); }
+    const c = await accessCodeOf(h); if (!c) return;
+    (ui.accessReveal ||= {})[h] = c; render();
+  },
+  copyCode: async b => { const c = await accessCodeOf(b.dataset.hash); if (c) navigator.clipboard.writeText(fmtCode(c)).then(() => toast('Código copiado')).catch(() => toast('Cópialo a mano: ' + fmtCode(c), 'warn')); },
+  regenAccess: b => regenAccess(b.dataset.hash),
   delAccess: b => delAccess(b.dataset.hash),
   ghConnect: () => ghConnectModal(),
   ghDisconnect: () => { if (!confirm('¿Desconectar GitHub? Se borra la llave guardada en este móvil.')) return; try { localStorage.removeItem(GH_KEY); } catch { /* nada */ } render(); toast('GitHub desconectado'); },
@@ -4474,6 +4485,48 @@ async function ghEditAcl(pin, fn, message) {
   access.list = parseAcl(next); lsSet(ACL_KEY, { list: access.list, at: Date.now() });
 }
 function accessWho(x) { return state.accessNames?.[x.hash] || ''; }
+/* Códigos guardados en la lista del administrador, cifrados con su PIN (nunca en GitHub) */
+const fmtCode = c => { const n = normCode(c); return n.slice(0, 4) + '-' + n.slice(4); };
+async function codeEnc(code, pin) {
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await pinKey(pin, salt), new TextEncoder().encode(normCode(code)));
+  return { s: b64e(salt), iv: b64e(iv), ct: b64e(ct) };
+}
+async function codeDec(e, pin) { return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(e.iv) }, await pinKey(pin, b64d(e.s)), b64d(e.ct))); }
+async function saveAccessCode(hash, code, pin) { if (pin) { state.accessCodes[hash] = await codeEnc(code, pin); persist(); } }
+async function accessCodeOf(hash) {
+  if (hash === access.me?.hash && lsGet(ACCESS_KEY)?.code) return normCode(lsGet(ACCESS_KEY).code);
+  const e = state.accessCodes?.[hash]; if (!e) { toast('Ese código no está guardado', 'warn'); return null; }
+  if (!ui.accessPin) { toast('Abre la sección con tu PIN para ver los códigos', 'warn'); return null; }
+  try { return await codeDec(e, ui.accessPin); } catch { toast('No se puede leer: se guardó con otro PIN', 'error'); return null; }
+}
+async function reencryptSecrets(oldPin, newPin) {
+  for (const [h, e] of Object.entries(state.accessCodes || {})) { try { state.accessCodes[h] = await codeEnc(await codeDec(e, oldPin), newPin); } catch { /* guardado con otro PIN: se queda como estaba */ } }
+  try { if (lsGet(GH_KEY)) await ghSaveToken(await ghToken(oldPin), newPin); } catch { /* nada */ }
+}
+function codeShareModal(title, who, code, warn = '') {
+  const msg = `Hola${who ? ' ' + who : ''}, tu código de FITNESTEBAN es ${fmtCode(code)}\nhttps://egarluq292.github.io/fitnesteban/`;
+  openModal(`<h3 class="modal-title">${title}</h3>${warn}
+    <div class="text-center py-1"><div class="text-[11px] text-mute mb-1">${warn ? 'Nuevo código' : 'Código'}</div><div class="font-mono text-3xl font-black tracking-[.2em] text-brand">${fmtCode(code)}</div></div>
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="copy" type="button">📋 Copiar</button><a class="btn-ghost block text-center" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">💬 WhatsApp</a></div>
+    <button class="btn-primary w-full" data-close type="button">Hecho</button>
+    <p class="text-[11px] text-mute text-center">Ya funciona. Queda guardado (cifrado con tu PIN) en tu lista de Acceso.</p>`, {
+    copy: () => navigator.clipboard.writeText(fmtCode(code)).then(() => toast('Código copiado')).catch(() => toast('Cópialo a mano', 'warn'))
+  });
+}
+function regenAccess(hash) {
+  const self = hash === access.me?.hash, who = self ? 'ti' : (state.accessNames[hash] || 'Sin nombre …' + hash.slice(-4));
+  askPin({ title: `🔄 Nuevo código para ${esc(who)}`, text: self ? 'Tu código actual dejará de valer. En este móvil se cambia solo; en tus otros dispositivos tendrás que escribir el nuevo.' : `El código actual dejará de funcionar: ${esc(who)} tendrá que escribir el nuevo la próxima vez que la app se lo pida.`, onPin: async pin => {
+    const code = newCode(), nh = await codeHash(code);
+    await ghEditAcl(pin, lines => lines.map(l => l.trim().toLowerCase().startsWith(hash) ? [nh, ...l.trim().split(/\s+/).slice(1)].join(' ') : l), 'Acceso: código renovado');
+    if (state.accessNames[hash]) { state.accessNames[nh] = state.accessNames[hash]; delete state.accessNames[hash]; }
+    delete state.accessCodes[hash]; await saveAccessCode(nh, code, pin);
+    if (self) { lsSet(ACCESS_KEY, { code: normCode(code), at: Date.now() }); access.me = { ...access.me, hash: nh }; }
+    if (ui.accessReveal) delete ui.accessReveal[hash];
+    persist(); render();
+    codeShareModal(`🔄 Nuevo código para ${esc(self ? 'ti' : who)}`, self ? '' : who, code, `<div class="card p-3 text-[13px] leading-snug"><b class="text-amber-300">El código anterior ya no funciona.</b> ${self ? 'Escribe este en tus otros dispositivos.' : `Mándale este a ${esc(who)}.`}</div>`);
+  } });
+}
 function askPinOnly(title, text, onOk) {
   let fails = 0;
   openModal(`<h3 class="modal-title">${title}</h3><p class="text-sm text-mute">${text}</p>${pinField('pin', 'Tu PIN')}<button class="btn-primary w-full mt-2" data-mact="ok" type="button">Abrir</button>`, {
@@ -4481,7 +4534,7 @@ function askPinOnly(title, text, onOk) {
     ok: async root => {
       const pin = pinVal(root, 'pin'); if (!pin) return toast('Introduce el PIN', 'warn');
       if (await hashPin(pin) !== state.settings.pinHash) { fails++; root.querySelector('[name="pin"]').value = ''; if (fails >= 5) { closeModal(); return toast('Demasiados intentos', 'error'); } return toast(`PIN incorrecto (${fails}/5)`, 'error'); }
-      closeModal(); onOk();
+      closeModal(); onOk(pin);
     }
   });
 }
@@ -4501,15 +4554,25 @@ function askPin({ title, text, onPin }) {
 }
 function accessSectionHTML() {
   if (!access.me?.admin) return '';
+  if (!ui.accessOpen) { ui.accessPin = null; ui.accessReveal = {}; }
   if (!ui.accessOpen) return `<section class="card p-0 mt-3"><button class="w-full flex items-center justify-between px-4 py-3.5" data-act="openAccess" type="button">
       <h3 class="section-title">🔑 Acceso</h3><span class="flex items-center gap-2 text-[11px] text-mute">🔒 Protegido<span class="tri"></span></span></button></section>`;
   const list = access.list || [], gh = !!lsGet(GH_KEY);
   return `<section class="card p-4 mt-3 space-y-3">
     <button class="w-full flex items-center justify-between" data-act="closeAccess" type="button"><h3 class="section-title">🔑 Acceso</h3><span class="flex items-center gap-2 text-[11px] text-emerald-300">🔓 Abierto<span class="tri rotate-180"></span></span></button>
-    <p class="text-[11px] text-mute">${list.length} ${list.length === 1 ? 'persona' : 'personas'} con acceso. La lista pública (acceso.txt) solo contiene huellas: los nombres solo los ves tú aquí y van en tus copias de Drive.</p>
-    <div class="space-y-1">${list.map(x => `<div class="flex items-center justify-between gap-2 bg-ink rounded-lg px-2.5 py-1.5 text-xs">
-      <span class="min-w-0 truncate">${accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`}${x.hash === access.me.hash ? ' <span class="text-brand">(tú · admin)</span>' : x.admin ? ' <span class="text-mute">(admin)</span>' : ''}</span>
-      <span class="flex items-center gap-1.5 shrink-0"><button class="iconbtn iconbtn-sm" data-act="nameAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Poner nombre">✎</button>${x.hash === access.me.hash || !gh ? '' : `<button class="iconbtn iconbtn-sm text-rose-300" data-act="delAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Quitar acceso">🗑</button>`}</span></div>`).join('')}</div>
+    <p class="text-[11px] text-mute">${list.length} ${list.length === 1 ? 'persona' : 'personas'} con acceso. Los nombres y códigos solo los ves tú: van cifrados con tu PIN en este móvil y en tus copias. En GitHub solo hay huellas.</p>
+    <div class="space-y-1.5">${list.map(x => {
+      const me = x.hash === access.me.hash, has = me ? !!lsGet(ACCESS_KEY)?.code : !!state.accessCodes?.[x.hash], shown = ui.accessReveal?.[x.hash];
+      const codeLine = has
+        ? `<span class="font-mono text-[15px] font-black tracking-[.15em] ${shown ? 'text-brand' : 'text-mute'}">${shown ? fmtCode(shown) : '••••-••••'}</span>
+           <span class="flex gap-1.5"><button class="iconbtn iconbtn-sm" data-act="showCode" data-hash="${esc(x.hash)}" type="button" aria-label="Ver código">${shown ? '🙈' : '👁'}</button><button class="iconbtn iconbtn-sm" data-act="copyCode" data-hash="${esc(x.hash)}" type="button" aria-label="Copiar código">📋</button></span>`
+        : `<span class="text-amber-300 text-[11px]">Código no guardado (creado antes de la 4.24). Si lo necesita, dale uno nuevo con 🔄.</span>`;
+      return `<div class="bg-ink rounded-lg px-3 py-2 text-xs space-y-1.5">
+      <div class="flex items-center justify-between gap-2"><span class="min-w-0 truncate font-semibold text-[13px]">${accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`}${me ? ' <span class="text-brand font-normal">(tú · admin)</span>' : x.admin ? ' <span class="text-mute font-normal">(admin)</span>' : ''}</span>
+      <span class="flex items-center gap-1.5 shrink-0"><button class="iconbtn iconbtn-sm" data-act="nameAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Poner nombre">✎</button>${gh ? `<button class="iconbtn iconbtn-sm" data-act="regenAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Nuevo código">🔄</button>` : ''}${me || !gh ? '' : `<button class="iconbtn iconbtn-sm text-rose-300" data-act="delAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Quitar acceso">🗑</button>`}</span></div>
+      <div class="flex items-center justify-between gap-2 min-h-[28px]">${codeLine}</div></div>`;
+    }).join('')}</div>
+    ${gh ? '<p class="text-[11px] text-mute">✎ nombre · 🔄 nuevo código (el anterior deja de funcionar) · 🗑 quitar acceso</p>' : ''}
     ${gh ? `<button class="btn-primary w-full" data-act="newAccess" type="button">＋ Crear código para alguien</button>
       <p class="text-[11px] text-mute flex justify-between">GitHub conectado ✓ (token cifrado con tu PIN)<button class="underline" data-act="ghDisconnect" type="button">Desconectar</button></p>`
     : `<p class="text-[11px] text-mute">Conecta GitHub para crear y quitar códigos con un botón, sin editar archivos.</p>
@@ -4549,15 +4612,8 @@ function newAccessModal() {
       askPin({ title: `Crear código para ${esc(who)}`, text: 'Tu PIN abre la llave de GitHub para añadir el código a la lista.', onPin: async pin => {
         const code = newCode(), hash = await codeHash(code);
         await ghEditAcl(pin, lines => [...lines.filter(l => l.trim()), hash], 'Acceso: nuevo código');
-        state.accessNames[hash] = who; persist(); render();
-        openModal(`<h3 class="modal-title">Código para ${esc(who)}</h3>
-          <div class="text-center text-3xl font-black tracking-[.2em] text-brand bg-ink border border-line rounded-xl py-3">${code}</div>
-          <button class="btn-primary w-full" data-mact="copy" type="button">📋 Copiar para enviárselo</button>
-          <p class="text-[11px] text-mute">Ya está en la lista. Funcionará en 1–2 minutos, cuando GitHub publique el cambio.</p>
-          <p class="text-[11px] text-amber-300">Apunta o envía el código ahora: por seguridad la app no lo guarda.</p>
-          <button class="btn-ghost w-full" data-close type="button">Hecho</button>`, {
-          copy: () => navigator.clipboard.writeText(code).then(() => toast('Código copiado')).catch(() => toast('Cópialo a mano', 'warn'))
-        });
+        state.accessNames[hash] = who; await saveAccessCode(hash, code, pin); ui.accessPin = pin; persist(); render();
+        codeShareModal(`Código para ${esc(who)}`, who, code);
       } });
     }
   });
@@ -4566,7 +4622,7 @@ function delAccess(hash) {
   const who = state.accessNames[hash] || 'Sin nombre …' + hash.slice(-4);
   askPin({ title: `Quitar el acceso de ${esc(who)}`, text: 'Su código dejará de funcionar la próxima vez que abra la app con conexión (en 1–2 minutos, cuando GitHub publique el cambio). Sus datos se quedan en su móvil.', onPin: async pin => {
     await ghEditAcl(pin, lines => lines.filter(l => !l.trim().toLowerCase().startsWith(hash)), 'Acceso: código retirado');
-    delete state.accessNames[hash]; persist(); closeModal(); render(); toast('Acceso retirado ✓');
+    delete state.accessNames[hash]; delete state.accessCodes[hash]; persist(); closeModal(); render(); toast('Acceso retirado ✓');
   } });
 }
 
