@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.22.1';
+const APP_VERSION = '4.23.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -399,7 +399,7 @@ let modalHandlers = {};
 function openModal(html, handlers = {}) {
   modalHandlers = handlers;
   const root = $('#modalRoot');
-  root.innerHTML = `<div class="modal-back" data-close></div><div class="modal-sheet ${handlers.sheetClass || ''}" role="dialog" aria-modal="true">${html}</div>`;
+  root.innerHTML = `<div class="modal-back" ${handlers.noClose ? '' : 'data-close'}></div><div class="modal-sheet ${handlers.sheetClass || ''}" role="dialog" aria-modal="true">${html}</div>`;
   root.classList.add('open');
   document.body.classList.add('overflow-hidden');
   const first = root.querySelector('input,textarea');
@@ -3086,6 +3086,126 @@ document.addEventListener('visibilitychange', () => {
   if (hiddenAt && (Date.now() - hiddenAt > 30 * 60000 || hiddenDay !== todayISO()) && dietBackToToday() && ui.view === 'diet' && !$('#modalRoot').classList.contains('open')) { ui._animRings = true; render(); window.scrollTo({ top: 0 }); }
 });
 
+/* ---------- Primeros pasos (solo dispositivos nuevos, no administrador) ---------- */
+const ACTIVITY = { low: ['Sentada', 1.35], mid: ['Algo activa', 1.5], high: ['Muy activa', 1.65] };
+function needsOnboarding(me) {
+  const st = state.settings;
+  return !me?.admin && !st.onboarded && !st.profile && !state.sessions.length && !Object.keys(state.meals).length && !state.bodyMetrics.length;
+}
+function calcTargets(d) {
+  const w = +d.weight, h = +d.height, a = +d.age;
+  const bmr = 10 * w + 6.25 * h - 5 * a + (d.sex === 'h' ? 5 : d.sex === 'm' ? -161 : -78);
+  const adj = { fat: 0.8, recomp: 0.9, muscle: 1.1, maint: 1 }[d.goal] ?? 0.9;
+  const kcal = Math.round(bmr * (ACTIVITY[d.activity] || ACTIVITY.mid)[1] * adj / 10) * 10;
+  const prot = Math.round(w * ({ fat: 2, recomp: 2, muscle: 1.8, maint: 1.6 }[d.goal] ?? 1.8));
+  const fat = Math.round(w * 0.8);
+  const carbs = Math.max(50, Math.round((kcal - prot * 4 - fat * 9) / 4));
+  return { kcal, prot, carbs, fat };
+}
+function onboarding() {
+  const d = { step: 0, ok: false, name: '', sex: '', age: '', height: '', weight: '', activity: 'mid', goal: 'recomp', key: '', keyOk: false, testing: false };
+  const valid = () => d.sex && +d.age >= 14 && +d.age <= 100 && +d.height >= 120 && +d.height <= 230 && +d.weight >= 35 && +d.weight <= 250;
+  const dots = () => `<div class="flex gap-1.5 justify-center">${[0, 1, 2].map(i => `<span style="height:7px;border-radius:9px;width:${i === d.step ? 22 : 7}px;background:${i === d.step ? '#22d3ee' : '#334155'}"></span>`).join('')}</div><div class="text-[11px] text-mute text-center -mt-1">Paso ${d.step + 1} de 3</div>`;
+  const seg = (f, opts, cols) => `<div class="seg" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${Object.entries(opts).map(([k, v]) => `<button class="seg-btn py-2 ${d[f] === k ? 'seg-on' : ''}" data-mact="pick" data-f="${f}" data-v="${k}" type="button">${Array.isArray(v) ? v[0] : v}</button>`).join('')}</div>`;
+  const s0 = () => `${dots()}<h3 class="modal-title">👋 Te damos la bienvenida</h3>
+    <p class="text-sm text-mute">FITNESTEBAN es un proyecto personal de Esteban que comparte con amigos. Antes de empezar:</p>
+    <div class="card p-3 space-y-2 text-[13px] leading-snug">
+      <p>📱 <b>Tus datos son tuyos.</b> Se guardan en este móvil y, si quieres, en <b>tu</b> Google Drive. Nadie más los ve.</p>
+      <p>🤖 <b>La IA funciona con tu propia clave de Gemini.</b> Es gratuita dentro de los límites de Google.</p>
+      <p>🩺 <b>No sustituye a un profesional.</b> Las cifras son orientativas: si tienes lesiones, embarazo o algún problema de salud, consulta antes.</p>
+      <p>🛠️ <b>Es un proyecto vivo.</b> Irá mejorando, pero puede tener fallos o cambiar.</p>
+    </div>
+    <label class="flex items-start gap-2 text-[13px]"><input type="checkbox" name="ok" ${d.ok ? 'checked' : ''} style="margin-top:3px;accent-color:#22d3ee;width:18px;height:18px" /> Lo he leído y estoy de acuerdo.</label>
+    <button class="btn-primary w-full" data-mact="next" type="button">Empezar</button>`;
+  const s1 = () => {
+    const t = valid() ? calcTargets(d) : null;
+    return `${dots()}<h3 class="modal-title">🎯 Tu perfil y tus objetivos</h3>
+    <p class="text-xs text-mute">Con esto calculamos tus objetivos de partida. Los puedes cambiar cuando quieras en Ajustes.</p>
+    <label class="lbl">Nombre<input class="field mt-1" name="name" maxlength="24" value="${esc(d.name)}" /></label>
+    <div><div class="lbl mb-1">Sexo</div>${seg('sex', SEXES, 3)}</div>
+    <div class="grid grid-cols-3 gap-2">
+      <label class="lbl">Edad<input class="field mt-1" name="age" inputmode="numeric" maxlength="3" value="${esc(d.age)}" /></label>
+      <label class="lbl">Altura (cm)<input class="field mt-1" name="height" inputmode="numeric" maxlength="3" placeholder="170" value="${esc(d.height)}" /></label>
+      <label class="lbl">Peso (kg)<input class="field mt-1" name="weight" inputmode="decimal" maxlength="5" value="${esc(d.weight)}" /></label>
+    </div>
+    <div><div class="lbl mb-1">Actividad diaria (sin contar el entreno)</div>${seg('activity', ACTIVITY, 3)}</div>
+    <div><div class="lbl mb-1">Objetivo</div>${seg('goal', GOALS, 2)}</div>
+    <div class="card p-3" id="obTargets">${t ? `<div class="text-[11px] text-mute mb-1">Tus objetivos de partida</div>
+      <div class="grid grid-cols-4 gap-1 text-center">
+        <div><div class="text-lg font-black text-brand">${t.kcal}</div><div class="text-[10px] text-mute">kcal</div></div>
+        <div><div class="text-lg font-black">${t.prot} g</div><div class="text-[10px] text-mute">proteína</div></div>
+        <div><div class="text-lg font-black">${t.carbs} g</div><div class="text-[10px] text-mute">hidratos</div></div>
+        <div><div class="text-lg font-black">${t.fat} g</div><div class="text-[10px] text-mute">grasa</div></div></div>`
+      : '<div class="text-[12px] text-mute text-center">Rellena sexo, edad, altura y peso para calcular tus objetivos.</div>'}</div>
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="back" type="button">Atrás</button><button class="btn-primary" data-mact="next" type="button">Siguiente</button></div>`;
+  };
+  const s2 = () => `${dots()}<h3 class="modal-title">🤖 Activa el Coach IA</h3>
+    <p class="text-xs text-mute">Necesitas una clave gratuita de Google. Son 2 minutos y solo se hace una vez.</p>
+    <ol class="card p-3 space-y-2.5 text-[13px] leading-snug">
+      <li><b class="text-brand">1.</b> Toca el botón de abajo: se abre Google AI Studio.</li>
+      <li><b class="text-brand">2.</b> Entra con tu cuenta de Google y acepta las condiciones.</li>
+      <li><b class="text-brand">3.</b> Pulsa <b>«Create API key»</b> (Crear clave de API).</li>
+      <li><b class="text-brand">4.</b> Pulsa <b>Copiar</b> y vuelve aquí.</li>
+    </ol>
+    <a class="btn-ghost w-full block text-center" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">🔑 Abrir Google AI Studio ↗</a>
+    <label class="lbl">Pega aquí tu clave<div class="flex gap-2 mt-1"><input class="field flex-1 min-w-0 font-mono" name="key" autocomplete="off" spellcheck="false" placeholder="AIza… o AQ.…" value="${esc(d.key)}" /><button class="btn-ghost px-3" data-mact="paste" type="button">📋 Pegar</button></div></label>
+    <div class="text-[13px] ${d.keyOk ? 'text-emerald-300' : 'text-mute'}" id="obKeyMsg">${d.keyOk ? '✓ Clave correcta: el Coach ya te puede responder.' : d.testing ? '<span class="spinner"></span> Comprobando la clave…' : ''}</div>
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="finish" data-skip="1" type="button">Saltar por ahora</button><button class="btn-primary" data-mact="finish" type="button">Terminar</button></div>
+    <p class="text-[11px] text-mute text-center">La clave se queda solo en este móvil. Sin ella la app funciona igual, pero sin IA. También puedes ponerla luego en Ajustes.</p>`;
+  const html = () => [s0, s1, s2][d.step]();
+  const keep = root => {
+    const g = n => root.querySelector(`[name="${n}"]`);
+    if (g('ok')) d.ok = g('ok').checked;
+    if (g('name')) { d.name = g('name').value.trim(); d.age = g('age').value.replace(/\D/g, ''); d.height = g('height').value.replace(/\D/g, ''); d.weight = g('weight').value.replace(',', '.').replace(/[^\d.]/g, ''); }
+    if (g('key')) d.key = g('key').value.trim();
+  };
+  const draw = root => { root.querySelector('.modal-sheet').innerHTML = html(); root.querySelector('.modal-sheet').scrollTop = 0; bindLive(root); };
+  const bindLive = root => {
+    if (d.step === 1) root.querySelectorAll('[name=age],[name=height],[name=weight]').forEach(i => i.oninput = () => { keep(root); const box = root.querySelector('#obTargets'), tmp = document.createElement('div'); tmp.innerHTML = s1(); box.innerHTML = tmp.querySelector('#obTargets').innerHTML; });
+    if (d.step === 2) { const k = root.querySelector('[name=key]'); if (k) k.oninput = () => { d.keyOk = false; const m = root.querySelector('#obKeyMsg'); if (m) m.textContent = ''; }; }
+  };
+  const test = async root => {
+    keep(root); if (!d.key) { toast('Pega primero la clave', 'warn'); return false; }
+    d.testing = true; draw(root);
+    const saved = state.settings.apiKey; state.settings.apiKey = d.key;
+    try { const r = parseJSONLoose(await callGemini([{ text: 'Responde exactamente este JSON: {"ok": true}' }], { timeout: 20000 })); d.keyOk = !!r.ok; }
+    catch (e) { d.keyOk = false; toast('La clave no funciona: ' + e.message, 'error'); }
+    finally { state.settings.apiKey = saved; d.testing = false; }
+    if ($('#modalRoot').classList.contains('open')) draw(root);
+    return d.keyOk;
+  };
+  openModal(html(), {
+    noClose: true,
+    pick: (root, b) => { keep(root); d[b.dataset.f] = b.dataset.v; draw(root); },
+    back: root => { keep(root); d.step--; draw(root); },
+    next: root => {
+      keep(root);
+      if (d.step === 0 && !d.ok) return toast('Marca la casilla para continuar', 'warn');
+      if (d.step === 1) {
+        if (!d.name) return toast('Escribe tu nombre', 'warn');
+        if (!valid()) return toast('Revisa sexo, edad, altura (cm) y peso (kg)', 'warn');
+      }
+      d.step++; draw(root);
+    },
+    paste: async root => {
+      try { const t = (await navigator.clipboard.readText()).trim(); if (!t) return toast('El portapapeles está vacío', 'warn'); root.querySelector('[name=key]').value = t; d.keyOk = false; await test(root); }
+      catch { toast('No puedo leer el portapapeles: mantén pulsado el campo y elige «Pegar»', 'warn'); }
+    },
+    finish: async (root, b) => {
+      keep(root);
+      if (!b.dataset.skip && !d.keyOk && !(await test(root))) return;
+      const t = calcTargets(d), st = state.settings;
+      st.profile = { name: d.name.slice(0, 24), sex: d.sex, age: d.age, height: d.height, goal: d.goal, activity: d.activity };
+      Object.assign(st, { targetKcal: t.kcal, targetProt: t.prot, targetCarbs: t.carbs, targetFat: t.fat, onboarded: todayISO() });
+      if (!b.dataset.skip && d.keyOk) st.apiKey = d.key;
+      state.bodyMetrics.push({ id: uid('m_'), date: todayISO(), weight: r2(+d.weight), waist: null });
+      persist(); closeModal(); ui._animRings = true; render();
+      toast(`¡Listo, ${d.name}! Tus objetivos ya están puestos 💪`);
+    }
+  });
+  bindLive($('#modalRoot'));
+}
+
 /* ---------- Mi perfil: lo usan el Coach IA y el resumen semanal ---------- */
 const GOALS = { recomp: ['Recomposición', 'RECOMPOSICIÓN corporal (perder grasa manteniendo o ganando músculo)'], fat: ['Perder grasa', 'PERDER GRASA conservando el músculo'], muscle: ['Ganar músculo', 'GANAR MÚSCULO con el mínimo de grasa'], maint: ['Mantener', 'MANTENER peso y forma física, y salud'] };
 const SEXES = { h: 'Hombre', m: 'Mujer', x: 'Prefiero no decirlo' };
@@ -3331,6 +3451,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.23.0', ['👋 Primeros pasos para quien instala la app: condiciones, perfil con objetivos calculados a su medida y guía para activar la clave de Gemini.']],
   ['4.22.1', ['📏 Altura en «Mi perfil». El Coach IA y el resumen semanal te avisan si tus objetivos de kcal o proteína no encajan con tu perfil.']],
   ['4.22.0', ['👤 Nuevo «Mi perfil» en Ajustes (nombre, sexo, edad y objetivo): el Coach IA y el resumen semanal te aconsejan a tu medida.', '📖 La guía «?» muestra tus propios bloques y días.']],
   ['4.21.2', ['🕘 El Coach IA guarda tus conversaciones de los últimos 7 días (hasta 20). Ábrelas desde «Conversaciones anteriores» y retómalas donde las dejaste.']],
@@ -4273,6 +4394,7 @@ function unlock(me) {
   if (me.admin && !state.settings.profile) { state.settings.profile = { name: 'Esteban', sex: 'h', age: '', goal: 'recomp' }; persist(); }
   $('#lockScreen')?.remove(); document.body.classList.remove('overflow-hidden');
   if (ui.view === 'settings') render();
+  if (needsOnboarding(me)) setTimeout(onboarding, 300);
 }
 async function fetchAcl() {
   try {
