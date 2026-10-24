@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.22.0';
+const APP_VERSION = '4.22.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1282,7 +1282,8 @@ async function generateReport() {
     try {
       const prompt = `Eres entrenador personal y nutricionista deportivo. Analiza la última semana de ${profileText()}.
 Datos (JSON, null = sin datos): ${JSON.stringify(data)}
-Reglas: básate SOLO en estos datos; si faltan datos importantes, dilo en "mejorar". Sé directo, concreto y breve, en español de España. Nada de frases motivacionales vacías.
+Objetivos diarios configurados: ${state.settings.targetKcal} kcal y ${state.settings.targetProt} g de proteína; peso actual: ${latestWeight() || 'desconocido'} kg.
+Reglas: básate SOLO en estos datos; si faltan datos importantes, dilo en "mejorar". Si los objetivos diarios claramente no encajan con su perfil y objetivo, dilo en "mejorar" con cifras orientativas. Sé directo, concreto y breve, en español de España. Nada de frases motivacionales vacías.
 Responde SOLO con JSON válido:
 {"titular": "una frase con el balance de la semana", "bien": ["máx. 3 puntos"], "mejorar": ["máx. 3 puntos"], "acciones": ["exactamente 3 acciones concretas y medibles para la próxima semana"]}`;
       const r = parseJSONLoose(await callGemini([{ text: prompt }], { timeout: 45000 }));
@@ -3091,7 +3092,7 @@ const SEXES = { h: 'Hombre', m: 'Mujer', x: 'Prefiero no decirlo' };
 function profileOf() { return state.settings.profile || null; }
 function profileText() {
   const p = profileOf() || {};
-  const who = [p.sex === 'h' ? 'hombre' : p.sex === 'm' ? 'mujer' : 'persona', p.age ? `de ${p.age} años` : 'adulta'].join(' ');
+  const who = [p.sex === 'h' ? 'hombre' : p.sex === 'm' ? 'mujer' : 'persona', p.age ? `de ${p.age} años` : 'adulta'].join(' ') + (p.height ? `, ${p.height} cm de altura` : '');
   return `${p.name || 'el usuario'} (${who}), objetivo: ${(GOALS[p.goal] || GOALS.recomp)[1]}`;
 }
 function profileModal(after) {
@@ -3102,10 +3103,13 @@ function profileModal(after) {
     <p class="text-xs text-mute">El Coach IA y el resumen semanal lo usan para darte consejos a tu medida. Solo se guarda en este móvil y en tus copias.</p>
     <label class="lbl">Nombre<input class="field mt-1" name="name" maxlength="24" value="${esc(draft.name || '')}" /></label>
     <div><div class="lbl mb-1">Sexo</div>${seg('sex', SEXES, draft.sex)}</div>
-    <label class="lbl">Edad (opcional)<input class="field mt-1" name="age" inputmode="numeric" maxlength="3" value="${esc(draft.age || '')}" /></label>
+    <div class="grid grid-cols-2 gap-2">
+      <label class="lbl">Edad (opcional)<input class="field mt-1" name="age" inputmode="numeric" maxlength="3" value="${esc(draft.age || '')}" /></label>
+      <label class="lbl">Altura en cm (opcional)<input class="field mt-1" name="height" inputmode="numeric" maxlength="3" placeholder="Ej: 175" value="${esc(draft.height || '')}" /></label>
+    </div>
     <div><div class="lbl mb-1">Objetivo</div>${seg('goal', GOALS, draft.goal)}</div>
     <button class="btn-primary w-full" data-mact="save" type="button">Guardar</button>`;
-  const keep = root => { draft.name = mval(root, 'name').trim(); draft.age = mval(root, 'age').replace(/\D/g, ''); };
+  const keep = root => { draft.name = mval(root, 'name').trim(); draft.age = mval(root, 'age').replace(/\D/g, ''); draft.height = mval(root, 'height').replace(/\D/g, ''); };
   const handlers = {
     autofocus: !p.name,
     pick: (root, b) => { keep(root); draft[b.dataset.f] = b.dataset.v; root.querySelector('.modal-sheet').innerHTML = html(); },
@@ -3113,7 +3117,8 @@ function profileModal(after) {
       keep(root);
       if (!draft.name) return toast('Pon tu nombre', 'warn');
       if (!draft.sex) return toast('Elige una opción de sexo', 'warn');
-      state.settings.profile = { name: draft.name.slice(0, 24), sex: draft.sex, age: draft.age ? String(Math.min(110, +draft.age)) : '', goal: draft.goal || 'recomp' };
+      if (draft.height && (+draft.height < 100 || +draft.height > 230)) return toast('La altura va en centímetros (ej. 175)', 'warn');
+      state.settings.profile = { name: draft.name.slice(0, 24), sex: draft.sex, age: draft.age ? String(Math.min(110, +draft.age)) : '', height: draft.height || '', goal: draft.goal || 'recomp' };
       persist(); closeModal(); render(); toast('Perfil guardado ✓');
       if (after) after();
     }
@@ -3125,7 +3130,7 @@ function profileSectionHTML() {
   return `<section class="card p-4 mt-3">
     <div class="flex items-center justify-between gap-3">
       <div class="min-w-0"><h3 class="section-title">👤 Mi perfil</h3>
-        <p class="text-xs ${p ? 'text-slate-300' : 'text-amber-300'} mt-1 truncate">${p ? `${esc(p.name)} · ${esc(SEXES[p.sex] || '')}${p.age ? ` · ${esc(p.age)} años` : ''} · ${esc((GOALS[p.goal] || GOALS.recomp)[0])}` : 'Sin rellenar: el Coach IA no sabe a quién aconseja'}</p></div>
+        <p class="text-xs ${p ? 'text-slate-300' : 'text-amber-300'} mt-1 truncate">${p ? `${esc(p.name)} · ${esc(SEXES[p.sex] || '')}${p.age ? ` · ${esc(p.age)} años` : ''}${p.height ? ` · ${esc(p.height)} cm` : ''} · ${esc((GOALS[p.goal] || GOALS.recomp)[0])}` : 'Sin rellenar: el Coach IA no sabe a quién aconseja'}</p></div>
       <button class="btn-ghost px-3 py-2 shrink-0" data-act="editProfile" type="button">${p ? 'Editar' : 'Rellenar'}</button>
     </div></section>`;
 }
@@ -3172,6 +3177,7 @@ Reglas:
 - El campo "coach_app" es lo que la app le recomienda en cada ejercicio (doble progresión). No lo contradigas sin explicar por qué.
 - "quedan" = lo que le falta hoy para sus objetivos (negativo = se ha pasado). Para comidas, propone platos normales de España con cantidades en gramos y sus macros aproximados.
 - Nada de frases motivacionales vacías. Si menciona dolor, lesión o algo médico, recomienda consultar a un profesional y no diagnostiques.
+- Comprueba si sus objetivos diarios ("objetivos": kcal y proteína) encajan con su sexo, edad, altura, peso actual y objetivo. Si claramente NO encajan (p. ej. demasiado altos o bajos para esa persona), avísale una sola vez en la conversación, en una o dos frases, con cifras orientativas y diciendo que los cambia en Ajustes → Objetivos diarios. Si faltan edad o altura, puedes sugerir que las añada en Ajustes → Mi perfil.
 - Cuando propongas una o varias comidas CONCRETAS (alimentos con cantidades), añade al final de tu respuesta un bloque oculto EXACTAMENTE con este formato (no lo menciones en el texto):
 \`\`\`comida
 {"opciones":[{"titulo":"nombre corto","tipo":"Desayuno|Comida|Puente|Cena|Otro","items":[{"nombre":"alimento","gramos":número,"por100":{"kcal":n,"p":n,"c":n,"g":n}}]}]}
@@ -3325,6 +3331,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.22.1', ['📏 Altura en «Mi perfil». El Coach IA y el resumen semanal te avisan si tus objetivos de kcal o proteína no encajan con tu perfil.']],
   ['4.22.0', ['👤 Nuevo «Mi perfil» en Ajustes (nombre, sexo, edad y objetivo): el Coach IA y el resumen semanal te aconsejan a tu medida.', '📖 La guía «?» muestra tus propios bloques y días.']],
   ['4.21.2', ['🕘 El Coach IA guarda tus conversaciones de los últimos 7 días (hasta 20). Ábrelas desde «Conversaciones anteriores» y retómalas donde las dejaste.']],
   ['4.21.1', ['➕ «Añadir ingrediente» en cualquier comida cargada (estimada con foto o texto, propuesta por el Coach o al editarla): escribe «30 g de queso fresco» y la IA calcula sus macros, o añádelo a mano.']],
