@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.23.0';
+const APP_VERSION = '4.23.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3451,6 +3451,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
    GUÍA Y NOVEDADES
    ========================================================================= */
 const CHANGELOG = [
+  ['4.23.1', ['🔑 Los códigos de acceso recién creados funcionan a la primera, sin esperar a que GitHub publique la lista.']],
   ['4.23.0', ['👋 Primeros pasos para quien instala la app: condiciones, perfil con objetivos calculados a su medida y guía para activar la clave de Gemini.']],
   ['4.22.1', ['📏 Altura en «Mi perfil». El Coach IA y el resumen semanal te avisan si tus objetivos de kcal o proteína no encajan con tu perfil.']],
   ['4.22.0', ['👤 Nuevo «Mi perfil» en Ajustes (nombre, sexo, edad y objetivo): el Coach IA y el resumen semanal te aconsejan a tu medida.', '📖 La guía «?» muestra tus propios bloques y días.']],
@@ -4378,8 +4379,10 @@ function lockScreen(mode, msg = '') {
     const v = $('#lockCode').value; if (normCode(v).length < 8) return toast('El código tiene 8 caracteres', 'warn');
     $('#lockGo').disabled = true;
     try {
-      const list = access.list || await fetchAcl();
-      const h = await codeHash(v), me = (list || []).find(x => x.hash === h);
+      const h = await codeHash(v);
+      let list = access.list || await fetchAcl(), me = (list || []).find(x => x.hash === h);
+      // Código recién creado: GitHub Pages tarda unos minutos en publicarlo → mirar la lista al día directamente en GitHub
+      if (!me) { const live = await fetchAclLive(); if (live) { list = live; me = live.find(x => x.hash === h); } }
       if (!me) { toast(list ? 'Código no válido' : 'Sin conexión para comprobar el código', 'error'); $('#lockGo').disabled = false; return; }
       lsSet(ACCESS_KEY, { code: normCode(v), at: Date.now() });
       unlock(me); toast('Acceso concedido 👋');
@@ -4405,6 +4408,16 @@ async function fetchAcl() {
     return list;
   } catch { return null; }
 }
+/* Lista al día leída de la API de GitHub (sin la caché de Pages). Sin token: 60 consultas/hora por conexión, solo se usa si el código no aparece. */
+async function fetchAclLive() {
+  try {
+    const r = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}?t=${Date.now()}`, { headers: { Accept: 'application/vnd.github.raw+json' }, cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const list = parseAcl(await r.text());
+    access.list = list; lsSet(ACL_KEY, { list, at: Date.now() });
+    return list;
+  } catch { return null; }
+}
 async function accessBoot() {
   const cached = lsGet(ACL_KEY);
   if (cached?.list) access.list = cached.list;
@@ -4412,11 +4425,12 @@ async function accessBoot() {
   if (meCached) unlock(meCached); else lockScreen(access.list ? 'code' : 'wait');
   const fresh = await fetchAcl();
   if (!fresh) { if (!access.ok && !access.list) lockScreen('code', 'No hay conexión para comprobar el acceso. Conéctate y vuelve a abrir la app.'); return; }
-  const me = await accessCheck(fresh);
+  let me = await accessCheck(fresh);
+  if (!me && lsGet(ACCESS_KEY)?.code) { const live = await fetchAclLive(); if (live) me = await accessCheck(live); }
   if (me) { if (!access.ok) unlock(me); else access.me = me; }
   else lockScreen('code', lsGet(ACCESS_KEY)?.code ? 'Tu código ya no es válido. Pide uno nuevo a Esteban.' : '');
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { if (l && !(await accessCheck(l))) { access.ok = false; lockScreen('code', 'Tu código ya no es válido. Pide uno nuevo a Esteban.'); } }); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { if (l && !(await accessCheck(l))) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', 'Tu código ya no es válido. Pide uno nuevo a Esteban.'); } }); });
 
 /* Gestión (solo administrador): crear el código de una persona y la línea para acceso.txt */
 function newCode() { const a = crypto.getRandomValues(new Uint8Array(8)); const s = [...a].map(x => CODE_ABC[x % CODE_ABC.length]).join(''); return s.slice(0, 4) + '-' + s.slice(4); }
