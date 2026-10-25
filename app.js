@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.26.2';
+const APP_VERSION = '4.26.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3522,6 +3522,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.26.3', ['📶 Registro de uso: la clave del script ya no cambia al cerrar y reabrir la ventana de configuración, y hay un botón «Reconfigurar» por si algo falla.'], 'admin'],
   ['4.26.2', ['📶 La app envía a Esteban solo el día de último uso y la versión instalada, para saber quién tiene que actualizar. Nada de tu dieta ni de tus entrenos.']],
   ['4.26.1', ['📶 Registro de uso: solo envían su día de último uso y versión los móviles que lo han aceptado en las condiciones de los primeros pasos (usuarios nuevos) y el tuyo. Sin avisos para el resto.'], 'admin'],
   ['4.26.0', ['📶 Registro de uso en Ajustes → Acceso: ves cuándo usó cada persona la app por última vez y con qué versión. Se configura una vez con una hoja de Google y un Apps Script.'], 'admin'],
@@ -4711,7 +4712,9 @@ function doGet(e) {
 }`;
 }
 function usageSetupModal() {
-  const key = [...crypto.getRandomValues(new Uint8Array(18))].map(b => b.toString(16).padStart(2, '0')).join('');
+  // la misma clave hasta que se active: así da igual cerrar y reabrir esta ventana
+  let key = lsGet('fitnesteban_usekey_pending');
+  if (!/^[0-9a-f]{36}$/.test(key || '')) { key = [...crypto.getRandomValues(new Uint8Array(18))].map(b => b.toString(16).padStart(2, '0')).join(''); lsSet('fitnesteban_usekey_pending', key); }
   const code = usageScript(key);
   openModal(`<h3 class="modal-title">📶 Ver quién usa la app</h3>
     <p class="text-xs text-mute">Se hace una sola vez (unos 5 minutos). Todo queda en <b class="text-slate-300">tu</b> Google: una hoja de cálculo y un pequeño script. Es más cómodo en el ordenador: envíate el código con 📤 y deja esta ventana abierta para pegar la URL al final.</p>
@@ -4720,6 +4723,7 @@ function usageSetupModal() {
       <li><b class="text-brand">2.</b> Menú <b>Extensiones → Apps Script</b>. Borra lo que haya y pega el código (botón de abajo). Guarda 💾.</li>
       <li><b class="text-brand">3.</b> <b>Implementar → Nueva implementación</b> → tipo <b>Aplicación web</b>. «Ejecutar como»: <b>Yo</b>. «Quién tiene acceso»: <b>Cualquier usuario</b>. Pulsa Implementar y autoriza con tu cuenta (si avisa de «app no verificada»: Configuración avanzada → Ir al proyecto).</li>
       <li><b class="text-brand">4.</b> Copia la <b>URL de la aplicación web</b> (acaba en /exec) y pégala aquí.</li>
+      <li class="text-amber-300"><b>Si ya lo habías implementado antes:</b> pega el código nuevo, guarda y en <b>Implementar → Gestionar implementaciones → ✏️ → Versión: Nueva versión → Implementar</b>. Si no, Google sigue usando el código viejo. La URL no cambia.</li>
     </ol>
     <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="copy" type="button">📋 Copiar código</button><button class="btn-ghost" data-mact="share" type="button">📤 Enviármelo</button></div>
     <label class="lbl">URL de la aplicación web<input class="field mt-1 font-mono text-xs" name="url" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec" /></label>
@@ -4732,7 +4736,7 @@ function usageSetupModal() {
       if (!USAGE_RE.test('#uso ' + url)) return toast('Pega la URL que acaba en /exec', 'warn');
       askPin({ title: '📶 Activar el registro de uso', text: 'Tu PIN guarda la clave de lectura cifrada y añade la dirección a la lista de acceso.', onPin: async pin => {
         await ghEditAcl(pin, lines => [...lines.filter(l => l.trim() && !/^#\s*uso\b/i.test(l.trim())), '#uso ' + url], 'Acceso: registro de uso');
-        lsSet(USE_KEY, await secretEnc(key, pin)); lsSet(PING_KEY, '');
+        lsSet(USE_KEY, await secretEnc(key, pin)); lsSet(PING_KEY, ''); try { localStorage.removeItem('fitnesteban_usekey_pending'); } catch { /* nada */ }
         ui.accessPin = pin; closeModal(); render(); toast('Registro de uso activado ✓');
         usagePing(); setTimeout(loadUsage, 2500);
       } });
@@ -4810,7 +4814,7 @@ function accessSectionHTML() {
     }).join('')}</div>
     ${gh ? '<p class="text-[11px] text-mute">✎ nombre · 🔄 nuevo código (el anterior deja de funcionar) · 🗑 quitar acceso</p>' : ''}
     ${access.usageUrl && lsGet(USE_KEY)
-      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? 'actualizado ahora' : '—'}</span><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></div>`
+      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? 'actualizado ahora' : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
       : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
     ${gh ? `<button class="btn-primary w-full" data-act="newAccess" type="button">＋ Crear código para alguien</button>
       <p class="text-[11px] text-mute flex justify-between">GitHub conectado ✓ (token cifrado con tu PIN)<button class="underline" data-act="ghDisconnect" type="button">Desconectar</button></p>`
