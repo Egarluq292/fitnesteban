@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.25.2';
+const APP_VERSION = '4.26.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3182,6 +3182,7 @@ function onboarding() {
       <p>🤖 <b>La IA funciona con tu propia clave de Gemini.</b> Es gratuita dentro de los límites de Google.</p>
       <p>🩺 <b>No sustituye a un profesional.</b> Las cifras son orientativas: si tienes lesiones, embarazo o algún problema de salud, consulta antes.</p>
       <p>🛠️ <b>Es un proyecto vivo.</b> Irá mejorando, pero puede tener fallos o cambiar.</p>
+      <p>📶 <b>Para mantener la app</b>, envía a Esteban solo el día de último uso y la versión instalada. Nada de tu dieta ni de tus entrenos.</p>
     </div>
     <label class="flex items-start gap-2 text-[13px]"><input type="checkbox" name="ok" ${d.ok ? 'checked' : ''} style="margin-top:3px;accent-color:#22d3ee;width:18px;height:18px" /> Lo he leído y estoy de acuerdo.</label>
     <button class="btn-primary w-full" data-mact="next" type="button">Empezar</button>`;
@@ -3264,7 +3265,7 @@ function onboarding() {
       if (!b.dataset.skip && !d.keyOk && !(await test(root))) return;
       const t = calcTargets(d), st = state.settings;
       st.profile = { name: d.name.slice(0, 24), sex: d.sex, age: d.age, height: d.height, goal: d.goal, activity: d.activity };
-      Object.assign(st, { targetKcal: t.kcal, targetProt: t.prot, targetCarbs: t.carbs, targetFat: t.fat, onboarded: todayISO() });
+      Object.assign(st, { targetKcal: t.kcal, targetProt: t.prot, targetCarbs: t.carbs, targetFat: t.fat, onboarded: todayISO(), usageOk: true });
       if (!b.dataset.skip && d.keyOk) st.apiKey = d.key;
       state.bodyMetrics.push({ id: uid('m_'), date: todayISO(), weight: r2(+d.weight), waist: null });
       persist(); closeModal(); ui._animRings = true; render();
@@ -3521,6 +3522,9 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.26.2', ['📶 La app envía a Esteban solo el día de último uso y la versión instalada, para saber quién tiene que actualizar. Nada de tu dieta ni de tus entrenos.']],
+  ['4.26.1', ['📶 Registro de uso: solo envían su día de último uso y versión los móviles que lo han aceptado en las condiciones de los primeros pasos (usuarios nuevos) y el tuyo. Sin avisos para el resto.'], 'admin'],
+  ['4.26.0', ['📶 Registro de uso en Ajustes → Acceso: ves cuándo usó cada persona la app por última vez y con qué versión. Se configura una vez con una hoja de Google y un Apps Script.'], 'admin'],
   ['4.25.2', ['📂 Ajustes más recogido: «Objetivos diarios» y «Hábitos» van plegados, como la IA. Se abren con un toque y a la derecha ves el resumen.', '🩹 Si al actualizar a la 4.25.1 tu lista de hábitos se quedó vacía, vuelve a aparecer.']],
   ['4.25.1', ['🧹 Quien instala la app desde cero empieza con la lista de hábitos en blanco (con un aviso en Dieta para añadirlos).'], 'quiet'],
   ['4.25.0', ['✅ Hábitos de Entreno o Diarios: en Ajustes eliges dónde va cada uno. Los diarios (suplementos, agua, cero alcohol…) salen en Dieta y se marcan cada día, entrenes o no, solo los días de la semana que elijas. El Coach y el resumen semanal ven cuántos días los cumples.']],
@@ -3708,6 +3712,7 @@ function openGuide() {
 }
 $('#helpBtn').addEventListener('click', openGuide);
 
+const USAGE_NOTICE_VER = '4.26.2';
 function maybeShowNews() {
   const seen = state.settings.lastSeenVersion;
   if (seen === APP_VERSION) return;
@@ -3718,7 +3723,11 @@ function maybeShowNews() {
   // sin novedades para este usuario (solo cambios de administración o arreglos internos): se marca como vista sin avisar
   if (!CHANGELOG.some(e => cmpVer(e[0], from) > 0 && cmpVer(e[0], APP_VERSION) <= 0 && newsForMe(e))) return markSeen();
   // se marca como vista solo cuando de verdad se muestra (por si la app se recarga justo al arrancar)
-  setTimeout(() => { if ($('#modalRoot').classList.contains('open')) return; markSeen(); openNews(from); }, 600);
+  setTimeout(() => {
+    if ($('#modalRoot').classList.contains('open')) return;
+    if (cmpVer(USAGE_NOTICE_VER, from) > 0) state.settings.usageOk = true; // ha visto la línea del registro de uso
+    markSeen(); openNews(from); setTimeout(usagePing, 1500);
+  }, 600);
 }
 
 /* =========================================================================
@@ -4265,7 +4274,7 @@ const actions = {
   editProfile: () => profileModal(),
   newAccess: () => newAccessModal(),
   openAccess: () => {
-    if (state.settings.pinHash) return askPinOnly('🔑 Acceso', 'Escribe tu PIN para abrir esta sección.', pin => { ui.accessOpen = true; ui.accessPin = pin; ui.accessReveal = {}; render(); });
+    if (state.settings.pinHash) return askPinOnly('🔑 Acceso', 'Escribe tu PIN para abrir esta sección.', pin => { ui.accessOpen = true; ui.accessPin = pin; ui.accessReveal = {}; ui.usage = null; ui.usageErr = ''; render(); loadUsage(); });
     let fails = 0;
     openModal(`<h3 class="modal-title">🔑 Acceso</h3><p class="text-sm text-mute">Este dispositivo no tiene PIN: escribe tu código personal de acceso (o crea un PIN en Ajustes → Seguridad para usarlo aquí).</p>
       <input class="field mt-1 text-center text-2xl font-black tracking-[.2em] uppercase" name="code" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" />
@@ -4279,6 +4288,8 @@ const actions = {
     });
   },
   closeAccess: () => { ui.accessOpen = false; render(); },
+  usageSetup: () => usageSetupModal(),
+  usageRefresh: () => { ui.usage = null; ui.usageErr = ''; loadUsage(); render(); },
   showCode: async b => {
     const h = b.dataset.hash;
     if (ui.accessReveal?.[h]) { delete ui.accessReveal[h]; return render(); }
@@ -4472,7 +4483,7 @@ function parseAcl(text) {
     return { hash: p[0].toLowerCase(), admin };
   }).filter(x => /^[0-9a-f]{32}$/.test(x.hash));
 }
-const access = { list: null, me: null, ok: false };
+const access = { list: null, me: null, ok: false, usageUrl: '' };
 function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* nada */ } }
 async function accessCheck(list) {
@@ -4519,13 +4530,19 @@ function unlock(me) {
   else if (!newsChecked) { newsChecked = true; maybeShowNews(); }
 }
 let newsChecked = false;
+/* acceso.txt: huellas + (opcional) una línea «#uso https://script.google.com/…» con la dirección del registro de uso */
+const USAGE_RE = /^#\s*uso\s+(https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec)\s*$/m;
+function aclLoad(text) {
+  const list = parseAcl(text), m = String(text).match(USAGE_RE);
+  access.list = list; access.usageUrl = m ? m[1] : '';
+  lsSet(ACL_KEY, { list, usageUrl: access.usageUrl, at: Date.now() });
+  return list;
+}
 async function fetchAcl() {
   try {
     const r = await fetch('acceso.txt?v=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    const list = parseAcl(await r.text());
-    access.list = list; lsSet(ACL_KEY, { list, at: Date.now() });
-    return list;
+    return aclLoad(await r.text());
   } catch { return null; }
 }
 /* Lista al día leída de la API de GitHub (sin la caché de Pages). Sin token: 60 consultas/hora por conexión, solo se usa si el código no aparece. */
@@ -4533,24 +4550,22 @@ async function fetchAclLive() {
   try {
     const r = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}?t=${Date.now()}`, { headers: { Accept: 'application/vnd.github.raw+json' }, cache: 'no-store' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    const list = parseAcl(await r.text());
-    access.list = list; lsSet(ACL_KEY, { list, at: Date.now() });
-    return list;
+    return aclLoad(await r.text());
   } catch { return null; }
 }
 async function accessBoot() {
   const cached = lsGet(ACL_KEY);
-  if (cached?.list) access.list = cached.list;
+  if (cached?.list) { access.list = cached.list; access.usageUrl = cached.usageUrl || ''; }
   const meCached = await accessCheck(access.list);
   if (meCached) unlock(meCached); else lockScreen(access.list ? 'code' : 'wait');
   const fresh = await fetchAcl();
   if (!fresh) { if (!access.ok && !access.list) lockScreen('code', 'No hay conexión para comprobar el acceso. Conéctate y vuelve a abrir la app.'); return; }
   let me = await accessCheck(fresh);
   if (!me && lsGet(ACCESS_KEY)?.code) { const live = await fetchAclLive(); if (live) me = await accessCheck(live); }
-  if (me) { if (!access.ok) unlock(me); else access.me = me; }
+  if (me) { if (!access.ok) unlock(me); else access.me = me; usagePing(); }
   else lockScreen('code', lsGet(ACCESS_KEY)?.code ? 'Tu código ya no es válido. Pide uno nuevo a Esteban.' : '');
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { if (l && !(await accessCheck(l))) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', 'Tu código ya no es válido. Pide uno nuevo a Esteban.'); } }); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { usagePing(); if (l && !(await accessCheck(l))) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', 'Tu código ya no es válido. Pide uno nuevo a Esteban.'); } }); });
 
 /* Gestión (solo administrador): crear el código de una persona y la línea para acceso.txt */
 function newCode() { const a = crypto.getRandomValues(new Uint8Array(8)); const s = [...a].map(x => CODE_ABC[x % CODE_ABC.length]).join(''); return s.slice(0, 4) + '-' + s.slice(4); }
@@ -4591,7 +4606,7 @@ async function ghEditAcl(pin, fn, message) {
   const text = b64utf8(cur.content || '');
   const next = fn(text.replace(/\r/g, '').split('\n')).join('\n').replace(/\n*$/, '\n');
   await ghApi(token, 'PUT', { message, content: utf8b64(next), sha: cur.sha });
-  access.list = parseAcl(next); lsSet(ACL_KEY, { list: access.list, at: Date.now() });
+  aclLoad(next);
 }
 function accessWho(x) { return state.accessNames?.[x.hash] || ''; }
 /* Códigos guardados en la lista del administrador, cifrados con su PIN (nunca en GitHub) */
@@ -4612,7 +4627,119 @@ async function accessCodeOf(hash) {
 async function reencryptSecrets(oldPin, newPin) {
   for (const [h, e] of Object.entries(state.accessCodes || {})) { try { state.accessCodes[h] = await codeEnc(await codeDec(e, oldPin), newPin); } catch { /* guardado con otro PIN: se queda como estaba */ } }
   try { if (lsGet(GH_KEY)) await ghSaveToken(await ghToken(oldPin), newPin); } catch { /* nada */ }
+  try { const u = lsGet(USE_KEY); if (u) lsSet(USE_KEY, await secretEnc(await secretDec(u, oldPin), newPin)); } catch { /* nada */ }
 }
+/* ---------- Registro de uso: día de último uso y versión (una vez al día por móvil) ----------
+   Va a una hoja de Google del administrador mediante un Apps Script. Solo se envía la huella del código y la versión. */
+const USE_KEY = 'fitnesteban_usekey', PING_KEY = 'fitnesteban_ping';
+async function secretEnc(text, pin) {
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await pinKey(pin, salt), new TextEncoder().encode(text));
+  return { s: b64e(salt), iv: b64e(iv), ct: b64e(ct) };
+}
+const secretDec = (e, pin) => codeDec(e, pin);
+async function usagePing() {
+  try {
+    const url = access.usageUrl, code = lsGet(ACCESS_KEY)?.code;
+    if (!url || !code || !access.ok || !navigator.onLine || lsGet(PING_KEY) === todayISO()) return;
+    // solo móviles que han visto la frase de las condiciones (instalados desde la 4.26) y el administrador
+    if (!access.me?.admin && !state.settings.usageOk) return;
+    const h = await codeHash(code);
+    await fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ h, v: APP_VERSION }) });
+    lsSet(PING_KEY, todayISO());
+  } catch { /* sin conexión: mañana se vuelve a intentar */ }
+}
+async function loadUsage() {
+  const enc = lsGet(USE_KEY);
+  if (!access.usageUrl || !enc || !ui.accessPin || ui.usageLoading) return;
+  ui.usageLoading = true;
+  try {
+    const key = await secretDec(enc, ui.accessPin);
+    const r = await fetch(`${access.usageUrl}?key=${encodeURIComponent(key)}&t=${Date.now()}`, { cache: 'no-store' });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error === 'clave' ? 'La clave del registro no coincide con la del script' : 'El registro no respondió bien');
+    ui.usage = {}; for (const x of d.rows || []) ui.usage[String(x.h).toLowerCase()] = x;
+    ui.usageErr = '';
+  } catch (e) { ui.usageErr = e.message || 'No se pudo leer el registro de uso'; ui.usage = null; }
+  ui.usageLoading = false; ui.usageAt = Date.now();
+  if (ui.accessOpen && ui.view === 'settings') render();
+}
+function usageLine(hash) {
+  if (!access.usageUrl || !lsGet(USE_KEY)) return '';
+  if (!ui.usage) return ui.usageLoading ? '<div class="text-[11px] text-mute"><span class="spinner"></span> Consultando uso…</div>' : '';
+  const u = ui.usage[hash];
+  if (!u) return '<div class="text-[11px] text-mute">⚪ Aún no la ha abierto (o sin conexión desde que tiene el código)</div>';
+  const ago = daysBetween(u.last, todayISO()), old = u.v && cmpVer(APP_VERSION, String(u.v)) > 0;
+  const when = ago <= 0 ? 'Hoy' : ago === 1 ? 'Ayer' : `Hace ${ago} días`;
+  return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>`;
+}
+function usageScript(key) {
+  return `// FITNESTEBAN · registro de uso (solo día de último uso y versión)
+const READ_KEY = '${key}';
+const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
+function hoja_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName('uso');
+  if (!sh) { sh = ss.insertSheet('uso'); sh.getRange('A:E').setNumberFormat('@'); sh.appendRow(['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso']); }
+  return sh;
+}
+function fecha_(x) { return x instanceof Date ? Utilities.formatDate(x, 'Europe/Madrid', 'yyyy-MM-dd') : String(x); }
+function huellas_() {
+  const c = CacheService.getScriptCache(); let t = c.get('acl');
+  if (!t) { t = UrlFetchApp.fetch(ACL_URL + '?t=' + Date.now(), { muteHttpExceptions: true }).getContentText(); c.put('acl', t, 600); }
+  return t.split('\\n').map(l => l.trim().split(/\\s+/)[0].toLowerCase()).filter(h => /^[0-9a-f]{32}$/.test(h));
+}
+function salida_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+function doPost(e) {
+  try {
+    const b = JSON.parse(e.postData.contents), h = String(b.h || '').toLowerCase(), v = String(b.v || '').slice(0, 12);
+    if (!/^[0-9a-f]{32}$/.test(h) || huellas_().indexOf(h) < 0) return salida_({ ok: false });
+    const lock = LockService.getScriptLock(); lock.waitLock(10000);
+    try {
+      const sh = hoja_(), hoy = fecha_(new Date()), datos = sh.getDataRange().getValues();
+      let fila = -1; for (let i = 1; i < datos.length; i++) if (String(datos[i][0]) === h) { fila = i + 1; break; }
+      if (fila < 0) sh.appendRow([h, hoy, v, hoy, '1']);
+      else { const antes = fecha_(datos[fila - 1][1]); sh.getRange(fila, 2, 1, 2).setValues([[hoy, v]]); if (antes !== hoy) sh.getRange(fila, 5).setValue(String((+datos[fila - 1][4] || 0) + 1)); }
+    } finally { lock.releaseLock(); }
+    return salida_({ ok: true });
+  } catch (err) { return salida_({ ok: false }); }
+}
+function doGet(e) {
+  if (!e || !e.parameter || e.parameter.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
+  const datos = hoja_().getDataRange().getValues().slice(1);
+  return salida_({ ok: true, rows: datos.map(r => ({ h: String(r[0]), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1 })) });
+}`;
+}
+function usageSetupModal() {
+  const key = [...crypto.getRandomValues(new Uint8Array(18))].map(b => b.toString(16).padStart(2, '0')).join('');
+  const code = usageScript(key);
+  openModal(`<h3 class="modal-title">📶 Ver quién usa la app</h3>
+    <p class="text-xs text-mute">Se hace una sola vez (unos 5 minutos). Todo queda en <b class="text-slate-300">tu</b> Google: una hoja de cálculo y un pequeño script. Es más cómodo en el ordenador: envíate el código con 📤 y deja esta ventana abierta para pegar la URL al final.</p>
+    <ol class="card p-3 space-y-2 text-[13px] leading-snug">
+      <li><b class="text-brand">1.</b> Abre <a class="text-brand underline" href="https://sheets.new" target="_blank" rel="noopener">sheets.new</a> y ponle de nombre «FITNESTEBAN uso».</li>
+      <li><b class="text-brand">2.</b> Menú <b>Extensiones → Apps Script</b>. Borra lo que haya y pega el código (botón de abajo). Guarda 💾.</li>
+      <li><b class="text-brand">3.</b> <b>Implementar → Nueva implementación</b> → tipo <b>Aplicación web</b>. «Ejecutar como»: <b>Yo</b>. «Quién tiene acceso»: <b>Cualquier usuario</b>. Pulsa Implementar y autoriza con tu cuenta (si avisa de «app no verificada»: Configuración avanzada → Ir al proyecto).</li>
+      <li><b class="text-brand">4.</b> Copia la <b>URL de la aplicación web</b> (acaba en /exec) y pégala aquí.</li>
+    </ol>
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="copy" type="button">📋 Copiar código</button><button class="btn-ghost" data-mact="share" type="button">📤 Enviármelo</button></div>
+    <label class="lbl">URL de la aplicación web<input class="field mt-1 font-mono text-xs" name="url" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec" /></label>
+    <button class="btn-primary w-full" data-mact="save" type="button">Guardar y activar</button>
+    <p class="text-[11px] text-mute">El código lleva una clave de lectura única: solo tu app (con tu PIN) puede consultar la hoja. Los móviles de los demás solo pueden apuntar su visita.</p>`, {
+    copy: () => navigator.clipboard.writeText(code).then(() => toast('Código copiado: pégalo en Apps Script')).catch(() => toast('No se pudo copiar', 'error')),
+    share: () => { if (navigator.share) navigator.share({ title: 'FITNESTEBAN · script de uso', text: code }).catch(() => {}); else navigator.clipboard.writeText(code).then(() => toast('Copiado (este navegador no permite compartir)')); },
+    save: root => {
+      const url = mval(root, 'url').trim();
+      if (!USAGE_RE.test('#uso ' + url)) return toast('Pega la URL que acaba en /exec', 'warn');
+      askPin({ title: '📶 Activar el registro de uso', text: 'Tu PIN guarda la clave de lectura cifrada y añade la dirección a la lista de acceso.', onPin: async pin => {
+        await ghEditAcl(pin, lines => [...lines.filter(l => l.trim() && !/^#\s*uso\b/i.test(l.trim())), '#uso ' + url], 'Acceso: registro de uso');
+        lsSet(USE_KEY, await secretEnc(key, pin)); lsSet(PING_KEY, '');
+        ui.accessPin = pin; closeModal(); render(); toast('Registro de uso activado ✓');
+        usagePing(); setTimeout(loadUsage, 2500);
+      } });
+    }
+  });
+}
+
 function codeShareModal(title, who, code, warn = '') {
   const msg = `Hola${who ? ' ' + who : ''}, tu código de FITNESTEBAN es ${fmtCode(code)}\nhttps://egarluq292.github.io/fitnesteban/`;
   openModal(`<h3 class="modal-title">${title}</h3>${warn}
@@ -4679,9 +4806,12 @@ function accessSectionHTML() {
       return `<div class="bg-ink rounded-lg px-3 py-2 text-xs space-y-1.5">
       <div class="flex items-center justify-between gap-2"><span class="min-w-0 truncate font-semibold text-[13px]">${accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`}${me ? ' <span class="text-brand font-normal">(tú · admin)</span>' : x.admin ? ' <span class="text-mute font-normal">(admin)</span>' : ''}</span>
       <span class="flex items-center gap-1.5 shrink-0"><button class="iconbtn iconbtn-sm" data-act="nameAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Poner nombre">✎</button>${gh ? `<button class="iconbtn iconbtn-sm" data-act="regenAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Nuevo código">🔄</button>` : ''}${me || !gh ? '' : `<button class="iconbtn iconbtn-sm text-rose-300" data-act="delAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Quitar acceso">🗑</button>`}</span></div>
-      <div class="flex items-center justify-between gap-2 min-h-[28px]">${codeLine}</div></div>`;
+      <div class="flex items-center justify-between gap-2 min-h-[28px]">${codeLine}</div>${usageLine(x.hash)}</div>`;
     }).join('')}</div>
     ${gh ? '<p class="text-[11px] text-mute">✎ nombre · 🔄 nuevo código (el anterior deja de funcionar) · 🗑 quitar acceso</p>' : ''}
+    ${access.usageUrl && lsGet(USE_KEY)
+      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? 'actualizado ahora' : '—'}</span><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></div>`
+      : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
     ${gh ? `<button class="btn-primary w-full" data-act="newAccess" type="button">＋ Crear código para alguien</button>
       <p class="text-[11px] text-mute flex justify-between">GitHub conectado ✓ (token cifrado con tu PIN)<button class="underline" data-act="ghDisconnect" type="button">Desconectar</button></p>`
     : `<p class="text-[11px] text-mute">Conecta GitHub para crear y quitar códigos con un botón, sin editar archivos.</p>
