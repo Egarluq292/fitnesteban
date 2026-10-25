@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.24.0';
+const APP_VERSION = '4.24.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3452,18 +3452,21 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* =========================================================================
    GUÍA Y NOVEDADES
    ========================================================================= */
+/* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
+   El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
-  ['4.24.0', ['🔑 Acceso: los códigos nuevos quedan guardados (cifrados con tu PIN) para verlos o copiarlos cuando quieras. Nuevo botón 🔄 para dar un código nuevo a quien lo pierda, y envío directo por WhatsApp. Al cambiar el PIN se vuelven a cifrar los códigos y la llave de GitHub.']],
-  ['4.23.1', ['🔑 Los códigos de acceso recién creados funcionan a la primera, sin esperar a que GitHub publique la lista.']],
-  ['4.23.0', ['👋 Primeros pasos para quien instala la app: condiciones, perfil con objetivos calculados a su medida y guía para activar la clave de Gemini.']],
+  ['4.24.1', ['📣 Novedades por perfil: los cambios de administración (Acceso, primeros pasos…) solo te los anuncia a ti. El resto solo recibe aviso cuando una versión les afecta; en su historial, lo demás sale como «Mejoras en la aplicación».'], 'admin'],
+  ['4.24.0', ['🔑 Acceso: los códigos nuevos quedan guardados (cifrados con tu PIN) para verlos o copiarlos cuando quieras. Nuevo botón 🔄 para dar un código nuevo a quien lo pierda, y envío directo por WhatsApp. Al cambiar el PIN se vuelven a cifrar los códigos y la llave de GitHub.'], 'admin'],
+  ['4.23.1', ['🔑 Los códigos de acceso recién creados funcionan a la primera, sin esperar a que GitHub publique la lista.'], 'quiet'],
+  ['4.23.0', ['👋 Primeros pasos para quien instala la app: condiciones, perfil con objetivos calculados a su medida y guía para activar la clave de Gemini.'], 'admin'],
   ['4.22.1', ['📏 Altura en «Mi perfil». El Coach IA y el resumen semanal te avisan si tus objetivos de kcal o proteína no encajan con tu perfil.']],
   ['4.22.0', ['👤 Nuevo «Mi perfil» en Ajustes (nombre, sexo, edad y objetivo): el Coach IA y el resumen semanal te aconsejan a tu medida.', '📖 La guía «?» muestra tus propios bloques y días.']],
   ['4.21.2', ['🕘 El Coach IA guarda tus conversaciones de los últimos 7 días (hasta 20). Ábrelas desde «Conversaciones anteriores» y retómalas donde las dejaste.']],
   ['4.21.1', ['➕ «Añadir ingrediente» en cualquier comida cargada (estimada con foto o texto, propuesta por el Coach o al editarla): escribe «30 g de queso fresco» y la IA calcula sus macros, o añádelo a mano.']],
   ['4.21.0', ['🍽️ Cuando el Coach IA te propone una comida, aparece «Apuntar en Dieta»: abre la comida que toca con los alimentos ya cargados para que ajustes raciones y la registres.']],
   ['4.20.5', ['🤖 Si Gemini está saturado, la app reintenta sola y, si hace falta, usa otro modelo de Gemini. Los errores de la IA salen en español.']],
-  ['4.20.4', ['🔒 La sección Acceso de Ajustes va plegada y se abre con tu PIN (o con tu código personal si el dispositivo no tiene PIN). Se cierra sola al salir de Ajustes o de la app.']],
-  ['4.20.2', ['🔑 Acceso privado: cada persona entra con su propio código. La lista pública solo contiene huellas; el administrador crea y quita códigos desde Ajustes → Acceso (con GitHub conectado y su PIN).']],
+  ['4.20.4', ['🔒 La sección Acceso de Ajustes va plegada y se abre con tu PIN (o con tu código personal si el dispositivo no tiene PIN). Se cierra sola al salir de Ajustes o de la app.'], 'admin'],
+  ['4.20.2', ['🔑 Acceso privado: cada persona entra con su propio código. La lista pública solo contiene huellas; el administrador crea y quita códigos desde Ajustes → Acceso (con GitHub conectado y su PIN).'], 'admin'],
   ['4.19.1', ['🌱 Retos para cualquier nivel: si en la prueba inicial no llegas al mínimo, empiezas en el nivel más bajo con una variante más fácil. La rueda abdominal empieza ahora en 1.']],
   ['4.19.0', ['🛞 Nuevo reto: rueda abdominal en dos fases. De rodillas (1–30, 3 series con bajada lenta) y, al completarla, de pie (1–15).']],
   ['4.18.2', ['⚡ El botón del Coach IA es ahora un rayo cian metalizado, como TEBAN.']],
@@ -3584,11 +3587,21 @@ const GUIDE = [
   ]]
 ];
 
+const isAdminUser = () => !!access.me?.admin;
+const newsForMe = ([, , tag]) => isAdminUser() || !tag;
 function renderNews(fromVer) {
-  const list = CHANGELOG.filter(([v]) => !fromVer || cmpVer(v, fromVer) > 0).slice(0, 4);
-  return list.map(([v, items]) => `<div class="mt-3 first:mt-0">
-      <div class="text-xs font-extrabold text-brand">Versión ${v}</div>
-      <ul class="mt-1 space-y-1 text-sm text-slate-300 list-disc pl-5">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
+  let list = CHANGELOG.filter(([v]) => !fromVer || cmpVer(v, fromVer) > 0);
+  if (fromVer && !isAdminUser()) list = list.filter(newsForMe);
+  // historial para usuarios: las versiones internas seguidas se agrupan en una sola línea
+  const rows = [];
+  for (const e of list) {
+    if (newsForMe(e)) rows.push({ v: e[0], items: e[1] });
+    else if (rows.length && rows[rows.length - 1].internal) rows[rows.length - 1].v2 = e[0];
+    else rows.push({ v: e[0], items: ['🔧 Mejoras en la aplicación.'], internal: true });
+  }
+  return rows.slice(0, 4).map(r => `<div class="mt-3 first:mt-0">
+      <div class="text-xs font-extrabold ${r.internal ? 'text-mute' : 'text-brand'}">Versión ${r.v2 ? r.v2 + '–' + r.v : r.v}</div>
+      <ul class="mt-1 space-y-1 text-sm ${r.internal ? 'text-mute' : 'text-slate-300'} list-disc pl-5">${r.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
     </div>`).join('');
 }
 function openNews(fromVer) {
@@ -3633,6 +3646,8 @@ function maybeShowNews() {
   const hasData = state.sessions.length || Object.keys(state.meals).length;
   const from = seen || (hasData ? '4.4.1' : null); // sin registro previo: si ya usabas la app, vienes de la 4.4.1
   if (!(from && cmpVer(APP_VERSION, from) > 0)) return markSeen();
+  // sin novedades para este usuario (solo cambios de administración o arreglos internos): se marca como vista sin avisar
+  if (!CHANGELOG.some(e => cmpVer(e[0], from) > 0 && cmpVer(e[0], APP_VERSION) <= 0 && newsForMe(e))) return markSeen();
   // se marca como vista solo cuando de verdad se muestra (por si la app se recarga justo al arrancar)
   setTimeout(() => { if ($('#modalRoot').classList.contains('open')) return; markSeen(); openNews(from); }, 600);
 }
@@ -4409,7 +4424,9 @@ function unlock(me) {
   $('#lockScreen')?.remove(); document.body.classList.remove('overflow-hidden');
   if (ui.view === 'settings') render();
   if (needsOnboarding(me)) setTimeout(onboarding, 300);
+  else if (!newsChecked) { newsChecked = true; maybeShowNews(); }
 }
+let newsChecked = false;
 async function fetchAcl() {
   try {
     const r = await fetch('acceso.txt?v=' + Date.now(), { cache: 'no-store' });
@@ -4653,6 +4670,5 @@ ui.dayId = nextDayId();
   else ui._animRings = true;
 }
 render();
-accessBoot();
-maybeShowNews();
+accessBoot(); // las novedades se comprueban al entrar (unlock), cuando ya se sabe si es el administrador
 setTimeout(() => maybeAutoDriveBackup(), 1500);
