@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.26.3';
+const APP_VERSION = '4.26.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3522,6 +3522,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.26.4', ['📶 Registro de uso: al actualizar, el móvil vuelve a avisar en el momento con su versión nueva (antes la hoja mantenía la versión vieja hasta el día siguiente).'], 'quiet'],
   ['4.26.3', ['📶 Registro de uso: la clave del script ya no cambia al cerrar y reabrir la ventana de configuración, y hay un botón «Reconfigurar» por si algo falla.'], 'admin'],
   ['4.26.2', ['📶 La app envía a Esteban solo el día de último uso y la versión instalada, para saber quién tiene que actualizar. Nada de tu dieta ni de tus entrenos.']],
   ['4.26.1', ['📶 Registro de uso: solo envían su día de último uso y versión los móviles que lo han aceptado en las condiciones de los primeros pasos (usuarios nuevos) y el tuyo. Sin avisos para el resto.'], 'admin'],
@@ -4642,12 +4643,14 @@ const secretDec = (e, pin) => codeDec(e, pin);
 async function usagePing() {
   try {
     const url = access.usageUrl, code = lsGet(ACCESS_KEY)?.code;
-    if (!url || !code || !access.ok || !navigator.onLine || lsGet(PING_KEY) === todayISO()) return;
+    // una vez al día… y otra vez si cambia la versión (si no, la hoja se queda con la versión vieja hasta mañana)
+    const mark = todayISO() + '|' + APP_VERSION;
+    if (!url || !code || !access.ok || !navigator.onLine || lsGet(PING_KEY) === mark) return;
     // solo móviles que han visto la frase de las condiciones (instalados desde la 4.26) y el administrador
     if (!access.me?.admin && !state.settings.usageOk) return;
     const h = await codeHash(code);
     await fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ h, v: APP_VERSION }) });
-    lsSet(PING_KEY, todayISO());
+    lsSet(PING_KEY, mark);
   } catch { /* sin conexión: mañana se vuelve a intentar */ }
 }
 async function loadUsage() {
