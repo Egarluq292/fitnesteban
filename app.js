@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.24.1';
+const APP_VERSION = '4.25.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -14,6 +14,19 @@ const DEFAULT_HABITS = [
   'Puente proteico (19:30): batido / yogur / pavo',
   'Pacto 0,0: cero alcohol hoy entre semana'
 ];
+
+/* Hábitos: días en orden de getDay() (0 = domingo); se muestran de lunes a domingo */
+const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0], DAY_LETTER = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+function daysLabel(days) {
+  const set = new Set(days);
+  if (set.size === 7) return 'Todos los días';
+  if (set.size === 5 && [1, 2, 3, 4, 5].every(d => set.has(d))) return 'L–V';
+  if (set.size === 2 && set.has(6) && set.has(0)) return 'Fines de semana';
+  return WEEK_ORDER.filter(d => set.has(d)).map(d => DAY_LETTER[d]).join(' · ') || 'Ningún día';
+}
+const dailyHabitsFor = date => (state.settings.habitList || []).filter(h => h.where === 'daily' && h.days.includes(parseISO(date).getDay()));
+const habitDone = (date, name) => (state.habitLog[date] || []).includes(name);
 
 /* ---------- Plan por defecto (tu Push / Pull / Torso) ---------- */
 const mkEx = (id, block, sets, minReps, maxReps, increment, rest, variants) => ({
@@ -156,10 +169,10 @@ const isStandalone = () => window.matchMedia('(display-mode: standalone)').match
 
 /* ---------- Estado ---------- */
 function defaultSettings() {
-  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, minProtMeal: 25, pinHash: '', lastSeenVersion: '', driveConnected: false, driveEmail: '', driveFolderId: '', autoDrive: true, lastDriveBackup: null, swipeNav: true, swipeMode: '', profile: null };
+  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [], habitList: [], lastBackup: null, eatBackCardio: false, minProtMeal: 25, pinHash: '', lastSeenVersion: '', driveConnected: false, driveEmail: '', driveFolderId: '', autoDrive: true, lastDriveBackup: null, swipeNav: true, swipeMode: '', profile: null };
 }
 function defaultState() {
-  return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {}, chat: null, chats: [], retos: {}, accessNames: {}, accessCodes: {} };
+  return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {}, chat: null, chats: [], retos: {}, accessNames: {}, accessCodes: {}, habitLog: {} };
 }
 const safeUrl = u => { const t = String(u || '').trim(); return /^https:\/\/[^\s"'<>]+$/i.test(t) ? t : ''; };
 const videoUrl = v => v.video || `https://www.youtube.com/results?search_query=${encodeURIComponent(v.name + ' técnica correcta')}`;
@@ -219,6 +232,11 @@ function normalize(s) {
   const out = { ...d, ...s };
   out.settings = { ...d.settings, ...(s.settings || {}) };
   if (!Array.isArray(out.settings.habits)) out.settings.habits = [...DEFAULT_HABITS];
+  // 4.25: hábitos con sitio (Entreno o Diario) y días; settings.habits sigue siendo la lista de los de Entreno
+  if (!Array.isArray(out.settings.habitList)) out.settings.habitList = out.settings.habits.map(name => ({ name, where: 'train', days: [...ALL_DAYS] }));
+  out.settings.habitList = out.settings.habitList.filter(h => h && h.name).map(h => ({ name: String(h.name).slice(0, 60), where: h.where === 'daily' ? 'daily' : 'train', days: Array.isArray(h.days) && h.days.length ? h.days.filter(d => d >= 0 && d <= 6) : [...ALL_DAYS] }));
+  out.settings.habits = out.settings.habitList.filter(h => h.where === 'train').map(h => h.name);
+  if (!out.habitLog || typeof out.habitLog !== 'object' || Array.isArray(out.habitLog)) out.habitLog = {};
   out.plan = normalizePlan(out.plan);
   for (const k of ['selectedVariants', 'memory', 'meals', 'drafts']) if (!out[k] || typeof out[k] !== 'object' || Array.isArray(out[k])) out[k] = {};
   for (const k of ['sessions', 'bodyMetrics', 'cardio', 'reports']) if (!Array.isArray(out[k])) out[k] = [];
@@ -320,7 +338,7 @@ let saveTimer = null;
 function hashStr(t) { let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0; return h; }
 function dataSig() {
   const retos = {}; for (const [k, r] of Object.entries(state.retos || {})) retos[k] = { level: r.level, best: r.best, history: r.history, tests: r.tests };
-  return hashStr(JSON.stringify([state.plan, state.sessions, state.meals, state.cardio, state.bodyMetrics, retos, state.reports, state.selectedVariants]));
+  return hashStr(JSON.stringify([state.plan, state.sessions, state.meals, state.cardio, state.bodyMetrics, retos, state.reports, state.selectedVariants, state.habitLog]));
 }
 function latestContentDate(st) {
   let d = '';
@@ -1272,6 +1290,10 @@ function weekData() {
     cardio_sesiones: cardio.length, cardio_minutos: cardio.reduce((a, c) => a + c.minutes, 0), cardio_kcal: cardio.reduce((a, c) => a + c.kcal, 0), gym_kcal_estimadas: sess.reduce((a, x) => a + gymKcalOf(x), 0),
     peso_tendencia_kg: wt.ready ? wt.last.y : null, cambio_peso_kg_semana: wt.ready ? r2(wt.kgWeek) : null, cambio_cintura_cm_3_semanas: wt.ready ? wt.waistChange3 : null,
     habitos_cumplidos_en_sesiones: habits, semana_de_descarga: deloadActive(),
+    habitos_diarios: (state.settings.habitList || []).filter(h => h.where === 'daily').map(h => {
+      const due = Array.from({ length: 7 }, (_, i) => addDays(to, -i)).filter(d => h.days.includes(parseISO(d).getDay()));
+      return { habito: h.name, cumplidos: due.filter(d => habitDone(d, h.name)).length, dias_que_tocaba: due.length };
+    }),
     duracion_media_sesion_min: (() => { const l = sess.filter(x => x.durationMin); return l.length ? Math.round(l.reduce((a, x) => a + x.durationMin, 0) / l.length) : null; })()
   };
 }
@@ -2002,6 +2024,7 @@ function renderDiet() {
     ${(() => { const ps = protSpread(date); return ps.total ? `<p class="text-[11px] mt-3 ${ps.ok === ps.total ? 'text-emerald-300' : 'text-amber-300'}">🥩 Proteína repartida: ${ps.ok}/${ps.total} comidas con ${minProt()} g o más${ps.low.length ? ` · baja en ${esc(ps.low.join(', ').toLowerCase())}` : ' ✓'}</p>` : ''; })()}
     <p class="text-xs text-mute mt-2 leading-relaxed">${esc(advice)}</p>
   </section>
+  ${dailyHabitsHTML(date)}
 
   <section class="card p-4 mt-3 space-y-3 ${ui.editing ? 'border-brand/50' : ''}" id="mealCard">
     ${ui.editing ? `<div class="flex items-center justify-between"><h3 class="section-title">✏️ Editar comida</h3><span class="text-[11px] text-mute">${esc(fmtDate(ui.editing.date))}</span></div>` : '<h3 class="section-title">➕ Añadir comida</h3>'}
@@ -2579,11 +2602,7 @@ function renderSettings() {
     </div>
   </details>
 
-  <section class="card p-4 mt-3 space-y-3">
-    <h3 class="section-title">✅ Hábitos del remate</h3>
-    <textarea class="field" id="habitsTxt" rows="3" placeholder="Uno por línea">${esc(st.habits.join('\n'))}</textarea>
-    <button class="btn-primary w-full" data-act="saveHabits" type="button">Guardar hábitos</button>
-  </section>
+  ${habitsSettingsHTML()}
 
   <section class="card p-4 mt-3 space-y-3">
     <h3 class="section-title">💾 Copias de seguridad</h3>
@@ -3088,6 +3107,35 @@ document.addEventListener('visibilitychange', () => {
   if (hiddenAt && (Date.now() - hiddenAt > 30 * 60000 || hiddenDay !== todayISO()) && dietBackToToday() && ui.view === 'diet' && !$('#modalRoot').classList.contains('open')) { ui._animRings = true; render(); window.scrollTo({ top: 0 }); }
 });
 
+/* ---------- Hábitos: editor en Ajustes y tarjeta diaria en Dieta ---------- */
+function saveHabitList() { state.settings.habits = state.settings.habitList.filter(h => h.where === 'train').map(h => h.name); persist(); render(); }
+function habitsSettingsHTML() {
+  const list = state.settings.habitList || [];
+  return `<section class="card p-4 mt-3 space-y-3">
+    <h3 class="section-title">✅ Hábitos</h3>
+    <p class="text-[11px] text-mute">🏋️ <b class="text-slate-300">Entreno</b>: se marcan al guardar la sesión. 🍽️ <b class="text-slate-300">Diario</b>: salen en Dieta los días que elijas y se marcan cada día, entrenes o no.</p>
+    <div class="space-y-1.5">${list.map((h, i) => `<div class="bg-ink rounded-lg px-3 py-2 space-y-2">
+      <div class="flex items-center justify-between gap-2"><span class="text-[13px] font-semibold min-w-0 break-words">${esc(h.name)}</span><button class="iconbtn iconbtn-sm text-rose-300 shrink-0" data-act="habDel" data-i="${i}" type="button" aria-label="Borrar hábito">🗑</button></div>
+      <div class="seg" style="grid-template-columns:repeat(2,minmax(0,1fr))"><button class="seg-btn py-1.5 ${h.where === 'train' ? 'seg-on' : ''}" data-act="habWhere" data-i="${i}" data-v="train" type="button">🏋️ Entreno</button><button class="seg-btn py-1.5 ${h.where === 'daily' ? 'seg-on' : ''}" data-act="habWhere" data-i="${i}" data-v="daily" type="button">🍽️ Diario (Dieta)</button></div>
+      ${h.where === 'daily' ? `<button class="text-[12px] text-brand flex items-center gap-1" data-act="habDaysOpen" data-i="${i}" type="button">📅 ${daysLabel(h.days)} <span class="text-mute">${ui.habDaysOpen === i ? '▲' : '▼'}</span></button>
+        ${ui.habDaysOpen === i ? `<div class="grid grid-cols-7 gap-1">${WEEK_ORDER.map(d => `<button class="seg-btn py-1.5 rounded-lg border ${h.days.includes(d) ? 'seg-on' : 'border-line'}" data-act="habDay" data-i="${i}" data-d="${d}" type="button">${DAY_LETTER[d]}</button>`).join('')}</div>` : ''}` : ''}
+    </div>`).join('') || '<p class="text-xs text-mute">Aún no tienes hábitos.</p>'}</div>
+    ${list.length < 12 ? `<div class="flex gap-2"><input class="field flex-1 min-w-0" id="habNew" maxlength="60" placeholder="Nuevo hábito (ej: 💊 Creatina 5 g)" /><button class="btn-primary px-4" data-act="habAdd" type="button">Añadir</button></div>` : '<p class="text-[11px] text-mute">Máximo 12 hábitos.</p>'}
+  </section>`;
+}
+function dailyHabitsHTML(date) {
+  if (!(state.settings.habitList || []).length) return state.settings.habitsHintOff ? '' : `<div class="flex items-center gap-2 mt-3 rounded-xl border border-line bg-panel px-3 py-2 text-[12px] text-mute">
+    <span class="flex-1">✅ ¿Suplementos, agua, cero alcohol…? <button class="text-brand underline" data-act="goHabits" type="button">Añade tus hábitos en Ajustes</button></span>
+    <button class="iconbtn iconbtn-sm" data-act="habHintOff" type="button" aria-label="No volver a mostrar">✕</button></div>`;
+  const list = dailyHabitsFor(date); if (!list.length) return '';
+  const done = list.filter(h => habitDone(date, h.name)).length;
+  return `<section class="card p-4 mt-3">
+    <div class="flex items-center justify-between"><h3 class="section-title">✅ Hábitos ${date === todayISO() ? 'de hoy' : 'del día'}</h3><span class="text-[11px] font-bold ${done === list.length ? 'text-emerald-300' : 'text-mute'}">${done}/${list.length}${done === list.length ? ' ✓' : ''}</span></div>
+    <div class="flex flex-wrap gap-2 mt-3">${list.map(h => { const on = habitDone(date, h.name); return `<button class="flex items-center gap-2 rounded-xl border px-3 py-2 text-[13px] font-semibold text-left ${on ? 'border-emerald-400/60 bg-emerald-500/10 text-emerald-200' : 'border-line bg-ink text-slate-300'}" data-act="dailyHabit" data-name="${esc(h.name)}" type="button" aria-pressed="${on}">
+      <span class="w-5 h-5 shrink-0 rounded-md grid place-items-center text-[12px] font-black ${on ? 'bg-emerald-400 text-black' : 'border-2 border-slate-500'}">${on ? '✓' : ''}</span>${esc(h.name)}</button>`; }).join('')}</div>
+  </section>`;
+}
+
 /* ---------- Primeros pasos (solo dispositivos nuevos, no administrador) ---------- */
 const ACTIVITY = { low: ['Sentada', 1.35], mid: ['Algo activa', 1.5], high: ['Muy activa', 1.65] };
 function needsOnboarding(me) {
@@ -3455,6 +3503,8 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.25.1', ['🧹 Quien instala la app desde cero empieza con la lista de hábitos en blanco (con un aviso en Dieta para añadirlos).'], 'quiet'],
+  ['4.25.0', ['✅ Hábitos de Entreno o Diarios: en Ajustes eliges dónde va cada uno. Los diarios (suplementos, agua, cero alcohol…) salen en Dieta y se marcan cada día, entrenes o no, solo los días de la semana que elijas. El Coach y el resumen semanal ven cuántos días los cumples.']],
   ['4.24.1', ['📣 Novedades por perfil: los cambios de administración (Acceso, primeros pasos…) solo te los anuncia a ti. El resto solo recibe aviso cuando una versión les afecta; en su historial, lo demás sale como «Mejoras en la aplicación».'], 'admin'],
   ['4.24.0', ['🔑 Acceso: los códigos nuevos quedan guardados (cifrados con tu PIN) para verlos o copiarlos cuando quieras. Nuevo botón 🔄 para dar un código nuevo a quien lo pierda, y envío directo por WhatsApp. Al cambiar el PIN se vuelven a cifrar los códigos y la llave de GitHub.'], 'admin'],
   ['4.23.1', ['🔑 Los códigos de acceso recién creados funcionan a la primera, sin esperar a que GitHub publique la lista.'], 'quiet'],
@@ -4163,7 +4213,30 @@ const actions = {
     const pm = parseInt($('#tPM').value, 10); if (pm > 0 && pm <= 100) g.minProtMeal = pm;
     Object.assign(state.settings, g); persist(); render(); toast('Objetivos guardados ✓');
   },
-  saveHabits: () => { state.settings.habits = $('#habitsTxt').value.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 8); persist(); render(); toast('Hábitos guardados ✓'); },
+  goHabits: () => { go('settings'); setTimeout(() => { const n = $('#habNew'); if (n) { n.scrollIntoView({ block: 'center' }); n.focus(); } }, 80); },
+  habHintOff: () => { state.settings.habitsHintOff = true; persist(); render(); },
+  habAdd: () => {
+    const v = ($('#habNew')?.value || '').trim().replace(/\s+/g, ' ');
+    if (!v) return toast('Escribe el hábito', 'warn');
+    const L = state.settings.habitList;
+    if (L.some(h => h.name.toLowerCase() === v.toLowerCase())) return toast('Ese hábito ya existe', 'warn');
+    if (L.length >= 12) return toast('Máximo 12 hábitos', 'warn');
+    L.push({ name: v.slice(0, 60), where: 'daily', days: [...ALL_DAYS] }); saveHabitList(); toast('Hábito añadido: elige si es de Entreno o Diario');
+  },
+  habDel: b => { const h = state.settings.habitList[+b.dataset.i]; if (!h || !confirm(`¿Borrar el hábito «${h.name}»? Lo ya registrado se conserva.`)) return; state.settings.habitList.splice(+b.dataset.i, 1); ui.habDaysOpen = null; saveHabitList(); },
+  habWhere: b => { const h = state.settings.habitList[+b.dataset.i]; if (!h) return; h.where = b.dataset.v; if (h.where !== 'daily' && ui.habDaysOpen === +b.dataset.i) ui.habDaysOpen = null; saveHabitList(); },
+  habDaysOpen: b => { const i = +b.dataset.i; ui.habDaysOpen = ui.habDaysOpen === i ? null : i; render(); },
+  habDay: b => {
+    const h = state.settings.habitList[+b.dataset.i], d = +b.dataset.d; if (!h) return;
+    if (h.days.includes(d)) { if (h.days.length === 1) return toast('Deja al menos un día', 'warn'); h.days = h.days.filter(x => x !== d); } else h.days = [...h.days, d].sort();
+    saveHabitList();
+  },
+  dailyHabit: b => {
+    const date = ui.dietDate || todayISO(), n = b.dataset.name, cur = state.habitLog[date] || [];
+    const next = cur.includes(n) ? cur.filter(x => x !== n) : [...cur, n];
+    if (next.length) state.habitLog[date] = next; else delete state.habitLog[date];
+    persist(); render();
+  },
   resetPlan: () => {
     if (!confirm('¿Restaurar los bloques originales (PPT y FULL BODY)? Perderás los bloques, días y ejercicios que hayas creado o editado (el historial se conserva).')) return;
     state.plan = normalizePlan(clone(DEFAULT_PLAN)); state.selectedVariants = {}; state.drafts = {}; ui.dayId = nextDayId();
