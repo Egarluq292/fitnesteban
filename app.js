@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.27.0';
+const APP_VERSION = '4.27.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -429,8 +429,9 @@ function toast(msg, kind = 'ok') {
   el.className = `toast toast-${kind}`;
   el.textContent = msg;
   $('#toastRoot').appendChild(el);
-  setTimeout(() => el.classList.add('toast-out'), 2600);
-  setTimeout(() => el.remove(), 3000);
+  const ms = kind === 'pr' ? 5000 : 2600;
+  setTimeout(() => el.classList.add('toast-out'), ms);
+  setTimeout(() => el.remove(), ms + 400);
 }
 let modalHandlers = {};
 function openModal(html, handlers = {}) {
@@ -831,6 +832,19 @@ function realAverage(dayId) {
   return list.length >= 2 ? Math.round(list.reduce((a, s) => a + s.durationMin, 0) / list.length) : null;
 }
 
+/* Récord en el momento: al marcar ✓ una serie que supera tu mejor 1RM estimado de esa variante (una vez por mejora) */
+function checkSetPR(ex, key, cell, d, day) {
+  const today = todayISO(), st = { w: num(cell.w) ?? 0, r: Math.round(num(cell.r) || 0) };
+  const val = oneRM({ exId: ex.id, exKey: key }, st, today);
+  const prev = bestE1rm(key, state.sessions.filter(s => !(s.date === today && s.dayId === day.id)));
+  if (!(prev > 0 && val > prev + 0.05)) return;
+  d.prBest = d.prBest || {};
+  if (val <= (d.prBest[key] || 0) + 0.05) return; // ya avisado con esta marca o una mejor
+  d.prBest[key] = val;
+  const name = (ex.variants[parseInt(key.split('_v').pop(), 10)] || ex.variants[0]).name;
+  toast(`🏆 ¡Récord personal! ${name}: ${fmtNum(Math.round(val * 10) / 10)} kg de 1RM estimado (antes ${fmtNum(Math.round(prev * 10) / 10)})`, 'pr');
+  try { navigator.vibrate?.([90, 60, 90, 60, 180]); } catch { /* nada */ }
+}
 function markSetDone(exId, key, i) {
   const f = findEx(exId); if (!f) return;
   const day = currentDay();
@@ -846,7 +860,7 @@ function markSetDone(exId, key, i) {
     if ((cell.r === undefined || cell.r === '') && typeof c.targets[i] === 'number') cell.r = String(c.targets[i]);
     if (cell.w === undefined && c.weight !== null) cell.w = fmtNum(c.weight);
     touchSession(d, exId);
-    if (num(cell.r) > 0) startTimer(f.ex.rest);
+    if (num(cell.r) > 0) { startTimer(f.ex.rest); checkSetPR(f.ex, key, cell, d, day); }
     else toast('Apunta las repeticiones de la serie', 'warn');
   }
   persist();
@@ -3567,6 +3581,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.27.1', ['🏆 Récord en el momento: al marcar ✓ una serie que supera tu mejor marca, la app te avisa al instante (con vibración). El resumen al guardar y la tarjeta para compartir siguen mostrando tus récords.']],
   ['4.27.0', ['⏭ «Hoy no»: en cada ejercicio puedes saltártelo solo por hoy. No cuenta en tu progreso, no suma al tiempo estimado y queda anotado en el historial.', '⇄ Alternativas en todos los ejercicios: los de serie traen al menos 2 nuevas, y en cualquiera (también en los tuyos) puedes pedir 2 a la IA o añadirlas a mano.']],
   ['4.26.4', ['📶 Registro de uso: al actualizar, el móvil vuelve a avisar en el momento con su versión nueva (antes la hoja mantenía la versión vieja hasta el día siguiente).'], 'quiet'],
   ['4.26.3', ['📶 Registro de uso: la clave del script ya no cambia al cerrar y reabrir la ventana de configuración, y hay un botón «Reconfigurar» por si algo falla.'], 'admin'],
