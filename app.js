@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.26.4';
+const APP_VERSION = '4.27.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -118,6 +118,9 @@ const FULLBODY_DAYS = [
   }
 ];
 
+/* 4.27: alternativas para los ejercicios de serie (se añaden una sola vez al final de sus variantes) */
+const EX_ALTS = {"d1_goblet": [["Prensa de piernas", "Pies a media altura, sin bloquear rodillas."], ["Sentadilla frontal con barra", "Codos altos, torso erguido."]], "d1_bench": [["Press en suelo con mancuernas", "Codos a 45º, pausa abajo."], ["Press de pecho en máquina", "Recorrido completo."]], "d1_incline": [["Press inclinado con barra", "Banco a 30º."]], "d1_shoulder": [["Press Arnold", "Gira las muñecas al subir."], ["Press de hombro con kettlebell", "A una mano, core firme."]], "d1_lat": [["Elevaciones laterales en polea", "Tensión constante."], ["Elevaciones laterales con banda", "Controla la bajada."]], "d1_triceps": [["Press francés con mancuernas + rueda", "Anota repeticiones de tríceps."], ["Extensión de tríceps en polea + rueda", "Anota repeticiones de tríceps."]], "d2_rdl": [["Peso muerto rumano con mancuernas", "Mancuernas pegadas a las piernas."], ["Buenos días con barra", "Cadera atrás, rodillas suaves."]], "d2_swings": [["Swing a una mano", "Cambia de mano a mitad de serie."], ["Thruster con kettlebell", "Sentadilla + press en un solo gesto."]], "d2_pullup": [["Dominadas asistidas con banda", "Banda bajo las rodillas. 0 kg = peso corporal."], ["Dominadas negativas", "Baja en 4–5 s. 0 kg = peso corporal."]], "d2_row": [["Remo en polea baja", "Espalda neutra, codos atrás."], ["Remo con barra", "Torso a ~45º."]], "d2_rear": [["Pájaros con mancuernas", "Torso inclinado, codos suaves."], ["Apertura con banda", "Brazos rectos a la altura del pecho."]], "d2_biceps": [["Curl con mancuernas alterno", "Supina al subir."], ["Curl en polea", "Tensión constante."]], "d3_ss1_push": [["Press de banca con barra", "Alterna con A2."], ["Press en suelo con mancuernas", "Alterna con A2."]], "d3_ss1_pull": [["Remo invertido en TRX", "Cuerpo recto. 0 kg = peso corporal."], ["Dominadas con agarre neutro", "0 kg = peso corporal."]], "d3_ss2_push": [["Flexiones diamante", "Codos pegados. 0 kg = peso corporal."], ["Fondos en banco", "Hombros abajo. 0 kg = peso corporal."]], "d3_ss2_pull": [["Remo en polea baja", "Aprieta escápulas."], ["Remo con barra", "Aprieta escápulas."]], "d3_arms": [["Curl martillo + press francés", "Superserie sin descanso."], ["Curl en polea + extensión en polea", "Superserie sin descanso."]], "d3_spartan": [["Sentadilla goblet + swings + plancha", "A tope de intensidad."], ["Zancadas con mancuernas + remo + rueda", "A tope de intensidad."]], "fa_squat": [["Sentadilla frontal", "Codos altos."], ["Prensa de piernas", "Sin bloquear rodillas."]], "fa_bench": [["Press de banca con mancuernas", "Bajada en 2 s."], ["Press de pecho en máquina", "Recorrido completo."]], "fa_row": [["Remo con mancuerna a una mano", "Codo hacia la cadera."], ["Remo en polea baja", "Espalda neutra."]], "fa_legcurl": [["Curl femoral sentado", "Bajada lenta."], ["Peso muerto rumano con mancuernas", "Cadera atrás, espalda neutra."]], "fa_ohp": [["Press militar sentado con mancuernas", "Rango completo."], ["Press Arnold", "Gira las muñecas al subir."]], "fa_lat": [["Elevaciones laterales en polea", "Tensión constante."], ["Elevaciones laterales con banda", "Controla la bajada."]], "fa_curl": [["Curl con mancuernas alterno", "Supina al subir."], ["Curl en polea", "Tensión constante."]], "fa_hammer": [["Curl martillo en polea con cuerda", "Codos fijos."], ["Curl Zottman", "Sube supino, baja prono."]], "fb_deadlift": [["Peso muerto con barra hexagonal", "Empuja el suelo."], ["Peso muerto rumano", "Cadera atrás, espalda neutra."]], "fb_pullup": [["Dominadas asistidas con banda", "Banda bajo las rodillas. 0 kg = peso corporal."], ["Dominadas negativas", "Baja en 4–5 s. 0 kg = peso corporal."]], "fb_incline": [["Press inclinado con barra", "Banco a 30º."], ["Press inclinado en máquina", "Recorrido completo."]], "fb_squat": [["Sentadilla búlgara", "Reps por pierna."], ["Prensa de piernas", "Sin bloquear rodillas."]], "fb_hipthrust": [["Puente de glúteo con barra", "Pausa arriba."], ["Hip thrust a una pierna", "Reps por pierna."]], "fb_face": [["Pájaros con mancuernas", "Torso inclinado."], ["Apertura con banda", "Brazos rectos."]], "fb_triceps": [["Press francés con mancuernas", "Codos fijos."], ["Fondos en banco con lastre", "Hombros abajo."]], "fb_calf": [["Elevación de gemelos sentado", "Pausa arriba."], ["Elevación de gemelos a una pierna", "Apoyado en un escalón."]]};
+
 const DEFAULT_PLAN = {
   active: 'ppt',
   programs: [
@@ -190,6 +193,8 @@ function normalizeExercise(e) {
     variants: Array.isArray(e.variants) && e.variants.length ? e.variants.map(v => ({ name: String(v.name || 'Ejercicio'), note: String(v.note || ''), video: safeUrl(v.video) })) : [{ name: 'Ejercicio', note: '', video: '' }]
   };
   if (out.maxReps < out.minReps) out.maxReps = out.minReps;
+  out.alts27 = true;
+  if (!e.alts27 && EX_ALTS[out.id]) for (const [name, note] of EX_ALTS[out.id]) if (!out.variants.some(v => v.name.toLowerCase() === name.toLowerCase())) out.variants.push({ name, note, video: '' });
   return out;
 }
 function normalizeDay(day) {
@@ -666,8 +671,12 @@ function renderTrain() {
   `;
 }
 
+function skippedToday(d) { return d.skip && d.skip.date === todayISO() ? d.skip.ids : []; }
 function renderExerciseCard(e, idx, day, d) {
   const { key, variant } = variantOf(e);
+  if (skippedToday(d).includes(e.id)) return `<article class="card px-4 py-3 opacity-70 flex items-center justify-between gap-3" id="ex-${esc(e.id)}">
+    <div class="min-w-0"><div class="text-[11px] font-bold uppercase tracking-wider text-mute">⏭ Hoy no</div><div class="font-semibold text-sm truncate line-through decoration-slate-500">${esc(variant.name)}</div></div>
+    <button class="btn-mini text-brand shrink-0" data-act="skipEx" data-ex="${esc(e.id)}" type="button">Deshacer</button></article>`;
   const c = coachFor(e, key);
   const n = setCount(e, key, d);
   const tone = TONE[c.tone];
@@ -712,7 +721,8 @@ function renderExerciseCard(e, idx, day, d) {
         <div class="text-[11px] text-mute mt-1">${e.sets} × ${e.minReps}–${e.maxReps} reps · descanso ${e.rest}s · +${fmtNum(e.increment)} kg${e.bw ? ' de lastre · peso corporal' : ''}</div>
       </div>
       <div class="flex gap-1.5 shrink-0">
-        ${e.variants.length > 1 ? `<button class="iconbtn" data-act="variant" data-ex="${esc(e.id)}" type="button" aria-label="Cambiar variante">⇄</button>` : ''}
+        <button class="iconbtn" data-act="skipEx" data-ex="${esc(e.id)}" type="button" aria-label="Hoy no hago este ejercicio">⏭</button>
+        <button class="iconbtn" data-act="variant" data-ex="${esc(e.id)}" type="button" aria-label="Cambiar por una alternativa">⇄</button>
         <button class="iconbtn" data-act="editEx" data-ex="${esc(e.id)}" type="button" aria-label="Editar ejercicio">✎</button>
       </div>
     </div>
@@ -744,6 +754,35 @@ function keepCardioInputs() {
   const w = $('#cdWeight'); if (w) ui.cardio.weight = w.value;
 }
 
+/* ⇄ Cambiar por una alternativa: lista de variantes + proponer con IA + añadir a mano */
+function variantPicker(exId) {
+  const f = findEx(exId); if (!f) return;
+  const e = f.ex, cur = variantOf(e).v;
+  const html = () => `<h3 class="modal-title">⇄ Alternativas</h3>
+    <p class="text-xs text-mute -mt-1">${esc(e.block)} · el progreso y el peso sugerido se guardan por separado para cada alternativa.</p>
+    <div class="space-y-1.5">${e.variants.map((v, i) => `<button class="w-full text-left rounded-xl border px-3 py-2.5 ${i === cur ? 'border-brand bg-brand/10' : 'border-line bg-ink'}" data-mact="pick" data-i="${i}" type="button">
+      <div class="flex items-center justify-between gap-2"><span class="font-semibold text-[14px]">${esc(v.name)}</span>${i === cur ? '<span class="text-brand text-xs font-bold shrink-0">✓ Hoy</span>' : ''}</div>
+      ${v.note ? `<div class="text-[11px] text-mute mt-0.5">${esc(v.note)}</div>` : ''}</button>`).join('')}</div>
+    ${e.variants.length < 8 ? `<button class="btn-ghost w-full" data-mact="ai" type="button">✨ Proponer 2 alternativas con IA</button>
+    <div class="flex gap-2"><input class="field flex-1 min-w-0" name="alt" maxlength="60" placeholder="O escribe una alternativa" /><button class="btn-ghost px-4" data-mact="add" type="button">Añadir</button></div>` : ''}`;
+  const redraw = root => { root.querySelector('.modal-sheet').innerHTML = html(); };
+  const add = (name, note = '') => { name = String(name || '').trim().slice(0, 60); if (!name || e.variants.some(v => v.name.toLowerCase() === name.toLowerCase()) || e.variants.length >= 8) return false; e.variants.push({ name, note: String(note || '').slice(0, 80), video: '' }); return true; };
+  openModal(html(), {
+    pick: (root, b) => { state.selectedVariants[e.id] = +b.dataset.i; persist(); closeModal(); render(); document.getElementById(`ex-${e.id}`)?.scrollIntoView({ block: 'nearest' }); },
+    add: root => { const v = mval(root, 'alt'); if (!add(v)) return toast('Escribe una alternativa nueva', 'warn'); persist(); redraw(root); toast('Alternativa añadida'); },
+    ai: async (root, b) => {
+      if (!state.settings.apiKey) return toast('Necesitas tu clave de Gemini (Ajustes)', 'warn');
+      b.disabled = true; b.innerHTML = '<span class="spinner"></span> Buscando alternativas…';
+      try {
+        const prompt = `Eres entrenador personal. Para el ejercicio «${variantOf(e).variant.name}» (bloque: ${e.block}; ${e.sets} series de ${e.minReps}-${e.maxReps} reps${e.bw ? '; se registra como peso corporal + lastre' : '; se registra con kilos'}) propone 2 alternativas que trabajen los mismos músculos con un patrón parecido${e.bw ? ', también con peso corporal' : ', con carga externa (mancuernas, barra, kettlebell, polea o máquina)'}. No repitas: ${e.variants.map(v => v.name).join(', ')}. Responde SOLO JSON: {"alternativas":[{"nombre":"…","nota":"consejo técnico de máximo 8 palabras"}]}`;
+        const r = parseJSONLoose(await callGemini([{ text: prompt }], { timeout: 30000 }));
+        const n = (r.alternativas || []).filter(x => add(x.nombre, x.nota)).length;
+        persist(); if ($('#modalRoot').classList.contains('open')) redraw(root);
+        toast(n ? `${n} alternativa${n === 1 ? '' : 's'} añadida${n === 1 ? '' : 's'}` : 'No ha propuesto nada nuevo', n ? 'ok' : 'warn');
+      } catch (err) { toast('IA: ' + err.message, 'error'); b.disabled = false; b.textContent = '✨ Proponer 2 alternativas con IA'; }
+    }
+  });
+}
 function findEx(exId) {
   for (const d of allDays()) { const i = d.exercises.findIndex(e => e.id === exId); if (i >= 0) return { day: d, ex: d.exercises[i], idx: i }; }
   return null;
@@ -777,7 +816,9 @@ function sessionMinutes(d) {
 function estimateMinutes(day, d) {
   if (!day.exercises.length) return 0;
   let sec = 5 * 60; // calentamiento
+  const sk = d ? skippedToday(d) : [];
   for (const e of day.exercises) {
+    if (sk.includes(e.id)) continue;
     const { key } = variantOf(e);
     const n = d ? setCount(e, key, d) : (deloadActive() ? Math.max(1, Math.ceil(e.sets / 2)) : e.sets);
     const reps = (e.minReps + e.maxReps) / 2;
@@ -816,8 +857,9 @@ function saveSession() {
   const day = currentDay();
   const d = draftOf(day.id);
   const today = todayISO();
-  const exs = [];
+  const exs = [], skipIds = skippedToday(d);
   for (const e of day.exercises) {
+    if (skipIds.includes(e.id)) continue;
     const { key, variant } = variantOf(e);
     const c = coachFor(e, key);
     const n = setCount(e, key, d);
@@ -846,6 +888,8 @@ function saveSession() {
   }
   const habits = state.settings.habits.filter(h => d.habits[h]);
   const session = { id: uid('s_'), date: today, dayId: day.id, dayTitle: day.title, habits, exercises: exs };
+  const skippedNames = day.exercises.filter(e => skipIds.includes(e.id)).map(e => variantOf(e).variant.name);
+  if (skippedNames.length) session.skipped = skippedNames;
   if (deloadActive()) session.deload = true;
   const mins = sessionMinutes(d);
   if (mins) session.durationMin = mins;
@@ -1107,7 +1151,7 @@ function editExModal(exId) {
       const minReps = parseInt(mval(root, 'minReps'), 10), maxReps = parseInt(mval(root, 'maxReps'), 10);
       if (!(minReps > 0) || !(maxReps >= minReps)) return toast('Revisa el rango de reps (mín ≤ máx)', 'warn');
       const data = normalizeExercise({
-        id: isNew ? uid('c_') : e.id, block: mval(root, 'block').trim() || 'Ejercicio', variants,
+        id: isNew ? uid('c_') : e.id, alts27: true, block: mval(root, 'block').trim() || 'Ejercicio', variants,
         sets: mval(root, 'sets'), minReps, maxReps, increment: num(mval(root, 'increment')) ?? 2, rest: mval(root, 'rest'), bw: root.querySelector('[name="bw"]').checked
       });
       if (isNew) day.exercises.push(data); else f.day.exercises[f.idx] = data;
@@ -2532,6 +2576,7 @@ function renderProgress() {
         <div class="px-3 pb-3 space-y-1 text-[11px]">
           ${s.exercises.map(e => `<div><strong>${esc(e.name)}:</strong> <span class="font-mono text-mute">${e.sets.map(x => `${wLabel(x.w, isBwEx(e.exId))}×${x.r}`).join(', ')}</span></div>`).join('')}
           ${s.habits?.length ? `<div class="text-emerald-300 mt-1">✓ ${s.habits.map(esc).join(' · ')}</div>` : ''}
+          ${s.skipped?.length ? `<div class="text-mute mt-1">⏭ Hoy no: ${s.skipped.map(esc).join(' · ')}</div>` : ''}
           ${(() => { const g = gymKcalInfo(s); return `<div class="mt-1.5 flex flex-wrap items-center gap-x-2">${g ? `<span class="${MAC.kcal.text}">🏋️ ~${g.kcal} kcal netas</span><span class="text-mute">${g.manual ? '(corregidas a mano)' : `(MET ${fmtNum(Math.round(g.met * 10) / 10)} · ${g.mins} min · ${fmtNum(g.bw)} kg)`}</span>` : '<span class="text-mute">Sin estimación de kcal (falta duración o peso)</span>'}<button class="underline text-brand" data-act="sessKcal" data-id="${esc(s.id)}" type="button">ajustar</button></div>`; })()}
           <div class="flex gap-4 mt-2"><button class="underline text-brand" data-act="shareSession" data-id="${esc(s.id)}" type="button">📸 Tarjeta</button>
           <button class="text-rose-300 underline" data-act="delSession" data-id="${esc(s.id)}" type="button">Borrar esta sesión</button></div>
@@ -3337,7 +3382,7 @@ function chatContext() {
     dia: day.label, titulo: day.title,
     ejercicios: day.exercises.map(e => { const { key, variant } = variantOf(e); const c = coachFor(e, key); return { nombre: variant.name, series: e.sets, reps: `${e.minReps}-${e.maxReps}`, peso_corporal: !!e.bw, coach_app: `${c.title}. ${c.text}` }; })
   }));
-  const last = sortedSessions().slice(-8).reverse().map(s => ({ fecha: s.date, dia: s.dayTitle, min: s.durationMin || null, descarga: !!s.deload,
+  const last = sortedSessions().slice(-8).reverse().map(s => ({ fecha: s.date, dia: s.dayTitle, min: s.durationMin || null, descarga: !!s.deload, ejercicios_saltados: s.skipped || [],
     ejercicios: s.exercises.map(e => `${e.name}: ${e.sets.map(x => setTxt(e.exId, x)).join(', ')}`) }));
   const w = activeWip();
   return {
@@ -3522,6 +3567,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.27.0', ['⏭ «Hoy no»: en cada ejercicio puedes saltártelo solo por hoy. No cuenta en tu progreso, no suma al tiempo estimado y queda anotado en el historial.', '⇄ Alternativas en todos los ejercicios: los de serie traen al menos 2 nuevas, y en cualquiera (también en los tuyos) puedes pedir 2 a la IA o añadirlas a mano.']],
   ['4.26.4', ['📶 Registro de uso: al actualizar, el móvil vuelve a avisar en el momento con su versión nueva (antes la hoja mantenía la versión vieja hasta el día siguiente).'], 'quiet'],
   ['4.26.3', ['📶 Registro de uso: la clave del script ya no cambia al cerrar y reabrir la ventana de configuración, y hay un botón «Reconfigurar» por si algo falla.'], 'admin'],
   ['4.26.2', ['📶 La app envía a Esteban solo el día de último uso y la versión instalada, para saber quién tiene que actualizar. Nada de tu dieta ni de tus entrenos.']],
@@ -4057,11 +4103,12 @@ const actions = {
   editDayId: b => editDayModal(b.dataset.day),
   addEx: () => editExModal(null),
   editEx: b => editExModal(b.dataset.ex),
-  variant: b => {
+  variant: b => variantPicker(b.dataset.ex),
+  skipEx: b => {
     const f = findEx(b.dataset.ex); if (!f) return;
-    state.selectedVariants[f.ex.id] = ((state.selectedVariants[f.ex.id] || 0) + 1) % f.ex.variants.length;
+    const d = draftOf(currentDay().id), ids = skippedToday(d);
+    d.skip = { date: todayISO(), ids: ids.includes(f.ex.id) ? ids.filter(x => x !== f.ex.id) : [...ids, f.ex.id] };
     persist(); render();
-    document.getElementById(`ex-${f.ex.id}`)?.scrollIntoView({ block: 'nearest' });
   },
   setCount: b => {
     const f = findEx(b.dataset.ex); if (!f) return;
