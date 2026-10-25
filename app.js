@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.25.1';
+const APP_VERSION = '4.25.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -233,7 +233,7 @@ function normalize(s) {
   out.settings = { ...d.settings, ...(s.settings || {}) };
   if (!Array.isArray(out.settings.habits)) out.settings.habits = [...DEFAULT_HABITS];
   // 4.25: hábitos con sitio (Entreno o Diario) y días; settings.habits sigue siendo la lista de los de Entreno
-  if (!Array.isArray(out.settings.habitList)) out.settings.habitList = out.settings.habits.map(name => ({ name, where: 'train', days: [...ALL_DAYS] }));
+  if (!Array.isArray(s.settings?.habitList)) out.settings.habitList = out.settings.habits.map(name => ({ name, where: 'train', days: [...ALL_DAYS] }));
   out.settings.habitList = out.settings.habitList.filter(h => h && h.name).map(h => ({ name: String(h.name).slice(0, 60), where: h.where === 'daily' ? 'daily' : 'train', days: Array.isArray(h.days) && h.days.length ? h.days.filter(d => d >= 0 && d <= 6) : [...ALL_DAYS] }));
   out.settings.habits = out.settings.habitList.filter(h => h.where === 'train').map(h => h.name);
   if (!out.habitLog || typeof out.habitLog !== 'object' || Array.isArray(out.habitLog)) out.habitLog = {};
@@ -367,6 +367,19 @@ if (state._migrated) { delete state._migrated; persist(); }
 const PREV_KEY = 'fitnesteban_prev';
 function savePrevCopy(raw, ver) { if (!raw) return; try { localStorage.setItem(PREV_KEY, JSON.stringify({ ver, at: new Date().toISOString(), data: raw })); } catch { /* sin espacio: no es grave */ } }
 function prevCopy() { try { const p = JSON.parse(localStorage.getItem(PREV_KEY) || 'null'); return p && p.data ? p : null; } catch { return null; } }
+/* 4.25.2: la 4.25.1 dejaba vacía la lista de hábitos al venir de una versión anterior. Se recuperan (una sola vez)
+   de la copia que la app guarda antes de cada actualización. */
+if (!state.settings.habitsFix252) {
+  state.settings.habitsFix252 = true;
+  if (!state.settings.habitList.length) {
+    try {
+      const old = JSON.parse(prevCopy()?.data || 'null')?.settings || {};
+      const back = Array.isArray(old.habitList) && old.habitList.length ? old.habitList : Array.isArray(old.habits) ? old.habits.map(name => ({ name, where: 'train', days: [...ALL_DAYS] })) : [];
+      if (back.length) { state.settings.habitList = normalize({ settings: { habitList: back } }).settings.habitList; state.settings.habits = state.settings.habitList.filter(h => h.where === 'train').map(h => h.name); }
+    } catch { /* sin copia previa: nada que recuperar */ }
+  }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* nada */ }
+}
 { const seen = state.settings.lastSeenVersion; if (bootRaw && seen && seen !== APP_VERSION && prevCopy()?.ver !== seen) savePrevCopy(bootRaw, seen); }
 
 /* ---------- Estado de interfaz ---------- */
@@ -1321,6 +1334,14 @@ Responde SOLO con JSON válido:
 }
 /* Recuerda qué plegables abriste/cerraste para que no cambien al refrescar la pantalla */
 const openKeys = {};
+/* Apartado plegable de Ajustes: título + estado a la derecha; se recuerda abierto/cerrado mientras la app está abierta */
+const foldCard = (key, title, status, statusCls, body) => `<details class="card p-4 mt-3" ${openAttr('set_' + key)}>
+    <summary class="flex items-center justify-between gap-3 cursor-pointer select-none">
+      <h3 class="section-title shrink-0">${title}</h3>
+      <span class="flex items-center gap-2 text-[11px] min-w-0 ${statusCls || 'text-mute'}"><span class="truncate">${status}</span><span class="tri"></span></span>
+    </summary>
+    <div class="space-y-3 mt-3">${body}</div>
+  </details>`;
 const openAttr = (key, def = false) => `data-open-key="${key}" ${(openKeys[key] ?? def) ? 'open' : ''}`;
 
 function renderReport(r, open) {
@@ -2562,8 +2583,7 @@ function renderSettings() {
   </details>
 
   ${profileSectionHTML()}
-  <section class="card p-4 mt-3 space-y-3">
-    <h3 class="section-title">🎯 Objetivos diarios</h3>
+  ${foldCard('goals', '🎯 Objetivos diarios', `${st.targetKcal} kcal · ${st.targetProt} g P`, '', `
     <div class="grid grid-cols-4 gap-2">
       <label class="lbl ${MAC.kcal.text}">kcal<input class="field mt-1 text-center" id="tK" inputmode="numeric" value="${st.targetKcal}" /></label>
       <label class="lbl ${MAC.prot.text}">Prot g<input class="field mt-1 text-center" id="tP" inputmode="numeric" value="${st.targetProt}" /></label>
@@ -2574,7 +2594,7 @@ function renderSettings() {
     <p class="text-[11px] ${Math.abs(sumK - st.targetKcal) > st.targetKcal * 0.05 ? 'text-amber-300' : 'text-mute'}">Tus macros suman ${sumK} kcal (objetivo ${st.targetKcal}).</p>
     <label class="habit"><input type="checkbox" id="tEat" ${st.eatBackCardio ? 'checked' : ''} /><span class="text-xs">Sumar las calorías del ejercicio (cardio y gym) a lo que puedo comer <span class="text-mute">(desactivado = déficit más fiable)</span></span></label>
     <button class="btn-primary w-full" data-act="saveGoals" type="button">Guardar objetivos</button>
-  </section>
+`)}
 
   <details class="card p-4 mt-3" id="blocksBox" ${ui.blocksOpen ? 'open' : ''}>
     <summary class="flex items-center justify-between cursor-pointer select-none">
@@ -3110,9 +3130,8 @@ document.addEventListener('visibilitychange', () => {
 /* ---------- Hábitos: editor en Ajustes y tarjeta diaria en Dieta ---------- */
 function saveHabitList() { state.settings.habits = state.settings.habitList.filter(h => h.where === 'train').map(h => h.name); persist(); render(); }
 function habitsSettingsHTML() {
-  const list = state.settings.habitList || [];
-  return `<section class="card p-4 mt-3 space-y-3">
-    <h3 class="section-title">✅ Hábitos</h3>
+  const list = state.settings.habitList || [], nd = list.filter(h => h.where === 'daily').length;
+  return foldCard('habits', '✅ Hábitos', list.length ? `${list.length - nd} entreno · ${nd} diario${nd === 1 ? "" : "s"}` : 'Ninguno', '', `
     <p class="text-[11px] text-mute">🏋️ <b class="text-slate-300">Entreno</b>: se marcan al guardar la sesión. 🍽️ <b class="text-slate-300">Diario</b>: salen en Dieta los días que elijas y se marcan cada día, entrenes o no.</p>
     <div class="space-y-1.5">${list.map((h, i) => `<div class="bg-ink rounded-lg px-3 py-2 space-y-2">
       <div class="flex items-center justify-between gap-2"><span class="text-[13px] font-semibold min-w-0 break-words">${esc(h.name)}</span><button class="iconbtn iconbtn-sm text-rose-300 shrink-0" data-act="habDel" data-i="${i}" type="button" aria-label="Borrar hábito">🗑</button></div>
@@ -3120,8 +3139,7 @@ function habitsSettingsHTML() {
       ${h.where === 'daily' ? `<button class="text-[12px] text-brand flex items-center gap-1" data-act="habDaysOpen" data-i="${i}" type="button">📅 ${daysLabel(h.days)} <span class="text-mute">${ui.habDaysOpen === i ? '▲' : '▼'}</span></button>
         ${ui.habDaysOpen === i ? `<div class="grid grid-cols-7 gap-1">${WEEK_ORDER.map(d => `<button class="seg-btn py-1.5 rounded-lg border ${h.days.includes(d) ? 'seg-on' : 'border-line'}" data-act="habDay" data-i="${i}" data-d="${d}" type="button">${DAY_LETTER[d]}</button>`).join('')}</div>` : ''}` : ''}
     </div>`).join('') || '<p class="text-xs text-mute">Aún no tienes hábitos.</p>'}</div>
-    ${list.length < 12 ? `<div class="flex gap-2"><input class="field flex-1 min-w-0" id="habNew" maxlength="60" placeholder="Nuevo hábito (ej: 💊 Creatina 5 g)" /><button class="btn-primary px-4" data-act="habAdd" type="button">Añadir</button></div>` : '<p class="text-[11px] text-mute">Máximo 12 hábitos.</p>'}
-  </section>`;
+    ${list.length < 12 ? `<div class="flex gap-2"><input class="field flex-1 min-w-0" id="habNew" maxlength="60" placeholder="Nuevo hábito (ej: 💊 Creatina 5 g)" /><button class="btn-primary px-4" data-act="habAdd" type="button">Añadir</button></div>` : '<p class="text-[11px] text-mute">Máximo 12 hábitos.</p>'}`);
 }
 function dailyHabitsHTML(date) {
   if (!(state.settings.habitList || []).length) return state.settings.habitsHintOff ? '' : `<div class="flex items-center gap-2 mt-3 rounded-xl border border-line bg-panel px-3 py-2 text-[12px] text-mute">
@@ -3503,6 +3521,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.25.2', ['📂 Ajustes más recogido: «Objetivos diarios» y «Hábitos» van plegados, como la IA. Se abren con un toque y a la derecha ves el resumen.', '🩹 Si al actualizar a la 4.25.1 tu lista de hábitos se quedó vacía, vuelve a aparecer.']],
   ['4.25.1', ['🧹 Quien instala la app desde cero empieza con la lista de hábitos en blanco (con un aviso en Dieta para añadirlos).'], 'quiet'],
   ['4.25.0', ['✅ Hábitos de Entreno o Diarios: en Ajustes eliges dónde va cada uno. Los diarios (suplementos, agua, cero alcohol…) salen en Dieta y se marcan cada día, entrenes o no, solo los días de la semana que elijas. El Coach y el resumen semanal ven cuántos días los cumples.']],
   ['4.24.1', ['📣 Novedades por perfil: los cambios de administración (Acceso, primeros pasos…) solo te los anuncia a ti. El resto solo recibe aviso cuando una versión les afecta; en su historial, lo demás sale como «Mejoras en la aplicación».'], 'admin'],
@@ -4213,7 +4232,7 @@ const actions = {
     const pm = parseInt($('#tPM').value, 10); if (pm > 0 && pm <= 100) g.minProtMeal = pm;
     Object.assign(state.settings, g); persist(); render(); toast('Objetivos guardados ✓');
   },
-  goHabits: () => { go('settings'); setTimeout(() => { const n = $('#habNew'); if (n) { n.scrollIntoView({ block: 'center' }); n.focus(); } }, 80); },
+  goHabits: () => { openKeys.set_habits = true; go('settings'); setTimeout(() => { const n = $('#habNew'); if (n) { n.scrollIntoView({ block: 'center' }); n.focus(); } }, 80); },
   habHintOff: () => { state.settings.habitsHintOff = true; persist(); render(); },
   habAdd: () => {
     const v = ($('#habNew')?.value || '').trim().replace(/\s+/g, ' ');
