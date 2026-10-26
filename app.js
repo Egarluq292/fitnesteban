@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.27.2';
+const APP_VERSION = '4.27.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3581,6 +3581,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.27.3', ['📶 Los nombres pasan solos a tu hoja de uso (columna «nombre»): al abrir Acceso y cada vez que creas, renombras, renuevas o quitas un acceso. Requiere actualizar el script una vez (Reconfigurar → nueva versión).'], 'admin'],
   ['4.27.2', ['📋 Acceso: botón «Copiar huellas y nombres» para pegar en tu hoja de uso y ver quién es cada huella. La app pide a los buscadores que no la muestren (noindex).'], 'admin'],
   ['4.27.1', ['🏆 Récord en el momento: al marcar ✓ una serie que supera tu mejor marca, la app te avisa al instante (con vibración). El resumen al guardar y la tarjeta para compartir siguen mostrando tus récords.']],
   ['4.27.0', ['⏭ «Hoy no»: en cada ejercicio puedes saltártelo solo por hoy. No cuenta en tu progreso, no suma al tiempo estimado y queda anotado en el historial.', '⇄ Alternativas en todos los ejercicios: los de serie traen al menos 2 nuevas, y en cualquiera (también en los tuyos) puedes pedir 2 a la IA o añadirlas a mano.']],
@@ -4376,7 +4377,7 @@ const actions = {
     openModal(`<h3 class="modal-title">¿Quién es? <span class="text-mute font-mono text-sm">…${esc(h.slice(-4))}</span></h3><p class="text-xs text-mute">Solo se guarda en tu app y en tus copias.</p>
       <label class="lbl">Nombre<input class="field mt-1" name="who" maxlength="24" value="${esc(state.accessNames[h] || '')}" /></label>
       <button class="btn-primary w-full" data-mact="save" type="button">Guardar</button>`, {
-      autofocus: true, save: root => { const v = mval(root, 'who').trim(); if (v) state.accessNames[h] = v; else delete state.accessNames[h]; persist(); closeModal(); render(); }
+      autofocus: true, save: root => { const v = mval(root, 'who').trim(); if (v) state.accessNames[h] = v; else delete state.accessNames[h]; persist(); closeModal(); render(); syncUsageNames(); }
     });
   },
   reloadApp: () => location.reload(),
@@ -4731,7 +4732,8 @@ async function loadUsage() {
     const d = await r.json();
     if (!d.ok) throw new Error(d.error === 'clave' ? 'La clave del registro no coincide con la del script' : 'El registro no respondió bien');
     ui.usage = {}; for (const x of d.rows || []) ui.usage[String(x.h).toLowerCase()] = x;
-    ui.usageErr = '';
+    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2);
+    if (!ui.usageOld) syncUsageNames();
   } catch (e) { ui.usageErr = e.message || 'No se pudo leer el registro de uso'; ui.usage = null; }
   ui.usageLoading = false; ui.usageAt = Date.now();
   if (ui.accessOpen && ui.view === 'settings') render();
@@ -4746,13 +4748,15 @@ function usageLine(hash) {
   return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>`;
 }
 function usageScript(key) {
-  return `// FITNESTEBAN · registro de uso (solo día de último uso y versión)
+  return `// FITNESTEBAN · registro de uso (día de último uso, versión y nombre puesto por el administrador) · v2
 const READ_KEY = '${key}';
 const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
+const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre'];
 function hoja_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sh = ss.getSheetByName('uso');
-  if (!sh) { sh = ss.insertSheet('uso'); sh.getRange('A:E').setNumberFormat('@'); sh.appendRow(['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso']); }
+  if (!sh) { sh = ss.insertSheet('uso'); sh.getRange('A:E').setNumberFormat('@'); sh.appendRow(COLS); }
+  if (String(sh.getRange(1, 6).getValue()) !== 'nombre') sh.getRange(1, 6).setValue('nombre');
   return sh;
 }
 function fecha_(x) { return x instanceof Date ? Utilities.formatDate(x, 'Europe/Madrid', 'yyyy-MM-dd') : String(x); }
@@ -4761,17 +4765,30 @@ function huellas_() {
   if (!t) { t = UrlFetchApp.fetch(ACL_URL + '?t=' + Date.now(), { muteHttpExceptions: true }).getContentText(); c.put('acl', t, 600); }
   return t.split('\\n').map(l => l.trim().split(/\\s+/)[0].toLowerCase()).filter(h => /^[0-9a-f]{32}$/.test(h));
 }
+function nombres_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('nombres') || '{}'); } catch (e) { return {}; } }
 function salida_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 function doPost(e) {
   try {
-    const b = JSON.parse(e.postData.contents), h = String(b.h || '').toLowerCase(), v = String(b.v || '').slice(0, 12);
+    const b = JSON.parse(e.postData.contents);
+    // el administrador manda la lista huella → nombre (con la clave de lectura): se guarda y se escribe en la columna F
+    if (b.k === READ_KEY && b.names && typeof b.names === 'object') {
+      const n = {}; for (const h in b.names) if (/^[0-9a-f]{32}$/.test(h)) n[h] = String(b.names[h]).slice(0, 40);
+      PropertiesService.getScriptProperties().setProperty('nombres', JSON.stringify(n));
+      const lock = LockService.getScriptLock(); lock.waitLock(10000);
+      try {
+        const sh = hoja_(), filas = sh.getLastRow() - 1;
+        if (filas > 0) { const hs = sh.getRange(2, 1, filas, 1).getValues(); sh.getRange(2, 6, filas, 1).setValues(hs.map(r => [n[String(r[0])] || ''])); }
+      } finally { lock.releaseLock(); }
+      return salida_({ ok: true });
+    }
+    const h = String(b.h || '').toLowerCase(), v = String(b.v || '').slice(0, 12);
     if (!/^[0-9a-f]{32}$/.test(h) || huellas_().indexOf(h) < 0) return salida_({ ok: false });
     const lock = LockService.getScriptLock(); lock.waitLock(10000);
     try {
-      const sh = hoja_(), hoy = fecha_(new Date()), datos = sh.getDataRange().getValues();
+      const sh = hoja_(), hoy = fecha_(new Date()), datos = sh.getDataRange().getValues(), nom = nombres_()[h] || '';
       let fila = -1; for (let i = 1; i < datos.length; i++) if (String(datos[i][0]) === h) { fila = i + 1; break; }
-      if (fila < 0) sh.appendRow([h, hoy, v, hoy, '1']);
-      else { const antes = fecha_(datos[fila - 1][1]); sh.getRange(fila, 2, 1, 2).setValues([[hoy, v]]); if (antes !== hoy) sh.getRange(fila, 5).setValue(String((+datos[fila - 1][4] || 0) + 1)); }
+      if (fila < 0) sh.appendRow([h, hoy, v, hoy, '1', nom]);
+      else { const antes = fecha_(datos[fila - 1][1]); sh.getRange(fila, 2, 1, 2).setValues([[hoy, v]]); if (antes !== hoy) sh.getRange(fila, 5).setValue(String((+datos[fila - 1][4] || 0) + 1)); sh.getRange(fila, 6).setValue(nom); }
     } finally { lock.releaseLock(); }
     return salida_({ ok: true });
   } catch (err) { return salida_({ ok: false }); }
@@ -4779,8 +4796,22 @@ function doPost(e) {
 function doGet(e) {
   if (!e || !e.parameter || e.parameter.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
   const datos = hoja_().getDataRange().getValues().slice(1);
-  return salida_({ ok: true, rows: datos.map(r => ({ h: String(r[0]), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1 })) });
+  return salida_({ ok: true, ver: 2, rows: datos.map(r => ({ h: String(r[0]), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1 })) });
 }`;
+}
+/* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
+let namesSyncTimer = null;
+function syncUsageNames() {
+  clearTimeout(namesSyncTimer);
+  namesSyncTimer = setTimeout(async () => {
+    try {
+      const enc = lsGet(USE_KEY);
+      if (!access.usageUrl || !enc || !ui.accessPin || !navigator.onLine) return;
+      const k = await secretDec(enc, ui.accessPin), names = {};
+      for (const x of access.list || []) names[x.hash] = state.accessNames[x.hash] || (x.hash === access.me?.hash ? 'Yo (admin)' : 'Sin nombre');
+      await fetch(access.usageUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ k, names }) });
+    } catch { /* se reintenta la próxima vez que abras Acceso */ }
+  }, 600);
 }
 function usageSetupModal() {
   // la misma clave hasta que se active: así da igual cerrar y reabrir esta ventana
@@ -4834,7 +4865,7 @@ function regenAccess(hash) {
     delete state.accessCodes[hash]; await saveAccessCode(nh, code, pin);
     if (self) { lsSet(ACCESS_KEY, { code: normCode(code), at: Date.now() }); access.me = { ...access.me, hash: nh }; }
     if (ui.accessReveal) delete ui.accessReveal[hash];
-    persist(); render();
+    ui.accessPin = pin; persist(); render(); syncUsageNames();
     codeShareModal(`🔄 Nuevo código para ${esc(self ? 'ti' : who)}`, self ? '' : who, code, `<div class="card p-3 text-[13px] leading-snug"><b class="text-amber-300">El código anterior ya no funciona.</b> ${self ? 'Escribe este en tus otros dispositivos.' : `Mándale este a ${esc(who)}.`}</div>`);
   } });
 }
@@ -4886,7 +4917,7 @@ function accessSectionHTML() {
     ${gh ? '<p class="text-[11px] text-mute">✎ nombre · 🔄 nuevo código (el anterior deja de funcionar) · 🗑 quitar acceso</p>' : ''}
     ${list.length ? '<button class="btn-ghost w-full" data-act="copyHashes" type="button">📋 Copiar huellas y nombres (para tu hoja)</button>' : ''}
     ${access.usageUrl && lsGet(USE_KEY)
-      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? 'actualizado ahora' : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
+      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : 'actualizado ahora · nombres sincronizados con la hoja') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
       : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
     ${gh ? `<button class="btn-primary w-full" data-act="newAccess" type="button">＋ Crear código para alguien</button>
       <p class="text-[11px] text-mute flex justify-between">GitHub conectado ✓ (token cifrado con tu PIN)<button class="underline" data-act="ghDisconnect" type="button">Desconectar</button></p>`
@@ -4927,7 +4958,7 @@ function newAccessModal() {
       askPin({ title: `Crear código para ${esc(who)}`, text: 'Tu PIN abre la llave de GitHub para añadir el código a la lista.', onPin: async pin => {
         const code = newCode(), hash = await codeHash(code);
         await ghEditAcl(pin, lines => [...lines.filter(l => l.trim()), hash], 'Acceso: nuevo código');
-        state.accessNames[hash] = who; await saveAccessCode(hash, code, pin); ui.accessPin = pin; persist(); render();
+        state.accessNames[hash] = who; await saveAccessCode(hash, code, pin); ui.accessPin = pin; persist(); render(); syncUsageNames();
         codeShareModal(`Código para ${esc(who)}`, who, code);
       } });
     }
@@ -4937,7 +4968,7 @@ function delAccess(hash) {
   const who = state.accessNames[hash] || 'Sin nombre …' + hash.slice(-4);
   askPin({ title: `Quitar el acceso de ${esc(who)}`, text: 'Su código dejará de funcionar la próxima vez que abra la app con conexión (en 1–2 minutos, cuando GitHub publique el cambio). Sus datos se quedan en su móvil.', onPin: async pin => {
     await ghEditAcl(pin, lines => lines.filter(l => !l.trim().toLowerCase().startsWith(hash)), 'Acceso: código retirado');
-    delete state.accessNames[hash]; delete state.accessCodes[hash]; persist(); closeModal(); render(); toast('Acceso retirado ✓');
+    delete state.accessNames[hash]; delete state.accessCodes[hash]; ui.accessPin = pin; persist(); closeModal(); render(); toast('Acceso retirado ✓'); syncUsageNames();
   } });
 }
 
