@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.27.3';
+const APP_VERSION = '4.27.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3581,6 +3581,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.27.4', ['📲 Aviso para instalar la app (solo si no está instalada): botón directo en Android, instrucciones en iPhone y aviso si se abre dentro de WhatsApp. También en la pantalla de acceso.'], 'quiet'],
   ['4.27.3', ['📶 Los nombres pasan solos a tu hoja de uso (columna «nombre»): al abrir Acceso y cada vez que creas, renombras, renuevas o quitas un acceso. Requiere actualizar el script una vez (Reconfigurar → nueva versión).'], 'admin'],
   ['4.27.2', ['📋 Acceso: botón «Copiar huellas y nombres» para pegar en tu hoja de uso y ver quién es cada huella. La app pide a los buscadores que no la muestren (noindex).'], 'admin'],
   ['4.27.1', ['🏆 Récord en el momento: al marcar ✓ una serie que supera tu mejor marca, la app te avisa al instante (con vibración). El resumen al guardar y la tarjeta para compartir siguen mostrando tus récords.']],
@@ -3817,9 +3818,9 @@ function render() {
 }
 function renderInner() {
   const app = $('#app');
-  if (ui.view === 'train') app.innerHTML = renderTrain();
-  else if (ui.view === 'diet') app.innerHTML = renderDiet();
-  else if (ui.view === 'progress') app.innerHTML = renderProgress();
+  if (ui.view === 'train') app.innerHTML = installBannerHTML() + renderTrain();
+  else if (ui.view === 'diet') app.innerHTML = installBannerHTML() + renderDiet();
+  else if (ui.view === 'progress') app.innerHTML = installBannerHTML() + renderProgress();
   else app.innerHTML = renderSettings();
   document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('navbtn-on', b.dataset.view === ui.view));
   const sub = { train: 'Entreno · coach', diet: 'Nutrición', progress: 'Tu progreso', settings: 'Ajustes' };
@@ -4406,7 +4407,10 @@ const actions = {
     if (!state.settings.pinHash) return $('#importInput').click();
     guardModal({ title: 'Importar copia', text: 'Importar sustituye todos tus datos actuales por los de la copia.', word: 'IMPORTAR', onOk: () => $('#importInput').click() });
   },
-  install: async () => { if (!deferredInstall) return; deferredInstall.prompt(); await deferredInstall.userChoice.catch(() => null); deferredInstall = null; render(); },
+  install: async () => { if (!deferredInstall) return; deferredInstall.prompt(); await deferredInstall.userChoice.catch(() => null); deferredInstall = null; render(); refreshLockInstall(); },
+  installHelp: () => installHelpModal(),
+  installHide: () => { lsSet(INSTALL_HIDE, Date.now() + 7 * 86400000); render(); },
+  copyAppLink: () => navigator.clipboard.writeText('https://egarluq292.github.io/fitnesteban/').then(() => toast('Enlace copiado: pégalo en Chrome o Safari')).catch(() => toast('Enlace: egarluq292.github.io/fitnesteban', 'warn')),
   checkUpdate: async () => {
     checkRemoteVersion(true);
     if (!swReg) return toast('El modo app solo funciona desde una web https', 'warn');
@@ -4436,6 +4440,10 @@ app.addEventListener('click', e => {
   if (!b || !app.contains(b)) return;
   const fn = actions[b.dataset.act];
   if (fn) { e.preventDefault(); fn(b); }
+});
+document.addEventListener('click', e => {
+  const b = e.target.closest('#lockScreen [data-act]'); if (!b) return;
+  const fn = actions[b.dataset.act]; if (fn) { e.preventDefault(); fn(b); }
 });
 app.addEventListener('input', e => {
   const t = e.target;
@@ -4497,8 +4505,44 @@ function versionStatusHTML() {
    PWA: service worker, instalación, actualizaciones
    ========================================================================= */
 let deferredInstall = null;
+/* ---------- Aviso «Instalar la app» (solo si no está instalada) ---------- */
+const INSTALL_HIDE = 'fitnesteban_install_hide';
+const UA = navigator.userAgent || '';
+const isIOS = () => /iphone|ipad|ipod/i.test(UA) || (/macintosh/i.test(UA) && navigator.maxTouchPoints > 1);
+const isInAppBrowser = () => /WhatsApp|FBAN|FBAV|FB_IAB|Instagram|Line\/|; wv\)/i.test(UA);
+function installMode() {
+  if (isStandalone()) return '';
+  if (isInAppBrowser()) return 'inapp';
+  if (isIOS()) return 'ios';
+  if (deferredInstall) return 'prompt';
+  return /android/i.test(UA) ? 'menu' : '';
+}
+function installBannerHTML(force = false) {
+  const m = installMode();
+  if (!m || (!force && (lsGet(INSTALL_HIDE) || 0) > Date.now())) return '';
+  const txt = { prompt: 'Instálala: se abre más rápido, a pantalla completa y sin conexión.', ios: 'Instálala en tu iPhone: se abre a pantalla completa, como una app.', menu: 'Instálala: menú ⋮ de Chrome → «Instalar aplicación».', inapp: 'Estás dentro de WhatsApp: abre el enlace en Chrome (o Safari) para poder instalarla.' }[m];
+  const btn = m === 'prompt' ? '<button class="btn-banner shrink-0" data-act="install" type="button">Instalar</button>'
+    : m === 'ios' ? '<button class="btn-banner shrink-0" data-act="installHelp" type="button">Cómo</button>'
+    : m === 'inapp' ? '<button class="btn-banner shrink-0" data-act="copyAppLink" type="button">Copiar enlace</button>' : '';
+  return `<div class="banner-info mb-3" id="installBanner"><span>📲 ${txt}</span>${btn}${force ? '' : '<button class="iconbtn iconbtn-sm shrink-0" data-act="installHide" type="button" aria-label="Ocultar una semana">✕</button>'}</div>`;
+}
+function installHelpModal() {
+  const share = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-4px"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
+  openModal(`<h3 class="modal-title">📲 Instalar en iPhone</h3>
+    <ol class="card p-3 space-y-2.5 text-[14px] leading-snug">
+      <li><b class="text-brand">1.</b> Abre la app en <b>Safari</b> (no dentro de WhatsApp ni de otra app).</li>
+      <li><b class="text-brand">2.</b> Pulsa <b>Compartir</b> <span class="text-brand">${share}</span> en la barra de abajo.</li>
+      <li><b class="text-brand">3.</b> Baja y elige <b>«Añadir a pantalla de inicio»</b>.</li>
+      <li><b class="text-brand">4.</b> Pulsa <b>Añadir</b>. Ya tienes el icono de FITNESTEBAN.</li>
+    </ol>
+    <p class="text-[11px] text-mute">Al abrirla desde el icono te pedirá el código una vez más: es normal, el iPhone la trata como una app nueva.</p>
+    <button class="btn-primary w-full" data-close type="button">Entendido</button>`);
+}
 let swReg = null;
-window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; if (ui.view === 'settings') render(); });
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; render(); refreshLockInstall(); });
+window.addEventListener('appinstalled', () => { deferredInstall = null; render(); refreshLockInstall(); });
+/* En la pantalla de «Acceso privado» (sus botones van con el mismo sistema data-act) */
+function refreshLockInstall() { const slot = $('#lockInstall'); if (slot) slot.innerHTML = installBannerHTML(true); }
 window.addEventListener('appinstalled', () => { deferredInstall = null; toast('App instalada ✓'); });
 
 function showUpdate(worker) {
@@ -4574,7 +4618,8 @@ function lockScreen(mode, msg = '') {
     <p class="text-sm text-mute mt-1">${msg || 'Esta app es personal. Escribe el código que te ha dado Esteban.'}</p></div>
     <input class="field mt-5 text-center text-2xl font-black tracking-[.2em] uppercase" id="lockCode" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" />
     <button class="btn-primary w-full mt-3" id="lockGo" type="button">Entrar</button>
-    <p class="text-[11px] text-mute text-center mt-4">Cada código es personal. Si lo compartes, dejará de funcionar para ti también.</p></div>`;
+    <p class="text-[11px] text-mute text-center mt-4">Cada código es personal. Si lo compartes, dejará de funcionar para ti también.</p>
+    <div id="lockInstall" class="mt-5">${installBannerHTML(true)}</div></div>`;
   const go = async () => {
     const v = $('#lockCode').value; if (normCode(v).length < 8) return toast('El código tiene 8 caracteres', 'warn');
     $('#lockGo').disabled = true;
