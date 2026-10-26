@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.27.5';
+const APP_VERSION = '4.28.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -175,7 +175,7 @@ function defaultSettings() {
   return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [], habitList: [], lastBackup: null, eatBackCardio: false, minProtMeal: 25, pinHash: '', lastSeenVersion: '', driveConnected: false, driveEmail: '', driveFolderId: '', autoDrive: true, lastDriveBackup: null, swipeNav: true, swipeMode: '', profile: null };
 }
 function defaultState() {
-  return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {}, chat: null, chats: [], retos: {}, accessNames: {}, accessCodes: {}, habitLog: {} };
+  return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {}, chat: null, chats: [], retos: {}, accessNames: {}, accessCodes: {}, habitLog: {}, habitCount: {} };
 }
 const safeUrl = u => { const t = String(u || '').trim(); return /^https:\/\/[^\s"'<>]+$/i.test(t) ? t : ''; };
 const videoUrl = v => v.video || `https://www.youtube.com/results?search_query=${encodeURIComponent(v.name + ' técnica correcta')}`;
@@ -239,9 +239,10 @@ function normalize(s) {
   if (!Array.isArray(out.settings.habits)) out.settings.habits = [...DEFAULT_HABITS];
   // 4.25: hábitos con sitio (Entreno o Diario) y días; settings.habits sigue siendo la lista de los de Entreno
   if (!Array.isArray(s.settings?.habitList)) out.settings.habitList = out.settings.habits.map(name => ({ name, where: 'train', days: [...ALL_DAYS] }));
-  out.settings.habitList = out.settings.habitList.filter(h => h && h.name).map(h => ({ name: String(h.name).slice(0, 60), where: h.where === 'daily' ? 'daily' : 'train', days: Array.isArray(h.days) && h.days.length ? h.days.filter(d => d >= 0 && d <= 6) : [...ALL_DAYS] }));
+  out.settings.habitList = out.settings.habitList.filter(h => h && h.name).map(h => ({ name: String(h.name).slice(0, 60), where: h.where === 'daily' ? 'daily' : 'train', days: Array.isArray(h.days) && h.days.length ? h.days.filter(d => d >= 0 && d <= 6) : [...ALL_DAYS], target: clamp(parseInt(h.target, 10) || 1, 1, 20), unit: String(h.unit || '').slice(0, 12) }));
   out.settings.habits = out.settings.habitList.filter(h => h.where === 'train').map(h => h.name);
   if (!out.habitLog || typeof out.habitLog !== 'object' || Array.isArray(out.habitLog)) out.habitLog = {};
+  if (!out.habitCount || typeof out.habitCount !== 'object' || Array.isArray(out.habitCount)) out.habitCount = {};
   out.plan = normalizePlan(out.plan);
   for (const k of ['selectedVariants', 'memory', 'meals', 'drafts']) if (!out[k] || typeof out[k] !== 'object' || Array.isArray(out[k])) out[k] = {};
   for (const k of ['sessions', 'bodyMetrics', 'cardio', 'reports']) if (!Array.isArray(out[k])) out[k] = [];
@@ -343,7 +344,7 @@ let saveTimer = null;
 function hashStr(t) { let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0; return h; }
 function dataSig() {
   const retos = {}; for (const [k, r] of Object.entries(state.retos || {})) retos[k] = { level: r.level, best: r.best, history: r.history, tests: r.tests };
-  return hashStr(JSON.stringify([state.plan, state.sessions, state.meals, state.cardio, state.bodyMetrics, retos, state.reports, state.selectedVariants, state.habitLog]));
+  return hashStr(JSON.stringify([state.plan, state.sessions, state.meals, state.cardio, state.bodyMetrics, retos, state.reports, state.selectedVariants, state.habitLog, state.habitCount]));
 }
 function latestContentDate(st) {
   let d = '';
@@ -3190,6 +3191,7 @@ document.addEventListener('visibilitychange', () => {
 /* Al renombrar, el historial (marcas diarias, sesiones y borradores) pasa al nombre nuevo */
 function renameHabit(old, nu) {
   for (const k of Object.keys(state.habitLog || {})) state.habitLog[k] = state.habitLog[k].map(n => n === old ? nu : n);
+  for (const c of Object.values(state.habitCount || {})) if (old in c) { c[nu] = c[old]; delete c[old]; }
   for (const s of state.sessions) if (Array.isArray(s.habits)) s.habits = s.habits.map(n => n === old ? nu : n);
   for (const d of Object.values(state.drafts || {})) if (d?.habits && old in d.habits) { d.habits[nu] = d.habits[old]; delete d.habits[old]; }
 }
@@ -3206,7 +3208,11 @@ function habitsSettingsHTML() {
         <button class="iconbtn iconbtn-sm text-rose-300" data-act="habDel" data-i="${i}" type="button" aria-label="Borrar hábito">🗑</button></span></div>
       <div class="seg" style="grid-template-columns:repeat(2,minmax(0,1fr))"><button class="seg-btn py-1.5 ${h.where === 'train' ? 'seg-on' : ''}" data-act="habWhere" data-i="${i}" data-v="train" type="button">🏋️ Entreno</button><button class="seg-btn py-1.5 ${h.where === 'daily' ? 'seg-on' : ''}" data-act="habWhere" data-i="${i}" data-v="daily" type="button">🍽️ Diario (Dieta)</button></div>
       ${h.where === 'daily' ? `<button class="text-[12px] text-brand flex items-center gap-1" data-act="habDaysOpen" data-i="${i}" type="button">📅 ${daysLabel(h.days)} <span class="text-mute">${ui.habDaysOpen === i ? '▲' : '▼'}</span></button>
-        ${ui.habDaysOpen === i ? `<div class="grid grid-cols-7 gap-1">${WEEK_ORDER.map(d => `<button class="seg-btn py-1.5 rounded-lg border ${h.days.includes(d) ? 'seg-on' : 'border-line'}" data-act="habDay" data-i="${i}" data-d="${d}" type="button">${DAY_LETTER[d]}</button>`).join('')}</div>` : ''}` : ''}
+        ${ui.habDaysOpen === i ? `<div class="grid grid-cols-7 gap-1">${WEEK_ORDER.map(d => `<button class="seg-btn py-1.5 rounded-lg border ${h.days.includes(d) ? 'seg-on' : 'border-line'}" data-act="habDay" data-i="${i}" data-d="${d}" type="button">${DAY_LETTER[d]}</button>`).join('')}</div>` : ''}
+        <div class="lbl">Se cumple con</div>
+        <div class="seg" style="grid-template-columns:repeat(2,minmax(0,1fr))"><button class="seg-btn py-1.5 ${(h.target || 1) === 1 ? 'seg-on' : ''}" data-act="habTarget" data-i="${i}" data-v="1" type="button">1 toque</button><button class="seg-btn py-1.5 ${(h.target || 1) > 1 ? 'seg-on' : ''}" data-act="habTarget" data-i="${i}" data-v="multi" type="button">Varios toques</button></div>
+        ${(h.target || 1) > 1 ? `<div class="grid grid-cols-2 gap-2"><label class="lbl">¿Cuántos?<input class="field mt-1" inputmode="numeric" maxlength="2" data-hab-t="${i}" value="${h.target}" /></label><label class="lbl">¿De qué? (opcional)<input class="field mt-1" maxlength="12" data-hab-u="${i}" value="${esc(h.unit || '')}" placeholder="vasos" /></label></div>
+        <p class="text-[11px] text-mute">Cada toque en Dieta rellena 1/${h.target} del anillo. Ej.: 8 vasos de 250 ml = 2 L.</p>` : ''}` : ''}
     </div>`).join('') || '<p class="text-xs text-mute">Aún no tienes hábitos.</p>'}</div>
     ${list.length < 12 ? `<div class="flex gap-2"><input class="field flex-1 min-w-0" id="habNew" maxlength="60" placeholder="Nuevo hábito (ej: 💊 Creatina 5 g)" /><button class="btn-primary px-4" data-act="habAdd" type="button">Añadir</button></div>` : '<p class="text-[11px] text-mute">Máximo 12 hábitos.</p>'}`);
 }
@@ -3215,13 +3221,47 @@ function dailyHabitsHTML(date) {
     <span class="flex-1">✅ ¿Suplementos, agua, cero alcohol…? <button class="text-brand underline" data-act="goHabits" type="button">Añade tus hábitos en Ajustes</button></span>
     <button class="iconbtn iconbtn-sm" data-act="habHintOff" type="button" aria-label="No volver a mostrar">✕</button></div>`;
   const list = dailyHabitsFor(date); if (!list.length) return '';
-  const done = list.filter(h => habitDone(date, h.name)).length;
-  return `<section class="card p-4 mt-3">
-    <div class="flex items-center justify-between"><h3 class="section-title">✅ Hábitos ${date === todayISO() ? 'de hoy' : 'del día'}</h3><span class="text-[11px] font-bold ${done === list.length ? 'text-emerald-300' : 'text-mute'}">${done}/${list.length}${done === list.length ? ' ✓' : ''}</span></div>
-    <div class="flex flex-wrap gap-2 mt-3">${list.map(h => { const on = habitDone(date, h.name); return `<button class="flex items-center gap-2 rounded-xl border px-3 py-2 text-[13px] font-semibold text-left ${on ? 'border-emerald-400/60 bg-emerald-500/10 text-emerald-200' : 'border-line bg-ink text-slate-300'}" data-act="dailyHabit" data-name="${esc(h.name)}" type="button" aria-pressed="${on}">
-      <span class="w-5 h-5 shrink-0 rounded-md grid place-items-center text-[12px] font-black ${on ? 'bg-emerald-400 text-black' : 'border-2 border-slate-500'}">${on ? '✓' : ''}</span>${esc(h.name)}</button>`; }).join('')}</div>
+  const done = list.filter(h => habitDone(date, h.name)).length, multi = list.some(h => (h.target || 1) > 1);
+  return `<section class="card px-3 py-3 mt-3" data-noswipe>
+    <div class="flex items-center justify-between px-1"><h3 class="section-title">✅ Hábitos ${date === todayISO() ? 'de hoy' : 'del día'}</h3><span class="text-[11px] font-bold ${done === list.length ? 'text-emerald-300' : 'text-mute'}">${done}/${list.length}${done === list.length ? ' ✓' : ''}</span></div>
+    <div class="grid gap-1 mt-2.5" style="grid-template-columns:repeat(5,minmax(0,1fr))">${list.map(h => habitRingHTML(h, date)).join('')}</div>
+    ${multi ? '<p class="text-[10px] text-mute text-center mt-2">Toca para sumar · mantén pulsado para restar</p>' : ''}
   </section>`;
 }
+/* Icono del hábito: su emoji inicial o, si no lleva, la inicial del nombre */
+function habitIcon(name) {
+  const m = String(name).match(/^(\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic}|\p{Emoji_Modifier})*)\s*(.*)$/u);
+  return m ? { icon: m[1], label: m[2] || name, emoji: true } : { icon: (String(name).trim()[0] || '?').toUpperCase(), label: name, emoji: false };
+}
+const habitCountOf = (date, name) => state.habitCount[date]?.[name] || 0;
+function habitRingHTML(h, date) {
+  const t = h.target || 1, n = t > 1 ? Math.min(t, habitCountOf(date, h.name)) : (habitDone(date, h.name) ? 1 : 0), done = habitDone(date, h.name);
+  const { icon, label, emoji } = habitIcon(h.name), R = 20, C = 2 * Math.PI * R, gap = t > 1 ? 3 : 0, seg = C / t - gap;
+  const col = done ? '#34d399' : '#22d3ee';
+  const arcs = Array.from({ length: t }, (_, i) => `<circle cx="24" cy="24" r="${R}" fill="none" stroke="${i < n ? col : '#334155'}" stroke-width="4" stroke-dasharray="${seg.toFixed(2)} ${(C - seg).toFixed(2)}" stroke-dashoffset="${(-i * C / t).toFixed(2)}"/>`).join('');
+  const sub = t > 1 ? `${n}/${t}${h.unit ? ' ' + esc(h.unit) : ''}` : (done ? '✓' : '');
+  return `<button class="flex flex-col items-center gap-1 select-none" style="min-width:0;-webkit-touch-callout:none" data-act="dailyHabit" data-name="${esc(h.name)}" type="button" aria-pressed="${done}" aria-label="${esc(h.name)}${t > 1 ? ` ${n} de ${t}` : ''}">
+    <span class="relative grid place-items-center rounded-full pointer-events-none" style="width:56px;height:56px;background:${done ? 'rgba(52,211,153,.14)' : 'transparent'}">
+      <svg viewBox="0 0 48 48" class="absolute inset-0 -rotate-90 swipe-ok" style="width:56px;height:56px">${arcs}</svg>
+      <span class="relative ${emoji ? 'text-lg' : `text-[17px] font-black ${done ? 'text-emerald-300' : 'text-slate-300'}`}" style="${emoji && !n ? 'filter:grayscale(1);opacity:.6' : ''}">${esc(icon)}</span></span>
+    <span class="text-[10px] leading-tight text-center w-full truncate pointer-events-none ${done ? 'text-emerald-200' : 'text-mute'}">${esc(label)}</span>
+    <span class="text-[10px] font-bold -mt-0.5 pointer-events-none ${done ? 'text-emerald-300' : 'text-brand'}" style="min-height:12px">${sub}</span></button>`;
+}
+function habitStep(name, delta) {
+  const date = ui.dietDate || todayISO(), h = (state.settings.habitList || []).find(x => x.name === name); if (!h) return;
+  const t = h.target || 1, cur = state.habitLog[date] || [];
+  let doneNow;
+  if (t > 1) {
+    const c = (state.habitCount[date] ||= {}), n = clamp((c[name] || 0) + delta, 0, t);
+    if (n) c[name] = n; else delete c[name];
+    if (!Object.keys(c).length) delete state.habitCount[date];
+    doneNow = n >= t;
+  } else doneNow = delta > 0 ? !cur.includes(name) : false;
+  const next = doneNow ? [...new Set([...cur, name])] : cur.filter(x => x !== name);
+  if (next.length) state.habitLog[date] = next; else delete state.habitLog[date];
+  persist(); render();
+}
+let habPress = null; // pulsación larga en hábitos (los listeners van junto a los de #app)
 
 /* ---------- Primeros pasos (solo dispositivos nuevos, no administrador) ---------- */
 const ACTIVITY = { low: ['Sentada', 1.35], mid: ['Algo activa', 1.5], high: ['Muy activa', 1.65] };
@@ -3591,6 +3631,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.28.0', ['⭕ Hábitos diarios en Dieta más compactos: un anillo por hábito. Y ahora pueden ser «de varios toques» (por ejemplo 8 vasos de agua): cada toque rellena un tramo del anillo; mantén pulsado para restar. Se configura en Ajustes → Hábitos.']],
   ['4.27.5', ['✎ Hábitos: ahora puedes cambiarles el nombre (sin perder lo ya marcado) y ordenarlos con ▲▼ en Ajustes.']],
   ['4.27.4', ['📲 Aviso para instalar la app (solo si no está instalada): botón directo en Android, instrucciones en iPhone y aviso si se abre dentro de WhatsApp. También en la pantalla de acceso.'], 'quiet'],
   ['4.27.3', ['📶 Los nombres pasan solos a tu hoja de uso (columna «nombre»): al abrir Acceso y cada vez que creas, renombras, renuevas o quitas un acceso. Requiere actualizar el script una vez (Reconfigurar → nueva versión).'], 'admin'],
@@ -4330,6 +4371,12 @@ const actions = {
     L.push({ name: v.slice(0, 60), where: 'daily', days: [...ALL_DAYS] }); saveHabitList(); toast('Hábito añadido: elige si es de Entreno o Diario');
   },
   habDel: b => { const h = state.settings.habitList[+b.dataset.i]; if (!h || !confirm(`¿Borrar el hábito «${h.name}»? Lo ya registrado se conserva.`)) return; state.settings.habitList.splice(+b.dataset.i, 1); ui.habDaysOpen = null; saveHabitList(); },
+  habTarget: b => {
+    const h = state.settings.habitList[+b.dataset.i]; if (!h) return;
+    h.target = b.dataset.v === 'multi' ? Math.max(2, h.target > 1 ? h.target : 8) : 1;
+    if (h.target > 1 && !h.unit && /agua|vaso/i.test(h.name)) h.unit = 'vasos';
+    saveHabitList();
+  },
   habMove: b => {
     const L = state.settings.habitList, i = +b.dataset.i, j = i + +b.dataset.d;
     if (j < 0 || j >= L.length) return;
@@ -4361,10 +4408,8 @@ const actions = {
     saveHabitList();
   },
   dailyHabit: b => {
-    const date = ui.dietDate || todayISO(), n = b.dataset.name, cur = state.habitLog[date] || [];
-    const next = cur.includes(n) ? cur.filter(x => x !== n) : [...cur, n];
-    if (next.length) state.habitLog[date] = next; else delete state.habitLog[date];
-    persist(); render();
+    if (habPress?.fired) { habPress = null; return; } // fue una pulsación larga: ya restó
+    habPress = null; habitStep(b.dataset.name, 1);
   },
   resetPlan: () => {
     if (!confirm('¿Restaurar los bloques originales (PPT y FULL BODY)? Perderás los bloques, días y ejercicios que hayas creado o editado (el historial se conserva).')) return;
@@ -4469,6 +4514,13 @@ const actions = {
 };
 
 const app = $('#app');
+/* Mantener pulsado un hábito = restar uno (o desmarcar) */
+app.addEventListener('pointerdown', e => {
+  const b = e.target.closest('[data-act=dailyHabit]'); if (!b) return;
+  habPress = { name: b.dataset.name, fired: false, t: setTimeout(() => { habPress.fired = true; try { navigator.vibrate?.(30); } catch { /* nada */ } habitStep(habPress.name, -1); }, 550) };
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => app.addEventListener(ev, () => { if (habPress) clearTimeout(habPress.t); }));
+app.addEventListener('contextmenu', e => { if (e.target.closest('[data-act=dailyHabit]')) e.preventDefault(); });
 app.addEventListener('click', e => {
   const b = e.target.closest('[data-act]');
   if (!b || !app.contains(b)) return;
@@ -4494,6 +4546,11 @@ app.addEventListener('input', e => {
 });
 app.addEventListener('change', e => {
   const t = e.target;
+  if (t.dataset.habT !== undefined || t.dataset.habU !== undefined) {
+    const h = state.settings.habitList[+(t.dataset.habT ?? t.dataset.habU)]; if (!h) return;
+    if (t.dataset.habT !== undefined) h.target = clamp(parseInt(t.value, 10) || 2, 2, 20); else h.unit = t.value.trim().slice(0, 12);
+    return saveHabitList();
+  }
   if (t.dataset.habit !== undefined) {
     const h = state.settings.habits[parseInt(t.dataset.habit, 10)];
     draftOf(currentDay().id).habits[h] = t.checked; persist();
