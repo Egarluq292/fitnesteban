@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.30.0';
+const APP_VERSION = '4.32.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -121,12 +121,144 @@ const FULLBODY_DAYS = [
 /* 4.27: alternativas para los ejercicios de serie (se añaden una sola vez al final de sus variantes) */
 const EX_ALTS = {"d1_goblet": [["Prensa de piernas", "Pies a media altura, sin bloquear rodillas."], ["Sentadilla frontal con barra", "Codos altos, torso erguido."]], "d1_bench": [["Press en suelo con mancuernas", "Codos a 45º, pausa abajo."], ["Press de pecho en máquina", "Recorrido completo."]], "d1_incline": [["Press inclinado con barra", "Banco a 30º."]], "d1_shoulder": [["Press Arnold", "Gira las muñecas al subir."], ["Press de hombro con kettlebell", "A una mano, core firme."]], "d1_lat": [["Elevaciones laterales en polea", "Tensión constante."], ["Elevaciones laterales con banda", "Controla la bajada."]], "d1_triceps": [["Press francés con mancuernas + rueda", "Anota repeticiones de tríceps."], ["Extensión de tríceps en polea + rueda", "Anota repeticiones de tríceps."]], "d2_rdl": [["Peso muerto rumano con mancuernas", "Mancuernas pegadas a las piernas."], ["Buenos días con barra", "Cadera atrás, rodillas suaves."]], "d2_swings": [["Swing a una mano", "Cambia de mano a mitad de serie."], ["Thruster con kettlebell", "Sentadilla + press en un solo gesto."]], "d2_pullup": [["Dominadas asistidas con banda", "Banda bajo las rodillas. 0 kg = peso corporal."], ["Dominadas negativas", "Baja en 4–5 s. 0 kg = peso corporal."]], "d2_row": [["Remo en polea baja", "Espalda neutra, codos atrás."], ["Remo con barra", "Torso a ~45º."]], "d2_rear": [["Pájaros con mancuernas", "Torso inclinado, codos suaves."], ["Apertura con banda", "Brazos rectos a la altura del pecho."]], "d2_biceps": [["Curl con mancuernas alterno", "Supina al subir."], ["Curl en polea", "Tensión constante."]], "d3_ss1_push": [["Press de banca con barra", "Alterna con A2."], ["Press en suelo con mancuernas", "Alterna con A2."]], "d3_ss1_pull": [["Remo invertido en TRX", "Cuerpo recto. 0 kg = peso corporal."], ["Dominadas con agarre neutro", "0 kg = peso corporal."]], "d3_ss2_push": [["Flexiones diamante", "Codos pegados. 0 kg = peso corporal."], ["Fondos en banco", "Hombros abajo. 0 kg = peso corporal."]], "d3_ss2_pull": [["Remo en polea baja", "Aprieta escápulas."], ["Remo con barra", "Aprieta escápulas."]], "d3_arms": [["Curl martillo + press francés", "Superserie sin descanso."], ["Curl en polea + extensión en polea", "Superserie sin descanso."]], "d3_spartan": [["Sentadilla goblet + swings + plancha", "A tope de intensidad."], ["Zancadas con mancuernas + remo + rueda", "A tope de intensidad."]], "fa_squat": [["Sentadilla frontal", "Codos altos."], ["Prensa de piernas", "Sin bloquear rodillas."]], "fa_bench": [["Press de banca con mancuernas", "Bajada en 2 s."], ["Press de pecho en máquina", "Recorrido completo."]], "fa_row": [["Remo con mancuerna a una mano", "Codo hacia la cadera."], ["Remo en polea baja", "Espalda neutra."]], "fa_legcurl": [["Curl femoral sentado", "Bajada lenta."], ["Peso muerto rumano con mancuernas", "Cadera atrás, espalda neutra."]], "fa_ohp": [["Press militar sentado con mancuernas", "Rango completo."], ["Press Arnold", "Gira las muñecas al subir."]], "fa_lat": [["Elevaciones laterales en polea", "Tensión constante."], ["Elevaciones laterales con banda", "Controla la bajada."]], "fa_curl": [["Curl con mancuernas alterno", "Supina al subir."], ["Curl en polea", "Tensión constante."]], "fa_hammer": [["Curl martillo en polea con cuerda", "Codos fijos."], ["Curl Zottman", "Sube supino, baja prono."]], "fb_deadlift": [["Peso muerto con barra hexagonal", "Empuja el suelo."], ["Peso muerto rumano", "Cadera atrás, espalda neutra."]], "fb_pullup": [["Dominadas asistidas con banda", "Banda bajo las rodillas. 0 kg = peso corporal."], ["Dominadas negativas", "Baja en 4–5 s. 0 kg = peso corporal."]], "fb_incline": [["Press inclinado con barra", "Banco a 30º."], ["Press inclinado en máquina", "Recorrido completo."]], "fb_squat": [["Sentadilla búlgara", "Reps por pierna."], ["Prensa de piernas", "Sin bloquear rodillas."]], "fb_hipthrust": [["Puente de glúteo con barra", "Pausa arriba."], ["Hip thrust a una pierna", "Reps por pierna."]], "fb_face": [["Pájaros con mancuernas", "Torso inclinado."], ["Apertura con banda", "Brazos rectos."]], "fb_triceps": [["Press francés con mancuernas", "Codos fijos."], ["Fondos en banco con lastre", "Hombros abajo."]], "fb_calf": [["Elevación de gemelos sentado", "Pausa arriba."], ["Elevación de gemelos a una pierna", "Apoyado en un escalón."]]};
 
+/* Biblioteca de ejercicios sueltos (preparados por Esteban): se añaden a cualquier día, también a FREE.
+   [grupo, nombre, nota, series, reps mín, reps máx, incremento, descanso, peso corporal, alternativas] */
+const EX_LIB = [["Pecho","Press de banca con barra","Escápulas retraídas, pies firmes.",4,6,10,2.5,120,false,[["Press de banca con mancuernas","Bajada en 2 s."],["Press de pecho en máquina","Recorrido completo."]]],["Pecho","Press de banca con mancuernas","Bajada controlada en 2 s.",4,8,12,2,90,false,[["Press en suelo con mancuernas","Codos a 45º."],["Press de banca con barra","Escápulas retraídas."]]],["Pecho","Press inclinado con mancuernas","Banco a 30º.",3,8,12,2,90,false,[["Press inclinado con barra","Banco a 30º."],["Press inclinado en máquina","Recorrido completo."]]],["Pecho","Aperturas con mancuernas","Codos algo flexionados, abre hasta notar estiramiento.",3,10,15,1,60,false,[["Aperturas en polea","Tensión constante."],["Contractora (pec deck)","Pausa al cerrar."]]],["Pecho","Cruce de poleas","Junta las manos delante del pecho.",3,12,15,1,60,false,[["Aperturas con mancuernas","Codos algo flexionados."],["Contractora (pec deck)","Pausa al cerrar."]]],["Pecho","Fondos en paralelas","Torso inclinado hacia delante. 0 kg = peso corporal.",3,6,12,2,90,true,[["Fondos asistidos con banda","0 kg = peso corporal."],["Flexiones declinadas","Pies elevados."]]],["Pecho","Flexiones","Cuerpo en bloque, pecho al suelo. 0 kg = peso corporal.",3,10,20,2,60,true,[["Flexiones declinadas","Pies elevados."],["Flexiones con palmada","Explosivas."]]],["Espalda","Dominadas pronas","Pecho a la barra. 0 kg = peso corporal.",4,5,10,2,120,true,[["Dominadas asistidas con banda","Banda bajo las rodillas."],["Dominadas negativas","Baja en 4–5 s."]]],["Espalda","Dominadas supinas","Agarre cerrado. 0 kg = peso corporal.",3,6,10,2,120,true,[["Dominadas con agarre neutro","0 kg = peso corporal."],["Dominadas asistidas con banda","Banda bajo las rodillas."]]],["Espalda","Jalón al pecho en polea","Pecho arriba, codos hacia abajo.",4,8,12,2.5,90,false,[["Jalón con agarre neutro","Codos pegados."],["Jalón supino","Agarre estrecho."]]],["Espalda","Remo con barra","Torso a unos 45º, barra al ombligo.",4,8,10,2.5,90,false,[["Remo Pendlay","Desde el suelo en cada rep."],["Remo en máquina","Pecho apoyado."]]],["Espalda","Remo con mancuerna a una mano","Codo hacia la cadera.",3,8,12,2,90,false,[["Remo con kettlebell a una mano","Codo hacia la cadera."],["Remo en banco inclinado","Pecho apoyado en el banco."]]],["Espalda","Remo en polea baja","Espalda neutra, codos atrás.",3,10,12,2.5,90,false,[["Remo en máquina","Pecho apoyado."],["Remo con mancuerna a una mano","Codo a la cadera."]]],["Espalda","Remo invertido en TRX","Cuerpo recto, pecho a las asas. 0 kg = peso corporal.",3,8,15,2,60,true,[["Remo invertido en barra","Cuerpo recto."],["Dominadas australianas","Barra a la altura de la cadera."]]],["Espalda","Pullover en polea","Brazos casi rectos, lleva la barra a los muslos.",3,12,15,2.5,60,false,[["Pullover con mancuerna","Tumbado en banco."],["Jalón con brazos rectos","Codos fijos."]]],["Espalda","Face pull","Codos altos, abre al final.",3,12,20,1,60,false,[["Pájaros con mancuernas","Torso inclinado."],["Apertura con banda","Brazos rectos."]]],["Hombro","Press militar de pie con barra","Glúteos y abdomen apretados.",4,6,10,2.5,120,false,[["Press militar sentado con mancuernas","Rango completo."],["Press de hombro en máquina","Recorrido completo."]]],["Hombro","Press de hombro sentado con mancuernas","Rango completo.",3,8,12,2,90,false,[["Press Arnold","Gira las muñecas al subir."],["Press de hombro en máquina","Recorrido completo."]]],["Hombro","Press Arnold","Gira las muñecas al subir.",3,8,12,2,90,false,[["Press de hombro sentado con mancuernas","Rango completo."],["Press militar de pie con barra","Core firme."]]],["Hombro","Elevaciones laterales con mancuernas","Sin impulso, codos algo flexionados.",3,12,20,1,60,false,[["Elevaciones laterales en polea","Tensión constante."],["Elevaciones laterales con banda","Controla la bajada."]]],["Hombro","Pájaros con mancuernas","Torso inclinado, codos suaves.",3,12,15,1,60,false,[["Face pull","Codos altos."],["Pájaros en máquina","Brazos casi rectos."]]],["Hombro","Elevaciones frontales","Sube hasta la altura de los ojos.",3,10,15,1,60,false,[["Elevaciones frontales con disco","Agarre por los lados."],["Elevaciones frontales en polea","Tensión constante."]]],["Hombro","Encogimientos con mancuernas","Sube los hombros hacia las orejas, pausa arriba.",3,10,15,2,60,false,[["Encogimientos con barra","Sin girar los hombros."],["Encogimientos en máquina","Pausa arriba."]]],["Bíceps","Curl con barra","Codos pegados, sin balanceo.",3,8,12,2,60,false,[["Curl con barra Z","Agarre más cómodo para muñecas."],["Curl en polea","Tensión constante."]]],["Bíceps","Curl con mancuernas alterno","Supina al subir.",3,10,12,1,60,false,[["Curl en banco inclinado","Brazos por detrás del cuerpo."],["Curl concentrado","Codo apoyado en el muslo."]]],["Bíceps","Curl martillo","Agarre neutro.",3,10,12,1,60,false,[["Curl martillo en polea con cuerda","Codos fijos."],["Curl Zottman","Sube supino, baja prono."]]],["Bíceps","Curl en banco inclinado","Brazos por detrás del cuerpo.",3,10,12,1,60,false,[["Curl con mancuernas alterno","Supina al subir."],["Curl concentrado","Codo apoyado."]]],["Bíceps","Curl concentrado","Codo apoyado en el muslo.",3,10,12,1,60,false,[["Curl en banco inclinado","Brazos atrás."],["Curl en polea a una mano","Tensión constante."]]],["Tríceps","Extensión de tríceps en polea","Codos fijos pegados al cuerpo.",3,10,15,2.5,60,false,[["Extensión de tríceps en polea con cuerda","Abre la cuerda abajo."],["Patada de tríceps","Brazo paralelo al suelo."]]],["Tríceps","Press francés con barra Z","Baja a la frente con los codos fijos.",3,8,12,2,60,false,[["Press francés con mancuernas","Codos fijos."],["Extensión sobre la cabeza con mancuerna","Codos hacia el techo."]]],["Tríceps","Extensión sobre la cabeza con mancuerna","Codos hacia el techo.",3,10,12,1,60,false,[["Extensión sobre la cabeza en polea","Tensión constante."],["Press francés con mancuernas","Codos fijos."]]],["Tríceps","Patada de tríceps","Brazo paralelo al suelo, extiende del todo.",3,12,15,1,60,false,[["Patada de tríceps en polea","Tensión constante."],["Extensión de tríceps en polea","Codos fijos."]]],["Tríceps","Press cerrado con barra","Manos a la anchura de los hombros.",3,6,10,2.5,90,false,[["Press cerrado con mancuernas","Mancuernas juntas."],["Fondos en banco","Hombros abajo."]]],["Tríceps","Fondos en banco","Hombros abajo. 0 kg = peso corporal.",3,10,20,2,60,true,[["Flexiones diamante","Codos pegados."],["Fondos en paralelas","Torso erguido."]]],["Pierna","Sentadilla trasera con barra","Profundidad paralela o más, core apretado.",4,5,8,2.5,150,false,[["Sentadilla frontal con barra","Codos altos."],["Sentadilla goblet","Mancuerna al pecho."]]],["Pierna","Sentadilla goblet","Pega la mancuerna al esternón.",3,10,15,2,90,false,[["Sentadilla con kettlebell en rack","Kettlebell en el antebrazo."],["Sentadilla búlgara","Reps por pierna."]]],["Pierna","Prensa de piernas","Pies a media altura, sin bloquear rodillas.",4,10,15,5,120,false,[["Sentadilla hack","Espalda apoyada."],["Sentadilla en máquina Smith","Pies algo adelantados."]]],["Pierna","Sentadilla búlgara","Pie trasero en el banco. Reps por pierna.",3,8,12,2,90,false,[["Zancadas con mancuernas","Paso largo."],["Step-up con mancuernas","Sube con el talón."]]],["Pierna","Zancadas con mancuernas","Rodilla trasera rozando el suelo.",3,10,12,2,90,false,[["Zancadas inversas","Paso atrás controlado."],["Zancadas caminando","Paso largo y continuo."]]],["Pierna","Extensión de cuádriceps","Pausa de 1 s arriba.",3,12,15,2.5,60,false,[["Extensión de cuádriceps a una pierna","Pausa arriba."],["Sentadilla goblet","Mancuerna al pecho."]]],["Pierna","Step-up con mancuernas","Sube empujando con el talón.",3,10,12,2,90,false,[["Sentadilla búlgara","Reps por pierna."],["Zancadas con mancuernas","Paso largo."]]],["Femoral y glúteo","Peso muerto con barra","Espalda neutra, empuja el suelo.",3,5,8,5,180,false,[["Peso muerto con barra hexagonal","Empuja el suelo."],["Peso muerto rumano","Cadera atrás."]]],["Femoral y glúteo","Peso muerto rumano","Cadera atrás, espalda neutra, rodillas suaves.",3,8,12,2.5,120,false,[["Peso muerto rumano con mancuernas","Mancuernas pegadas a las piernas."],["Buenos días con barra","Rodillas suaves."]]],["Femoral y glúteo","Curl femoral tumbado","Bajada lenta en 3 s.",3,10,12,2.5,60,false,[["Curl femoral sentado","Bajada lenta."],["Curl nórdico asistido","Baja lo más lento posible."]]],["Femoral y glúteo","Curl femoral sentado","Bajada lenta en 3 s.",3,10,12,2.5,60,false,[["Curl femoral tumbado","Bajada lenta."],["Peso muerto rumano con mancuernas","Cadera atrás."]]],["Femoral y glúteo","Hip thrust con barra","Pausa de 1 s arriba, barbilla al pecho.",4,8,12,5,90,false,[["Puente de glúteo con barra","Pausa arriba."],["Hip thrust a una pierna","Reps por pierna."]]],["Femoral y glúteo","Patada de glúteo en polea","Pierna estirada hacia atrás, sin arquear la espalda.",3,12,15,1,60,false,[["Patada de glúteo en máquina","Pausa arriba."],["Puente de glúteo a una pierna","Reps por pierna."]]],["Femoral y glúteo","Abducción de cadera en máquina","Pausa al abrir.",3,12,20,2.5,60,false,[["Abducción con banda (paso lateral)","Rodillas algo flexionadas."],["Abducción en polea","De pie, pierna estirada."]]],["Femoral y glúteo","Buenos días con barra","Cadera atrás, rodillas suaves.",3,8,12,2.5,90,false,[["Peso muerto rumano","Cadera atrás."],["Hiperextensiones","Sin pasar de la línea del cuerpo."]]],["Gemelos","Elevación de gemelos de pie","Pausa abajo y arriba.",4,10,15,2.5,60,false,[["Elevación de gemelos sentado","Pausa arriba."],["Elevación de gemelos a una pierna","Apoyado en un escalón."]]],["Gemelos","Elevación de gemelos sentado","Pausa arriba.",4,12,15,2.5,60,false,[["Elevación de gemelos de pie","Pausa abajo y arriba."],["Elevación de gemelos en prensa","Recorrido completo."]]],["Core","Rueda abdominal","Pelvis metida, sin hundir la zona lumbar. 0 kg = peso corporal.",3,8,15,1,60,true,[["Rueda abdominal de rodillas","Bajada lenta."],["Plancha con toque de hombros","Sin girar la cadera."]]],["Core","Elevación de piernas colgado","Sin balanceo, sube las rodillas al pecho. 0 kg = peso corporal.",3,8,15,1,60,true,[["Elevación de rodillas en paralelas","Espalda apoyada."],["Elevación de piernas tumbado","Zona lumbar pegada al suelo."]]],["Core","Crunch en polea","Enrolla la columna, cadera quieta.",3,12,15,2.5,60,false,[["Crunch en máquina","Pausa abajo."],["Crunch con peso en el suelo","Sube solo los hombros."]]],["Core","Pallof press","Resiste el giro, brazos al frente. Reps por lado.",3,10,12,1,60,false,[["Pallof press con banda","Resiste el giro."],["Plancha lateral con peso","Cadera alta."]]],["Core","Leñador en polea","Gira desde el tronco, brazos estirados. Reps por lado.",3,10,12,1,60,false,[["Leñador con mancuerna","Gira desde el tronco."],["Russian twist con disco","Pies en el suelo."]]],["Kettlebell","Kettlebell swing","Bisagra de cadera, potencia con glúteos.",4,15,20,2,60,false,[["Swing a una mano","Cambia de mano a mitad."],["Peso muerto con kettlebell","Cadera atrás."]]],["Kettlebell","Clean & press con kettlebell","Carga limpia al pecho y press estricto. Reps por brazo.",3,8,12,2,90,false,[["Press de hombro con kettlebell","Sin impulso."],["Push press con kettlebell","Pequeño impulso de piernas."]]],["Kettlebell","Snatch con kettlebell","De la cadera a arriba en un solo gesto. Reps por brazo.",3,8,12,2,90,false,[["Swing a una mano","Cambia de mano a mitad."],["Clean & press con kettlebell","Reps por brazo."]]],["Kettlebell","Turkish get-up","Lento y controlado, la vista en la kettlebell. Reps por lado.",3,3,5,2,90,false,[["Media turkish get-up","Hasta sentado."],["Press en suelo con kettlebell","Una mano."]]],["Kettlebell","Gorilla row","Apoyo firme, tira de los codos sin rotar el tronco.",3,10,12,2,90,false,[["Remo a una mano con kettlebell","Codo a la cadera."],["Remo renegado","En plancha."]]],["Kettlebell","Goblet squat con kettlebell","Codos por dentro de las rodillas.",4,10,15,2,90,false,[["Sentadilla con kettlebell en rack","Kettlebell en el antebrazo."],["Zancadas con kettlebell en rack","Rodilla trasera rozando el suelo."]]],["Peso corporal","Flexiones diamante","Codos pegados al cuerpo. 0 kg = peso corporal.",3,8,15,2,60,true,[["Flexiones cerradas","Manos a la anchura de los hombros."],["Fondos en banco","Hombros abajo."]]],["Peso corporal","Burpees","Ritmo constante, pecho al suelo.",3,10,15,1,60,true,[["Burpees sin salto","Más suave para las rodillas."],["Sentadilla con salto","Aterriza suave."]]],["Peso corporal","Sentadilla con salto","Aterriza suave, rodillas hacia fuera.",3,10,15,1,60,true,[["Sentadilla al aire","Ritmo constante."],["Zancadas con salto","Alterna piernas."]]],["Peso corporal","Escaladores","Rodillas al pecho, cadera baja. Reps por pierna.",3,15,30,1,45,true,[["Escaladores cruzados","Rodilla al codo contrario."],["Plancha con toque de hombros","Sin girar la cadera."]]]];
+const EX_LIB_GROUPS = ['Pecho', 'Espalda', 'Hombro', 'Bíceps', 'Tríceps', 'Pierna', 'Femoral y glúteo', 'Gemelos', 'Core', 'Kettlebell', 'Peso corporal'];
+const EX_LIB_ICON = { 'Pecho': '💪', 'Espalda': '🦅', 'Hombro': '🎯', 'Bíceps': '💪', 'Tríceps': '💪', 'Pierna': '🦵', 'Femoral y glúteo': '🍑', 'Gemelos': '🦵', 'Core': '🧱', 'Kettlebell': '🔔', 'Peso corporal': '🤸' };
+const normTxt = t => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+function exLibraryModal() {
+  const day = currentDay(); if (!day) return;
+  const st = { q: '', g: '' };
+  const has = n => day.exercises.some(e => e.variants.some(v => v.name.toLowerCase() === n.toLowerCase()));
+  const list = () => EX_LIB.filter(x => (!st.g || x[0] === st.g) && (!st.q || normTxt(x[1] + ' ' + x[0] + ' ' + x[9].map(a => a[0]).join(' ')).includes(normTxt(st.q))));
+  const rows = () => { const L = list(); return L.length ? L.map(x => { const i = EX_LIB.indexOf(x), added = has(x[1]); return `<div class="flex items-center justify-between gap-2 bg-ink rounded-xl border border-line px-3 py-2">
+      <div class="min-w-0"><div class="font-semibold text-[14px] truncate">${esc(x[1])}</div><div class="text-[11px] text-mute truncate">${EX_LIB_ICON[x[0]] || ''} ${esc(x[0])} · ${x[3]}×${x[4]}–${x[5]}${x[8] ? ' · peso corporal' : ''} · +${x[9].length} alternativas</div></div>
+      <button class="${added ? 'btn-mini text-emerald-300' : 'btn-mini text-brand'} shrink-0" data-mact="add" data-i="${i}" type="button">${added ? '✓ Añadido' : '＋ Añadir'}</button></div>`; }).join('') : '<p class="text-xs text-mute text-center py-4">No encuentro ese ejercicio. Pídeselo a Esteban o créalo con «＋ Añadir ejercicio».</p>'; };
+  const html = () => `<h3 class="modal-title">📚 Biblioteca de ejercicios</h3>
+    <p class="text-xs text-mute -mt-1">Se añaden a <b class="text-slate-300">${esc(day.label === prog().name ? day.label : day.label + ' · ' + prog().name)}</b>, ya configurados, con 2 alternativas (⇄). Puedes añadir varios.</p>
+    <input class="field" name="q" placeholder="Buscar: press, remo, glúteo, kettlebell…" value="${esc(st.q)}" autocomplete="off" />
+    <div class="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" data-noswipe>${['', ...EX_LIB_GROUPS].map(g => `<button class="chip ${st.g === g ? 'chip-on' : ''} shrink-0" data-mact="grp" data-g="${esc(g)}" type="button">${g ? (EX_LIB_ICON[g] || '') + ' ' + esc(g) : 'Todos'}</button>`).join('')}</div>
+    <div class="space-y-1.5" id="exLibRows">${rows()}</div>`;
+  openModal(html(), {
+    grp: (root, b) => { st.g = b.dataset.g; root.querySelector('.modal-sheet').innerHTML = html(); bindQ(root); },
+    add: (root, b) => {
+      const x = EX_LIB[+b.dataset.i]; if (!x) return;
+      if (has(x[1])) return toast('Ya está en este día', 'warn');
+      day.exercises.push(normalizeExercise({ id: uid('c_'), alts27: true, block: `${EX_LIB_ICON[x[0]] || '⚡'} ${x[0]}`, sets: x[3], minReps: x[4], maxReps: x[5], increment: x[6], rest: x[7], bw: !!x[8], variants: [{ name: x[1], note: x[2] }, ...x[9].map(([name, note]) => ({ name, note }))] }));
+      persist(); render(); root.querySelector('#exLibRows').innerHTML = rows(); toast(`Añadido: ${x[1]}`);
+    }
+  });
+  const bindQ = root => { const q = root.querySelector('[name=q]'); if (q) q.oninput = () => { st.q = q.value; root.querySelector('#exLibRows').innerHTML = rows(); }; };
+  bindQ($('#modalRoot'));
+}
+
+/* Biblioteca: bloques recomendados (preparados por Esteban) que cada usuario puede añadir a los suyos */
+const KB_DAYS = [{
+  id: 'kb_day', label: 'KB', rotation: false,
+  title: 'Kettlebell · potencia y quema-grasa',
+  subtitle: 'Kettlebell ajustable (hasta 18 kg) y fija (24 kg)',
+  exercises: [
+    mkEx('kb_swing', '💥 Potencia y cadena posterior', 4, 15, 20, 2, 60, [['Kettlebell swing explosivo', 'Bisagra de cadera pura: la potencia sale de los glúteos.'], ['Swing a una mano', 'Cambia de mano a mitad de serie.'], ['Peso muerto con kettlebell', 'Cadera atrás, espalda neutra.']]),
+    mkEx('kb_goblet', '🦵 Cuádriceps y core', 4, 10, 15, 2, 90, [['Goblet squat profundo', 'Codos por dentro de las rodillas, espalda recta.'], ['Sentadilla con kettlebell en rack', 'Kettlebell apoyada en el antebrazo.'], ['Sentadilla búlgara con kettlebell', 'Reps por pierna.']]),
+    mkEx('kb_clean', '💪 Hombro y estabilidad unilateral', 3, 8, 12, 2, 90, [['Clean & press unilateral', 'Carga limpia al pecho y press estricto arriba. Reps por brazo.'], ['Press de hombro con kettlebell', 'Sin impulso de piernas.'], ['Push press con kettlebell', 'Pequeño impulso de piernas.']]),
+    mkEx('kb_lunge', '🎯 Pierna unilateral y glúteo', 3, 10, 12, 2, 90, [['Zancadas con kettlebell en rack', 'Rodilla trasera rozando el suelo.'], ['Zancadas inversas con kettlebell', 'Paso atrás controlado.'], ['Step-up con kettlebell', 'Sube empujando con el talón.']]),
+    mkEx('kb_row', '🦅 Espalda y grosor', 3, 10, 12, 2, 90, [['Gorilla row (remo alterno)', 'Apoyo firme, tira de los codos sin rotar el tronco.'], ['Remo a una mano con kettlebell', 'Codo hacia la cadera.'], ['Remo renegado', 'En plancha, sin girar la cadera.']])
+  ]
+}];
+const LIB_BLOCKS = [
+  { lib: 'kb', name: 'KETTLEBELL', icon: '🔔', desc: 'Potencia y quema-grasa con kettlebell: swing, goblet, clean & press, zancadas y remo. Ideal en casa.', days: () => KB_DAYS },
+  { lib: 'ppt', name: 'PPT', icon: '', desc: 'Push / Pull / Torso en 3 días, con «peaje» de pierna al inicio de cada sesión.', days: () => PPT_DAYS },
+  { lib: 'fullbody', name: 'FULL BODY', icon: '', desc: 'Cuerpo completo en 2 días alternos (A y B): básicos pesados y accesorios.', days: () => FULLBODY_DAYS }
+];
+/* Bloques que Esteban publica desde su app (bloques.json del repositorio). Se leen al abrir la biblioteca. */
+const LIB_FILE = 'bloques.json', LIB_CACHE = 'fitnesteban_lib';
+let remoteLib = (() => { try { return JSON.parse(localStorage.getItem(LIB_CACHE) || '[]'); } catch { return []; } })();
+async function fetchRemoteLib() {
+  try {
+    const r = await fetch(LIB_FILE + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    const list = await r.json();
+    if (Array.isArray(list)) { remoteLib = list.filter(x => x && x.lib && x.name && Array.isArray(x.days)); try { localStorage.setItem(LIB_CACHE, JSON.stringify(remoteLib)); } catch { /* nada */ } }
+  } catch { /* sin conexión o aún no hay bloques publicados: se usa lo guardado */ }
+  return remoteLib;
+}
+const libAll = () => [...remoteLib.map(x => ({ ...x, pub: true, days: () => x.days })), ...LIB_BLOCKS];
+/* Publicar (solo administrador, con GitHub conectado): copia limpia del bloque, sin ids */
+function blockForLib(p) {
+  return p.days.map(d => ({ label: d.label, rotation: d.rotation, title: d.title, subtitle: d.subtitle,
+    exercises: d.exercises.map(e => ({ id: e.id, block: e.block, sets: e.sets, minReps: e.minReps, maxReps: e.maxReps, increment: e.increment, rest: e.rest, bw: e.bw, alts27: true, variants: e.variants.map(v => ({ name: v.name, note: v.note || '' })) })) }));
+}
+async function ghEditLib(pin, fn, message) {
+  const token = await ghToken(pin);
+  const cur = await ghApi(token, 'GET', null, LIB_FILE);
+  let list = []; try { list = JSON.parse(b64utf8(cur.content || '') || '[]'); } catch { list = []; }
+  const next = fn(Array.isArray(list) ? list : []);
+  await ghApi(token, 'PUT', { message, content: utf8b64(JSON.stringify(next, null, 1) + '\n'), ...(cur.sha ? { sha: cur.sha } : {}) }, LIB_FILE);
+  remoteLib = next; try { localStorage.setItem(LIB_CACHE, JSON.stringify(next)); } catch { /* nada */ }
+}
+function publishBlockModal(progId) {
+  const p = state.plan.programs.find(x => x.id === progId); if (!p) return;
+  const pubId = p.pubId || ('pub_' + uid('').slice(0, 10));
+  const existing = remoteLib.find(x => x.lib === pubId);
+  openModal(`<h3 class="modal-title">📤 Publicar «${esc(p.name)}» en la biblioteca</h3>
+    <p class="text-xs text-mute">Aparecerá en «📚 Bloques recomendados» de todos. Se publica una copia: lo que cambies después en tu bloque no se ve hasta que vuelvas a publicar.</p>
+    <label class="lbl">Descripción (una o dos frases)<textarea class="field mt-1" name="desc" rows="3" maxlength="200" placeholder="Ej: Circuito de 30 min con mancuernas para días con poco tiempo.">${esc(existing?.desc || '')}</textarea></label>
+    <button class="btn-primary w-full" data-mact="go" type="button">${existing ? 'Actualizar en la biblioteca' : 'Publicar'}</button>
+    ${existing ? '<button class="btn-danger w-full" data-mact="remove" type="button">Retirar de la biblioteca</button>' : ''}`, {
+    go: root => {
+      const desc = mval(root, 'desc').trim(); if (!desc) return toast('Escribe una descripción', 'warn');
+      askPin({ title: '📤 Publicar bloque', text: 'Tu PIN abre la llave de GitHub para publicarlo.', onPin: async pin => {
+        const item = { lib: pubId, name: p.name, icon: p.icon || '', desc, author: 'Esteban', at: todayISO(), days: blockForLib(p) };
+        await ghEditLib(pin, list => [item, ...list.filter(x => x.lib !== pubId)], `Biblioteca: ${existing ? 'actualiza' : 'publica'} ${p.name}`);
+        p.pubId = pubId; p.lib = pubId; persist(); closeModal(); render(); toast(`«${p.name}» publicado en la biblioteca ✓`);
+      } });
+    },
+    remove: () => askPin({ title: 'Retirar de la biblioteca', text: `«${esc(p.name)}» dejará de aparecer para los demás. Quien ya lo añadió lo conserva.`, onPin: async pin => {
+      await ghEditLib(pin, list => list.filter(x => x.lib !== pubId), `Biblioteca: retira ${p.name}`);
+      delete p.pubId; persist(); closeModal(); render(); toast('Retirado de la biblioteca');
+    } })
+  });
+}
+function addLibBlock(lib) {
+  const L = libAll().find(x => x.lib === lib); if (!L) return;
+  const days = clone(L.days()).map(d => {
+    const nd = normalizeDay(d); nd.id = uid('d_');
+    nd.exercises = nd.exercises.map(e => ({ ...e, id: uid('c_'), alts27: true }));
+    return nd;
+  });
+  const np = { id: uid('p_'), name: L.name, icon: L.icon, lib: L.lib, type: 'strength', days };
+  state.plan.programs.push(np); state.plan.active = np.id; ui.dayId = days[0].id;
+  persist(); closeModal(); ui.view = 'train'; render(); window.scrollTo({ top: 0 });
+  toast(`Bloque ${L.name} añadido ✓`);
+}
+function libraryModal() {
+  const html = () => `<h3 class="modal-title">📚 Bloques recomendados</h3>
+    <p class="text-xs text-mute -mt-1">Preparados por Esteban. Al añadir uno se copia a tus bloques y lo puedes editar como quieras.</p>
+    <div class="space-y-2">${libAll().map(L => {
+      const days = L.days(), nEx = days.reduce((a, d) => a + d.exercises.length, 0), have = state.plan.programs.some(p => p.lib === L.lib), open = ui.libOpen === L.lib;
+      return `<div class="card p-3 space-y-2">
+        <div class="flex items-start justify-between gap-2"><div class="min-w-0"><div class="font-extrabold">${L.icon ? L.icon + ' ' : ''}${esc(L.name)}${L.pub ? ' <span class="text-[10px] font-bold text-brand align-middle">NUEVO</span>' : ''}</div><div class="text-[11px] text-mute">${days.length} ${days.length === 1 ? 'día' : 'días'} · ${nEx} ejercicios${have ? ' · <span class="text-emerald-300">ya lo tienes</span>' : ''}</div></div>
+          <button class="btn-mini text-brand shrink-0" data-mact="see" data-lib="${L.lib}" type="button">${open ? 'Ocultar' : 'Ver'}</button></div>
+        <p class="text-[12px] text-slate-300 leading-snug">${esc(L.desc)}</p>
+        ${open ? days.map(d => `<div class="text-[12px]"><div class="text-brand font-bold">${esc(d.label)} · ${esc(d.title)}</div><ul class="text-mute list-disc pl-5">${d.exercises.map(e => `<li>${esc(e.variants[0].name)} <span class="opacity-70">${e.sets}×${e.minReps}–${e.maxReps}</span></li>`).join('')}</ul></div>`).join('') : ''}
+        <button class="${have ? 'btn-ghost' : 'btn-primary'} w-full" data-mact="add" data-lib="${L.lib}" type="button">${have ? '＋ Añadir otra copia' : '＋ Añadir a mis bloques'}</button></div>`;
+    }).join('')}</div>
+    <button class="btn-ghost w-full" data-mact="empty" type="button">✏️ O crea un bloque vacío</button>`;
+  fetchRemoteLib().then(() => { const sh = $('#modalRoot .modal-sheet'); if (sh && sh.querySelector('[data-mact=empty]')) sh.innerHTML = html(); });
+  openModal(html(), {
+    see: (root, b) => { ui.libOpen = ui.libOpen === b.dataset.lib ? null : b.dataset.lib; root.querySelector('.modal-sheet').innerHTML = html(); },
+    add: (root, b) => addLibBlock(b.dataset.lib),
+    empty: () => { closeModal(); editProgModal(null); }
+  });
+}
+
+/* 4.31: quien instala la app desde cero empieza sin bloques de fuerza y los elige en «📚 Bloques recomendados».
+   Quien ya tiene sus bloques guardados los conserva tal cual. */
 const DEFAULT_PLAN = {
-  active: 'ppt',
+  active: 'retos',
   programs: [
     { id: 'retos', name: 'RETOS', icon: '🏆', type: 'retos', days: [] },
-    { id: 'ppt', name: 'PPT', days: PPT_DAYS },
-    { id: 'fullbody', name: 'FULL BODY', days: FULLBODY_DAYS },
     { id: 'cardio', name: 'CARDIO', icon: '🔥', type: 'cardio', days: [] },
     { id: 'free', name: 'FREE', days: FREE_DAYS }
   ]
@@ -209,7 +341,7 @@ function normalizePlan(plan) {
   if (plan && Array.isArray(plan.programs) && plan.programs.length) programs = plan.programs;
   else if (plan && Array.isArray(plan.days) && plan.days.length) {
     // plan antiguo (solo días): pasa a ser el bloque PPT y se añade FULL BODY
-    programs = [{ id: 'ppt', name: 'PPT', days: plan.days }, ...clone(DEFAULT_PLAN.programs.filter(p => p.id !== 'ppt' && p.id !== 'free'))];
+    programs = [{ id: 'ppt', name: 'PPT', days: plan.days }, { id: 'fullbody', name: 'FULL BODY', days: clone(FULLBODY_DAYS) }, ...clone(DEFAULT_PLAN.programs.filter(p => p.id !== 'free'))];
   } else programs = clone(DEFAULT_PLAN.programs);
   // FREE va como bloque propio, no dentro de PPT
   if (!programs.some(p => p.id === 'free')) {
@@ -224,7 +356,7 @@ function normalizePlan(plan) {
   if (!programs.some(p => p.type === 'cardio')) programs.push(clone(DEFAULT_PLAN.programs.find(p => p.type === 'cardio')));
   if (!programs.some(p => p.type === 'retos')) programs.push(clone(DEFAULT_PLAN.programs.find(p => p.type === 'retos')));
   programs = programs.map(p => ({
-    id: p.id || uid('p_'), name: String(p.name || 'BLOQUE').slice(0, 16), icon: p.icon || '',
+    id: p.id || uid('p_'), name: String(p.name || 'BLOQUE').slice(0, 16), icon: p.icon || '', lib: p.lib || (p.id === 'ppt' ? 'ppt' : p.id === 'fullbody' ? 'fullbody' : ''), ...(p.pubId ? { pubId: p.pubId } : {}),
     type: p.type === 'cardio' || p.type === 'retos' ? p.type : 'strength',
     days: p.type === 'cardio' || p.type === 'retos' ? [] : (p.days || []).map(normalizeDay)
   }));
@@ -373,6 +505,26 @@ if (state._migrated) { delete state._migrated; persist(); }
 const PREV_KEY = 'fitnesteban_prev';
 function savePrevCopy(raw, ver) { if (!raw) return; try { localStorage.setItem(PREV_KEY, JSON.stringify({ ver, at: new Date().toISOString(), data: raw })); } catch { /* sin espacio: no es grave */ } }
 function prevCopy() { try { const p = JSON.parse(localStorage.getItem(PREV_KEY) || 'null'); return p && p.data ? p : null; } catch { return null; } }
+/* 4.31: quien nunca usó ni editó los bloques de serie (PPT / FULL BODY) los pierde y elige en la biblioteca.
+   Se conservan si hay alguna sesión o borrador en ellos o si se modificó cualquier cosa (días, ejercicios, series, reps…). */
+function untouchedDefault(p) {
+  const base = p.id === 'ppt' ? PPT_DAYS : p.id === 'fullbody' ? FULLBODY_DAYS : null;
+  if (!base || p.type !== 'strength') return false;
+  const ids = new Set(p.days.map(d => d.id));
+  if (state.sessions.some(x => ids.has(x.dayId)) || p.days.some(d => state.drafts[d.id])) return false;
+  const sig = days => JSON.stringify(days.map(d => [d.id, d.label, d.title, d.exercises.map(e => [e.id, e.block, e.sets, e.minReps, e.maxReps, e.increment, e.rest, e.variants[0]?.name])]));
+  return sig(p.days) === sig(base.map(normalizeDay));
+}
+if (!state.settings.planClean431) {
+  state.settings.planClean431 = true;
+  const before = state.plan.programs.length;
+  state.plan.programs = state.plan.programs.filter(p => !untouchedDefault(p));
+  if (state.plan.programs.length !== before) {
+    if (!state.plan.programs.some(p => p.id === state.plan.active)) state.plan.active = 'retos';
+    for (const k of Object.keys(state.selectedVariants)) if (!allDays().some(d => d.exercises.some(e => e.id === k))) delete state.selectedVariants[k];
+  }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* nada */ }
+}
 /* 4.25.2: la 4.25.1 dejaba vacía la lista de hábitos al venir de una versión anterior. Se recuperan (una sola vez)
    de la copia que la app guarda antes de cada actualización. */
 if (!state.settings.habitsFix252) {
@@ -630,8 +782,18 @@ function renderProgHeader() {
     + `<button class="prog prog-add" data-act="addProg" type="button" aria-label="Añadir bloque">＋ Bloque</button>`;
   return `<div class="flex items-center gap-2 -mx-4 px-4 mb-2.5">
     <div class="chips-row flex-1 relative" id="progRow">${progRow}</div>
+    <button class="iconbtn iconbtn-sm shrink-0" data-act="library" type="button" aria-label="Bloques recomendados" title="Bloques recomendados">📚</button>
     <button class="iconbtn iconbtn-sm shrink-0" data-act="editProg" type="button" aria-label="Editar bloque">✎</button>
-  </div>`;
+  </div>${libCtaHTML()}`;
+}
+/* Sin bloques de fuerza propios: invitación grande a la biblioteca */
+function libCtaHTML() {
+  const hasOwn = state.plan.programs.some(p => p.type === 'strength' && p.id !== 'free' && p.days.some(d => d.exercises.length));
+  if (hasOwn) return '';
+  return `<button class="w-full card p-4 mb-3 text-left flex items-center gap-3" style="border-color:rgba(34,211,238,.45);background:linear-gradient(135deg,rgba(34,211,238,.10),rgba(34,211,238,.02))" data-act="library" type="button">
+    <span class="text-3xl">📚</span>
+    <span class="flex-1 min-w-0"><span class="block font-extrabold">Elige tu primer bloque de entreno</span><span class="block text-[12px] text-mute mt-0.5">Bloques preparados por Esteban: Kettlebell, PPT, Full Body… Se añaden con un toque.</span></span>
+    <span class="text-brand font-black text-lg">›</span></button>`;
 }
 
 function renderTrain() {
@@ -681,7 +843,10 @@ function renderTrain() {
     ${exercises || `<div class="card p-6 text-center text-sm text-mute">Este día no tiene ejercicios todavía.</div>`}
   </div>
 
-  <button class="btn-dashed w-full mt-3" data-act="addEx" type="button">＋ Añadir ejercicio a este día</button>
+  <div class="grid grid-cols-2 gap-2 mt-3">
+    <button class="btn-dashed w-full" data-act="exLibrary" type="button">📚 De la biblioteca</button>
+    <button class="btn-dashed w-full" data-act="addEx" type="button">＋ Crear ejercicio</button>
+  </div>
 
   ${state.settings.habits.length ? `<section class="card p-4 mt-4 space-y-2.5">
     <h3 class="section-title">🔥 Remate y hábitos</h3>
@@ -1587,6 +1752,13 @@ const MUSCLE_NEUTRAL = new Set(['head', 'hair', 'neck', 'hands', 'feet', 'ankles
 /* Reglas por nombre del ejercicio (sirven para los de serie, las alternativas y los creados por cada usuario).
    [expresión, principales, secundarios]; los ejercicios con «+» se reparten por partes. */
 const MUSCLE_RULES = [
+  [/encogimiento|shrug/, ['trapezius'], ['forearm']],
+  [/abducci[oó]n|paso lateral/, ['gluteal'], []],
+  [/aducci[oó]n/, ['adductors'], []],
+  [/pallof|leñador|russian twist|plancha lateral|antirrotaci/, ['obliques', 'abs'], []],
+  [/elevaci[oó]n de (piernas|rodillas)|escaladores|mountain/, ['abs'], ['obliques']],
+  [/get-up/, ['deltoids', 'abs'], ['obliques', 'gluteal']],
+  [/hiperextensi/, ['lower-back'], ['gluteal', 'hamstring']],
   [/curl femoral|n[oó]rdico/, ['hamstring'], []],
   [/peso muerto rumano|buenos d[ií]as/, ['hamstring'], ['gluteal', 'lower-back']],
   [/peso muerto/, ['gluteal', 'hamstring', 'lower-back'], ['upper-back', 'forearm', 'quadriceps']],
@@ -1602,12 +1774,14 @@ const MUSCLE_RULES = [
   [/diamante|press cerrado|fondos en banco|extensi[oó]n|press franc[eé]s|tr[ií]ceps|patada/, ['triceps'], ['chest']],
   [/fondos|paralelas|dips/, ['chest', 'triceps'], ['deltoids']],
   [/face pull|p[aá]jaros|apertura con banda|apertura trx|hombro posterior|deltoides posterior/, ['deltoids'], ['upper-back', 'trapezius']],
+  [/clean|push press|snatch/, ['deltoids'], ['gluteal', 'hamstring', 'triceps', 'trapezius']],
   [/press militar|press de hombro|press arnold|press.*kettlebell|hombro/, ['deltoids'], ['triceps']],
   [/elevaci(o|ó)n(es)? laterales?|laterales/, ['deltoids'], []],
-  [/press|flexiones|aperturas|pecho|banca/, ['chest'], ['deltoids', 'triceps']],
-  [/dominadas|jal[oó]n|remo|pull/, ['upper-back'], ['biceps', 'forearm', 'deltoids']],
+  [/jal[oó]n|pullover/, ['upper-back'], ['biceps', 'forearm']],
+  [/press|flexiones|aperturas|pecho|banca|cruce de poleas|contractora|pec deck/, ['chest'], ['deltoids', 'triceps']],
+  [/dominadas|jal[oó]n|remo|row|pull/, ['upper-back'], ['biceps', 'forearm', 'deltoids']],
   [/curl|b[ií]ceps|martillo|zottman/, ['biceps'], ['forearm']],
-  [/elevaciones/, ['deltoids'], []],
+  [/elevaci(o|ó)n(es)? frontal|elevaciones/, ['deltoids'], []],
 ];
 const RETO_MUSCLES = { pullup: 'Dominadas', pushup: 'Flexiones', dips: 'Fondos', squat: 'Sentadillas', burpee: 'Burpees', plank: 'Plancha', abwheel: 'Rueda abdominal', abwheel2: 'Rueda abdominal' };
 const musclesCache = new Map();
@@ -2837,7 +3011,7 @@ function renderSettings() {
     ${state.plan.programs.map(p => `<div class="space-y-1.5">
       <div class="flex items-center justify-between">
         <div class="text-sm font-extrabold ${p.id === prog().id ? 'text-brand' : ''}">${progLabel(p)}${p.id === prog().id ? ' <span class="text-[10px] font-semibold">· activo</span>' : ''}</div>
-        <button class="iconbtn iconbtn-sm" data-act="editProgId" data-prog="${esc(p.id)}" type="button" aria-label="Editar bloque">✎</button>
+        <span class="flex gap-1.5">${access.me?.admin && lsGet(GH_KEY) && p.type === 'strength' && p.id !== 'free' ? `<button class="iconbtn iconbtn-sm ${p.pubId ? 'text-brand' : ''}" data-act="publishProg" data-prog="${esc(p.id)}" type="button" aria-label="Publicar en la biblioteca">${p.pubId ? '📢' : '📤'}</button>` : ''}<button class="iconbtn iconbtn-sm" data-act="editProgId" data-prog="${esc(p.id)}" type="button" aria-label="Editar bloque">✎</button></span>
       </div>
       ${p.type === 'cardio' ? '<p class="text-[11px] text-mute bg-ink rounded-xl border border-line px-3 py-2">Bicicleta y caminata con estimación de calorías.</p>' : p.type === 'retos' ? '<p class="text-[11px] text-mute bg-ink rounded-xl border border-line px-3 py-2">Retos por niveles con ajuste según cómo te sientas.</p>' : ''}
       ${p.days.map(d => `<div class="flex items-center justify-between bg-ink rounded-xl border border-line px-3 py-2">
@@ -2848,8 +3022,10 @@ function renderSettings() {
     </div>`).join('')}
     <div class="grid grid-cols-2 gap-2">
       <button class="btn-ghost" data-act="addProg" type="button">＋ Añadir bloque</button>
-      <button class="btn-ghost" data-act="resetPlan" type="button">Restaurar bloques</button>
+      <button class="btn-ghost" data-act="resetPlan" type="button">Vaciar bloques</button>
     </div>
+    <button class="btn-ghost w-full" data-act="library" type="button">📚 Bloques recomendados</button>
+    ${access.me?.admin && lsGet(GH_KEY) ? '<p class="text-[11px] text-mute">📤 publica un bloque tuyo en la biblioteca para todos (📢 = ya publicado; toca para actualizarlo o retirarlo).</p>' : ''}
     <p class="text-[11px] text-mute">Los días se añaden desde Entreno con «＋ Día» (en el bloque activo) y los ejercicios con el botón ✎ de cada uno.</p>
     </div>
   </details>
@@ -3805,6 +3981,8 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.32.0', ['📚 Biblioteca de ejercicios: en cualquier día (también en FREE) toca «📚 De la biblioteca» y añade ejercicios ya configurados —series, reps, descanso, técnica y 2 alternativas—. Más de 60 para empezar, por grupos y con buscador.']],
+  ['4.31.0', ['📚 Biblioteca de bloques: con el botón 📚 de Entreno (o en Ajustes → Bloques) eliges bloques preparados por Esteban y los añades con un toque. Estreno: 🔔 KETTLEBELL, para entrenar en casa. Irán llegando más.', '🧹 Si nunca usaste ni cambiaste PPT o FULL BODY, se han quitado para dejarte la app limpia: si los quieres, están en la biblioteca. Los bloques que usas o editaste siguen igual.']],
   ['4.30.0', ['🔥 Mapa muscular en Progreso: «Ahora» te muestra qué músculos siguen cargados y cuándo estarán listos; «7 días» y «30 días», cuánto has trabajado cada uno y cuáles tienes olvidados. Usa todas tus sesiones y retos ya guardados. En «Hoy te toca» verás si lo que toca está recuperado.']],
   ['4.29.0', ['💬 «Comenta al Coach» en cada ejercicio: marca 😣 molestia, 🥵 muy duro, 😌 fácil o ⏱ poco tiempo y escribe lo que notes. Se guarda con la sesión, te lo recuerdo la próxima vez, el Coach IA y el resumen semanal lo tienen en cuenta, y con 😣 o 🥵 no te subo peso.']],
   ['4.28.0', ['⭕ Hábitos diarios en Dieta más compactos: un anillo por hábito. Y ahora pueden ser «de varios toques» (por ejemplo 8 vasos de agua): cada toque rellena un tramo del anillo; mantén pulsado para restar. Se configura en Ajustes → Hábitos.']],
@@ -4328,6 +4506,8 @@ const actions = {
   pickDay: b => { ui.dayId = b.dataset.day; render(); window.scrollTo({ top: 0 }); },
   pickProg: b => { state.plan.active = b.dataset.prog; ui.dayId = nextDayId(); persist(); render(); window.scrollTo({ top: 0 }); },
   addProg: () => editProgModal(null),
+  library: () => libraryModal(),
+  publishProg: b => publishBlockModal(b.dataset.prog),
   editProg: () => editProgModal(prog().id),
   editProgId: b => editProgModal(b.dataset.prog),
   cdType: b => { keepCardioInputs(); ui.cardio.type = b.dataset.type; ui.cardio.est = null; render(); },
@@ -4348,6 +4528,7 @@ const actions = {
   editDay: () => editDayModal(currentDay().id),
   editDayId: b => editDayModal(b.dataset.day),
   addEx: () => editExModal(null),
+  exLibrary: () => exLibraryModal(),
   editEx: b => editExModal(b.dataset.ex),
   variant: b => variantPicker(b.dataset.ex),
   mmTab: b => { ui.mmTab = b.dataset.v; render(); },
@@ -4595,7 +4776,7 @@ const actions = {
     habPress = null; habitStep(b.dataset.name, 1);
   },
   resetPlan: () => {
-    if (!confirm('¿Restaurar los bloques originales (PPT y FULL BODY)? Perderás los bloques, días y ejercicios que hayas creado o editado (el historial se conserva).')) return;
+    if (!confirm('¿Empezar de cero con los bloques? Se quitan tus bloques, días y ejercicios (quedan RETOS, CARDIO y FREE). El historial se conserva. Después puedes elegir bloques en «📚 Bloques recomendados».')) return;
     state.plan = normalizePlan(clone(DEFAULT_PLAN)); state.selectedVariants = {}; state.drafts = {}; ui.dayId = nextDayId();
     persist(); render(); toast('Plan restaurado');
   },
@@ -4981,12 +5162,13 @@ async function ghToken(pin) {
   try { return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(g.iv) }, await pinKey(pin, b64d(g.salt)), b64d(g.ct))); }
   catch { throw new Error('No se pudo abrir la llave de GitHub (¿cambiaste el PIN?). Vuelve a conectar GitHub.'); }
 }
-async function ghApi(token, method = 'GET', body = null) {
-  const r = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`, {
+async function ghApi(token, method = 'GET', body = null, file = GH_FILE) {
+  const r = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${file}`, {
     method, headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(body ? { 'Content-Type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined, cache: 'no-store'
   });
   const d = await r.json().catch(() => ({}));
+  if (r.status === 404 && method === 'GET' && file !== GH_FILE) return { content: '', sha: undefined }; // archivo aún no creado
   if (!r.ok) throw new Error(r.status === 401 ? 'El token no es válido o ha caducado' : r.status === 403 || r.status === 404 ? 'El token no tiene permiso sobre el repositorio (Contents: lectura y escritura)' : (d.message || 'GitHub respondió ' + r.status));
   return d;
 }

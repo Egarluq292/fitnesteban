@@ -1,6 +1,6 @@
 /* FITNESTEBAN service worker: funciona sin conexión.
    Al cambiar cualquier archivo de la app, sube el número de CACHE para que el móvil descargue la versión nueva. */
-const CACHE = 'fitnesteban-4.30.0';
+const CACHE = 'fitnesteban-4.32.0';
 const ASSETS = [
   './',
   './index.html',
@@ -39,7 +39,7 @@ self.addEventListener('fetch', event => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // la IA y enlaces externos van directos a la red
-  if (url.pathname.endsWith('/sw.js') || url.pathname.endsWith('/acceso.txt')) return;        // comprobar la versión publicada: siempre a la red
+  if (url.pathname.endsWith('/sw.js') || url.pathname.endsWith('/acceso.txt') || url.pathname.endsWith('/bloques.json')) return;        // comprobar la versión publicada: siempre a la red
 
   if (req.mode === 'navigate') {
     event.respondWith(
