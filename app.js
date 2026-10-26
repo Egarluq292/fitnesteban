@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.27.4';
+const APP_VERSION = '4.27.5';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3187,13 +3187,23 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* ---------- Hábitos: editor en Ajustes y tarjeta diaria en Dieta ---------- */
+/* Al renombrar, el historial (marcas diarias, sesiones y borradores) pasa al nombre nuevo */
+function renameHabit(old, nu) {
+  for (const k of Object.keys(state.habitLog || {})) state.habitLog[k] = state.habitLog[k].map(n => n === old ? nu : n);
+  for (const s of state.sessions) if (Array.isArray(s.habits)) s.habits = s.habits.map(n => n === old ? nu : n);
+  for (const d of Object.values(state.drafts || {})) if (d?.habits && old in d.habits) { d.habits[nu] = d.habits[old]; delete d.habits[old]; }
+}
 function saveHabitList() { state.settings.habits = state.settings.habitList.filter(h => h.where === 'train').map(h => h.name); persist(); render(); }
 function habitsSettingsHTML() {
   const list = state.settings.habitList || [], nd = list.filter(h => h.where === 'daily').length;
   return foldCard('habits', '✅ Hábitos', list.length ? `${list.length - nd} entreno · ${nd} diario${nd === 1 ? "" : "s"}` : 'Ninguno', '', `
     <p class="text-[11px] text-mute">🏋️ <b class="text-slate-300">Entreno</b>: se marcan al guardar la sesión. 🍽️ <b class="text-slate-300">Diario</b>: salen en Dieta los días que elijas y se marcan cada día, entrenes o no.</p>
     <div class="space-y-1.5">${list.map((h, i) => `<div class="bg-ink rounded-lg px-3 py-2 space-y-2">
-      <div class="flex items-center justify-between gap-2"><span class="text-[13px] font-semibold min-w-0 break-words">${esc(h.name)}</span><button class="iconbtn iconbtn-sm text-rose-300 shrink-0" data-act="habDel" data-i="${i}" type="button" aria-label="Borrar hábito">🗑</button></div>
+      <div class="flex items-center justify-between gap-2"><span class="text-[13px] font-semibold min-w-0 break-words">${esc(h.name)}</span><span class="flex gap-1 shrink-0">
+        <button class="iconbtn iconbtn-sm ${i === 0 ? 'opacity-30 pointer-events-none' : ''}" data-act="habMove" data-i="${i}" data-d="-1" type="button" aria-label="Subir">▲</button>
+        <button class="iconbtn iconbtn-sm ${i === list.length - 1 ? 'opacity-30 pointer-events-none' : ''}" data-act="habMove" data-i="${i}" data-d="1" type="button" aria-label="Bajar">▼</button>
+        <button class="iconbtn iconbtn-sm" data-act="habEdit" data-i="${i}" type="button" aria-label="Editar hábito">✎</button>
+        <button class="iconbtn iconbtn-sm text-rose-300" data-act="habDel" data-i="${i}" type="button" aria-label="Borrar hábito">🗑</button></span></div>
       <div class="seg" style="grid-template-columns:repeat(2,minmax(0,1fr))"><button class="seg-btn py-1.5 ${h.where === 'train' ? 'seg-on' : ''}" data-act="habWhere" data-i="${i}" data-v="train" type="button">🏋️ Entreno</button><button class="seg-btn py-1.5 ${h.where === 'daily' ? 'seg-on' : ''}" data-act="habWhere" data-i="${i}" data-v="daily" type="button">🍽️ Diario (Dieta)</button></div>
       ${h.where === 'daily' ? `<button class="text-[12px] text-brand flex items-center gap-1" data-act="habDaysOpen" data-i="${i}" type="button">📅 ${daysLabel(h.days)} <span class="text-mute">${ui.habDaysOpen === i ? '▲' : '▼'}</span></button>
         ${ui.habDaysOpen === i ? `<div class="grid grid-cols-7 gap-1">${WEEK_ORDER.map(d => `<button class="seg-btn py-1.5 rounded-lg border ${h.days.includes(d) ? 'seg-on' : 'border-line'}" data-act="habDay" data-i="${i}" data-d="${d}" type="button">${DAY_LETTER[d]}</button>`).join('')}</div>` : ''}` : ''}
@@ -3581,6 +3591,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.27.5', ['✎ Hábitos: ahora puedes cambiarles el nombre (sin perder lo ya marcado) y ordenarlos con ▲▼ en Ajustes.']],
   ['4.27.4', ['📲 Aviso para instalar la app (solo si no está instalada): botón directo en Android, instrucciones en iPhone y aviso si se abre dentro de WhatsApp. También en la pantalla de acceso.'], 'quiet'],
   ['4.27.3', ['📶 Los nombres pasan solos a tu hoja de uso (columna «nombre»): al abrir Acceso y cada vez que creas, renombras, renuevas o quitas un acceso. Requiere actualizar el script una vez (Reconfigurar → nueva versión).'], 'admin'],
   ['4.27.2', ['📋 Acceso: botón «Copiar huellas y nombres» para pegar en tu hoja de uso y ver quién es cada huella. La app pide a los buscadores que no la muestren (noindex).'], 'admin'],
@@ -4319,6 +4330,29 @@ const actions = {
     L.push({ name: v.slice(0, 60), where: 'daily', days: [...ALL_DAYS] }); saveHabitList(); toast('Hábito añadido: elige si es de Entreno o Diario');
   },
   habDel: b => { const h = state.settings.habitList[+b.dataset.i]; if (!h || !confirm(`¿Borrar el hábito «${h.name}»? Lo ya registrado se conserva.`)) return; state.settings.habitList.splice(+b.dataset.i, 1); ui.habDaysOpen = null; saveHabitList(); },
+  habMove: b => {
+    const L = state.settings.habitList, i = +b.dataset.i, j = i + +b.dataset.d;
+    if (j < 0 || j >= L.length) return;
+    [L[i], L[j]] = [L[j], L[i]];
+    if (ui.habDaysOpen === i) ui.habDaysOpen = j; else if (ui.habDaysOpen === j) ui.habDaysOpen = i;
+    saveHabitList();
+  },
+  habEdit: b => {
+    const L = state.settings.habitList, h = L[+b.dataset.i]; if (!h) return;
+    openModal(`<h3 class="modal-title">✎ Editar hábito</h3>
+      <label class="lbl">Nombre<input class="field mt-1" name="hn" maxlength="60" value="${esc(h.name)}" /></label>
+      <p class="text-[11px] text-mute">Lo que ya tenías marcado con el nombre anterior se mantiene con el nuevo.</p>
+      <button class="btn-primary w-full" data-mact="save" type="button">Guardar</button>`, {
+      autofocus: true,
+      save: root => {
+        const v = mval(root, 'hn').trim().replace(/\s+/g, ' ').slice(0, 60), old = h.name;
+        if (!v) return toast('Escribe el nombre', 'warn');
+        if (v !== old && L.some(x => x !== h && x.name.toLowerCase() === v.toLowerCase())) return toast('Ya tienes un hábito con ese nombre', 'warn');
+        if (v !== old) renameHabit(old, v);
+        h.name = v; closeModal(); saveHabitList(); toast('Hábito actualizado');
+      }
+    });
+  },
   habWhere: b => { const h = state.settings.habitList[+b.dataset.i]; if (!h) return; h.where = b.dataset.v; if (h.where !== 'daily' && ui.habDaysOpen === +b.dataset.i) ui.habDaysOpen = null; saveHabitList(); },
   habDaysOpen: b => { const i = +b.dataset.i; ui.habDaysOpen = ui.habDaysOpen === i ? null : i; render(); },
   habDay: b => {
