@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.32.0';
+const APP_VERSION = '4.32.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -131,9 +131,9 @@ function exLibraryModal() {
   const day = currentDay(); if (!day) return;
   const st = { q: '', g: '' };
   const has = n => day.exercises.some(e => e.variants.some(v => v.name.toLowerCase() === n.toLowerCase()));
-  const list = () => EX_LIB.filter(x => (!st.g || x[0] === st.g) && (!st.q || normTxt(x[1] + ' ' + x[0] + ' ' + x[9].map(a => a[0]).join(' ')).includes(normTxt(st.q))));
-  const rows = () => { const L = list(); return L.length ? L.map(x => { const i = EX_LIB.indexOf(x), added = has(x[1]); return `<div class="flex items-center justify-between gap-2 bg-ink rounded-xl border border-line px-3 py-2">
-      <div class="min-w-0"><div class="font-semibold text-[14px] truncate">${esc(x[1])}</div><div class="text-[11px] text-mute truncate">${EX_LIB_ICON[x[0]] || ''} ${esc(x[0])} · ${x[3]}×${x[4]}–${x[5]}${x[8] ? ' · peso corporal' : ''} · +${x[9].length} alternativas</div></div>
+  const list = () => exLibAll().filter(x => (!st.g || x[0] === st.g) && (!st.q || normTxt(x[1] + ' ' + x[0] + ' ' + x[9].map(a => a[0]).join(' ')).includes(normTxt(st.q))));
+  const rows = () => { const L = list(); return L.length ? L.map(x => { const i = exLibAll().indexOf(x), added = has(x[1]); return `<div class="flex items-center justify-between gap-2 bg-ink rounded-xl border border-line px-3 py-2">
+      <div class="min-w-0"><div class="font-semibold text-[14px] truncate">${esc(x[1])}${x[10] ? ' <span class="text-[10px] font-bold text-brand">NUEVO</span>' : ''}</div><div class="text-[11px] text-mute truncate">${EX_LIB_ICON[x[0]] || ''} ${esc(x[0])} · ${x[3]}×${x[4]}–${x[5]}${x[8] ? ' · peso corporal' : ''} · +${x[9].length} alternativas</div></div>
       <button class="${added ? 'btn-mini text-emerald-300' : 'btn-mini text-brand'} shrink-0" data-mact="add" data-i="${i}" type="button">${added ? '✓ Añadido' : '＋ Añadir'}</button></div>`; }).join('') : '<p class="text-xs text-mute text-center py-4">No encuentro ese ejercicio. Pídeselo a Esteban o créalo con «＋ Añadir ejercicio».</p>'; };
   const html = () => `<h3 class="modal-title">📚 Biblioteca de ejercicios</h3>
     <p class="text-xs text-mute -mt-1">Se añaden a <b class="text-slate-300">${esc(day.label === prog().name ? day.label : day.label + ' · ' + prog().name)}</b>, ya configurados, con 2 alternativas (⇄). Puedes añadir varios.</p>
@@ -143,7 +143,7 @@ function exLibraryModal() {
   openModal(html(), {
     grp: (root, b) => { st.g = b.dataset.g; root.querySelector('.modal-sheet').innerHTML = html(); bindQ(root); },
     add: (root, b) => {
-      const x = EX_LIB[+b.dataset.i]; if (!x) return;
+      const x = exLibAll()[+b.dataset.i]; if (!x) return;
       if (has(x[1])) return toast('Ya está en este día', 'warn');
       day.exercises.push(normalizeExercise({ id: uid('c_'), alts27: true, block: `${EX_LIB_ICON[x[0]] || '⚡'} ${x[0]}`, sets: x[3], minReps: x[4], maxReps: x[5], increment: x[6], rest: x[7], bw: !!x[8], variants: [{ name: x[1], note: x[2] }, ...x[9].map(([name, note]) => ({ name, note }))] }));
       persist(); render(); root.querySelector('#exLibRows').innerHTML = rows(); toast(`Añadido: ${x[1]}`);
@@ -151,6 +151,7 @@ function exLibraryModal() {
   });
   const bindQ = root => { const q = root.querySelector('[name=q]'); if (q) q.oninput = () => { st.q = q.value; root.querySelector('#exLibRows').innerHTML = rows(); }; };
   bindQ($('#modalRoot'));
+  fetchRemoteEx().then(() => { const r = $('#exLibRows'); if (r) r.innerHTML = rows(); });
 }
 
 /* Biblioteca: bloques recomendados (preparados por Esteban) que cada usuario puede añadir a los suyos */
@@ -189,13 +190,54 @@ function blockForLib(p) {
   return p.days.map(d => ({ label: d.label, rotation: d.rotation, title: d.title, subtitle: d.subtitle,
     exercises: d.exercises.map(e => ({ id: e.id, block: e.block, sets: e.sets, minReps: e.minReps, maxReps: e.maxReps, increment: e.increment, rest: e.rest, bw: e.bw, alts27: true, variants: e.variants.map(v => ({ name: v.name, note: v.note || '' })) })) }));
 }
-async function ghEditLib(pin, fn, message) {
+async function ghEditJson(pin, file, fn, message) {
   const token = await ghToken(pin);
-  const cur = await ghApi(token, 'GET', null, LIB_FILE);
+  const cur = await ghApi(token, 'GET', null, file);
   let list = []; try { list = JSON.parse(b64utf8(cur.content || '') || '[]'); } catch { list = []; }
   const next = fn(Array.isArray(list) ? list : []);
-  await ghApi(token, 'PUT', { message, content: utf8b64(JSON.stringify(next, null, 1) + '\n'), ...(cur.sha ? { sha: cur.sha } : {}) }, LIB_FILE);
+  await ghApi(token, 'PUT', { message, content: utf8b64(JSON.stringify(next, null, 1) + '\n'), ...(cur.sha ? { sha: cur.sha } : {}) }, file);
+  return next;
+}
+async function ghEditLib(pin, fn, message) {
+  const next = await ghEditJson(pin, LIB_FILE, fn, message);
   remoteLib = next; try { localStorage.setItem(LIB_CACHE, JSON.stringify(next)); } catch { /* nada */ }
+}
+/* Ejercicios sueltos publicados por Esteban (ejercicios.json). Mismo formato que EX_LIB + id de publicación al final */
+const EXLIB_FILE = 'ejercicios.json', EXLIB_CACHE = 'fitnesteban_exlib';
+let remoteEx = (() => { try { return JSON.parse(localStorage.getItem(EXLIB_CACHE) || '[]'); } catch { return []; } })();
+async function fetchRemoteEx() {
+  try {
+    const r = await fetch(EXLIB_FILE + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    const list = await r.json();
+    if (Array.isArray(list)) { remoteEx = list.filter(x => Array.isArray(x) && x[1] && x[10]); try { localStorage.setItem(EXLIB_CACHE, JSON.stringify(remoteEx)); } catch { /* nada */ } }
+  } catch { /* sin conexión o aún no hay ejercicios publicados */ }
+  return remoteEx;
+}
+const exLibAll = () => [...remoteEx, ...EX_LIB.filter(x => !remoteEx.some(r => r[1].toLowerCase() === x[1].toLowerCase()))];
+function publishExModal(exId) {
+  const f = findEx(exId); if (!f) return;
+  const e = f.ex, pubId = e.pubId || ('ex_' + uid('').slice(0, 10)), existing = remoteEx.find(x => x[10] === pubId);
+  let g = existing?.[0] || (/kettlebell/i.test(e.variants[0].name) ? 'Kettlebell' : e.bw ? 'Peso corporal' : 'Pecho');
+  const html = () => `<h3 class="modal-title">📤 Publicar «${esc(e.variants[0].name)}»</h3>
+    <p class="text-xs text-mute">Aparecerá en «📚 De la biblioteca» de todos, con sus series (${e.sets}×${e.minReps}–${e.maxReps}), descanso, nota y alternativas (${e.variants.length - 1}). Si lo cambias después, vuelve a publicarlo.</p>
+    <div><div class="lbl mb-1">Grupo</div><div class="flex flex-wrap gap-1.5">${EX_LIB_GROUPS.map(x => `<button class="chip ${g === x ? 'chip-on' : ''}" data-mact="grp" data-g="${esc(x)}" type="button">${EX_LIB_ICON[x] || ''} ${esc(x)}</button>`).join('')}</div></div>
+    <button class="btn-primary w-full" data-mact="go" type="button">${existing ? 'Actualizar en la biblioteca' : 'Publicar'}</button>
+    ${existing ? '<button class="btn-danger w-full" data-mact="remove" type="button">Retirar de la biblioteca</button>' : ''}`;
+  openModal(html(), {
+    grp: (root, b) => { g = b.dataset.g; root.querySelector('.modal-sheet').innerHTML = html(); },
+    go: () => askPin({ title: '📤 Publicar ejercicio', text: 'Tu PIN abre la llave de GitHub para publicarlo.', onPin: async pin => {
+      const v0 = e.variants[0], item = [g, v0.name, v0.note || '', e.sets, e.minReps, e.maxReps, e.increment, e.rest, !!e.bw, e.variants.slice(1, 4).map(v => [v.name, v.note || '']), pubId];
+      remoteEx = await ghEditJson(pin, EXLIB_FILE, list => [item, ...list.filter(x => x[10] !== pubId)], `Biblioteca de ejercicios: ${existing ? 'actualiza' : 'publica'} ${v0.name}`);
+      try { localStorage.setItem(EXLIB_CACHE, JSON.stringify(remoteEx)); } catch { /* nada */ }
+      e.pubId = pubId; persist(); closeModal(); render(); toast(`«${v0.name}» publicado en la biblioteca ✓`);
+    } }),
+    remove: () => askPin({ title: 'Retirar de la biblioteca', text: 'Dejará de aparecer para los demás. Quien ya lo añadió lo conserva.', onPin: async pin => {
+      remoteEx = await ghEditJson(pin, EXLIB_FILE, list => list.filter(x => x[10] !== pubId), `Biblioteca de ejercicios: retira ${e.variants[0].name}`);
+      try { localStorage.setItem(EXLIB_CACHE, JSON.stringify(remoteEx)); } catch { /* nada */ }
+      delete e.pubId; persist(); closeModal(); render(); toast('Retirado de la biblioteca');
+    } })
+  });
 }
 function publishBlockModal(progId) {
   const p = state.plan.programs.find(x => x.id === progId); if (!p) return;
@@ -326,6 +368,7 @@ function normalizeExercise(e) {
   };
   if (out.maxReps < out.minReps) out.maxReps = out.minReps;
   out.alts27 = true;
+  if (e.pubId) out.pubId = String(e.pubId);
   if (!e.alts27 && EX_ALTS[out.id]) for (const [name, note] of EX_ALTS[out.id]) if (!out.variants.some(v => v.name.toLowerCase() === name.toLowerCase())) out.variants.push({ name, note, video: '' });
   return out;
 }
@@ -1355,7 +1398,9 @@ function editExModal(exId) {
       <button class="btn-primary flex-1" data-mact="save" type="button">Guardar</button>
     </div>
     ${!isNew ? `<button class="btn-danger w-full mt-3" data-mact="del" type="button">Quitar del día</button>` : ''}
+    ${!isNew && access.me?.admin && lsGet(GH_KEY) ? `<button class="btn-ghost w-full mt-2" data-mact="publish" type="button">${e.pubId ? '📢 Publicado en la biblioteca · actualizar o retirar' : '📤 Publicar en la biblioteca de ejercicios'}</button>` : ''}
   `, {
+    publish: () => { closeModal(); publishExModal(exId); },
     autofocus: isNew,
     save: root => {
       const variants = mval(root, 'variants').split('\n').map(l => l.trim()).filter(Boolean).map(l => {
@@ -1367,7 +1412,7 @@ function editExModal(exId) {
       const minReps = parseInt(mval(root, 'minReps'), 10), maxReps = parseInt(mval(root, 'maxReps'), 10);
       if (!(minReps > 0) || !(maxReps >= minReps)) return toast('Revisa el rango de reps (mín ≤ máx)', 'warn');
       const data = normalizeExercise({
-        id: isNew ? uid('c_') : e.id, alts27: true, block: mval(root, 'block').trim() || 'Ejercicio', variants,
+        id: isNew ? uid('c_') : e.id, alts27: true, pubId: isNew ? undefined : e.pubId, block: mval(root, 'block').trim() || 'Ejercicio', variants,
         sets: mval(root, 'sets'), minReps, maxReps, increment: num(mval(root, 'increment')) ?? 2, rest: mval(root, 'rest'), bw: root.querySelector('[name="bw"]').checked
       });
       if (isNew) day.exercises.push(data); else f.day.exercises[f.idx] = data;
@@ -3981,6 +4026,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.32.1', ['📤 Publica también ejercicios sueltos: en ✎ de cualquier ejercicio tuyo, «Publicar en la biblioteca de ejercicios» (eliges el grupo y queda para todos con la etiqueta NUEVO). Los bloques se siguen publicando con 📤 en Ajustes → Bloques.'], 'admin'],
   ['4.32.0', ['📚 Biblioteca de ejercicios: en cualquier día (también en FREE) toca «📚 De la biblioteca» y añade ejercicios ya configurados —series, reps, descanso, técnica y 2 alternativas—. Más de 60 para empezar, por grupos y con buscador.']],
   ['4.31.0', ['📚 Biblioteca de bloques: con el botón 📚 de Entreno (o en Ajustes → Bloques) eliges bloques preparados por Esteban y los añades con un toque. Estreno: 🔔 KETTLEBELL, para entrenar en casa. Irán llegando más.', '🧹 Si nunca usaste ni cambiaste PPT o FULL BODY, se han quitado para dejarte la app limpia: si los quieres, están en la biblioteca. Los bloques que usas o editaste siguen igual.']],
   ['4.30.0', ['🔥 Mapa muscular en Progreso: «Ahora» te muestra qué músculos siguen cargados y cuándo estarán listos; «7 días» y «30 días», cuánto has trabajado cada uno y cuáles tienes olvidados. Usa todas tus sesiones y retos ya guardados. En «Hoy te toca» verás si lo que toca está recuperado.']],
