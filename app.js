@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.27.1';
+const APP_VERSION = '4.27.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3581,6 +3581,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.27.2', ['📋 Acceso: botón «Copiar huellas y nombres» para pegar en tu hoja de uso y ver quién es cada huella. La app pide a los buscadores que no la muestren (noindex).'], 'admin'],
   ['4.27.1', ['🏆 Récord en el momento: al marcar ✓ una serie que supera tu mejor marca, la app te avisa al instante (con vibración). El resumen al guardar y la tarjeta para compartir siguen mostrando tus récords.']],
   ['4.27.0', ['⏭ «Hoy no»: en cada ejercicio puedes saltártelo solo por hoy. No cuenta en tu progreso, no suma al tiempo estimado y queda anotado en el historial.', '⇄ Alternativas en todos los ejercicios: los de serie traen al menos 2 nuevas, y en cualquiera (también en los tuyos) puedes pedir 2 a la IA o añadirlas a mano.']],
   ['4.26.4', ['📶 Registro de uso: al actualizar, el móvil vuelve a avisar en el momento con su versión nueva (antes la hoja mantenía la versión vieja hasta el día siguiente).'], 'quiet'],
@@ -4353,6 +4354,11 @@ const actions = {
   },
   closeAccess: () => { ui.accessOpen = false; render(); },
   usageSetup: () => usageSetupModal(),
+  copyHashes: () => {
+    const rows = (access.list || []).map(x => `${x.hash}\t${(x.hash === access.me?.hash ? (state.accessNames[x.hash] || 'Yo (admin)') : (state.accessNames[x.hash] || 'Sin nombre')).replace(/\s+/g, ' ')}`);
+    const txt = ['huella\tnombre', ...rows].join('\n');
+    navigator.clipboard.writeText(txt).then(() => toast(`Copiadas ${rows.length} huellas: pégalas en A1 de una hoja «nombres»`)).catch(() => toast('No se pudo copiar', 'error'));
+  },
   usageRefresh: () => { ui.usage = null; ui.usageErr = ''; loadUsage(); render(); },
   showCode: async b => {
     const h = b.dataset.hash;
@@ -4878,6 +4884,7 @@ function accessSectionHTML() {
       <div class="flex items-center justify-between gap-2 min-h-[28px]">${codeLine}</div>${usageLine(x.hash)}</div>`;
     }).join('')}</div>
     ${gh ? '<p class="text-[11px] text-mute">✎ nombre · 🔄 nuevo código (el anterior deja de funcionar) · 🗑 quitar acceso</p>' : ''}
+    ${list.length ? '<button class="btn-ghost w-full" data-act="copyHashes" type="button">📋 Copiar huellas y nombres (para tu hoja)</button>' : ''}
     ${access.usageUrl && lsGet(USE_KEY)
       ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? 'actualizado ahora' : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
       : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
