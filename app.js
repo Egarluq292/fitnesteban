@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.37.0';
+const APP_VERSION = '4.37.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4226,6 +4226,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.37.1', ['🕘 Novedades: al final del historial, «Ver novedades anteriores» va mostrando todas las versiones hasta el principio.'], 'admin'],
   ['4.37.0', ['👨‍🍳 Recetas del Coach: cuando el Coach IA te propone un plato, pulsa «Receta» y verás cómo prepararlo paso a paso, con los mismos ingredientes y gramos que se apuntan en Dieta. Se guarda en la conversación y con «¿Cambiar algo?» la rehaces (a la plancha, en airfryer…).']],
   ['4.36.0', ['🏆 Tus retos ya salen en Progreso → Historial, junto a tus sesiones, y en el calendario de Dieta (con su 🏆 en cada día).']],
   ['4.35.0', ['👆 Desliza el dedo sobre el mapa muscular de Progreso para pasar de Ahora a 7 días y 30 días.', '👆 El gesto de deslizar queda fijo: en Dieta cambia de día y en Entreno, de bloque. Ya no hay que elegirlo en Ajustes.']],
@@ -4386,7 +4387,7 @@ const GUIDE = [
 
 const isAdminUser = () => !!access.me?.admin;
 const newsForMe = ([, , tag]) => isAdminUser() || !tag;
-function renderNews(fromVer) {
+function newsRows(fromVer) {
   let list = CHANGELOG.filter(([v]) => !fromVer || cmpVer(v, fromVer) > 0);
   if (fromVer && !isAdminUser()) list = list.filter(newsForMe);
   // historial para usuarios: las versiones internas seguidas se agrupan en una sola línea
@@ -4396,17 +4397,30 @@ function renderNews(fromVer) {
     else if (rows.length && rows[rows.length - 1].internal) rows[rows.length - 1].v2 = e[0];
     else rows.push({ v: e[0], items: ['🔧 Mejoras en la aplicación.'], internal: true });
   }
-  return rows.slice(0, 4).map(r => `<div class="mt-3 first:mt-0">
+  return rows;
+}
+const newsRowHTML = r => `<div class="mt-3 first:mt-0">
       <div class="text-xs font-extrabold ${r.internal ? 'text-mute' : 'text-brand'}">Versión ${r.v2 ? r.v2 + '–' + r.v : r.v}</div>
       <ul class="mt-1 space-y-1 text-sm ${r.internal ? 'text-mute' : 'text-slate-300'} list-disc pl-5">${r.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
-    </div>`).join('');
-}
+    </div>`;
+/* Novedades: primero las nuevas (o las 4 últimas) y «Ver novedades anteriores» va ampliando de 8 en 8 hasta el principio */
 function openNews(fromVer) {
-  openModal(`
+  const fresh = newsRows(fromVer), all = newsRows(null);
+  let shown = fromVer ? fresh.length : Math.min(4, all.length);
+  const list = () => fromVer && shown <= fresh.length ? fresh.slice(0, shown) : all.slice(0, shown);
+  const total = () => (fromVer && shown <= fresh.length ? Math.max(fresh.length, all.length) : all.length);
+  const html = () => `
     <div class="flex items-center gap-2"><span class="text-2xl">🎉</span><h3 class="modal-title">Novedades</h3><span class="text-xs text-mute ml-auto">v${APP_VERSION}</span></div>
-    <div>${renderNews(fromVer)}</div>
-    <button class="btn-primary w-full mt-4" data-close type="button">Entendido</button>
-  `);
+    <div>${list().map(newsRowHTML).join('')}</div>
+    ${shown < total() ? `<button class="w-full text-center text-sm text-brand font-bold py-2.5 rounded-xl border border-line bg-ink" data-mact="more" type="button">🕘 Ver novedades anteriores <span class="text-mute font-normal">(${total() - shown})</span></button>` : `<p class="text-[11px] text-mute text-center">Has llegado al principio del historial.</p>`}
+    <button class="btn-primary w-full mt-1" data-close type="button">Entendido</button>`;
+  openModal(html(), {
+    more: root => {
+      if (fromVer && shown <= fresh.length) { const seenV = new Set(fresh.map(r => r.v)); shown = all.findIndex(r => !seenV.has(r.v)); if (shown < 0) shown = all.length; }
+      shown = Math.min(all.length, shown + 8);
+      const sh = root.querySelector('.modal-sheet'), y = sh.scrollTop; sh.innerHTML = html(); sh.scrollTop = y;
+    }
+  });
 }
 /* La guía usa los bloques y días de ESTE móvil */
 function guideData() {
