@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.35.0';
+const APP_VERSION = '4.36.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2346,8 +2346,15 @@ function dietStatus(date) {
   return { c: 'green', label: 'Dentro del objetivo' };
 }
 const DOT = { green: 'bg-emerald-400', amber: 'bg-amber-400', red: 'bg-rose-500' };
+/* Sesiones de retos (no son sesiones de gym: se muestran aparte en historial y calendario) */
+function retoEntries(date) {
+  const out = [];
+  for (const id of RETO_IDS) for (const h of retoOf(id)?.history || []) if (!date || h.date === date) out.push({ id, r: RETOS[id], h });
+  return out.sort((a, b) => (a.h.date === b.h.date ? (a.h.at || 0) - (b.h.at || 0) : a.h.date < b.h.date ? -1 : 1));
+}
+const retoLine = ({ r, h }) => `${h.got.filter(v => v > 0).join('+')}${r.unit === 's' ? ' s' : ''}`;
 function dayActivity(date) {
-  return { sessions: sortedSessions().filter(s => s.date === date && s.exercises.length), cardio: state.cardio.filter(c => c.date === date) };
+  return { sessions: sortedSessions().filter(s => s.date === date && s.exercises.length), cardio: state.cardio.filter(c => c.date === date), retos: retoEntries(date) };
 }
 function renderCalMonth(part = 'all') {
   const m0 = ui.calMonth;
@@ -2369,7 +2376,7 @@ function renderCalMonth(part = 'all') {
     cells.push(`<button class="cal-day ${sel ? 'cal-sel' : ''} ${iso === today ? 'cal-today' : ''} ${future ? 'opacity-25 pointer-events-none' : ''}" data-mact="calDay" data-d="${iso}" type="button">
       <span class="text-xs font-bold">${d}</span>
       <span class="flex items-center gap-0.5 h-3 text-[9px] leading-none">
-        ${ds ? `<span class="w-1.5 h-1.5 rounded-full ${DOT[ds.c]}"></span>` : ''}${act.sessions.length ? '🏋️' : ''}${act.cardio.length ? '🔥' : ''}
+        ${ds ? `<span class="w-1.5 h-1.5 rounded-full ${DOT[ds.c]}"></span>` : ''}${act.sessions.length ? '🏋️' : ''}${act.retos.length ? '🏆' : ''}${act.cardio.length ? '🔥' : ''}
       </span>
     </button>`);
   }
@@ -2391,7 +2398,7 @@ function renderCalMonth(part = 'all') {
       <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>dieta bien</span>
       <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>regular</span>
       <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>pasado</span>
-      <span>🏋️ pesas</span><span>🔥 cardio</span>
+      <span>🏋️ pesas</span><span>🏆 retos</span><span>🔥 cardio</span>
     </div>
 `;
 }
@@ -2404,7 +2411,7 @@ function renderCalendar() {
         <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>dieta bien</span>
         <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>regular</span>
         <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>pasado</span>
-        <span>🏋️ pesas</span><span>🔥 cardio</span>
+        <span>🏋️ pesas</span><span>🏆 retos</span><span>🔥 cardio</span>
       </div>
       <div id="calDetail">${renderCalDetail(ui.calSel)}</div>
     </div>
@@ -2431,7 +2438,9 @@ function renderCalDetail(date) {
       ${act.sessions.length ? act.sessions.map(s => `<div class="mt-1">
           <div class="text-xs font-semibold">${esc(s.dayTitle || 'Sesión')}${s.durationMin ? ` · ⏱ ${s.durationMin} min` : ''}${gymKcalOf(s) ? ` · <span class="${MAC.kcal.text}">~${gymKcalOf(s)} kcal</span>` : ''}${s.deload ? ' · 🔋 descarga' : ''}</div>
           ${s.exercises.map(e => `<div class="text-[11px] text-mute leading-snug">· ${esc(e.name)}: <span class="font-mono">${e.sets.map(x => setStr(x, isBwEx(e.exId), isTimedEx(e))).join(' · ')}</span></div>`).join('')}
-        </div>`).join('') : '<div class="text-xs text-mute mt-0.5">Sin entreno de fuerza.</div>'}
+        </div>`).join('') : ''}
+      ${act.retos.map(x => `<div class="mt-1"><div class="text-xs font-semibold">🏆 Reto ${esc(x.r.name)} · nivel ${x.h.level}${x.h.kcal ? ` · <span class="${MAC.kcal.text}">~${x.h.kcal} kcal</span>` : ''}</div><div class="text-[11px] text-mute font-mono">${retoLine(x)} ${(RETO_FEEL.find(f => f[0] === x.h.feel) || ['', ''])[1]}</div></div>`).join('')}
+      ${!act.sessions.length && !act.retos.length ? '<div class="text-xs text-mute mt-0.5">Sin entreno de fuerza.</div>' : ''}
     </div>
     <div>
       <div class="text-[11px] font-bold uppercase tracking-wider text-brand">🔥 Cardio</div>
@@ -2991,7 +3000,7 @@ function renderProgress() {
 
   const backupAge = st.lastBackup ? daysBetween(st.lastBackup, todayISO()) : null;
   const needBackup = state.sessions.length > 0 && (backupAge === null || backupAge > 7);
-  const hist = sortedSessions().slice(-20).reverse();
+  const hist = [...sortedSessions().map(x => ({ ...x, _t: x.endedAt || 0 })), ...retoEntries().map(x => ({ reto: x, date: x.h.date, _t: x.h.at || 0 }))].sort((a, b) => (a.date === b.date ? a._t - b._t : a.date < b.date ? -1 : 1)).slice(-20).reverse();
 
   return `
   ${muscleMapHTML()}
@@ -3039,7 +3048,10 @@ function renderProgress() {
   <section class="card p-4 mt-3">
     <h3 class="section-title">📚 Historial de sesiones</h3>
     <div class="space-y-2 mt-3">
-      ${hist.length ? hist.map(s => `<details class="bg-ink rounded-xl border border-line">
+      ${hist.length ? hist.map(s => s.reto ? `<div class="bg-ink rounded-xl border border-line px-3 py-2.5 text-sm">
+        <div class="flex justify-between items-center"><span class="font-semibold truncate">🏆 Reto ${esc(s.reto.r.name)} <span class="text-mute font-normal text-xs">· nivel ${s.reto.h.level}</span></span><span class="text-[11px] text-mute shrink-0 ml-2">${fmtDate(s.date)}</span></div>
+        <div class="text-[11px] text-mute mt-0.5"><span class="font-mono">${retoLine(s.reto)}</span> ${(RETO_FEEL.find(f => f[0] === s.reto.h.feel) || ['', ''])[1]}${s.reto.h.kcal ? ` · <span class="${MAC.kcal.text}">~${s.reto.h.kcal} kcal</span>` : ''}</div>
+      </div>` : `<details class="bg-ink rounded-xl border border-line">
         <summary class="px-3 py-2.5 flex justify-between items-center cursor-pointer text-sm"><span class="font-semibold truncate">${esc(s.dayTitle || s.dayId)}${s.durationMin ? ` <span class="text-mute font-normal text-xs">· ${s.durationMin} min</span>` : ''}</span><span class="flex items-center gap-2 text-[11px] text-mute shrink-0 ml-2">${fmtDate(s.date)}<span class="tri"></span></span></summary>
         <div class="px-3 pb-3 space-y-1 text-[11px]">
           ${s.exercises.map(e => `<div><strong>${esc(e.name)}:</strong> <span class="font-mono text-mute">${e.sets.map(x => setStr(x, isBwEx(e.exId), isTimedEx(e))).join(', ')}</span></div>`).join('')}
@@ -4139,6 +4151,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.36.0', ['🏆 Tus retos ya salen en Progreso → Historial, junto a tus sesiones, y en el calendario de Dieta (con su 🏆 en cada día).']],
   ['4.35.0', ['👆 Desliza el dedo sobre el mapa muscular de Progreso para pasar de Ahora a 7 días y 30 días.', '👆 El gesto de deslizar queda fijo: en Dieta cambia de día y en Entreno, de bloque. Ya no hay que elegirlo en Ajustes.']],
   ['4.34.1', ['🧍 Mapa muscular: lo que entrenas (gimnasio o retos) se refleja al momento en «Ahora». Antes no aparecía hasta las 7 de la tarde. Los retos cuentan todas las series que haces y el test de máximo también suma.']],
   ['4.34.0', ['＋ Añadir ejercicio: ahora hay 141 ejercicios preparados, con máquinas, poleas, core y un grupo nuevo de 🎗️ bandas elásticas para entrenar en casa.', '⏱ Ejercicios por tiempo (plancha, plancha lateral, paseo del granjero): cada serie lleva su cronómetro. Pulsa ⏱, cuenta atrás de 3 s, te avisa al llegar al objetivo y guarda los segundos solo. En tus propios ejercicios puedes activarlo desde ✎ → «Por tiempo».']],
