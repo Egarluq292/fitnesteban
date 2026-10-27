@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.32.1';
+const APP_VERSION = '4.33.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -134,14 +134,16 @@ function exLibraryModal() {
   const list = () => exLibAll().filter(x => (!st.g || x[0] === st.g) && (!st.q || normTxt(x[1] + ' ' + x[0] + ' ' + x[9].map(a => a[0]).join(' ')).includes(normTxt(st.q))));
   const rows = () => { const L = list(); return L.length ? L.map(x => { const i = exLibAll().indexOf(x), added = has(x[1]); return `<div class="flex items-center justify-between gap-2 bg-ink rounded-xl border border-line px-3 py-2">
       <div class="min-w-0"><div class="font-semibold text-[14px] truncate">${esc(x[1])}${x[10] ? ' <span class="text-[10px] font-bold text-brand">NUEVO</span>' : ''}</div><div class="text-[11px] text-mute truncate">${EX_LIB_ICON[x[0]] || ''} ${esc(x[0])} · ${x[3]}×${x[4]}–${x[5]}${x[8] ? ' · peso corporal' : ''} · +${x[9].length} alternativas</div></div>
-      <button class="${added ? 'btn-mini text-emerald-300' : 'btn-mini text-brand'} shrink-0" data-mact="add" data-i="${i}" type="button">${added ? '✓ Añadido' : '＋ Añadir'}</button></div>`; }).join('') : '<p class="text-xs text-mute text-center py-4">No encuentro ese ejercicio. Pídeselo a Esteban o créalo con «＋ Añadir ejercicio».</p>'; };
-  const html = () => `<h3 class="modal-title">📚 Biblioteca de ejercicios</h3>
-    <p class="text-xs text-mute -mt-1">Se añaden a <b class="text-slate-300">${esc(day.label === prog().name ? day.label : day.label + ' · ' + prog().name)}</b>, ya configurados, con 2 alternativas (⇄). Puedes añadir varios.</p>
+      <button class="${added ? 'btn-mini text-emerald-300' : 'btn-mini text-brand'} shrink-0" data-mact="add" data-i="${i}" type="button">${added ? '✓ Añadido' : '＋ Añadir'}</button></div>`; }).join('') : '<p class="text-xs text-mute text-center py-4">No está entre los preparados. Créalo con «✏️ Crear uno nuevo».</p>'; };
+  const html = () => `<h3 class="modal-title">＋ Añadir ejercicio</h3>
+    <button class="btn-ghost w-full" data-mact="create" type="button">✏️ Crear uno nuevo</button>
+    <p class="text-xs text-mute">O elige uno preparado (con 2 alternativas ⇄). Se añaden a <b class="text-slate-300">${esc(day.label === prog().name ? day.label : day.label + ' · ' + prog().name)}</b>. Puedes añadir varios.</p>
     <input class="field" name="q" placeholder="Buscar: press, remo, glúteo, kettlebell…" value="${esc(st.q)}" autocomplete="off" />
     <div class="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" data-noswipe>${['', ...EX_LIB_GROUPS].map(g => `<button class="chip ${st.g === g ? 'chip-on' : ''} shrink-0" data-mact="grp" data-g="${esc(g)}" type="button">${g ? (EX_LIB_ICON[g] || '') + ' ' + esc(g) : 'Todos'}</button>`).join('')}</div>
     <div class="space-y-1.5" id="exLibRows">${rows()}</div>`;
   openModal(html(), {
     grp: (root, b) => { st.g = b.dataset.g; root.querySelector('.modal-sheet').innerHTML = html(); bindQ(root); },
+    create: () => { closeModal(); editExModal(null); },
     add: (root, b) => {
       const x = exLibAll()[+b.dataset.i]; if (!x) return;
       if (has(x[1])) return toast('Ya está en este día', 'warn');
@@ -219,23 +221,23 @@ function publishExModal(exId) {
   const f = findEx(exId); if (!f) return;
   const e = f.ex, pubId = e.pubId || ('ex_' + uid('').slice(0, 10)), existing = remoteEx.find(x => x[10] === pubId);
   let g = existing?.[0] || (/kettlebell/i.test(e.variants[0].name) ? 'Kettlebell' : e.bw ? 'Peso corporal' : 'Pecho');
-  const html = () => `<h3 class="modal-title">📤 Publicar «${esc(e.variants[0].name)}»</h3>
-    <p class="text-xs text-mute">Aparecerá en «📚 De la biblioteca» de todos, con sus series (${e.sets}×${e.minReps}–${e.maxReps}), descanso, nota y alternativas (${e.variants.length - 1}). Si lo cambias después, vuelve a publicarlo.</p>
+  const html = () => `<h3 class="modal-title">📤 Compartir «${esc(e.variants[0].name)}»</h3>
+    <p class="text-xs text-mute">Aparecerá en «＋ Añadir ejercicio» de todos, con sus series (${e.sets}×${e.minReps}–${e.maxReps}), descanso, nota y alternativas (${e.variants.length - 1}). Si lo cambias después, vuelve a publicarlo.</p>
     <div><div class="lbl mb-1">Grupo</div><div class="flex flex-wrap gap-1.5">${EX_LIB_GROUPS.map(x => `<button class="chip ${g === x ? 'chip-on' : ''}" data-mact="grp" data-g="${esc(x)}" type="button">${EX_LIB_ICON[x] || ''} ${esc(x)}</button>`).join('')}</div></div>
-    <button class="btn-primary w-full" data-mact="go" type="button">${existing ? 'Actualizar en la biblioteca' : 'Publicar'}</button>
-    ${existing ? '<button class="btn-danger w-full" data-mact="remove" type="button">Retirar de la biblioteca</button>' : ''}`;
+    <button class="btn-primary w-full" data-mact="go" type="button">${existing ? 'Actualizar' : 'Compartir'}</button>
+    ${existing ? '<button class="btn-danger w-full" data-mact="remove" type="button">Dejar de compartir</button>' : ''}`;
   openModal(html(), {
     grp: (root, b) => { g = b.dataset.g; root.querySelector('.modal-sheet').innerHTML = html(); },
-    go: () => askPin({ title: '📤 Publicar ejercicio', text: 'Tu PIN abre la llave de GitHub para publicarlo.', onPin: async pin => {
+    go: () => askPin({ title: '📤 Compartir ejercicio', text: 'Tu PIN abre la llave de GitHub para compartirlo.', onPin: async pin => {
       const v0 = e.variants[0], item = [g, v0.name, v0.note || '', e.sets, e.minReps, e.maxReps, e.increment, e.rest, !!e.bw, e.variants.slice(1, 4).map(v => [v.name, v.note || '']), pubId];
       remoteEx = await ghEditJson(pin, EXLIB_FILE, list => [item, ...list.filter(x => x[10] !== pubId)], `Biblioteca de ejercicios: ${existing ? 'actualiza' : 'publica'} ${v0.name}`);
       try { localStorage.setItem(EXLIB_CACHE, JSON.stringify(remoteEx)); } catch { /* nada */ }
-      e.pubId = pubId; persist(); closeModal(); render(); toast(`«${v0.name}» publicado en la biblioteca ✓`);
+      e.pubId = pubId; persist(); closeModal(); render(); toast(`«${v0.name}» compartido con todos ✓`);
     } }),
-    remove: () => askPin({ title: 'Retirar de la biblioteca', text: 'Dejará de aparecer para los demás. Quien ya lo añadió lo conserva.', onPin: async pin => {
+    remove: () => askPin({ title: 'Dejar de compartir', text: 'Dejará de aparecer para los demás. Quien ya lo añadió lo conserva.', onPin: async pin => {
       remoteEx = await ghEditJson(pin, EXLIB_FILE, list => list.filter(x => x[10] !== pubId), `Biblioteca de ejercicios: retira ${e.variants[0].name}`);
       try { localStorage.setItem(EXLIB_CACHE, JSON.stringify(remoteEx)); } catch { /* nada */ }
-      delete e.pubId; persist(); closeModal(); render(); toast('Retirado de la biblioteca');
+      delete e.pubId; persist(); closeModal(); render(); toast('Ya no se comparte');
     } })
   });
 }
@@ -243,22 +245,22 @@ function publishBlockModal(progId) {
   const p = state.plan.programs.find(x => x.id === progId); if (!p) return;
   const pubId = p.pubId || ('pub_' + uid('').slice(0, 10));
   const existing = remoteLib.find(x => x.lib === pubId);
-  openModal(`<h3 class="modal-title">📤 Publicar «${esc(p.name)}» en la biblioteca</h3>
-    <p class="text-xs text-mute">Aparecerá en «📚 Bloques recomendados» de todos. Se publica una copia: lo que cambies después en tu bloque no se ve hasta que vuelvas a publicar.</p>
+  openModal(`<h3 class="modal-title">📤 Compartir «${esc(p.name)}» con todos</h3>
+    <p class="text-xs text-mute">Aparecerá en «＋ Añadir bloque» de todos los usuarios. Se comparte una copia: si después cambias tu bloque, vuelve aquí para actualizarla.</p>
     <label class="lbl">Descripción (una o dos frases)<textarea class="field mt-1" name="desc" rows="3" maxlength="200" placeholder="Ej: Circuito de 30 min con mancuernas para días con poco tiempo.">${esc(existing?.desc || '')}</textarea></label>
-    <button class="btn-primary w-full" data-mact="go" type="button">${existing ? 'Actualizar en la biblioteca' : 'Publicar'}</button>
-    ${existing ? '<button class="btn-danger w-full" data-mact="remove" type="button">Retirar de la biblioteca</button>' : ''}`, {
+    <button class="btn-primary w-full" data-mact="go" type="button">${existing ? 'Actualizar' : 'Compartir'}</button>
+    ${existing ? '<button class="btn-danger w-full" data-mact="remove" type="button">Dejar de compartir</button>' : ''}`, {
     go: root => {
       const desc = mval(root, 'desc').trim(); if (!desc) return toast('Escribe una descripción', 'warn');
-      askPin({ title: '📤 Publicar bloque', text: 'Tu PIN abre la llave de GitHub para publicarlo.', onPin: async pin => {
+      askPin({ title: '📤 Compartir bloque', text: 'Tu PIN abre la llave de GitHub para compartirlo.', onPin: async pin => {
         const item = { lib: pubId, name: p.name, icon: p.icon || '', desc, author: 'Esteban', at: todayISO(), days: blockForLib(p) };
         await ghEditLib(pin, list => [item, ...list.filter(x => x.lib !== pubId)], `Biblioteca: ${existing ? 'actualiza' : 'publica'} ${p.name}`);
-        p.pubId = pubId; p.lib = pubId; persist(); closeModal(); render(); toast(`«${p.name}» publicado en la biblioteca ✓`);
+        p.pubId = pubId; p.lib = pubId; persist(); closeModal(); render(); toast(`«${p.name}» compartido con todos ✓`);
       } });
     },
-    remove: () => askPin({ title: 'Retirar de la biblioteca', text: `«${esc(p.name)}» dejará de aparecer para los demás. Quien ya lo añadió lo conserva.`, onPin: async pin => {
+    remove: () => askPin({ title: 'Dejar de compartir', text: `«${esc(p.name)}» dejará de aparecer para los demás. Quien ya lo añadió lo conserva.`, onPin: async pin => {
       await ghEditLib(pin, list => list.filter(x => x.lib !== pubId), `Biblioteca: retira ${p.name}`);
-      delete p.pubId; persist(); closeModal(); render(); toast('Retirado de la biblioteca');
+      delete p.pubId; persist(); closeModal(); render(); toast('Ya no se comparte');
     } })
   });
 }
@@ -275,8 +277,9 @@ function addLibBlock(lib) {
   toast(`Bloque ${L.name} añadido ✓`);
 }
 function libraryModal() {
-  const html = () => `<h3 class="modal-title">📚 Bloques recomendados</h3>
-    <p class="text-xs text-mute -mt-1">Preparados por Esteban. Al añadir uno se copia a tus bloques y lo puedes editar como quieras.</p>
+  const html = () => `<h3 class="modal-title">＋ Añadir bloque</h3>
+    <button class="btn-ghost w-full" data-mact="empty" type="button">✏️ Crear un bloque vacío</button>
+    <div class="text-[11px] font-bold uppercase tracking-wider text-mute pt-1">O elige uno preparado por Esteban</div>
     <div class="space-y-2">${libAll().map(L => {
       const days = L.days(), nEx = days.reduce((a, d) => a + d.exercises.length, 0), have = state.plan.programs.some(p => p.lib === L.lib), open = ui.libOpen === L.lib;
       return `<div class="card p-3 space-y-2">
@@ -284,9 +287,9 @@ function libraryModal() {
           <button class="btn-mini text-brand shrink-0" data-mact="see" data-lib="${L.lib}" type="button">${open ? 'Ocultar' : 'Ver'}</button></div>
         <p class="text-[12px] text-slate-300 leading-snug">${esc(L.desc)}</p>
         ${open ? days.map(d => `<div class="text-[12px]"><div class="text-brand font-bold">${esc(d.label)} · ${esc(d.title)}</div><ul class="text-mute list-disc pl-5">${d.exercises.map(e => `<li>${esc(e.variants[0].name)} <span class="opacity-70">${e.sets}×${e.minReps}–${e.maxReps}</span></li>`).join('')}</ul></div>`).join('') : ''}
-        <button class="${have ? 'btn-ghost' : 'btn-primary'} w-full" data-mact="add" data-lib="${L.lib}" type="button">${have ? '＋ Añadir otra copia' : '＋ Añadir a mis bloques'}</button></div>`;
+        <button class="${have ? 'btn-ghost' : 'btn-primary'} w-full" data-mact="add" data-lib="${L.lib}" type="button">${have ? '＋ Añadir otra copia' : '＋ Añadir'}</button></div>`;
     }).join('')}</div>
-    <button class="btn-ghost w-full" data-mact="empty" type="button">✏️ O crea un bloque vacío</button>`;
+    <p class="text-[11px] text-mute">Al añadir uno se copia a tus bloques y lo puedes cambiar como quieras.</p>`;
   fetchRemoteLib().then(() => { const sh = $('#modalRoot .modal-sheet'); if (sh && sh.querySelector('[data-mact=empty]')) sh.innerHTML = html(); });
   openModal(html(), {
     see: (root, b) => { ui.libOpen = ui.libOpen === b.dataset.lib ? null : b.dataset.lib; root.querySelector('.modal-sheet').innerHTML = html(); },
@@ -821,11 +824,10 @@ function nextDayId(pr = prog()) {
 
 function progLabel(p) { return `${p.icon ? p.icon + ' ' : ''}${esc(p.name)}`; }
 function renderProgHeader() {
-  const progRow = state.plan.programs.map(p => `<button class="prog ${p.id === prog().id ? 'prog-on' : ''}" data-act="pickProg" data-prog="${esc(p.id)}" type="button">${progLabel(p)}</button>`).join('')
-    + `<button class="prog prog-add" data-act="addProg" type="button" aria-label="Añadir bloque">＋ Bloque</button>`;
+  const progRow = state.plan.programs.map(p => `<button class="prog ${p.id === prog().id ? 'prog-on' : ''}" data-act="pickProg" data-prog="${esc(p.id)}" type="button">${progLabel(p)}</button>`).join('');
   return `<div class="flex items-center gap-2 -mx-4 px-4 mb-2.5">
     <div class="chips-row flex-1 relative" id="progRow">${progRow}</div>
-    <button class="iconbtn iconbtn-sm shrink-0" data-act="library" type="button" aria-label="Bloques recomendados" title="Bloques recomendados">📚</button>
+    <button class="iconbtn iconbtn-sm shrink-0 text-brand font-black" data-act="addProg" type="button" aria-label="Añadir bloque" title="Añadir bloque">＋</button>
     <button class="iconbtn iconbtn-sm shrink-0" data-act="editProg" type="button" aria-label="Editar bloque">✎</button>
   </div>${libCtaHTML()}`;
 }
@@ -833,9 +835,9 @@ function renderProgHeader() {
 function libCtaHTML() {
   const hasOwn = state.plan.programs.some(p => p.type === 'strength' && p.id !== 'free' && p.days.some(d => d.exercises.length));
   if (hasOwn) return '';
-  return `<button class="w-full card p-4 mb-3 text-left flex items-center gap-3" style="border-color:rgba(34,211,238,.45);background:linear-gradient(135deg,rgba(34,211,238,.10),rgba(34,211,238,.02))" data-act="library" type="button">
-    <span class="text-3xl">📚</span>
-    <span class="flex-1 min-w-0"><span class="block font-extrabold">Elige tu primer bloque de entreno</span><span class="block text-[12px] text-mute mt-0.5">Bloques preparados por Esteban: Kettlebell, PPT, Full Body… Se añaden con un toque.</span></span>
+  return `<button class="w-full card p-4 mb-3 text-left flex items-center gap-3" style="border-color:rgba(34,211,238,.45);background:linear-gradient(135deg,rgba(34,211,238,.10),rgba(34,211,238,.02))" data-act="addProg" type="button">
+    <span class="text-3xl">🏋️</span>
+    <span class="flex-1 min-w-0"><span class="block font-extrabold">Elige tu primer bloque de entreno</span><span class="block text-[12px] text-mute mt-0.5">Preparados por Esteban: Kettlebell, PPT, Full Body… O crea el tuyo.</span></span>
     <span class="text-brand font-black text-lg">›</span></button>`;
 }
 
@@ -886,10 +888,7 @@ function renderTrain() {
     ${exercises || `<div class="card p-6 text-center text-sm text-mute">Este día no tiene ejercicios todavía.</div>`}
   </div>
 
-  <div class="grid grid-cols-2 gap-2 mt-3">
-    <button class="btn-dashed w-full" data-act="exLibrary" type="button">📚 De la biblioteca</button>
-    <button class="btn-dashed w-full" data-act="addEx" type="button">＋ Crear ejercicio</button>
-  </div>
+  <button class="btn-dashed w-full mt-3" data-act="exLibrary" type="button">＋ Añadir ejercicio</button>
 
   ${state.settings.habits.length ? `<section class="card p-4 mt-4 space-y-2.5">
     <h3 class="section-title">🔥 Remate y hábitos</h3>
@@ -1331,8 +1330,10 @@ function editProgModal(progId) {
       ${!isNew ? `<button class="btn-ghost" data-mact="left" type="button" aria-label="Mover a la izquierda">◀</button><button class="btn-ghost" data-mact="right" type="button" aria-label="Mover a la derecha">▶</button>` : ''}
       <button class="btn-primary flex-1" data-mact="save" type="button">Guardar</button>
     </div>
+    ${!isNew && p.type === 'strength' && p.id !== 'free' && access.me?.admin && lsGet(GH_KEY) ? `<button class="btn-ghost w-full mt-3" data-mact="share" type="button">${p.pubId ? '📢 Compartido con todos · actualizar o retirar' : '📤 Compartir con todos'}</button>` : ''}
     ${!isNew && p.type === 'strength' && state.plan.programs.length > 1 ? `<button class="btn-danger w-full mt-3" data-mact="del" type="button">Eliminar este bloque</button><p class="text-[11px] text-mute mt-2">Eliminar un bloque no borra el historial de sesiones ya guardadas.</p>` : ''}
   `, {
+    share: () => { closeModal(); publishBlockModal(progId); },
     autofocus: isNew,
     save: root => {
       const name = mval(root, 'name').trim().toUpperCase();
@@ -1398,7 +1399,7 @@ function editExModal(exId) {
       <button class="btn-primary flex-1" data-mact="save" type="button">Guardar</button>
     </div>
     ${!isNew ? `<button class="btn-danger w-full mt-3" data-mact="del" type="button">Quitar del día</button>` : ''}
-    ${!isNew && access.me?.admin && lsGet(GH_KEY) ? `<button class="btn-ghost w-full mt-2" data-mact="publish" type="button">${e.pubId ? '📢 Publicado en la biblioteca · actualizar o retirar' : '📤 Publicar en la biblioteca de ejercicios'}</button>` : ''}
+    ${!isNew && access.me?.admin && lsGet(GH_KEY) ? `<button class="btn-ghost w-full mt-2" data-mact="publish" type="button">${e.pubId ? '📢 Compartido con todos · actualizar o retirar' : '📤 Compartir con todos'}</button>` : ''}
   `, {
     publish: () => { closeModal(); publishExModal(exId); },
     autofocus: isNew,
@@ -3056,7 +3057,7 @@ function renderSettings() {
     ${state.plan.programs.map(p => `<div class="space-y-1.5">
       <div class="flex items-center justify-between">
         <div class="text-sm font-extrabold ${p.id === prog().id ? 'text-brand' : ''}">${progLabel(p)}${p.id === prog().id ? ' <span class="text-[10px] font-semibold">· activo</span>' : ''}</div>
-        <span class="flex gap-1.5">${access.me?.admin && lsGet(GH_KEY) && p.type === 'strength' && p.id !== 'free' ? `<button class="iconbtn iconbtn-sm ${p.pubId ? 'text-brand' : ''}" data-act="publishProg" data-prog="${esc(p.id)}" type="button" aria-label="Publicar en la biblioteca">${p.pubId ? '📢' : '📤'}</button>` : ''}<button class="iconbtn iconbtn-sm" data-act="editProgId" data-prog="${esc(p.id)}" type="button" aria-label="Editar bloque">✎</button></span>
+        <button class="iconbtn iconbtn-sm" data-act="editProgId" data-prog="${esc(p.id)}" type="button" aria-label="Editar bloque">✎</button>
       </div>
       ${p.type === 'cardio' ? '<p class="text-[11px] text-mute bg-ink rounded-xl border border-line px-3 py-2">Bicicleta y caminata con estimación de calorías.</p>' : p.type === 'retos' ? '<p class="text-[11px] text-mute bg-ink rounded-xl border border-line px-3 py-2">Retos por niveles con ajuste según cómo te sientas.</p>' : ''}
       ${p.days.map(d => `<div class="flex items-center justify-between bg-ink rounded-xl border border-line px-3 py-2">
@@ -3069,8 +3070,6 @@ function renderSettings() {
       <button class="btn-ghost" data-act="addProg" type="button">＋ Añadir bloque</button>
       <button class="btn-ghost" data-act="resetPlan" type="button">Vaciar bloques</button>
     </div>
-    <button class="btn-ghost w-full" data-act="library" type="button">📚 Bloques recomendados</button>
-    ${access.me?.admin && lsGet(GH_KEY) ? '<p class="text-[11px] text-mute">📤 publica un bloque tuyo en la biblioteca para todos (📢 = ya publicado; toca para actualizarlo o retirarlo).</p>' : ''}
     <p class="text-[11px] text-mute">Los días se añaden desde Entreno con «＋ Día» (en el bloque activo) y los ejercicios con el botón ✎ de cada uno.</p>
     </div>
   </details>
@@ -4026,9 +4025,9 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
-  ['4.32.1', ['📤 Publica también ejercicios sueltos: en ✎ de cualquier ejercicio tuyo, «Publicar en la biblioteca de ejercicios» (eliges el grupo y queda para todos con la etiqueta NUEVO). Los bloques se siguen publicando con 📤 en Ajustes → Bloques.'], 'admin'],
-  ['4.32.0', ['📚 Biblioteca de ejercicios: en cualquier día (también en FREE) toca «📚 De la biblioteca» y añade ejercicios ya configurados —series, reps, descanso, técnica y 2 alternativas—. Más de 60 para empezar, por grupos y con buscador.']],
-  ['4.31.0', ['📚 Biblioteca de bloques: con el botón 📚 de Entreno (o en Ajustes → Bloques) eliges bloques preparados por Esteban y los añades con un toque. Estreno: 🔔 KETTLEBELL, para entrenar en casa. Irán llegando más.', '🧹 Si nunca usaste ni cambiaste PPT o FULL BODY, se han quitado para dejarte la app limpia: si los quieres, están en la biblioteca. Los bloques que usas o editaste siguen igual.']],
+  ['4.33.0', ['📤 Compartir con todos: en el ✎ de cualquier bloque o ejercicio tuyo verás «Compartir con todos». Les aparecerá al pulsar ＋ (con la etiqueta NUEVO). Puedes actualizarlo o dejar de compartirlo desde el mismo sitio.'], 'admin'],
+  ['4.32.0', ['＋ Añadir ejercicio: además de crear el tuyo, eliges entre más de 60 ejercicios preparados (por grupos y con buscador), ya configurados con series, reps, descanso, técnica y 2 alternativas.']],
+  ['4.31.0', ['＋ Añadir bloque: el botón ＋ junto a ✎ en Entreno te deja crear un bloque vacío o elegir uno preparado por Esteban. Estreno: 🔔 KETTLEBELL, para entrenar en casa. Irán llegando más.', '🧹 Si nunca usaste ni cambiaste PPT o FULL BODY, se han quitado para dejarte la app limpia: si los quieres, están en ＋. Los bloques que usas o editaste siguen igual.']],
   ['4.30.0', ['🔥 Mapa muscular en Progreso: «Ahora» te muestra qué músculos siguen cargados y cuándo estarán listos; «7 días» y «30 días», cuánto has trabajado cada uno y cuáles tienes olvidados. Usa todas tus sesiones y retos ya guardados. En «Hoy te toca» verás si lo que toca está recuperado.']],
   ['4.29.0', ['💬 «Comenta al Coach» en cada ejercicio: marca 😣 molestia, 🥵 muy duro, 😌 fácil o ⏱ poco tiempo y escribe lo que notes. Se guarda con la sesión, te lo recuerdo la próxima vez, el Coach IA y el resumen semanal lo tienen en cuenta, y con 😣 o 🥵 no te subo peso.']],
   ['4.28.0', ['⭕ Hábitos diarios en Dieta más compactos: un anillo por hábito. Y ahora pueden ser «de varios toques» (por ejemplo 8 vasos de agua): cada toque rellena un tramo del anillo; mantén pulsado para restar. Se configura en Ajustes → Hábitos.']],
@@ -4110,7 +4109,7 @@ const GUIDE = [
   ['🏋️ Entreno: bloques y días', [
     'Arriba eliges el <b>bloque</b> ({{BLOQUES}}) y debajo el <b>día</b>. El punto ● marca el día que te toca según tu rotación; ✓ el que ya hiciste hoy.',
     'Cada bloque lleva su propia rotación: {{ROTACION}}',
-    '«＋ Bloque» y «＋ Día» crean nuevos. El ✎ del bloque o del día permite renombrar, reordenar (◀ ▶) o eliminar. El historial nunca se borra al eliminar.'
+    'El ＋ junto al ✎ de arriba añade un bloque (vacío o uno preparado por Esteban) y «＋ Día» crea días. «＋ Añadir ejercicio» deja crear uno o elegir entre los preparados. El ✎ del bloque o del día permite renombrar, reordenar (◀ ▶) o eliminar. El historial nunca se borra al eliminar.'
   ]],
   ['🧭 Cómo decide el coach el peso', [
     '<b>Doble progresión</b>: cada ejercicio tiene un rango de reps (p. ej. 8–10). Mantienes el peso y sumas reps; cuando llegas al máximo en <b>todas</b> las series, te dice que subas el incremento (p. ej. +2 kg).',
@@ -4551,7 +4550,7 @@ document.addEventListener('touchcancel', swipeEnd, { passive: true });
 const actions = {
   pickDay: b => { ui.dayId = b.dataset.day; render(); window.scrollTo({ top: 0 }); },
   pickProg: b => { state.plan.active = b.dataset.prog; ui.dayId = nextDayId(); persist(); render(); window.scrollTo({ top: 0 }); },
-  addProg: () => editProgModal(null),
+  addProg: () => libraryModal(),
   library: () => libraryModal(),
   publishProg: b => publishBlockModal(b.dataset.prog),
   editProg: () => editProgModal(prog().id),
