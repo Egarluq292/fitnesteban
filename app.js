@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.34.0';
+const APP_VERSION = '4.34.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1182,7 +1182,7 @@ function saveSession() {
     state.memory[x.exKey] = { date: today, sets: x.sets };
   }
   const habits = state.settings.habits.filter(h => d.habits[h]);
-  const session = { id: uid('s_'), date: today, dayId: day.id, dayTitle: day.title, habits, exercises: exs };
+  const session = { id: uid('s_'), date: today, endedAt: Date.now(), dayId: day.id, dayTitle: day.title, habits, exercises: exs };
   const skippedNames = day.exercises.filter(e => skipIds.includes(e.id)).map(e => variantOf(e).variant.name);
   if (skippedNames.length) session.skipped = skippedNames;
   const notes = day.exercises.map(e => { const nt = d.notes?.[e.id]; return nt && (nt.tags.length || nt.text.trim()) ? { exId: e.id, name: variantOf(e).variant.name, tags: nt.tags, text: nt.text.trim() } : null; }).filter(Boolean);
@@ -1901,12 +1901,17 @@ function muscleWork(sinceDays) {
   const from = addDays(todayISO(), -sinceDays), out = [];
   for (const s of state.sessions) {
     if (s.date < from) continue;
-    const t = s.endedAt || (parseISO(s.date).getTime() + 19 * 3600000);
+    const t = s.endedAt || Math.min(Date.now(), parseISO(s.date).getTime() + 19 * 3600000); // sin hora guardada: las 19 h, o «ahora» si es de hoy y aún no son las 19
     for (const x of s.exercises) { const m = musclesOf(x.name); if (Object.keys(m).length) out.push({ t, sets: x.sets.length, m }); }
   }
   for (const [id, r] of Object.entries(state.retos || {})) for (const h of r.history || []) {
     if (h.date < from || !RETO_MUSCLES[id]) continue;
-    out.push({ t: parseISO(h.date).getTime() + 19 * 3600000, sets: 3, m: musclesOf(RETO_MUSCLES[id]) });
+    out.push({ t: h.at || Math.min(Date.now(), parseISO(h.date).getTime() + 19 * 3600000), sets: (h.got || []).filter(v => v > 0).length || 3, m: musclesOf(RETO_MUSCLES[id]) });
+  }
+  // el test de máximo también cansa: cuenta como 1 serie
+  for (const [id, r] of Object.entries(state.retos || {})) for (const tt of r.tests || []) {
+    if (tt.date < from || !RETO_MUSCLES[id]) continue;
+    out.push({ t: tt.at || Math.min(Date.now(), parseISO(tt.date).getTime() + 19 * 3600000), sets: 1, m: musclesOf(RETO_MUSCLES[id]) });
   }
   return out;
 }
@@ -2077,7 +2082,7 @@ function retoStartFrom(id, max) {
   const r = RETOS[id];
   const best = clamp(Math.round(max), 0, r.max * 2);
   const level = clamp(Math.floor(best * 0.7 / r.step) * r.step, r.min, r.max);
-  state.retos[id] = { level, best, startedAt: todayISO(), history: [], tests: [{ date: todayISO(), max: best }], hardStreak: 0, draft: null };
+  state.retos[id] = { level, best, startedAt: todayISO(), history: [], tests: [{ date: todayISO(), at: Date.now(), max: best }], hardStreak: 0, draft: null };
 }
 function retoFinish(id) {
   const r = RETOS[id], st = retoOf(id), d = retoDraft(id);
@@ -2096,7 +2101,7 @@ function retoFinish(id) {
       else { st.hardStreak = 0; st.level = snapLevel(r, st.level + (eff === 'easy' ? 2 : 1) * r.step); }
       st.best = Math.max(st.best, got[0]);
       const T = todayISO();
-      st.history.push({ date: T, level: before, target: d.target, got, feel, completed, kcal: retoKcal(id, got, T) });
+      st.history.push({ date: T, at: Date.now(), level: before, target: d.target, got, feel, completed, kcal: retoKcal(id, got, T) });
       st.draft = null; persist(); setTimeout(silentDriveBackup, 1500);
       const msg = st.level > before ? `Subes a nivel ${st.level}` : st.level < before ? `Bajamos a nivel ${st.level} para consolidar` : `Repites nivel ${st.level}`;
       openModal(`<div class="text-center"><div class="text-4xl">${st.level >= r.max && before < r.max ? '🏆' : RETO_FEEL.find(f => f[0] === feel)[1]}</div>
@@ -2118,7 +2123,7 @@ function retoTestModal(id) {
     save: root => {
       const v = parseInt(mval(root, 'max'), 10);
       if (!(v > 0)) return toast('Pon un número', 'warn');
-      st.tests.push({ date: todayISO(), max: v });
+      st.tests.push({ date: todayISO(), at: Date.now(), max: v });
       const prevBest = st.best; st.best = Math.max(st.best, v);
       const fromTest = clamp(Math.floor(v * 0.7 / r.step) * r.step, r.min, r.max);
       const up = fromTest > st.level; if (up) { st.level = fromTest; st.draft = null; }
@@ -4138,6 +4143,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.34.1', ['🧍 Mapa muscular: lo que entrenas (gimnasio o retos) se refleja al momento en «Ahora». Antes no aparecía hasta las 7 de la tarde. Los retos cuentan todas las series que haces y el test de máximo también suma.']],
   ['4.34.0', ['＋ Añadir ejercicio: ahora hay 141 ejercicios preparados, con máquinas, poleas, core y un grupo nuevo de 🎗️ bandas elásticas para entrenar en casa.', '⏱ Ejercicios por tiempo (plancha, plancha lateral, paseo del granjero): cada serie lleva su cronómetro. Pulsa ⏱, cuenta atrás de 3 s, te avisa al llegar al objetivo y guarda los segundos solo. En tus propios ejercicios puedes activarlo desde ✎ → «Por tiempo».']],
   ['4.33.1', ['＋ Añadir bloque: cada bloque sale una sola vez y, si ya lo tienes, pone «✓ Ya lo tienes» en vez de ofrecer otra copia.'], 'quiet'],
   ['4.33.0', ['📤 Compartir con todos: en el ✎ de cualquier bloque o ejercicio tuyo verás «Compartir con todos». Les aparecerá al pulsar ＋ (con la etiqueta NUEVO). Puedes actualizarlo o dejar de compartirlo desde el mismo sitio.'], 'admin'],
