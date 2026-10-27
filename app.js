@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.36.0';
+const APP_VERSION = '4.37.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4056,7 +4056,7 @@ function chatBodyHTML() {
     ${chatHistoryHTML()}`;
   return c.msgs.map((m, i) => m.role === 'user'
     ? `<div class="chat-me">${esc(m.text)}</div>`
-    : `<div class="chat-ai${m.error ? ' chat-err' : ''}">${mdLite(m.text)}${m.error && i === c.msgs.length - 1 ? '<button class="text-xs text-brand underline mt-1" data-mact="retry" type="button">Reintentar</button>' : ''}${(m.meals || []).map((ml, j) => `<button class="chat-meal" data-mact="toDiet" data-m="${i}" data-o="${j}" type="button"><span>🍽️ Apuntar en Dieta</span><span class="text-[11px] opacity-80 truncate">${m.meals.length > 1 ? esc(ml.title) + ' · ' : ''}${esc(ml.type || 'comida que toca')} · ~${mealKcal(ml)} kcal</span></button>`).join('')}</div>`).join('')
+    : `<div class="chat-ai${m.error ? ' chat-err' : ''}">${mdLite(m.text)}${m.error && i === c.msgs.length - 1 ? '<button class="text-xs text-brand underline mt-1" data-mact="retry" type="button">Reintentar</button>' : ''}${(m.meals || []).map((ml, j) => `<div class="flex gap-2 items-stretch"><button class="chat-meal flex-1 min-w-0" data-mact="toDiet" data-m="${i}" data-o="${j}" type="button"><span>🍽️ Apuntar en Dieta</span><span class="text-[11px] opacity-80 truncate max-w-full">${m.meals.length > 1 ? esc(ml.title) + ' · ' : ''}${esc(ml.type || 'comida que toca')} · ~${mealKcal(ml)} kcal</span></button><button class="chat-meal !w-auto shrink-0 items-center justify-center" data-mact="recipe" data-m="${i}" data-o="${j}" type="button"><span>👨‍🍳 Receta</span><span class="text-[11px] opacity-80">${ml.recipe ? 'guardada' : 'paso a paso'}</span></button></div>`).join('')}</div>`).join('')
     + (c.busy ? '<div class="chat-ai chat-typing"><span></span><span></span><span></span></div>' : '');
 }
 /* Historial: conversaciones de los últimos 7 días (máx. 20). Solo la conversación abierta se envía a Gemini. */
@@ -4112,9 +4112,9 @@ async function chatSend(text) {
     c.msgs.push({ role: 'model', text: 'No he podido responder: ' + e.message, error: true });
   } finally { c.busy = false; refreshChat(); }
 }
-function openChat() {
+function openChat(keep) {
   if (!profileOf()) return profileModal(openChat);
-  ui.chat = { msgs: [], busy: false }; ui.histOpen = false; ui.histAll = false;
+  if (!(keep === true && ui.chat)) { ui.chat = { msgs: [], busy: false }; ui.histOpen = false; ui.histAll = false; }
   openModal(`
     <div class="cal-head flex items-center gap-2 pb-3">
       <span class="text-xl">💬</span><div class="min-w-0"><h3 class="modal-title leading-tight">Coach IA</h3><p class="text-[11px] text-mute">Responde con tus datos · Gemini</p></div>
@@ -4129,6 +4129,7 @@ function openChat() {
     sheetClass: 'sheet-fixed',
     chip: (r, b) => chatSend(CHAT_CHIPS[+b.dataset.i]),
     toDiet: (r, b) => { const ml = ui.chat.msgs[+b.dataset.m]?.meals?.[+b.dataset.o]; if (ml) mealFromChat(ml); },
+    recipe: (r, b) => recipeSheet(+b.dataset.m, +b.dataset.o),
     histToggle: () => { ui.histOpen = !ui.histOpen; refreshChat(); },
     histMore: () => { ui.histAll = true; refreshChat(); },
     openConv: (r, b) => { const cv = state.chats.find(x => x.id === b.dataset.id); if (!cv) return; ui.chat = { id: cv.id, msgs: cv.msgs.map(m => ({ ...m })), busy: false }; refreshChat(); },
@@ -4143,7 +4144,81 @@ function openChat() {
   inp.addEventListener('input', grow);
   $('#chatForm').addEventListener('submit', e => { e.preventDefault(); const v = inp.value; inp.value = ''; grow(); chatSend(v); });
 }
-$('#chatBtn')?.addEventListener('click', openChat);
+$('#chatBtn')?.addEventListener('click', () => openChat());
+
+/* 👨‍🍳 Receta paso a paso de un plato propuesto por el Coach. Los ingredientes y gramos son SIEMPRE los del plato
+   (lo que se apunta en Dieta); Gemini solo añade condimentos sin calorías relevantes, utensilios y pasos. */
+async function fetchRecipe(ml, wish = '', chatMsgs = []) {
+  const ing = ml.items.map(it => `${it.name}: ${it.grams} g`).join('; ');
+  const said = chatMsgs.filter(m => m.role === 'user').slice(-6).map(m => m.text.slice(0, 200)).join(' | ');
+  const prompt = `Eres cocinero y nutricionista en España. Escribe la receta para 1 persona de «${ml.title}» usando EXACTAMENTE estos ingredientes y cantidades (ya pesados, no cambies ni añadas gramos): ${ing}.
+Reglas:
+- No añadas ningún ingrediente con calorías (ni aceite, ni mantequilla, ni salsas, ni azúcar, ni pan) que no esté en la lista. Si el plato necesita grasa para cocinar y no hay aceite en la lista, usa sartén antiadherente, horno, airfryer, plancha o un toque de spray.
+- Sí puedes usar sal, pimienta, especias, hierbas, ajo, limón, vinagre, mostaza y agua (cantidades orientativas: "1 pizca", "1 diente"…).
+- Pasos cortos, claros y en orden (máximo 8), en español de España, tuteando. Indica temperaturas y tiempos concretos.
+${said ? `- Lo que el usuario ha dicho en la conversación (respeta sus preferencias de cocinado, utensilios y gustos): ${said}\n` : ''}${wish ? `- PETICIÓN PARA ESTA RECETA (manda sobre todo lo demás, salvo las cantidades): ${wish.slice(0, 200)}\n` : ''}
+Devuelve SOLO este JSON: {"titulo":"…","tiempo_min":n,"dificultad":"Fácil|Media","utensilios":["…"],"condimentos":["…"],"pasos":[{"texto":"…","min":n o null}],"consejo":"una frase"}`;
+  const r = parseJSONLoose(await callGemini([{ text: prompt }], { timeout: 45000, temperature: 0.4 }));
+  const steps = (Array.isArray(r.pasos) ? r.pasos : []).map(p => ({ t: String(p?.texto ?? p ?? '').slice(0, 400), min: Math.round(num(p?.min) || 0) || null })).filter(p => p.t).slice(0, 10);
+  if (!steps.length) throw new Error('La IA no devolvió los pasos. Prueba otra vez.');
+  const list = v => (Array.isArray(v) ? v : []).map(x => String(x).slice(0, 60)).filter(Boolean).slice(0, 10);
+  return { title: String(r.titulo || ml.title).slice(0, 70), mins: Math.round(num(r.tiempo_min) || 0) || null, level: String(r.dificultad || '').slice(0, 12), tools: list(r.utensilios), extras: list(r.condimentos), steps, tip: String(r.consejo || '').slice(0, 240), at: Date.now() };
+}
+function recipeSheet(mi, oi) {
+  const ml = ui.chat?.msgs[mi]?.meals?.[oi]; if (!ml) return;
+  const st = { busy: !ml.recipe, err: '', wish: '' };
+  const tot = k => Math.round(ml.items.reduce((a, it) => a + it.per100[k] * it.grams / 100, 0));
+  const body = () => {
+    const rc = ml.recipe;
+    const head = `<div class="flex flex-wrap gap-1.5 text-[11px] font-bold">
+        <span class="rounded-full px-2.5 py-1 ${MAC.kcal.text}" style="background:rgba(250,204,21,.1)">${tot('kcal')} kcal</span>
+        <span class="rounded-full px-2.5 py-1 ${MAC.prot.text}" style="background:rgba(34,211,238,.1)">P ${tot('prot')} g</span>
+        <span class="rounded-full px-2.5 py-1 ${MAC.carbs.text}" style="background:rgba(52,211,153,.1)">C ${tot('carbs')} g</span>
+        <span class="rounded-full px-2.5 py-1 ${MAC.fat.text}" style="background:rgba(251,113,133,.1)">G ${tot('fat')} g</span>
+        ${rc?.mins ? `<span class="rounded-full px-2.5 py-1 text-slate-300 bg-panel border border-line">⏱ ${rc.mins} min</span>` : ''}${rc?.level ? `<span class="rounded-full px-2.5 py-1 text-slate-300 bg-panel border border-line">${esc(rc.level)}</span>` : ''}
+      </div>`;
+    const ingr = `<div class="card p-3"><div class="text-[11px] font-bold uppercase tracking-wider text-brand mb-1.5">🥘 Ingredientes · 1 ración</div>
+        ${ml.items.map(it => `<div class="flex justify-between gap-3 py-1 text-sm border-b border-line/60 last:border-0"><span>${esc(it.name)}</span><span class="font-mono text-slate-300 shrink-0">${it.grams} g</span></div>`).join('')}
+        ${rc?.extras?.length ? `<div class="text-[12px] text-mute mt-2">🧂 Al gusto: ${rc.extras.map(esc).join(' · ')}</div>` : ''}
+        <p class="text-[10px] text-mute mt-1.5">Son las cantidades del plato del Coach: si las cambias, cambian los macros.</p></div>`;
+    if (st.busy) return head + ingr + '<div class="card p-4 text-center text-sm text-mute"><div class="chat-typing inline-flex"><span></span><span></span><span></span></div><div class="mt-2">Preparando la receta…</div></div>';
+    if (!rc) return head + ingr + `<div class="card p-4 text-center text-sm text-rose-300">${esc(st.err || 'No se pudo preparar la receta.')}<br><button class="btn-ghost mt-3" data-mact="again" type="button">Reintentar</button></div>`;
+    return head + ingr + `
+      ${rc.tools.length ? `<div class="text-[12px] text-mute">🍳 Necesitas: ${rc.tools.map(esc).join(' · ')}</div>` : ''}
+      <div class="card p-3"><div class="text-[11px] font-bold uppercase tracking-wider text-brand mb-2">👨‍🍳 Paso a paso</div>
+        <ol class="space-y-2.5">${rc.steps.map((p, k) => `<li class="flex gap-3"><span class="w-7 h-7 shrink-0 rounded-full grid place-items-center text-[13px] font-black text-ink" style="background:linear-gradient(135deg,#22d3ee,#34d399)">${k + 1}</span><span class="text-sm leading-relaxed pt-0.5">${esc(p.t)}${p.min ? ` <span class="text-[11px] text-brand font-bold whitespace-nowrap">⏱ ${p.min} min</span>` : ''}</span></li>`).join('')}</ol></div>
+      ${rc.tip ? `<div class="rounded-xl px-3 py-2 text-[12px] text-amber-200" style="background:rgba(252,211,77,.08);border:1px solid rgba(252,211,77,.3)">💡 ${esc(rc.tip)}</div>` : ''}
+      ${rc.wish ? `<p class="text-[11px] text-mute text-center">Rehecha con: «${esc(rc.wish)}»</p>` : ''}
+      <div class="card p-3 space-y-2"><div class="text-[11px] font-bold uppercase tracking-wider text-brand">🔄 ¿Cambiar algo?</div>
+        <div class="flex gap-2"><input class="field flex-1 min-w-0 !py-2 text-sm" id="recipeWish" placeholder="Ej.: a la plancha, sin horno, en airfryer…" autocomplete="off" />
+        <button class="btn-primary shrink-0 !px-3 !py-2 text-sm" data-mact="redo" type="button">Rehacer</button></div>
+        <p class="text-[10px] text-mute">Cambia la forma de cocinarlo; los ingredientes y gramos se mantienen.</p></div>`;
+  };
+  const paint = () => { const b = $('#recipeBody'); if (b) b.innerHTML = body(); };
+  const load = async () => {
+    st.busy = true; st.err = ''; paint();
+    try { ml.recipe = await fetchRecipe(ml, st.wish, ui.chat.msgs); if (st.wish) ml.recipe.wish = st.wish; saveChatConv(ui.chat); }
+    catch (e) { st.err = 'No he podido preparar la receta: ' + e.message; }
+    st.busy = false; paint();
+  };
+  openModal(`
+    <div class="cal-head flex items-center gap-2 pb-3">
+      <button class="w-8 h-8 rounded-full border border-line text-mute shrink-0" data-mact="back" type="button" aria-label="Volver al chat">‹</button>
+      <div class="min-w-0 flex-1"><div class="text-[11px] font-bold uppercase tracking-wider text-brand">👨‍🍳 Receta${ml.type ? ' · ' + esc(ml.type) : ''}</div><h3 class="modal-title leading-tight truncate">${esc(ml.recipe?.title || ml.title)}</h3></div>
+    </div>
+    <div id="recipeBody" class="cal-body space-y-3">${body()}</div>
+    <div class="cal-foot grid grid-cols-2 gap-2">
+      <button class="btn-ghost" data-mact="back" type="button">‹ Chat</button>
+      <button class="btn-primary" data-mact="toDiet" type="button">🍽️ Apuntar en Dieta</button>
+    </div>`, {
+    sheetClass: 'sheet-fixed',
+    back: () => openChat(true),
+    toDiet: () => mealFromChat(ml),
+    again: () => load(),
+    redo: () => { st.wish = ($('#recipeWish')?.value || '').trim(); load(); }
+  });
+  if (!ml.recipe) load();
+}
 
 /* =========================================================================
    GUÍA Y NOVEDADES
@@ -4151,6 +4226,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.37.0', ['👨‍🍳 Recetas del Coach: cuando el Coach IA te propone un plato, pulsa «Receta» y verás cómo prepararlo paso a paso, con los mismos ingredientes y gramos que se apuntan en Dieta. Se guarda en la conversación y con «¿Cambiar algo?» la rehaces (a la plancha, en airfryer…).']],
   ['4.36.0', ['🏆 Tus retos ya salen en Progreso → Historial, junto a tus sesiones, y en el calendario de Dieta (con su 🏆 en cada día).']],
   ['4.35.0', ['👆 Desliza el dedo sobre el mapa muscular de Progreso para pasar de Ahora a 7 días y 30 días.', '👆 El gesto de deslizar queda fijo: en Dieta cambia de día y en Entreno, de bloque. Ya no hay que elegirlo en Ajustes.']],
   ['4.34.1', ['🧍 Mapa muscular: lo que entrenas (gimnasio o retos) se refleja al momento en «Ahora». Antes no aparecía hasta las 7 de la tarde. Los retos cuentan todas las series que haces y el test de máximo también suma.']],
