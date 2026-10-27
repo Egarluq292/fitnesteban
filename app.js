@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.33.1';
+const APP_VERSION = '4.34.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -123,17 +123,17 @@ const EX_ALTS = {"d1_goblet": [["Prensa de piernas", "Pies a media altura, sin b
 
 /* Biblioteca de ejercicios sueltos (preparados por Esteban): se añaden a cualquier día, también a FREE.
    [grupo, nombre, nota, series, reps mín, reps máx, incremento, descanso, peso corporal, alternativas] */
-const EX_LIB = [["Pecho","Press de banca con barra","Escápulas retraídas, pies firmes.",4,6,10,2.5,120,false,[["Press de banca con mancuernas","Bajada en 2 s."],["Press de pecho en máquina","Recorrido completo."]]],["Pecho","Press de banca con mancuernas","Bajada controlada en 2 s.",4,8,12,2,90,false,[["Press en suelo con mancuernas","Codos a 45º."],["Press de banca con barra","Escápulas retraídas."]]],["Pecho","Press inclinado con mancuernas","Banco a 30º.",3,8,12,2,90,false,[["Press inclinado con barra","Banco a 30º."],["Press inclinado en máquina","Recorrido completo."]]],["Pecho","Aperturas con mancuernas","Codos algo flexionados, abre hasta notar estiramiento.",3,10,15,1,60,false,[["Aperturas en polea","Tensión constante."],["Contractora (pec deck)","Pausa al cerrar."]]],["Pecho","Cruce de poleas","Junta las manos delante del pecho.",3,12,15,1,60,false,[["Aperturas con mancuernas","Codos algo flexionados."],["Contractora (pec deck)","Pausa al cerrar."]]],["Pecho","Fondos en paralelas","Torso inclinado hacia delante. 0 kg = peso corporal.",3,6,12,2,90,true,[["Fondos asistidos con banda","0 kg = peso corporal."],["Flexiones declinadas","Pies elevados."]]],["Pecho","Flexiones","Cuerpo en bloque, pecho al suelo. 0 kg = peso corporal.",3,10,20,2,60,true,[["Flexiones declinadas","Pies elevados."],["Flexiones con palmada","Explosivas."]]],["Espalda","Dominadas pronas","Pecho a la barra. 0 kg = peso corporal.",4,5,10,2,120,true,[["Dominadas asistidas con banda","Banda bajo las rodillas."],["Dominadas negativas","Baja en 4–5 s."]]],["Espalda","Dominadas supinas","Agarre cerrado. 0 kg = peso corporal.",3,6,10,2,120,true,[["Dominadas con agarre neutro","0 kg = peso corporal."],["Dominadas asistidas con banda","Banda bajo las rodillas."]]],["Espalda","Jalón al pecho en polea","Pecho arriba, codos hacia abajo.",4,8,12,2.5,90,false,[["Jalón con agarre neutro","Codos pegados."],["Jalón supino","Agarre estrecho."]]],["Espalda","Remo con barra","Torso a unos 45º, barra al ombligo.",4,8,10,2.5,90,false,[["Remo Pendlay","Desde el suelo en cada rep."],["Remo en máquina","Pecho apoyado."]]],["Espalda","Remo con mancuerna a una mano","Codo hacia la cadera.",3,8,12,2,90,false,[["Remo con kettlebell a una mano","Codo hacia la cadera."],["Remo en banco inclinado","Pecho apoyado en el banco."]]],["Espalda","Remo en polea baja","Espalda neutra, codos atrás.",3,10,12,2.5,90,false,[["Remo en máquina","Pecho apoyado."],["Remo con mancuerna a una mano","Codo a la cadera."]]],["Espalda","Remo invertido en TRX","Cuerpo recto, pecho a las asas. 0 kg = peso corporal.",3,8,15,2,60,true,[["Remo invertido en barra","Cuerpo recto."],["Dominadas australianas","Barra a la altura de la cadera."]]],["Espalda","Pullover en polea","Brazos casi rectos, lleva la barra a los muslos.",3,12,15,2.5,60,false,[["Pullover con mancuerna","Tumbado en banco."],["Jalón con brazos rectos","Codos fijos."]]],["Espalda","Face pull","Codos altos, abre al final.",3,12,20,1,60,false,[["Pájaros con mancuernas","Torso inclinado."],["Apertura con banda","Brazos rectos."]]],["Hombro","Press militar de pie con barra","Glúteos y abdomen apretados.",4,6,10,2.5,120,false,[["Press militar sentado con mancuernas","Rango completo."],["Press de hombro en máquina","Recorrido completo."]]],["Hombro","Press de hombro sentado con mancuernas","Rango completo.",3,8,12,2,90,false,[["Press Arnold","Gira las muñecas al subir."],["Press de hombro en máquina","Recorrido completo."]]],["Hombro","Press Arnold","Gira las muñecas al subir.",3,8,12,2,90,false,[["Press de hombro sentado con mancuernas","Rango completo."],["Press militar de pie con barra","Core firme."]]],["Hombro","Elevaciones laterales con mancuernas","Sin impulso, codos algo flexionados.",3,12,20,1,60,false,[["Elevaciones laterales en polea","Tensión constante."],["Elevaciones laterales con banda","Controla la bajada."]]],["Hombro","Pájaros con mancuernas","Torso inclinado, codos suaves.",3,12,15,1,60,false,[["Face pull","Codos altos."],["Pájaros en máquina","Brazos casi rectos."]]],["Hombro","Elevaciones frontales","Sube hasta la altura de los ojos.",3,10,15,1,60,false,[["Elevaciones frontales con disco","Agarre por los lados."],["Elevaciones frontales en polea","Tensión constante."]]],["Hombro","Encogimientos con mancuernas","Sube los hombros hacia las orejas, pausa arriba.",3,10,15,2,60,false,[["Encogimientos con barra","Sin girar los hombros."],["Encogimientos en máquina","Pausa arriba."]]],["Bíceps","Curl con barra","Codos pegados, sin balanceo.",3,8,12,2,60,false,[["Curl con barra Z","Agarre más cómodo para muñecas."],["Curl en polea","Tensión constante."]]],["Bíceps","Curl con mancuernas alterno","Supina al subir.",3,10,12,1,60,false,[["Curl en banco inclinado","Brazos por detrás del cuerpo."],["Curl concentrado","Codo apoyado en el muslo."]]],["Bíceps","Curl martillo","Agarre neutro.",3,10,12,1,60,false,[["Curl martillo en polea con cuerda","Codos fijos."],["Curl Zottman","Sube supino, baja prono."]]],["Bíceps","Curl en banco inclinado","Brazos por detrás del cuerpo.",3,10,12,1,60,false,[["Curl con mancuernas alterno","Supina al subir."],["Curl concentrado","Codo apoyado."]]],["Bíceps","Curl concentrado","Codo apoyado en el muslo.",3,10,12,1,60,false,[["Curl en banco inclinado","Brazos atrás."],["Curl en polea a una mano","Tensión constante."]]],["Tríceps","Extensión de tríceps en polea","Codos fijos pegados al cuerpo.",3,10,15,2.5,60,false,[["Extensión de tríceps en polea con cuerda","Abre la cuerda abajo."],["Patada de tríceps","Brazo paralelo al suelo."]]],["Tríceps","Press francés con barra Z","Baja a la frente con los codos fijos.",3,8,12,2,60,false,[["Press francés con mancuernas","Codos fijos."],["Extensión sobre la cabeza con mancuerna","Codos hacia el techo."]]],["Tríceps","Extensión sobre la cabeza con mancuerna","Codos hacia el techo.",3,10,12,1,60,false,[["Extensión sobre la cabeza en polea","Tensión constante."],["Press francés con mancuernas","Codos fijos."]]],["Tríceps","Patada de tríceps","Brazo paralelo al suelo, extiende del todo.",3,12,15,1,60,false,[["Patada de tríceps en polea","Tensión constante."],["Extensión de tríceps en polea","Codos fijos."]]],["Tríceps","Press cerrado con barra","Manos a la anchura de los hombros.",3,6,10,2.5,90,false,[["Press cerrado con mancuernas","Mancuernas juntas."],["Fondos en banco","Hombros abajo."]]],["Tríceps","Fondos en banco","Hombros abajo. 0 kg = peso corporal.",3,10,20,2,60,true,[["Flexiones diamante","Codos pegados."],["Fondos en paralelas","Torso erguido."]]],["Pierna","Sentadilla trasera con barra","Profundidad paralela o más, core apretado.",4,5,8,2.5,150,false,[["Sentadilla frontal con barra","Codos altos."],["Sentadilla goblet","Mancuerna al pecho."]]],["Pierna","Sentadilla goblet","Pega la mancuerna al esternón.",3,10,15,2,90,false,[["Sentadilla con kettlebell en rack","Kettlebell en el antebrazo."],["Sentadilla búlgara","Reps por pierna."]]],["Pierna","Prensa de piernas","Pies a media altura, sin bloquear rodillas.",4,10,15,5,120,false,[["Sentadilla hack","Espalda apoyada."],["Sentadilla en máquina Smith","Pies algo adelantados."]]],["Pierna","Sentadilla búlgara","Pie trasero en el banco. Reps por pierna.",3,8,12,2,90,false,[["Zancadas con mancuernas","Paso largo."],["Step-up con mancuernas","Sube con el talón."]]],["Pierna","Zancadas con mancuernas","Rodilla trasera rozando el suelo.",3,10,12,2,90,false,[["Zancadas inversas","Paso atrás controlado."],["Zancadas caminando","Paso largo y continuo."]]],["Pierna","Extensión de cuádriceps","Pausa de 1 s arriba.",3,12,15,2.5,60,false,[["Extensión de cuádriceps a una pierna","Pausa arriba."],["Sentadilla goblet","Mancuerna al pecho."]]],["Pierna","Step-up con mancuernas","Sube empujando con el talón.",3,10,12,2,90,false,[["Sentadilla búlgara","Reps por pierna."],["Zancadas con mancuernas","Paso largo."]]],["Femoral y glúteo","Peso muerto con barra","Espalda neutra, empuja el suelo.",3,5,8,5,180,false,[["Peso muerto con barra hexagonal","Empuja el suelo."],["Peso muerto rumano","Cadera atrás."]]],["Femoral y glúteo","Peso muerto rumano","Cadera atrás, espalda neutra, rodillas suaves.",3,8,12,2.5,120,false,[["Peso muerto rumano con mancuernas","Mancuernas pegadas a las piernas."],["Buenos días con barra","Rodillas suaves."]]],["Femoral y glúteo","Curl femoral tumbado","Bajada lenta en 3 s.",3,10,12,2.5,60,false,[["Curl femoral sentado","Bajada lenta."],["Curl nórdico asistido","Baja lo más lento posible."]]],["Femoral y glúteo","Curl femoral sentado","Bajada lenta en 3 s.",3,10,12,2.5,60,false,[["Curl femoral tumbado","Bajada lenta."],["Peso muerto rumano con mancuernas","Cadera atrás."]]],["Femoral y glúteo","Hip thrust con barra","Pausa de 1 s arriba, barbilla al pecho.",4,8,12,5,90,false,[["Puente de glúteo con barra","Pausa arriba."],["Hip thrust a una pierna","Reps por pierna."]]],["Femoral y glúteo","Patada de glúteo en polea","Pierna estirada hacia atrás, sin arquear la espalda.",3,12,15,1,60,false,[["Patada de glúteo en máquina","Pausa arriba."],["Puente de glúteo a una pierna","Reps por pierna."]]],["Femoral y glúteo","Abducción de cadera en máquina","Pausa al abrir.",3,12,20,2.5,60,false,[["Abducción con banda (paso lateral)","Rodillas algo flexionadas."],["Abducción en polea","De pie, pierna estirada."]]],["Femoral y glúteo","Buenos días con barra","Cadera atrás, rodillas suaves.",3,8,12,2.5,90,false,[["Peso muerto rumano","Cadera atrás."],["Hiperextensiones","Sin pasar de la línea del cuerpo."]]],["Gemelos","Elevación de gemelos de pie","Pausa abajo y arriba.",4,10,15,2.5,60,false,[["Elevación de gemelos sentado","Pausa arriba."],["Elevación de gemelos a una pierna","Apoyado en un escalón."]]],["Gemelos","Elevación de gemelos sentado","Pausa arriba.",4,12,15,2.5,60,false,[["Elevación de gemelos de pie","Pausa abajo y arriba."],["Elevación de gemelos en prensa","Recorrido completo."]]],["Core","Rueda abdominal","Pelvis metida, sin hundir la zona lumbar. 0 kg = peso corporal.",3,8,15,1,60,true,[["Rueda abdominal de rodillas","Bajada lenta."],["Plancha con toque de hombros","Sin girar la cadera."]]],["Core","Elevación de piernas colgado","Sin balanceo, sube las rodillas al pecho. 0 kg = peso corporal.",3,8,15,1,60,true,[["Elevación de rodillas en paralelas","Espalda apoyada."],["Elevación de piernas tumbado","Zona lumbar pegada al suelo."]]],["Core","Crunch en polea","Enrolla la columna, cadera quieta.",3,12,15,2.5,60,false,[["Crunch en máquina","Pausa abajo."],["Crunch con peso en el suelo","Sube solo los hombros."]]],["Core","Pallof press","Resiste el giro, brazos al frente. Reps por lado.",3,10,12,1,60,false,[["Pallof press con banda","Resiste el giro."],["Plancha lateral con peso","Cadera alta."]]],["Core","Leñador en polea","Gira desde el tronco, brazos estirados. Reps por lado.",3,10,12,1,60,false,[["Leñador con mancuerna","Gira desde el tronco."],["Russian twist con disco","Pies en el suelo."]]],["Kettlebell","Kettlebell swing","Bisagra de cadera, potencia con glúteos.",4,15,20,2,60,false,[["Swing a una mano","Cambia de mano a mitad."],["Peso muerto con kettlebell","Cadera atrás."]]],["Kettlebell","Clean & press con kettlebell","Carga limpia al pecho y press estricto. Reps por brazo.",3,8,12,2,90,false,[["Press de hombro con kettlebell","Sin impulso."],["Push press con kettlebell","Pequeño impulso de piernas."]]],["Kettlebell","Snatch con kettlebell","De la cadera a arriba en un solo gesto. Reps por brazo.",3,8,12,2,90,false,[["Swing a una mano","Cambia de mano a mitad."],["Clean & press con kettlebell","Reps por brazo."]]],["Kettlebell","Turkish get-up","Lento y controlado, la vista en la kettlebell. Reps por lado.",3,3,5,2,90,false,[["Media turkish get-up","Hasta sentado."],["Press en suelo con kettlebell","Una mano."]]],["Kettlebell","Gorilla row","Apoyo firme, tira de los codos sin rotar el tronco.",3,10,12,2,90,false,[["Remo a una mano con kettlebell","Codo a la cadera."],["Remo renegado","En plancha."]]],["Kettlebell","Goblet squat con kettlebell","Codos por dentro de las rodillas.",4,10,15,2,90,false,[["Sentadilla con kettlebell en rack","Kettlebell en el antebrazo."],["Zancadas con kettlebell en rack","Rodilla trasera rozando el suelo."]]],["Peso corporal","Flexiones diamante","Codos pegados al cuerpo. 0 kg = peso corporal.",3,8,15,2,60,true,[["Flexiones cerradas","Manos a la anchura de los hombros."],["Fondos en banco","Hombros abajo."]]],["Peso corporal","Burpees","Ritmo constante, pecho al suelo.",3,10,15,1,60,true,[["Burpees sin salto","Más suave para las rodillas."],["Sentadilla con salto","Aterriza suave."]]],["Peso corporal","Sentadilla con salto","Aterriza suave, rodillas hacia fuera.",3,10,15,1,60,true,[["Sentadilla al aire","Ritmo constante."],["Zancadas con salto","Alterna piernas."]]],["Peso corporal","Escaladores","Rodillas al pecho, cadera baja. Reps por pierna.",3,15,30,1,45,true,[["Escaladores cruzados","Rodilla al codo contrario."],["Plancha con toque de hombros","Sin girar la cadera."]]]];
-const EX_LIB_GROUPS = ['Pecho', 'Espalda', 'Hombro', 'Bíceps', 'Tríceps', 'Pierna', 'Femoral y glúteo', 'Gemelos', 'Core', 'Kettlebell', 'Peso corporal'];
-const EX_LIB_ICON = { 'Pecho': '💪', 'Espalda': '🦅', 'Hombro': '🎯', 'Bíceps': '💪', 'Tríceps': '💪', 'Pierna': '🦵', 'Femoral y glúteo': '🍑', 'Gemelos': '🦵', 'Core': '🧱', 'Kettlebell': '🔔', 'Peso corporal': '🤸' };
+const EX_LIB = [["Pecho","Press de banca con barra","Escápulas retraídas, pies firmes.",4,6,10,2.5,120,false,[["Press de banca con mancuernas","Bajada en 2 s."],["Press de pecho en máquina","Recorrido completo."]]],["Pecho","Press de banca con mancuernas","Bajada controlada en 2 s.",4,8,12,2,90,false,[["Press en suelo con mancuernas","Codos a 45º."],["Press de banca con barra","Escápulas retraídas."]]],["Pecho","Press inclinado con mancuernas","Banco a 30º.",3,8,12,2,90,false,[["Press inclinado con barra","Banco a 30º."],["Press inclinado en máquina","Recorrido completo."]]],["Pecho","Aperturas con mancuernas","Codos algo flexionados, abre hasta notar estiramiento.",3,10,15,1,60,false,[["Aperturas en polea","Tensión constante."],["Contractora (pec deck)","Pausa al cerrar."]]],["Pecho","Cruce de poleas","Junta las manos delante del pecho.",3,12,15,1,60,false,[["Aperturas con mancuernas","Codos algo flexionados."],["Contractora (pec deck)","Pausa al cerrar."]]],["Pecho","Fondos en paralelas","Torso inclinado hacia delante. 0 kg = peso corporal.",3,6,12,2,90,true,[["Fondos asistidos con banda","0 kg = peso corporal."],["Flexiones declinadas","Pies elevados."]]],["Pecho","Flexiones","Cuerpo en bloque, pecho al suelo. 0 kg = peso corporal.",3,10,20,2,60,true,[["Flexiones declinadas","Pies elevados."],["Flexiones con palmada","Explosivas."]]],["Pecho","Press inclinado con barra","Banco a 30º, barra a la parte alta del pecho.",4,6,10,2.5,120,false,[["Press inclinado con mancuernas","Banco a 30º."],["Press inclinado en máquina","Recorrido completo."]]],["Pecho","Press declinado con barra","Barra a la parte baja del pecho, pies sujetos.",3,8,10,2.5,90,false,[["Fondos en paralelas","Torso inclinado."],["Press declinado con mancuernas","Bajada controlada."]]],["Pecho","Press de pecho en máquina","Asiento a la altura del pecho, recorrido completo.",3,8,12,2.5,90,false,[["Press de banca con mancuernas","Bajada en 2 s."],["Flexiones","Cuerpo en bloque."]]],["Pecho","Contractora (pec deck)","Pausa de 1 s al cerrar.",3,12,15,2.5,60,false,[["Aperturas con mancuernas","Codos algo flexionados."],["Cruce de poleas","Junta las manos delante."]]],["Pecho","Aperturas en banco inclinado","Banco a 30º, abre hasta notar estiramiento.",3,10,15,1,60,false,[["Cruce de poleas de abajo arriba","Sube las manos a la barbilla."],["Aperturas con mancuernas","Codos algo flexionados."]]],["Pecho","Cruce de poleas de abajo arriba","Poleas abajo, sube las manos a la altura de la barbilla.",3,12,15,1,60,false,[["Aperturas en banco inclinado","Banco a 30º."],["Cruce de poleas","Junta las manos delante."]]],["Pecho","Flexiones inclinadas","Manos en un banco o mesa. Más fácil que en el suelo. 0 kg = peso corporal.",3,10,20,2,60,true,[["Flexiones de rodillas","Cuerpo recto de rodillas a cabeza."],["Flexiones","Pecho al suelo."]]],["Pecho","Flexiones declinadas","Pies en un banco, cuerpo en bloque. 0 kg = peso corporal.",3,8,15,2,60,true,[["Flexiones","Pecho al suelo."],["Press inclinado con mancuernas","Banco a 30º."]]],["Espalda","Dominadas pronas","Pecho a la barra. 0 kg = peso corporal.",4,5,10,2,120,true,[["Dominadas asistidas con banda","Banda bajo las rodillas."],["Dominadas negativas","Baja en 4–5 s."]]],["Espalda","Dominadas supinas","Agarre cerrado. 0 kg = peso corporal.",3,6,10,2,120,true,[["Dominadas con agarre neutro","0 kg = peso corporal."],["Dominadas asistidas con banda","Banda bajo las rodillas."]]],["Espalda","Jalón al pecho en polea","Pecho arriba, codos hacia abajo.",4,8,12,2.5,90,false,[["Jalón con agarre neutro","Codos pegados."],["Jalón supino","Agarre estrecho."]]],["Espalda","Remo con barra","Torso a unos 45º, barra al ombligo.",4,8,10,2.5,90,false,[["Remo Pendlay","Desde el suelo en cada rep."],["Remo en máquina","Pecho apoyado."]]],["Espalda","Remo con mancuerna a una mano","Codo hacia la cadera.",3,8,12,2,90,false,[["Remo con kettlebell a una mano","Codo hacia la cadera."],["Remo en banco inclinado","Pecho apoyado en el banco."]]],["Espalda","Remo en polea baja","Espalda neutra, codos atrás.",3,10,12,2.5,90,false,[["Remo en máquina","Pecho apoyado."],["Remo con mancuerna a una mano","Codo a la cadera."]]],["Espalda","Remo invertido en TRX","Cuerpo recto, pecho a las asas. 0 kg = peso corporal.",3,8,15,2,60,true,[["Remo invertido en barra","Cuerpo recto."],["Dominadas australianas","Barra a la altura de la cadera."]]],["Espalda","Pullover en polea","Brazos casi rectos, lleva la barra a los muslos.",3,12,15,2.5,60,false,[["Pullover con mancuerna","Tumbado en banco."],["Jalón con brazos rectos","Codos fijos."]]],["Espalda","Face pull","Codos altos, abre al final.",3,12,20,1,60,false,[["Pájaros con mancuernas","Torso inclinado."],["Apertura con banda","Brazos rectos."]]],["Espalda","Jalón con agarre estrecho","Triángulo al pecho, codos pegados.",3,8,12,2.5,90,false,[["Jalón al pecho en polea","Codos hacia abajo."],["Remo en polea baja","Codos atrás."]]],["Espalda","Jalón con agarre supino","Palmas hacia ti, barra a la clavícula.",3,8,12,2.5,90,false,[["Dominadas supinas","Agarre cerrado."],["Jalón al pecho en polea","Pecho arriba."]]],["Espalda","Remo en máquina con pecho apoyado","Pecho pegado al respaldo, aprieta las escápulas.",3,10,12,2.5,90,false,[["Remo en polea baja","Espalda neutra."],["Remo con mancuernas en banco inclinado","Pecho apoyado."]]],["Espalda","Remo con mancuernas en banco inclinado","Pecho apoyado en el banco a 30º, codos atrás.",3,10,12,2,90,false,[["Remo en máquina con pecho apoyado","Aprieta escápulas."],["Remo con mancuerna a una mano","Codo a la cadera."]]],["Espalda","Remo en T","Pecho alto, tira hacia el abdomen.",3,8,12,2.5,90,false,[["Remo con barra","Torso a 45º."],["Remo en máquina con pecho apoyado","Aprieta escápulas."]]],["Espalda","Dominadas asistidas","Con máquina o banda. Pon en kg la ayuda que te da la máquina, o 0 si usas banda.",3,6,12,2,90,false,[["Jalón al pecho en polea","Codos hacia abajo."],["Dominadas negativas","Baja en 4–5 s."]]],["Espalda","Hiperextensiones","Sube hasta la línea del cuerpo, sin pasarte. 0 kg = peso corporal.",3,12,15,2.5,60,true,[["Buenos días con barra","Rodillas suaves."],["Superman","Brazos y piernas a la vez."]]],["Hombro","Press militar de pie con barra","Glúteos y abdomen apretados.",4,6,10,2.5,120,false,[["Press militar sentado con mancuernas","Rango completo."],["Press de hombro en máquina","Recorrido completo."]]],["Hombro","Press de hombro sentado con mancuernas","Rango completo.",3,8,12,2,90,false,[["Press Arnold","Gira las muñecas al subir."],["Press de hombro en máquina","Recorrido completo."]]],["Hombro","Press Arnold","Gira las muñecas al subir.",3,8,12,2,90,false,[["Press de hombro sentado con mancuernas","Rango completo."],["Press militar de pie con barra","Core firme."]]],["Hombro","Elevaciones laterales con mancuernas","Sin impulso, codos algo flexionados.",3,12,20,1,60,false,[["Elevaciones laterales en polea","Tensión constante."],["Elevaciones laterales con banda","Controla la bajada."]]],["Hombro","Pájaros con mancuernas","Torso inclinado, codos suaves.",3,12,15,1,60,false,[["Face pull","Codos altos."],["Pájaros en máquina","Brazos casi rectos."]]],["Hombro","Elevaciones frontales","Sube hasta la altura de los ojos.",3,10,15,1,60,false,[["Elevaciones frontales con disco","Agarre por los lados."],["Elevaciones frontales en polea","Tensión constante."]]],["Hombro","Encogimientos con mancuernas","Sube los hombros hacia las orejas, pausa arriba.",3,10,15,2,60,false,[["Encogimientos con barra","Sin girar los hombros."],["Encogimientos en máquina","Pausa arriba."]]],["Hombro","Press de hombro en máquina","Espalda apoyada, sin bloquear los codos.",3,8,12,2.5,90,false,[["Press de hombro sentado con mancuernas","Rango completo."],["Press Arnold","Gira las muñecas."]]],["Hombro","Elevaciones laterales en polea","Polea baja, tensión constante. Reps por brazo.",3,12,15,1,60,false,[["Elevaciones laterales con mancuernas","Sin impulso."],["Elevaciones laterales en máquina","Pausa arriba."]]],["Hombro","Elevaciones laterales en máquina","Codos guían el movimiento, pausa arriba.",3,12,15,2.5,60,false,[["Elevaciones laterales con mancuernas","Sin impulso."],["Elevaciones laterales en polea","Tensión constante."]]],["Hombro","Pájaros en máquina","Contractora al revés, brazos casi rectos.",3,12,15,2.5,60,false,[["Pájaros con mancuernas","Torso inclinado."],["Face pull","Codos altos."]]],["Hombro","Remo al mentón en polea","Agarre ancho, codos por encima de las manos, sube hasta el pecho.",3,10,12,2.5,60,false,[["Elevaciones laterales con mancuernas","Sin impulso."],["Remo al mentón con mancuernas","Sube hasta el pecho."]]],["Hombro","Press landmine","Barra anclada en una esquina, empuja hacia arriba y adelante. Reps por brazo.",3,8,12,2.5,90,false,[["Press de hombro sentado con mancuernas","Rango completo."],["Press de hombro en máquina","Recorrido completo."]]],["Hombro","Encogimientos con barra","Sube los hombros hacia las orejas, pausa arriba.",3,10,15,2.5,60,false,[["Encogimientos con mancuernas","Pausa arriba."],["Paseo del granjero","Hombros abajo."]]],["Bíceps","Curl con barra","Codos pegados, sin balanceo.",3,8,12,2,60,false,[["Curl con barra Z","Agarre más cómodo para muñecas."],["Curl en polea","Tensión constante."]]],["Bíceps","Curl con mancuernas alterno","Supina al subir.",3,10,12,1,60,false,[["Curl en banco inclinado","Brazos por detrás del cuerpo."],["Curl concentrado","Codo apoyado en el muslo."]]],["Bíceps","Curl martillo","Agarre neutro.",3,10,12,1,60,false,[["Curl martillo en polea con cuerda","Codos fijos."],["Curl Zottman","Sube supino, baja prono."]]],["Bíceps","Curl en banco inclinado","Brazos por detrás del cuerpo.",3,10,12,1,60,false,[["Curl con mancuernas alterno","Supina al subir."],["Curl concentrado","Codo apoyado."]]],["Bíceps","Curl concentrado","Codo apoyado en el muslo.",3,10,12,1,60,false,[["Curl en banco inclinado","Brazos atrás."],["Curl en polea a una mano","Tensión constante."]]],["Bíceps","Curl en polea","Codos pegados, tensión constante.",3,10,15,2.5,60,false,[["Curl con barra","Sin balanceo."],["Curl con banda","Codos fijos."]]],["Bíceps","Curl predicador","Brazos apoyados en el banco Scott, baja del todo.",3,8,12,2,60,false,[["Curl concentrado","Codo apoyado."],["Curl en polea","Tensión constante."]]],["Bíceps","Curl con barra Z","Codos pegados, agarre cómodo para las muñecas.",3,8,12,2,60,false,[["Curl con barra","Sin balanceo."],["Curl con mancuernas alterno","Supina al subir."]]],["Bíceps","Curl spider","Pecho apoyado en banco inclinado, brazos colgando.",3,10,12,1,60,false,[["Curl predicador","Brazos apoyados."],["Curl concentrado","Codo apoyado."]]],["Bíceps","Curl martillo en polea con cuerda","Agarre neutro, codos fijos.",3,10,15,2.5,60,false,[["Curl martillo","Agarre neutro."],["Curl en polea","Tensión constante."]]],["Tríceps","Extensión de tríceps en polea","Codos fijos pegados al cuerpo.",3,10,15,2.5,60,false,[["Extensión de tríceps en polea con cuerda","Abre la cuerda abajo."],["Patada de tríceps","Brazo paralelo al suelo."]]],["Tríceps","Press francés con barra Z","Baja a la frente con los codos fijos.",3,8,12,2,60,false,[["Press francés con mancuernas","Codos fijos."],["Extensión sobre la cabeza con mancuerna","Codos hacia el techo."]]],["Tríceps","Extensión sobre la cabeza con mancuerna","Codos hacia el techo.",3,10,12,1,60,false,[["Extensión sobre la cabeza en polea","Tensión constante."],["Press francés con mancuernas","Codos fijos."]]],["Tríceps","Patada de tríceps","Brazo paralelo al suelo, extiende del todo.",3,12,15,1,60,false,[["Patada de tríceps en polea","Tensión constante."],["Extensión de tríceps en polea","Codos fijos."]]],["Tríceps","Press cerrado con barra","Manos a la anchura de los hombros.",3,6,10,2.5,90,false,[["Press cerrado con mancuernas","Mancuernas juntas."],["Fondos en banco","Hombros abajo."]]],["Tríceps","Fondos en banco","Hombros abajo. 0 kg = peso corporal.",3,10,20,2,60,true,[["Flexiones diamante","Codos pegados."],["Fondos en paralelas","Torso erguido."]]],["Tríceps","Extensión en polea con cuerda","Abre la cuerda abajo, codos fijos.",3,10,15,2.5,60,false,[["Extensión de tríceps en polea","Codos pegados."],["Patada de tríceps","Brazo paralelo al suelo."]]],["Tríceps","Extensión sobre la cabeza en polea","De espaldas a la polea, codos hacia delante.",3,10,15,2.5,60,false,[["Extensión sobre la cabeza con mancuerna","Codos al techo."],["Press francés con barra Z","Codos fijos."]]],["Tríceps","Extensión a una mano en polea","Codo pegado al costado. Reps por brazo.",3,10,15,1,60,false,[["Patada de tríceps","Extiende del todo."],["Extensión en polea con cuerda","Abre abajo."]]],["Tríceps","Press francés con mancuernas","Tumbado, baja las mancuernas junto a las orejas.",3,10,12,1,60,false,[["Press francés con barra Z","Codos fijos."],["Extensión sobre la cabeza con mancuerna","Codos al techo."]]],["Tríceps","Fondos en máquina","Torso erguido, codos atrás.",3,10,12,2.5,60,false,[["Fondos en banco","Hombros abajo."],["Press cerrado con barra","Manos a la anchura de hombros."]]],["Pierna","Sentadilla trasera con barra","Profundidad paralela o más, core apretado.",4,5,8,2.5,150,false,[["Sentadilla frontal con barra","Codos altos."],["Sentadilla goblet","Mancuerna al pecho."]]],["Pierna","Sentadilla goblet","Pega la mancuerna al esternón.",3,10,15,2,90,false,[["Sentadilla con kettlebell en rack","Kettlebell en el antebrazo."],["Sentadilla búlgara","Reps por pierna."]]],["Pierna","Prensa de piernas","Pies a media altura, sin bloquear rodillas.",4,10,15,5,120,false,[["Sentadilla hack","Espalda apoyada."],["Sentadilla en máquina Smith","Pies algo adelantados."]]],["Pierna","Sentadilla búlgara","Pie trasero en el banco. Reps por pierna.",3,8,12,2,90,false,[["Zancadas con mancuernas","Paso largo."],["Step-up con mancuernas","Sube con el talón."]]],["Pierna","Zancadas con mancuernas","Rodilla trasera rozando el suelo.",3,10,12,2,90,false,[["Zancadas inversas","Paso atrás controlado."],["Zancadas caminando","Paso largo y continuo."]]],["Pierna","Extensión de cuádriceps","Pausa de 1 s arriba.",3,12,15,2.5,60,false,[["Extensión de cuádriceps a una pierna","Pausa arriba."],["Sentadilla goblet","Mancuerna al pecho."]]],["Pierna","Step-up con mancuernas","Sube empujando con el talón.",3,10,12,2,90,false,[["Sentadilla búlgara","Reps por pierna."],["Zancadas con mancuernas","Paso largo."]]],["Pierna","Sentadilla frontal","Barra sobre los hombros delante, codos altos.",4,6,10,2.5,120,false,[["Sentadilla goblet","Mancuerna al pecho."],["Sentadilla trasera con barra","Core apretado."]]],["Pierna","Hack squat","Espalda apoyada, baja hasta la paralela.",3,8,12,5,120,false,[["Prensa de piernas","Sin bloquear rodillas."],["Sentadilla en multipower","Pies algo adelantados."]]],["Pierna","Sentadilla en multipower","Pies algo adelantados, baja controlado.",3,8,12,2.5,120,false,[["Sentadilla trasera con barra","Core apretado."],["Hack squat","Espalda apoyada."]]],["Pierna","Prensa a una pierna","Pie en el centro de la plataforma. Reps por pierna.",3,10,12,2.5,90,false,[["Prensa de piernas","Sin bloquear rodillas."],["Sentadilla búlgara","Reps por pierna."]]],["Pierna","Zancadas caminando","Paso largo y continuo, rodilla trasera rozando el suelo. Reps por pierna.",3,10,12,2,90,false,[["Zancadas con mancuernas","Paso largo."],["Zancadas inversas","Paso atrás."]]],["Pierna","Zancadas inversas","Paso atrás controlado, menos carga en la rodilla. Reps por pierna.",3,10,12,2,90,false,[["Zancadas con mancuernas","Paso largo."],["Step-up con mancuernas","Sube con el talón."]]],["Pierna","Sentadilla sumo con mancuerna","Pies abiertos y puntas fuera, mancuerna colgando.",3,10,15,2,90,false,[["Sentadilla goblet","Mancuerna al pecho."],["Peso muerto sumo","Rodillas hacia fuera."]]],["Pierna","Sentadilla a una pierna en cajón","Siéntate en un cajón con una pierna y levántate. Reps por pierna. 0 kg = peso corporal.",3,6,10,2,90,true,[["Sentadilla búlgara","Reps por pierna."],["Step-up con mancuernas","Sube con el talón."]]],["Femoral y glúteo","Peso muerto con barra","Espalda neutra, empuja el suelo.",3,5,8,5,180,false,[["Peso muerto con barra hexagonal","Empuja el suelo."],["Peso muerto rumano","Cadera atrás."]]],["Femoral y glúteo","Peso muerto rumano","Cadera atrás, espalda neutra, rodillas suaves.",3,8,12,2.5,120,false,[["Peso muerto rumano con mancuernas","Mancuernas pegadas a las piernas."],["Buenos días con barra","Rodillas suaves."]]],["Femoral y glúteo","Curl femoral tumbado","Bajada lenta en 3 s.",3,10,12,2.5,60,false,[["Curl femoral sentado","Bajada lenta."],["Curl nórdico asistido","Baja lo más lento posible."]]],["Femoral y glúteo","Curl femoral sentado","Bajada lenta en 3 s.",3,10,12,2.5,60,false,[["Curl femoral tumbado","Bajada lenta."],["Peso muerto rumano con mancuernas","Cadera atrás."]]],["Femoral y glúteo","Hip thrust con barra","Pausa de 1 s arriba, barbilla al pecho.",4,8,12,5,90,false,[["Puente de glúteo con barra","Pausa arriba."],["Hip thrust a una pierna","Reps por pierna."]]],["Femoral y glúteo","Patada de glúteo en polea","Pierna estirada hacia atrás, sin arquear la espalda.",3,12,15,1,60,false,[["Patada de glúteo en máquina","Pausa arriba."],["Puente de glúteo a una pierna","Reps por pierna."]]],["Femoral y glúteo","Abducción de cadera en máquina","Pausa al abrir.",3,12,20,2.5,60,false,[["Abducción con banda (paso lateral)","Rodillas algo flexionadas."],["Abducción en polea","De pie, pierna estirada."]]],["Femoral y glúteo","Buenos días con barra","Cadera atrás, rodillas suaves.",3,8,12,2.5,90,false,[["Peso muerto rumano","Cadera atrás."],["Hiperextensiones","Sin pasar de la línea del cuerpo."]]],["Femoral y glúteo","Peso muerto sumo","Pies abiertos, rodillas hacia fuera, espalda neutra.",3,5,8,5,150,false,[["Peso muerto con barra","Empuja el suelo."],["Sentadilla sumo con mancuerna","Puntas fuera."]]],["Femoral y glúteo","Peso muerto rumano con mancuernas","Mancuernas pegadas a las piernas, cadera atrás.",3,8,12,2,90,false,[["Peso muerto rumano","Cadera atrás."],["Peso muerto a una pierna","Reps por pierna."]]],["Femoral y glúteo","Peso muerto a una pierna","Cadera nivelada, pierna libre estirada atrás. Reps por pierna.",3,8,12,2,90,false,[["Peso muerto rumano con mancuernas","Cadera atrás."],["Puente de glúteo a una pierna","Pausa arriba."]]],["Femoral y glúteo","Puente de glúteo","Tumbado, sube la cadera y aprieta 1 s arriba.",3,12,15,2.5,60,false,[["Hip thrust con barra","Barbilla al pecho."],["Puente de glúteo a una pierna","Reps por pierna."]]],["Femoral y glúteo","Hip thrust en máquina","Pausa de 1 s arriba.",3,10,12,5,90,false,[["Hip thrust con barra","Pausa arriba."],["Puente de glúteo","Aprieta arriba."]]],["Femoral y glúteo","Hip thrust a una pierna","Espalda en el banco, pausa arriba. Reps por pierna. 0 kg = peso corporal.",3,8,12,2,60,true,[["Puente de glúteo a una pierna","En el suelo."],["Hip thrust con barra","Pausa arriba."]]],["Femoral y glúteo","Aducción en máquina","Cierra controlado, pausa al juntar.",3,12,15,2.5,60,false,[["Aducción en polea","De pie, pierna estirada."],["Sentadilla sumo con mancuerna","Puntas fuera."]]],["Femoral y glúteo","Abducción con banda","Banda en las rodillas, sentado o de lado, abre y aguanta 1 s.",3,15,20,1,45,true,[["Abducción de cadera en máquina","Pausa al abrir."],["Paso lateral con banda","Rodillas flexionadas."]]],["Gemelos","Elevación de gemelos de pie","Pausa abajo y arriba.",4,10,15,2.5,60,false,[["Elevación de gemelos sentado","Pausa arriba."],["Elevación de gemelos a una pierna","Apoyado en un escalón."]]],["Gemelos","Elevación de gemelos sentado","Pausa arriba.",4,12,15,2.5,60,false,[["Elevación de gemelos de pie","Pausa abajo y arriba."],["Elevación de gemelos en prensa","Recorrido completo."]]],["Gemelos","Gemelo en prensa","Solo las puntas en la plataforma, recorrido completo.",4,12,15,5,60,false,[["Elevación de gemelos de pie","Pausa abajo y arriba."],["Elevación de gemelos sentado","Pausa arriba."]]],["Gemelos","Elevación de gemelos a una pierna","De pie en un escalón, apoyado con una mano. Reps por pierna.",3,10,15,2,60,true,[["Elevación de gemelos de pie","Pausa abajo y arriba."],["Gemelo en prensa","Recorrido completo."]]],["Core","Rueda abdominal","Pelvis metida, sin hundir la zona lumbar. 0 kg = peso corporal.",3,8,15,1,60,true,[["Rueda abdominal de rodillas","Bajada lenta."],["Plancha con toque de hombros","Sin girar la cadera."]]],["Core","Elevación de piernas colgado","Sin balanceo, sube las rodillas al pecho. 0 kg = peso corporal.",3,8,15,1,60,true,[["Elevación de rodillas en paralelas","Espalda apoyada."],["Elevación de piernas tumbado","Zona lumbar pegada al suelo."]]],["Core","Crunch en polea","Enrolla la columna, cadera quieta.",3,12,15,2.5,60,false,[["Crunch en máquina","Pausa abajo."],["Crunch con peso en el suelo","Sube solo los hombros."]]],["Core","Pallof press","Resiste el giro, brazos al frente. Reps por lado.",3,10,12,1,60,false,[["Pallof press con banda","Resiste el giro."],["Plancha lateral con peso","Cadera alta."]]],["Core","Leñador en polea","Gira desde el tronco, brazos estirados. Reps por lado.",3,10,12,1,60,false,[["Leñador con mancuerna","Gira desde el tronco."],["Russian twist con disco","Pies en el suelo."]]],["Core","Plancha","Codos bajo los hombros, cuerpo en bloque, glúteos apretados. ⏱ Por tiempo.",3,30,60,2.5,60,true,[["Plancha con toque de hombros","Sin girar la cadera."],["Plancha de rodillas","Más suave."]],null,"t"],["Core","Plancha lateral","Codo bajo el hombro, cadera alta. Segundos por lado. ⏱ Por tiempo.",3,20,45,2.5,60,true,[["Plancha lateral de rodillas","Más suave."],["Pallof press","Resiste el giro."]],null,"t"],["Core","Dead bug","Zona lumbar pegada al suelo, brazo y pierna contrarios. Reps por lado.",3,8,12,1,45,true,[["Bird dog","Espalda quieta."],["Elevación de piernas tumbado","Lumbar pegada."]]],["Core","Bird dog","A cuatro patas, brazo y pierna contrarios sin mover la espalda. Reps por lado.",3,8,12,1,45,true,[["Dead bug","Lumbar pegada."],["Plancha","Cuerpo en bloque."]]],["Core","Crunch abdominal","Sube solo los hombros, sin tirar del cuello.",3,15,20,1,45,true,[["Crunch en polea","Enrolla la columna."],["Elevación de piernas tumbado","Lumbar pegada."]]],["Core","Elevación de piernas tumbado","Zona lumbar pegada al suelo, baja lento.",3,10,15,1,45,true,[["Elevación de piernas colgado","Sin balanceo."],["Crunch abdominal","Sube los hombros."]]],["Core","Russian twist","Sentado, pies en el suelo o elevados, gira el tronco. Reps por lado.",3,12,20,1,45,false,[["Leñador en polea","Gira desde el tronco."],["Pallof press","Resiste el giro."]]],["Core","Paseo del granjero","Una mancuerna o kettlebell pesada en cada mano, camina erguido. ⏱ Por tiempo.",3,30,45,2,90,false,[["Paseo con una mano","Sin inclinarte."],["Encogimientos con mancuernas","Pausa arriba."]],null,"t"],["Kettlebell","Kettlebell swing","Bisagra de cadera, potencia con glúteos.",4,15,20,2,60,false,[["Swing a una mano","Cambia de mano a mitad."],["Peso muerto con kettlebell","Cadera atrás."]]],["Kettlebell","Clean & press con kettlebell","Carga limpia al pecho y press estricto. Reps por brazo.",3,8,12,2,90,false,[["Press de hombro con kettlebell","Sin impulso."],["Push press con kettlebell","Pequeño impulso de piernas."]]],["Kettlebell","Snatch con kettlebell","De la cadera a arriba en un solo gesto. Reps por brazo.",3,8,12,2,90,false,[["Swing a una mano","Cambia de mano a mitad."],["Clean & press con kettlebell","Reps por brazo."]]],["Kettlebell","Turkish get-up","Lento y controlado, la vista en la kettlebell. Reps por lado.",3,3,5,2,90,false,[["Media turkish get-up","Hasta sentado."],["Press en suelo con kettlebell","Una mano."]]],["Kettlebell","Gorilla row","Apoyo firme, tira de los codos sin rotar el tronco.",3,10,12,2,90,false,[["Remo a una mano con kettlebell","Codo a la cadera."],["Remo renegado","En plancha."]]],["Kettlebell","Goblet squat con kettlebell","Codos por dentro de las rodillas.",4,10,15,2,90,false,[["Sentadilla con kettlebell en rack","Kettlebell en el antebrazo."],["Zancadas con kettlebell en rack","Rodilla trasera rozando el suelo."]]],["Kettlebell","Swing a una mano","Bisagra de cadera, cambia de mano a mitad.",3,10,15,2,60,false,[["Kettlebell swing","Potencia con glúteos."],["Snatch con kettlebell","Reps por brazo."]]],["Kettlebell","Sentadilla en rack con kettlebell","Kettlebell apoyada en el antebrazo, codo pegado.",3,8,12,2,90,false,[["Goblet squat con kettlebell","Codos dentro."],["Sentadilla goblet","Mancuerna al pecho."]]],["Kettlebell","Peso muerto con kettlebell","Kettlebell entre los pies, cadera atrás.",3,10,15,2,90,false,[["Kettlebell swing","Bisagra de cadera."],["Peso muerto rumano con mancuernas","Cadera atrás."]]],["Kettlebell","Press de hombro con kettlebell","Desde el rack, sin impulso. Reps por brazo.",3,6,10,2,90,false,[["Clean & press con kettlebell","Reps por brazo."],["Press de hombro sentado con mancuernas","Rango completo."]]],["Kettlebell","Halo con kettlebell","Rodea la cabeza con la kettlebell, core firme. Reps por lado.",3,8,10,2,45,false,[["Turkish get-up","Lento."],["Pallof press","Resiste el giro."]]],["Peso corporal","Flexiones diamante","Codos pegados al cuerpo. 0 kg = peso corporal.",3,8,15,2,60,true,[["Flexiones cerradas","Manos a la anchura de los hombros."],["Fondos en banco","Hombros abajo."]]],["Peso corporal","Burpees","Ritmo constante, pecho al suelo.",3,10,15,1,60,true,[["Burpees sin salto","Más suave para las rodillas."],["Sentadilla con salto","Aterriza suave."]]],["Peso corporal","Sentadilla con salto","Aterriza suave, rodillas hacia fuera.",3,10,15,1,60,true,[["Sentadilla al aire","Ritmo constante."],["Zancadas con salto","Alterna piernas."]]],["Peso corporal","Escaladores","Rodillas al pecho, cadera baja. Reps por pierna.",3,15,30,1,45,true,[["Escaladores cruzados","Rodilla al codo contrario."],["Plancha con toque de hombros","Sin girar la cadera."]]],["Peso corporal","Flexiones pike","Cadera alta en V, baja la cabeza hacia el suelo. 0 kg = peso corporal.",3,6,12,2,60,true,[["Press de hombro con mancuernas","Rango completo."],["Flexiones declinadas","Pies elevados."]]],["Peso corporal","Zancadas con salto","Alterna piernas en el aire, aterriza suave. Reps por pierna.",3,8,12,1,60,true,[["Zancadas inversas","Paso atrás."],["Sentadilla con salto","Aterriza suave."]]],["Peso corporal","Sentadilla búlgara sin peso","Pie trasero en una silla o banco. Reps por pierna.",3,10,15,2,60,true,[["Sentadilla búlgara","Con mancuernas."],["Zancadas inversas","Paso atrás."]]],["Peso corporal","Superman","Tumbado boca abajo, sube brazos y piernas y aguanta 2 s.",3,10,15,1,45,true,[["Hiperextensiones","Sin pasarte."],["Bird dog","Espalda quieta."]]],["Peso corporal","Jumping jacks","Ritmo constante, brazos arriba.",3,20,40,1,30,true,[["Burpees","Ritmo constante."],["Escaladores","Cadera baja."]]],["Bandas elásticas","Press de pecho con banda","Banda por la espalda o anclada detrás, empuja al frente.",3,12,20,1,60,false,[["Flexiones","Pecho al suelo."],["Press de banca con mancuernas","Bajada en 2 s."]]],["Bandas elásticas","Remo con banda","Banda anclada delante, codos atrás y aprieta escápulas.",3,12,20,1,60,false,[["Remo en polea baja","Codos atrás."],["Remo invertido en TRX","Cuerpo recto."]]],["Bandas elásticas","Jalón con banda","Banda anclada arriba, tira de los codos hacia abajo.",3,12,20,1,60,false,[["Jalón al pecho en polea","Codos hacia abajo."],["Dominadas asistidas","Con banda."]]],["Bandas elásticas","Face pull con banda","Banda a la altura de la cara, codos altos y abre al final.",3,15,20,1,45,false,[["Face pull","Codos altos."],["Pájaros con mancuernas","Torso inclinado."]]],["Bandas elásticas","Elevaciones laterales con banda","Pisa la banda, sube hasta la altura de los hombros.",3,12,20,1,45,false,[["Elevaciones laterales con mancuernas","Sin impulso."],["Elevaciones laterales en polea","Tensión constante."]]],["Bandas elásticas","Curl con banda","Pisa la banda, codos pegados.",3,12,20,1,45,false,[["Curl con mancuernas alterno","Supina al subir."],["Curl en polea","Tensión constante."]]],["Bandas elásticas","Sentadilla con banda","Banda bajo los pies y sobre los hombros, baja a la paralela.",3,12,20,1,60,false,[["Sentadilla goblet","Mancuerna al pecho."],["Sentadilla al aire","Ritmo constante."]]]];
+const EX_LIB_GROUPS = ['Pecho', 'Espalda', 'Hombro', 'Bíceps', 'Tríceps', 'Pierna', 'Femoral y glúteo', 'Gemelos', 'Core', 'Kettlebell', 'Peso corporal', 'Bandas elásticas'];
+const EX_LIB_ICON = { 'Pecho': '💪', 'Espalda': '🦅', 'Hombro': '🎯', 'Bíceps': '💪', 'Tríceps': '💪', 'Pierna': '🦵', 'Femoral y glúteo': '🍑', 'Gemelos': '🦵', 'Core': '🧱', 'Kettlebell': '🔔', 'Peso corporal': '🤸', 'Bandas elásticas': '🎗️' };
 const normTxt = t => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 function exLibraryModal() {
   const day = currentDay(); if (!day) return;
   const st = { q: '', g: '' };
   const has = n => day.exercises.some(e => e.variants.some(v => v.name.toLowerCase() === n.toLowerCase()));
-  const list = () => exLibAll().filter(x => (!st.g || x[0] === st.g) && (!st.q || normTxt(x[1] + ' ' + x[0] + ' ' + x[9].map(a => a[0]).join(' ')).includes(normTxt(st.q))));
+  const list = () => { const q = normTxt(st.q), L = exLibAll().filter(x => (!st.g || x[0] === st.g) && (!q || normTxt(x[1] + ' ' + x[0] + ' ' + x[9].map(a => a[0]).join(' ')).includes(q))); return q ? [...L.filter(x => normTxt(x[1]).includes(q)), ...L.filter(x => !normTxt(x[1]).includes(q))] : L; };
   const rows = () => { const L = list(); return L.length ? L.map(x => { const i = exLibAll().indexOf(x), added = has(x[1]); return `<div class="flex items-center justify-between gap-2 bg-ink rounded-xl border border-line px-3 py-2">
-      <div class="min-w-0"><div class="font-semibold text-[14px] truncate">${esc(x[1])}${x[10] && !access.me?.admin ? ' <span class="text-[10px] font-bold text-brand">NUEVO</span>' : ''}</div><div class="text-[11px] text-mute truncate">${EX_LIB_ICON[x[0]] || ''} ${esc(x[0])} · ${x[3]}×${x[4]}–${x[5]}${x[8] ? ' · peso corporal' : ''} · +${x[9].length} alternativas</div></div>
+      <div class="min-w-0"><div class="font-semibold text-[14px] truncate">${esc(x[1])}${x[10] && !access.me?.admin ? ' <span class="text-[10px] font-bold text-brand">NUEVO</span>' : ''}</div><div class="text-[11px] text-mute truncate">${EX_LIB_ICON[x[0]] || ''} ${esc(x[0])} · ${x[3]}×${x[4]}–${x[5]}${x[11] === 't' ? ' s ⏱' : ''}${x[8] ? ' · peso corporal' : ''} · +${x[9].length} alternativas</div></div>
       <button class="${added ? 'btn-mini text-emerald-300' : 'btn-mini text-brand'} shrink-0" data-mact="add" data-i="${i}" type="button">${added ? '✓ Añadido' : '＋ Añadir'}</button></div>`; }).join('') : '<p class="text-xs text-mute text-center py-4">No está entre los preparados. Créalo con «✏️ Crear uno nuevo».</p>'; };
   const html = () => `<h3 class="modal-title">＋ Añadir ejercicio</h3>
     <button class="btn-ghost w-full" data-mact="create" type="button">✏️ Crear uno nuevo</button>
@@ -147,7 +147,7 @@ function exLibraryModal() {
     add: (root, b) => {
       const x = exLibAll()[+b.dataset.i]; if (!x) return;
       if (has(x[1])) return toast('Ya está en este día', 'warn');
-      day.exercises.push(normalizeExercise({ id: uid('c_'), alts27: true, block: `${EX_LIB_ICON[x[0]] || '⚡'} ${x[0]}`, sets: x[3], minReps: x[4], maxReps: x[5], increment: x[6], rest: x[7], bw: !!x[8], variants: [{ name: x[1], note: x[2] }, ...x[9].map(([name, note]) => ({ name, note }))] }));
+      day.exercises.push(normalizeExercise({ id: uid('c_'), alts27: true, block: `${EX_LIB_ICON[x[0]] || '⚡'} ${x[0]}`, sets: x[3], minReps: x[4], maxReps: x[5], increment: x[6], rest: x[7], bw: !!x[8], timed: x[11] === 't', variants: [{ name: x[1], note: x[2] }, ...x[9].map(([name, note]) => ({ name, note }))] }));
       persist(); render(); root.querySelector('#exLibRows').innerHTML = rows(); toast(`Añadido: ${x[1]}`);
     }
   });
@@ -197,7 +197,7 @@ const libIsNew = L => L.pub && !access.me?.admin && (!L.at || L.at >= addDays(to
 /* Publicar (solo administrador, con GitHub conectado): copia limpia del bloque, sin ids */
 function blockForLib(p) {
   return p.days.map(d => ({ label: d.label, rotation: d.rotation, title: d.title, subtitle: d.subtitle,
-    exercises: d.exercises.map(e => ({ id: e.id, block: e.block, sets: e.sets, minReps: e.minReps, maxReps: e.maxReps, increment: e.increment, rest: e.rest, bw: e.bw, alts27: true, variants: e.variants.map(v => ({ name: v.name, note: v.note || '' })) })) }));
+    exercises: d.exercises.map(e => ({ id: e.id, block: e.block, sets: e.sets, minReps: e.minReps, maxReps: e.maxReps, increment: e.increment, rest: e.rest, bw: e.bw, ...(e.timed ? { timed: true } : {}), alts27: true, variants: e.variants.map(v => ({ name: v.name, note: v.note || '' })) })) }));
 }
 async function ghEditJson(pin, file, fn, message) {
   const token = await ghToken(pin);
@@ -229,14 +229,14 @@ function publishExModal(exId) {
   const e = f.ex, pubId = e.pubId || ('ex_' + uid('').slice(0, 10)), existing = remoteEx.find(x => x[10] === pubId);
   let g = existing?.[0] || (/kettlebell/i.test(e.variants[0].name) ? 'Kettlebell' : e.bw ? 'Peso corporal' : 'Pecho');
   const html = () => `<h3 class="modal-title">📤 Compartir «${esc(e.variants[0].name)}»</h3>
-    <p class="text-xs text-mute">Aparecerá en «＋ Añadir ejercicio» de todos, con sus series (${e.sets}×${e.minReps}–${e.maxReps}), descanso, nota y alternativas (${e.variants.length - 1}). Si lo cambias después, vuelve a publicarlo.</p>
+    <p class="text-xs text-mute">Aparecerá en «＋ Añadir ejercicio» de todos, con sus series (${e.sets}×${e.minReps}–${e.maxReps}${e.timed ? ' s' : ''}), descanso, nota y alternativas (${e.variants.length - 1}). Si lo cambias después, vuelve a publicarlo.</p>
     <div><div class="lbl mb-1">Grupo</div><div class="flex flex-wrap gap-1.5">${EX_LIB_GROUPS.map(x => `<button class="chip ${g === x ? 'chip-on' : ''}" data-mact="grp" data-g="${esc(x)}" type="button">${EX_LIB_ICON[x] || ''} ${esc(x)}</button>`).join('')}</div></div>
     <button class="btn-primary w-full" data-mact="go" type="button">${existing ? 'Actualizar' : 'Compartir'}</button>
     ${existing ? '<button class="btn-danger w-full" data-mact="remove" type="button">Dejar de compartir</button>' : ''}`;
   openModal(html(), {
     grp: (root, b) => { g = b.dataset.g; root.querySelector('.modal-sheet').innerHTML = html(); },
     go: () => askPin({ title: '📤 Compartir ejercicio', text: 'Tu PIN abre la llave de GitHub para compartirlo.', onPin: async pin => {
-      const v0 = e.variants[0], item = [g, v0.name, v0.note || '', e.sets, e.minReps, e.maxReps, e.increment, e.rest, !!e.bw, e.variants.slice(1, 4).map(v => [v.name, v.note || '']), pubId];
+      const v0 = e.variants[0], item = [g, v0.name, v0.note || '', e.sets, e.minReps, e.maxReps, e.increment, e.rest, !!e.bw, e.variants.slice(1, 4).map(v => [v.name, v.note || '']), pubId, e.timed ? 't' : ''];
       remoteEx = await ghEditJson(pin, EXLIB_FILE, list => [item, ...list.filter(x => x[10] !== pubId)], `Biblioteca de ejercicios: ${existing ? 'actualiza' : 'publica'} ${v0.name}`);
       try { localStorage.setItem(EXLIB_CACHE, JSON.stringify(remoteEx)); } catch { /* nada */ }
       e.pubId = pubId; persist(); closeModal(); render(); toast(`«${v0.name}» compartido con todos ✓`);
@@ -369,8 +369,8 @@ function normalizeExercise(e) {
   const out = {
     id: e.id || uid('c_'), block: e.block || 'Ejercicio',
     sets: clamp(parseInt(e.sets, 10) || 3, 1, 10),
-    minReps: clamp(parseInt(e.minReps, 10) || 8, 1, 100),
-    maxReps: clamp(parseInt(e.maxReps, 10) || 12, 1, 100),
+    minReps: clamp(parseInt(e.minReps, 10) || 8, 1, e.timed ? 600 : 100),
+    maxReps: clamp(parseInt(e.maxReps, 10) || 12, 1, e.timed ? 600 : 100),
     increment: num(e.increment) ?? 2,
     rest: clamp(parseInt(e.rest, 10) || 90, 10, 600),
     bw: typeof e.bw === 'boolean' ? e.bw : BW_DEFAULT.has(e.id),
@@ -378,6 +378,7 @@ function normalizeExercise(e) {
   };
   if (out.maxReps < out.minReps) out.maxReps = out.minReps;
   out.alts27 = true;
+  if (e.timed) out.timed = true;
   if (e.pubId) out.pubId = String(e.pubId);
   if (!e.alts27 && EX_ALTS[out.id]) for (const [name, note] of EX_ALTS[out.id]) if (!out.variants.some(v => v.name.toLowerCase() === name.toLowerCase())) out.variants.push({ name, note, video: '' });
   return out;
@@ -689,15 +690,27 @@ function bodyweightAt(date) {
   return v;
 }
 const isBwEx = exId => !!(exId && findEx(exId)?.ex.bw);
+/* ⏱ Ejercicios por tiempo: las «reps» son segundos */
+const isTimedEx = x => !!(x && (x.timed || (x.exId && findEx(x.exId)?.ex.timed)));
+const setStr = (x, bw, timed) => timed ? `${x.w > 0 || !bw ? wLabel(x.w, bw) + '·' : ''}${x.r}s` : `${wLabel(x.w, bw)}×${x.r}`;
+const secTxt = sec => sec >= 60 ? `${Math.floor(sec / 60)}:${pad(sec % 60)}` : `${sec} s`;
 /* «PC», «PC + 5» o «24» según el ejercicio */
 const wLabel = (w, bw) => (bw ? (w > 0 ? `PC+${fmtNum(w)}` : 'PC') : fmtNum(w || 0));
 /* 1RM estimado: en ejercicios de peso corporal suma tu peso registrado al lastre */
 function oneRM(e, x, date) {
+  if (isTimedEx(e)) return 0;
   if (isBwEx(e.exId)) { const b = bodyweightAt(date); return b ? e1rm(b + (x.w || 0), x.r) : 0; }
   return e1rm(x.w, x.r);
 }
 
+const timedTxt = x => String(x || '').replace(/\+1 rep por serie/g, '+5 s por serie').replace(/\breps limpias\b/g, 'series limpias').replace(/Tope de reps/g, 'Tope de tiempo').replace(/sin sumar reps/g, 'sin sumar segundos').replace(/(\d+)(–\d+)? reps?\b/g, '$1$2 s').replace(/\breps\b/g, 's').replace(/llegues a (\d+) en/g, 'llegues a $1 s en');
 function coach(e, exKey) {
+  const c = coachCore(e, exKey);
+  if (!e.timed) return c;
+  if (c.tone === 'new') return { ...c, text: e.bw ? `Aguanta ${e.minReps}–${e.maxReps} s con buena técnica. Pulsa ⏱ en cada serie y te cronometro. Desde la próxima te digo cuánto aguantar.` : `Busca un peso con el que aguantes ${e.minReps}–${e.maxReps} s. Pulsa ⏱ en cada serie y te cronometro. Desde la próxima te digo qué peso poner.` };
+  return { ...c, title: timedTxt(c.title), text: timedTxt(c.text) };
+}
+function coachCore(e, exKey) {
   const { minReps: min, maxReps: max, increment: inc, sets: n } = e;
   const fill = v => Array.from({ length: n }, () => v);
   const K = v => (e.bw ? (v > 0 ? `PC + ${fmtKg(v)}` : 'peso corporal') : fmtKg(v));
@@ -709,7 +722,7 @@ function coach(e, exKey) {
   const last = hist[hist.length - 1];
   const { t: topW, valid, work } = lastTop;
   const bw = topW === 0;
-  const lastStr = valid.map(s => `${wLabel(s.w, e.bw)}×${s.r}`).join(' · ');
+  const lastStr = valid.map(s => setStr(s, e.bw, e.timed)).join(' · ');
   const gap = daysBetween(last.date, todayISO());
   const deloadW = e.bw ? Math.max(0, r2(topW - (inc || 1))) : Math.max(inc || 1, roundStep(topW * 0.9, inc || 0.5));
 
@@ -740,7 +753,7 @@ function coach(e, exKey) {
       }
     }
   }
-  const targets = Array.from({ length: n }, (_, i) => (work[i] ? Math.min(max, work[i].r + 1) : min));
+  const targets = Array.from({ length: n }, (_, i) => (work[i] ? Math.min(max, work[i].r + (e.timed ? 5 : 1)) : min));
   const wTxt = K(topW);
   if (below) {
     return { tone: 'hold', title: `Repite ${wTxt}`, text: `Alguna serie quedó por debajo de ${min} reps. Mismo peso y busca ${min} en todas; si vuelve a pasar, bajamos.`, weight: topW, targets, last: lastStr };
@@ -753,6 +766,11 @@ const TONE = {
   down: { icon: '⬇️', cls: 'coach-down' }, stall: { icon: '⚠️', cls: 'coach-stall' }, break: { icon: '🔁', cls: 'coach-break' }
 };
 
+function bestSecs(exKey, sessions = state.sessions) {
+  let best = 0;
+  for (const s of sessions) for (const e of s.exercises) if (e.exKey === exKey) for (const x of e.sets) best = Math.max(best, x.r || 0);
+  return best;
+}
 function bestE1rm(exKey, sessions = state.sessions) {
   let best = 0;
   for (const s of sessions) for (const e of s.exercises) if (e.exKey === exKey) for (const x of e.sets) best = Math.max(best, oneRM(e, x, s.date));
@@ -806,7 +824,8 @@ function coachFor(e, key) {
     const wTxt = e.bw ? (w ? `PC + ${fmtKg(w)}` : 'tu peso') : fmtKg(w);
     c = { ...c, tone: 'hold', title: `Mantén ${wTxt}`, text: `Llegaste a las reps, pero la última vez anotaste ${(n.tags || []).filter(t => t === 'pain' || t === 'hard').map(t => NOTE_TAGS[t]).join(' y ')}. Hoy no subimos: repite ${wTxt} y comprueba sensaciones.`, weight: w };
   }
-  return deloadActive() ? deloadCoach(c, e, key) : c;
+  c = deloadActive() ? deloadCoach(c, e, key) : c;
+  return e.timed ? { ...c, title: timedTxt(c.title), text: timedTxt(c.text) } : c;
 }
 function cellValue(d, key, i, field, c) {
   const v = d.sets[key]?.[i]?.[field];
@@ -947,17 +966,18 @@ function renderExerciseCard(e, idx, day, d) {
           <input class="field field-set" inputmode="decimal" autocomplete="off" data-in="w" data-key="${esc(key)}" data-i="${i}" value="${esc(w)}" placeholder="${e.bw ? 'PC' : 'kg'}" aria-label="${e.bw ? 'Lastre' : 'Peso'} serie ${i + 1}" />
           <span class="unit">${e.bw ? '+kg' : 'kg'}</span>
         </div>
-        <span class="text-mute text-xs">×</span>
+        <span class="text-mute text-xs">${e.timed ? '·' : '×'}</span>
         <div class="relative flex-1">
-          <input class="field field-set text-brand" inputmode="numeric" autocomplete="off" data-in="r" data-key="${esc(key)}" data-i="${i}" value="${esc(r)}" placeholder="${esc(target)}" aria-label="Repeticiones serie ${i + 1}" />
-          <span class="unit">reps</span>
+          <input class="field field-set text-brand" inputmode="numeric" autocomplete="off" data-in="r" data-key="${esc(key)}" data-i="${i}" value="${esc(r)}" placeholder="${esc(e.timed ? String(target).split('-')[0] : target)}" aria-label="${e.timed ? 'Segundos' : 'Repeticiones'} serie ${i + 1}" />
+          <span class="unit">${e.timed ? 's' : 'reps'}</span>
         </div>
+        ${e.timed ? `<button class="checkbtn swbtn" data-act="swSet" data-ex="${esc(e.id)}" data-key="${esc(key)}" data-i="${i}" type="button" aria-label="Cronómetro serie ${i + 1}">⏱</button>` : ''}
         <button class="checkbtn" data-act="doneSet" data-ex="${esc(e.id)}" data-key="${esc(key)}" data-i="${i}" type="button" aria-label="Serie hecha">✓</button>
       </div>`;
     if (i > 0 && !done) {
       const pw = num(cellValue(d, key, i - 1, 'w', c)), pr = num(cellValue(d, key, i - 1, 'r', c));
       const same = String(num(w) ?? '') === String(pw ?? '') && String(num(r) ?? '') === String(pr ?? '');
-      if (pr > 0 && !same) rows += `<button class="copy-set" data-act="copySet" data-ex="${esc(e.id)}" data-key="${esc(key)}" data-i="${i}" type="button">↺ igual que S${i} (${wLabel(pw || 0, e.bw)} × ${pr})</button>`;
+      if (pr > 0 && !same) rows += `<button class="copy-set" data-act="copySet" data-ex="${esc(e.id)}" data-key="${esc(key)}" data-i="${i}" type="button">↺ igual que S${i} (${e.timed ? setStr({ w: pw || 0, r: pr }, e.bw, true) : `${wLabel(pw || 0, e.bw)} × ${pr}`})</button>`;
     }
   }
   return `
@@ -966,7 +986,7 @@ function renderExerciseCard(e, idx, day, d) {
       <div class="min-w-0">
         <div class="text-[11px] font-bold uppercase tracking-wider text-brand">${esc(e.block)}</div>
         <h3 class="font-extrabold text-[17px] leading-snug mt-0.5">${esc(variant.name)}</h3>
-        <div class="text-[11px] text-mute mt-1">${e.sets} × ${e.minReps}–${e.maxReps} reps · descanso ${e.rest}s · +${fmtNum(e.increment)} kg${e.bw ? ' de lastre · peso corporal' : ''}</div>
+        <div class="text-[11px] text-mute mt-1">${e.sets} × ${e.minReps}–${e.maxReps} ${e.timed ? 's ⏱' : 'reps'} · descanso ${e.rest}s · +${fmtNum(e.increment)} kg${e.bw ? ' de lastre · peso corporal' : ''}</div>
       </div>
       <div class="flex gap-1.5 shrink-0">
         <button class="iconbtn" data-act="skipEx" data-ex="${esc(e.id)}" type="button" aria-label="Hoy no hago este ejercicio">⏭</button>
@@ -1083,6 +1103,17 @@ function realAverage(dayId) {
 
 /* Récord en el momento: al marcar ✓ una serie que supera tu mejor 1RM estimado de esa variante (una vez por mejora) */
 function checkSetPR(ex, key, cell, d, day) {
+  if (ex.timed) {
+    const sec = Math.round(num(cell.r) || 0), prevS = bestSecs(key, state.sessions.filter(s => !(s.date === todayISO() && s.dayId === day.id)));
+    if (!(prevS > 0 && sec > prevS)) return;
+    d.prBest = d.prBest || {};
+    if (sec <= (d.prBest[key] || 0)) return;
+    d.prBest[key] = sec;
+    const nm = (ex.variants[parseInt(key.split('_v').pop(), 10)] || ex.variants[0]).name;
+    toast(`🏆 ¡Récord personal! ${nm}: ${secTxt(sec)} (antes ${secTxt(prevS)})`, 'pr');
+    try { navigator.vibrate?.([90, 60, 90, 60, 180]); } catch { /* nada */ }
+    return;
+  }
   const today = todayISO(), st = { w: num(cell.w) ?? 0, r: Math.round(num(cell.r) || 0) };
   const val = oneRM({ exId: ex.id, exKey: key }, st, today);
   const prev = bestE1rm(key, state.sessions.filter(s => !(s.date === today && s.dayId === day.id)));
@@ -1132,7 +1163,7 @@ function saveSession() {
       const w = num(cellValue(d, key, i, 'w', c));
       if (r && r > 0) sets.push({ w: w ?? 0, r: Math.round(r) });
     }
-    if (sets.length) exs.push({ exId: e.id, exKey: key, name: variant.name, sets });
+    if (sets.length) exs.push({ exId: e.id, exKey: key, name: variant.name, sets, ...(e.timed ? { timed: true } : {}) });
   }
   if (!exs.length) return toast('Apunta al menos una serie con repeticiones.', 'warn');
 
@@ -1146,7 +1177,8 @@ function saveSession() {
     const prev = bestE1rm(x.exKey, others);
     const now = Math.max(...x.sets.map(st => oneRM(x, st, today)));
     if (prev > 0 && now > prev + 0.05) prs.push(`${x.name}: ${fmtNum(Math.round(now * 10) / 10)} kg de 1RM estimado`);
-    for (const s of x.sets) { volume += s.w * s.r; nSets++; }
+    if (x.timed) { const pS = bestSecs(x.exKey, others), nS = Math.max(...x.sets.map(st => st.r)); if (pS > 0 && nS > pS) prs.push(`${x.name}: ${secTxt(nS)} (antes ${secTxt(pS)})`); }
+    for (const s of x.sets) { if (!x.timed) volume += s.w * s.r; nSets++; }
     state.memory[x.exKey] = { date: today, sets: x.sets };
   }
   const habits = state.settings.habits.filter(h => d.habits[h]);
@@ -1394,12 +1426,13 @@ function editExModal(exId) {
     <label class="lbl">Bloque / etiqueta<input class="field mt-1" name="block" value="${esc(e.block)}" /></label>
     <div class="grid grid-cols-3 gap-2">
       <label class="lbl">Series<input class="field mt-1" name="sets" inputmode="numeric" value="${e.sets}" /></label>
-      <label class="lbl">Reps mín<input class="field mt-1" name="minReps" inputmode="numeric" value="${e.minReps}" /></label>
-      <label class="lbl">Reps máx<input class="field mt-1" name="maxReps" inputmode="numeric" value="${e.maxReps}" /></label>
+      <label class="lbl">${e.timed ? 'Seg. mín' : 'Reps mín'}<input class="field mt-1" name="minReps" inputmode="numeric" value="${e.minReps}" /></label>
+      <label class="lbl">${e.timed ? 'Seg. máx' : 'Reps máx'}<input class="field mt-1" name="maxReps" inputmode="numeric" value="${e.maxReps}" /></label>
       <label class="lbl">Subida (kg)<input class="field mt-1" name="increment" inputmode="decimal" value="${fmtNum(e.increment)}" /></label>
       <label class="lbl col-span-2">Descanso (seg)<input class="field mt-1" name="rest" inputmode="numeric" value="${e.rest}" /></label>
     </div>
     <label class="habit"><input type="checkbox" name="bw" ${e.bw ? 'checked' : ''} /><span class="text-xs">Con peso corporal <span class="text-mute">(dominadas, fondos… el campo de peso pasa a ser el lastre; vacío = solo tu peso)</span></span></label>
+    <label class="habit"><input type="checkbox" name="timed" ${e.timed ? 'checked' : ''} /><span class="text-xs">⏱ Por tiempo <span class="text-mute">(plancha, paseo del granjero… mín y máx pasan a ser segundos y cada serie lleva cronómetro)</span></span></label>
     <p class="text-[11px] text-mute">El coach sube el peso cuando haces las reps máximas en todas las series, y baja un 10 % si fallas el mínimo dos sesiones seguidas.</p>
     <div class="flex gap-2 mt-4">
       ${!isNew ? `<button class="btn-ghost" data-mact="up" type="button" aria-label="Subir">▲</button><button class="btn-ghost" data-mact="down" type="button" aria-label="Bajar">▼</button>` : ''}
@@ -1418,10 +1451,10 @@ function editExModal(exId) {
       });
       if (!variants.length) return toast('Escribe al menos el nombre del ejercicio', 'warn');
       const minReps = parseInt(mval(root, 'minReps'), 10), maxReps = parseInt(mval(root, 'maxReps'), 10);
-      if (!(minReps > 0) || !(maxReps >= minReps)) return toast('Revisa el rango de reps (mín ≤ máx)', 'warn');
+      if (!(minReps > 0) || !(maxReps >= minReps)) return toast('Revisa el rango (mín ≤ máx)', 'warn');
       const data = normalizeExercise({
         id: isNew ? uid('c_') : e.id, alts27: true, pubId: isNew ? undefined : e.pubId, block: mval(root, 'block').trim() || 'Ejercicio', variants,
-        sets: mval(root, 'sets'), minReps, maxReps, increment: num(mval(root, 'increment')) ?? 2, rest: mval(root, 'rest'), bw: root.querySelector('[name="bw"]').checked
+        sets: mval(root, 'sets'), minReps, maxReps, increment: num(mval(root, 'increment')) ?? 2, rest: mval(root, 'rest'), bw: root.querySelector('[name="bw"]').checked, timed: root.querySelector('[name="timed"]').checked
       });
       if (isNew) day.exercises.push(data); else f.day.exercises[f.idx] = data;
       persist(); closeModal(); render();
@@ -1486,10 +1519,11 @@ function personalRecords() {
   const map = new Map();
   for (const s of sortedSessions()) for (const e of s.exercises) {
     if (!e.exKey) continue;
-    const r = map.get(e.exKey) || { bw: isBwEx(e.exId), name: e.name, bestW: -1, bestWReps: 0, bestWDate: '', best1: 0, best1Date: '', bestReps: 0, bestRepsDate: '', lastPR: '' };
+    const r = map.get(e.exKey) || { bw: isBwEx(e.exId), timed: isTimedEx(e), bestSec: 0, bestSecW: 0, bestSecDate: '', name: e.name, bestW: -1, bestWReps: 0, bestWDate: '', best1: 0, best1Date: '', bestReps: 0, bestRepsDate: '', lastPR: '' };
     r.name = e.name;
     for (const x of e.sets) {
       if (!(x.r > 0)) continue;
+      if (r.timed) { if (x.r > r.bestSec) { r.bestSec = x.r; r.bestSecW = x.w || 0; r.bestSecDate = s.date; r.lastPR = s.date; } r.bestW = Math.max(r.bestW, 0); continue; }
       if (x.w > r.bestW || (x.w === r.bestW && x.r > r.bestWReps)) { r.bestW = x.w; r.bestWReps = x.r; r.bestWDate = s.date; r.lastPR = s.date; }
       const one = oneRM(e, x, s.date);
       if (one > r.best1 + 0.05) { r.best1 = one; r.best1Date = s.date; r.lastPR = s.date; }
@@ -1507,7 +1541,9 @@ function renderRecords() {
     <div class="space-y-1.5 mt-3">
       ${recs.map(r => `<div class="bg-ink rounded-xl border border-line px-3 py-2">
         <div class="flex items-center justify-between gap-2"><span class="text-sm font-bold truncate">${esc(r.name)}</span>${r.lastPR >= addDays(todayISO(), -7) ? '<span class="text-[10px] font-bold text-emerald-300 shrink-0">NUEVO</span>' : ''}</div>
-        <div class="text-[11px] text-mute mt-0.5">${r.bw
+        <div class="text-[11px] text-mute mt-0.5">${r.timed
+          ? `⏱ Máx. <strong class="text-white">${secTxt(r.bestSec)}</strong>${r.bestSecW > 0 ? ` con ${r.bw ? 'PC + ' : ''}${fmtKg(r.bestSecW)}` : ''} (${fmtDateShort(r.bestSecDate)})`
+          : r.bw
           ? `Máx. <strong class="text-white">${wLabel(r.bestW, true)} × ${r.bestWReps}</strong> (${fmtDateShort(r.bestWDate)})${r.best1 > 0 ? ` · 1RM est. <strong class="text-brand">${fmtKg(Math.round(r.best1 * 10) / 10)}</strong> (${fmtDateShort(r.best1Date)})` : ''}`
           : r.bestW > 0
           ? `Máx. <strong class="text-white">${fmtKg(r.bestW)} × ${r.bestWReps}</strong> (${fmtDateShort(r.bestWDate)}) · 1RM est. <strong class="text-brand">${fmtKg(Math.round(r.best1 * 10) / 10)}</strong> (${fmtDateShort(r.best1Date)})`
@@ -1806,6 +1842,16 @@ const MUSCLE_NEUTRAL = new Set(['head', 'hair', 'neck', 'hands', 'feet', 'ankles
    [expresión, principales, secundarios]; los ejercicios con «+» se reparten por partes. */
 const MUSCLE_RULES = [
   [/encogimiento|shrug/, ['trapezius'], ['forearm']],
+  [/gemelo|pantorrilla/, ['calves'], []],
+  [/remo al ment[oó]n|upright/, ['deltoids', 'trapezius'], ['biceps']],
+  [/landmine|pike/, ['deltoids'], ['triceps', 'chest']],
+  [/^remo|gorilla row/, ['upper-back'], ['biceps', 'forearm', 'deltoids']],
+  [/dead bug/, ['abs'], ['obliques']],
+  [/bird dog|superman/, ['lower-back'], ['gluteal', 'abs']],
+  [/halo/, ['deltoids'], ['abs', 'obliques']],
+  [/jumping jack|comba|skipping/, ['calves'], ['quadriceps', 'deltoids']],
+  [/peso muerto a una pierna/, ['hamstring', 'gluteal'], ['lower-back']],
+  [/paseo/, ['forearm', 'trapezius'], ['abs']],
   [/abducci[oó]n|paso lateral/, ['gluteal'], []],
   [/aducci[oó]n/, ['adductors'], []],
   [/pallof|leñador|russian twist|plancha lateral|antirrotaci/, ['obliques', 'abs'], []],
@@ -2377,7 +2423,7 @@ function renderCalDetail(date) {
       <div class="text-[11px] font-bold uppercase tracking-wider text-brand">🏋️ Entreno</div>
       ${act.sessions.length ? act.sessions.map(s => `<div class="mt-1">
           <div class="text-xs font-semibold">${esc(s.dayTitle || 'Sesión')}${s.durationMin ? ` · ⏱ ${s.durationMin} min` : ''}${gymKcalOf(s) ? ` · <span class="${MAC.kcal.text}">~${gymKcalOf(s)} kcal</span>` : ''}${s.deload ? ' · 🔋 descarga' : ''}</div>
-          ${s.exercises.map(e => `<div class="text-[11px] text-mute leading-snug">· ${esc(e.name)}: <span class="font-mono">${e.sets.map(x => `${wLabel(x.w, isBwEx(e.exId))}×${x.r}`).join(' · ')}</span></div>`).join('')}
+          ${s.exercises.map(e => `<div class="text-[11px] text-mute leading-snug">· ${esc(e.name)}: <span class="font-mono">${e.sets.map(x => setStr(x, isBwEx(e.exId), isTimedEx(e))).join(' · ')}</span></div>`).join('')}
         </div>`).join('') : '<div class="text-xs text-mute mt-0.5">Sin entreno de fuerza.</div>'}
     </div>
     <div>
@@ -2919,7 +2965,9 @@ function renderProgress() {
   let strengthHtml = '<p class="text-sm text-mute">Guarda alguna sesión y aquí verás tu fuerza por ejercicio.</p>';
   if (ui.progEx) {
     const pts = [], rows = [];
+    let isT = false;
     for (const s of sortedSessions()) for (const e of s.exercises) if (e.exKey === ui.progEx) {
+      if (isTimedEx(e)) { isT = true; pts.push({ x: s.date, y: Math.max(...e.sets.map(x => x.r)), kg: false }); rows.push({ date: s.date, sets: e.sets, bw: isBwEx(e.exId), t: true }); continue; }
       const best = Math.max(...e.sets.map(x => oneRM(e, x, s.date)));
       const reps = e.sets.reduce((a, x) => a + x.r, 0);
       pts.push({ x: s.date, y: best > 0 ? Math.round(best * 10) / 10 : reps, kg: best > 0 });
@@ -2929,9 +2977,9 @@ function renderProgress() {
     const pr = pts.length ? Math.max(...pts.map(p => p.y)) : 0;
     strengthHtml = `
       <select class="field" data-act-change="progEx">${opts.map(([k, v]) => `<option value="${esc(k)}" ${k === ui.progEx ? 'selected' : ''}>${esc(v.name)} (${v.count})</option>`).join('')}</select>
-      <div class="flex justify-between text-[11px] text-mute mt-3"><span>${isBW ? 'Reps totales por sesión' : '1RM estimado (Epley) por sesión'}</span><span>Mejor: <strong class="text-white">${fmtNum(pr)}${isBW ? ' reps' : ' kg'}</strong></span></div>
-      <div class="mt-1">${lineChart(pts, { color: '#00d2df', unit: isBW ? '' : ' kg', label: 'fuerza' })}</div>
-      <div class="space-y-1 mt-2">${rows.slice(-5).reverse().map(r => `<div class="text-[11px] flex justify-between gap-3 bg-ink rounded-lg px-2.5 py-1.5"><span class="text-mute shrink-0">${fmtDate(r.date)}</span><span class="font-mono text-right">${r.sets.map(x => `${wLabel(x.w, r.bw)}×${x.r}`).join(' · ')}</span></div>`).join('')}</div>`;
+      <div class="flex justify-between text-[11px] text-mute mt-3"><span>${isT ? '⏱ Mejor serie por sesión' : isBW ? 'Reps totales por sesión' : '1RM estimado (Epley) por sesión'}</span><span>Mejor: <strong class="text-white">${isT ? secTxt(pr) : fmtNum(pr) + (isBW ? ' reps' : ' kg')}</strong></span></div>
+      <div class="mt-1">${lineChart(pts, { color: '#00d2df', unit: isT ? ' s' : isBW ? '' : ' kg', label: 'fuerza' })}</div>
+      <div class="space-y-1 mt-2">${rows.slice(-5).reverse().map(r => `<div class="text-[11px] flex justify-between gap-3 bg-ink rounded-lg px-2.5 py-1.5"><span class="text-mute shrink-0">${fmtDate(r.date)}</span><span class="font-mono text-right">${r.sets.map(x => setStr(x, r.bw, r.t)).join(' · ')}</span></div>`).join('')}</div>`;
   }
 
   const backupAge = st.lastBackup ? daysBetween(st.lastBackup, todayISO()) : null;
@@ -2987,7 +3035,7 @@ function renderProgress() {
       ${hist.length ? hist.map(s => `<details class="bg-ink rounded-xl border border-line">
         <summary class="px-3 py-2.5 flex justify-between items-center cursor-pointer text-sm"><span class="font-semibold truncate">${esc(s.dayTitle || s.dayId)}${s.durationMin ? ` <span class="text-mute font-normal text-xs">· ${s.durationMin} min</span>` : ''}</span><span class="flex items-center gap-2 text-[11px] text-mute shrink-0 ml-2">${fmtDate(s.date)}<span class="tri"></span></span></summary>
         <div class="px-3 pb-3 space-y-1 text-[11px]">
-          ${s.exercises.map(e => `<div><strong>${esc(e.name)}:</strong> <span class="font-mono text-mute">${e.sets.map(x => `${wLabel(x.w, isBwEx(e.exId))}×${x.r}`).join(', ')}</span></div>`).join('')}
+          ${s.exercises.map(e => `<div><strong>${esc(e.name)}:</strong> <span class="font-mono text-mute">${e.sets.map(x => setStr(x, isBwEx(e.exId), isTimedEx(e))).join(', ')}</span></div>`).join('')}
           ${s.habits?.length ? `<div class="text-emerald-300 mt-1">✓ ${s.habits.map(esc).join(' · ')}</div>` : ''}
           ${s.skipped?.length ? `<div class="text-mute mt-1">⏭ Hoy no: ${s.skipped.map(esc).join(' · ')}</div>` : ''}
           ${s.notes?.length ? s.notes.map(n => `<div class="text-amber-200/90 mt-1">💬 ${esc(n.name)}: ${esc(noteTxt(n))}</div>`).join('') : ''}
@@ -3550,6 +3598,64 @@ function tickTimer() {
   $('#timerDisplay').textContent = `${pad(Math.floor(left / 60))}:${pad(left % 60)}`;
   $('#timerBar').style.width = `${Math.max(0, Math.min(100, leftMs / (timer.total * 1000) * 100))}%`;
 }
+/* ⏱ Cronómetro de una serie por tiempo: cuenta atrás 3-2-1, cuenta hacia arriba, avisa al llegar al objetivo y guarda los segundos */
+function tone(freq = 880, dur = 0.15) {
+  const c = timer.ctx; if (!c) return;
+  try { const o = c.createOscillator(), g = c.createGain(); o.frequency.value = freq; o.type = 'sine';
+    g.gain.setValueAtTime(0.0001, c.currentTime); g.gain.exponentialRampToValueAtTime(0.4, c.currentTime + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
+    o.connect(g).connect(c.destination); o.start(); o.stop(c.currentTime + dur + 0.02); } catch { /* sin audio */ }
+}
+function stopwatchSheet(exId, key, i) {
+  const f = findEx(exId); if (!f) return;
+  const e = f.ex, c = coachFor(e, key), d = draftOf(currentDay().id);
+  const tg = c.targets[i] ?? c.targets[c.targets.length - 1];
+  const target = typeof tg === 'number' ? tg : (parseInt(String(tg), 10) || e.minReps);
+  const name = variantOf(e).variant.name;
+  const sw = { phase: 'ready', t0: 0, int: null, hitT: false, hitM: false };
+  const el = id => document.getElementById(id);
+  const draw = () => {
+    if (!el('swTime')) { clearInterval(sw.int); wakeOff(); return; }
+    if (sw.phase === 'count') {
+      const left = 3 - Math.floor((Date.now() - sw.t0) / 1000);
+      if (left <= 0) { sw.phase = 'run'; sw.t0 = Date.now(); tone(1320, 0.3); try { navigator.vibrate?.(120); } catch { /* nada */ } paint(); return; }
+      if (el('swTime').textContent !== String(left)) { el('swTime').textContent = String(left); tone(660, 0.12); }
+      return;
+    }
+    if (sw.phase !== 'run') return;
+    const sec = Math.floor((Date.now() - sw.t0) / 1000);
+    el('swTime').textContent = secClock(sec);
+    el('swBar').style.width = `${Math.min(100, sec / e.maxReps * 100)}%`;
+    if (!sw.hitT && sec >= target) { sw.hitT = true; beep(); try { navigator.vibrate?.([200, 100, 200]); } catch { /* nada */ } el('swMsg').innerHTML = '<span class="text-emerald-300 font-bold">🎯 ¡Objetivo! Aguanta si puedes</span>'; }
+    if (!sw.hitM && sec >= e.maxReps) { sw.hitM = true; beep(); try { navigator.vibrate?.([300, 120, 300]); } catch { /* nada */ } el('swMsg').innerHTML = '<span class="text-emerald-300 font-bold">🏁 Máximo alcanzado: para cuando quieras</span>'; }
+  };
+  const secClock = sec => `${pad(Math.floor(sec / 60))}:${pad(sec % 60)}`;
+  const html = () => `<div class="text-center">
+      <div class="text-[11px] font-bold uppercase tracking-wider text-brand">⏱ Serie ${i + 1} de ${setCount(e, key, d)}</div>
+      <h3 class="font-extrabold text-lg mt-1">${esc(name)}</h3>
+      <div class="text-xs text-mute mt-1">Objetivo <b class="text-white">${target} s</b> · máx ${e.maxReps} s</div>
+      <div id="swTime" class="font-black tabular-nums mt-4 ${sw.phase === 'count' ? 'text-brand' : ''}" style="font-size:72px;line-height:1">${sw.phase === 'count' ? '3' : '00:00'}</div>
+      <div class="h-2 rounded-full bg-ink border border-line mt-4 overflow-hidden"><div id="swBar" class="h-full" style="width:0%;background:linear-gradient(90deg,#22d3ee,#34d399)"></div></div>
+      <div id="swMsg" class="text-xs text-mute mt-3 min-h-[18px]">${sw.phase === 'ready' ? 'Ponte en posición y pulsa Empezar: tienes 3 s.' : sw.phase === 'count' ? 'Prepárate…' : ''}</div>
+    </div>
+    ${sw.phase === 'ready'
+      ? '<button class="btn-primary w-full text-lg py-4" data-mact="go" type="button">▶ Empezar</button><button class="btn-ghost w-full" data-mact="cancel" type="button">Cancelar</button>'
+      : '<button class="btn-primary w-full text-lg py-4" data-mact="stop" type="button">■ Parar y guardar</button><button class="btn-ghost w-full" data-mact="cancel" type="button">Cancelar sin guardar</button>'}`;
+  const paint = () => { const sh = $('#modalRoot .modal-sheet'); if (sh) sh.innerHTML = html(); draw(); };
+  openModal(html(), {
+    noClose: true,
+    go: () => { unlockAudio(); stopTimer(); sw.phase = 'count'; sw.t0 = Date.now(); paint(); tone(660, 0.12); wakeOn(); clearInterval(sw.int); sw.int = setInterval(draw, 100); },
+    cancel: () => { clearInterval(sw.int); wakeOff(); closeModal(); },
+    stop: () => {
+      if (sw.phase === 'count') { clearInterval(sw.int); wakeOff(); return closeModal(); }
+      const sec = Math.floor((Date.now() - sw.t0) / 1000);
+      clearInterval(sw.int); wakeOff(); closeModal();
+      if (sec < 1) return;
+      setDraftCell(key, i, 'r', String(sec));
+      if (!(d.done[key] || [])[i]) markSetDone(exId, key, i);
+      else { persist(); render(); }
+    }
+  });
+}
 function openTimerSheet() {
   unlockAudio();
   openModal(`
@@ -3838,15 +3944,15 @@ function profileSectionHTML() {
 const CHAT_CHIPS = ['¿Cómo voy esta semana?', '¿Qué ceno hoy para cuadrar macros?', '¿Por qué me estanco y qué cambio?', '¿Qué entreno hoy?'];
 function chatContext() {
   const T = todayISO(), st = state.settings;
-  const setTxt = (exId, x) => (isBwEx(exId) ? (x.w ? `PC+${x.w}` : 'PC') : `${x.w}kg`) + `x${x.r}`;
+  const setTxt = (exId, x, tm) => (isBwEx(exId) ? (x.w ? `PC+${x.w}` : 'PC') : `${x.w}kg`) + (tm ? ` ${x.r}s` : `x${x.r}`);
   const t = totalsOf(T), burn = exerciseBurnOf(T), budget = st.targetKcal + (st.eatBackCardio ? burn : 0);
   const days7 = Array.from({ length: 7 }, (_, i) => addDays(T, -i)).filter(d => mealsOf(d).length).map(d => { const x = totalsOf(d); return { fecha: d, kcal: Math.round(x.kcal), P: Math.round(x.prot), C: Math.round(x.carbs), G: Math.round(x.fat) }; });
   const plan = prog().days.map(day => ({
     dia: day.label, titulo: day.title,
-    ejercicios: day.exercises.map(e => { const { key, variant } = variantOf(e); const c = coachFor(e, key); return { nombre: variant.name, series: e.sets, reps: `${e.minReps}-${e.maxReps}`, peso_corporal: !!e.bw, coach_app: `${c.title}. ${c.text}` }; })
+    ejercicios: day.exercises.map(e => { const { key, variant } = variantOf(e); const c = coachFor(e, key); return { nombre: variant.name, series: e.sets, reps: `${e.minReps}-${e.maxReps}${e.timed ? ' segundos (por tiempo)' : ''}`, peso_corporal: !!e.bw, coach_app: `${c.title}. ${c.text}` }; })
   }));
   const last = sortedSessions().slice(-8).reverse().map(s => ({ fecha: s.date, dia: s.dayTitle, min: s.durationMin || null, descarga: !!s.deload, ejercicios_saltados: s.skipped || [], comentarios: (s.notes || []).map(n => `${n.name}: ${noteTxt(n)}`),
-    ejercicios: s.exercises.map(e => `${e.name}: ${e.sets.map(x => setTxt(e.exId, x)).join(', ')}`) }));
+    ejercicios: s.exercises.map(e => `${e.name}: ${e.sets.map(x => setTxt(e.exId, x, isTimedEx(e))).join(', ')}`) }));
   const w = activeWip();
   return {
     hoy: T, dia_semana: parseISO(T).toLocaleDateString('es-ES', { weekday: 'long' }), hora: new Date().toTimeString().slice(0, 5),
@@ -4032,6 +4138,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.34.0', ['＋ Añadir ejercicio: ahora hay 141 ejercicios preparados, con máquinas, poleas, core y un grupo nuevo de 🎗️ bandas elásticas para entrenar en casa.', '⏱ Ejercicios por tiempo (plancha, plancha lateral, paseo del granjero): cada serie lleva su cronómetro. Pulsa ⏱, cuenta atrás de 3 s, te avisa al llegar al objetivo y guarda los segundos solo. En tus propios ejercicios puedes activarlo desde ✎ → «Por tiempo».']],
   ['4.33.1', ['＋ Añadir bloque: cada bloque sale una sola vez y, si ya lo tienes, pone «✓ Ya lo tienes» en vez de ofrecer otra copia.'], 'quiet'],
   ['4.33.0', ['📤 Compartir con todos: en el ✎ de cualquier bloque o ejercicio tuyo verás «Compartir con todos». Les aparecerá al pulsar ＋ (con la etiqueta NUEVO). Puedes actualizarlo o dejar de compartirlo desde el mismo sitio.'], 'admin'],
   ['4.32.0', ['＋ Añadir ejercicio: además de crear el tuyo, eliges entre más de 60 ejercicios preparados (por grupos y con buscador), ya configurados con series, reps, descanso, técnica y 2 alternativas.']],
@@ -4635,6 +4742,7 @@ const actions = {
     persist(); render();
   },
   doneSet: b => markSetDone(b.dataset.ex, b.dataset.key, parseInt(b.dataset.i, 10)),
+  swSet: b => stopwatchSheet(b.dataset.ex, b.dataset.key, parseInt(b.dataset.i, 10)),
   abandon: () => {
     const day = currentDay(), d = state.drafts[day.id]; if (!d) return;
     const n = Object.values(d.sets || {}).reduce((a, arr) => a + (arr || []).filter(c => c && c.r !== undefined && c.r !== '').length, 0);
