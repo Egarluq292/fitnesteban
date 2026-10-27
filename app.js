@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.37.3';
+const APP_VERSION = '4.37.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3753,12 +3753,12 @@ function habitIcon(name) {
 }
 const habitCountOf = (date, name) => state.habitCount[date]?.[name] || 0;
 function habitRingHTML(h, date) {
-  const t = h.target || 1, n = t > 1 ? Math.min(t, habitCountOf(date, h.name)) : (habitDone(date, h.name) ? 1 : 0), done = habitDone(date, h.name);
+  const t = h.target || 1, full = t > 1 ? habitCountOf(date, h.name) : 0, n = t > 1 ? Math.min(t, full) : (habitDone(date, h.name) ? 1 : 0), done = habitDone(date, h.name);
   const { icon, label, emoji } = habitIcon(h.name), R = 20, C = 2 * Math.PI * R, gap = t > 1 ? 3 : 0, seg = C / t - gap;
   const col = done ? '#34d399' : '#22d3ee';
   const arcs = Array.from({ length: t }, (_, i) => `<circle cx="24" cy="24" r="${R}" fill="none" stroke="${i < n ? col : '#334155'}" stroke-width="4" stroke-dasharray="${seg.toFixed(2)} ${(C - seg).toFixed(2)}" stroke-dashoffset="${(-i * C / t).toFixed(2)}"/>`).join('');
-  const sub = t > 1 ? `${n}/${t}${h.unit ? ' ' + esc(h.unit) : ''}` : (done ? '✓' : '');
-  return `<button class="flex flex-col items-center gap-1 select-none" style="min-width:0;-webkit-touch-callout:none" data-act="dailyHabit" data-name="${esc(h.name)}" type="button" aria-pressed="${done}" aria-label="${esc(h.name)}${t > 1 ? ` ${n} de ${t}` : ''}">
+  const sub = t > 1 ? `${full}/${t}${h.unit ? ' ' + esc(h.unit) : ''}` : (done ? '✓' : '');
+  return `<button class="flex flex-col items-center gap-1 select-none" style="min-width:0;-webkit-touch-callout:none" data-act="dailyHabit" data-name="${esc(h.name)}" type="button" aria-pressed="${done}" aria-label="${esc(h.name)}${t > 1 ? ` ${full} de ${t}` : ''}">
     <span class="relative grid place-items-center rounded-full pointer-events-none" style="width:56px;height:56px;background:${done ? 'rgba(52,211,153,.14)' : 'transparent'}">
       <svg viewBox="0 0 48 48" class="absolute inset-0 -rotate-90 swipe-ok" style="width:56px;height:56px">${arcs}</svg>
       <span class="relative ${emoji ? 'text-lg' : `text-[17px] font-black ${done ? 'text-emerald-300' : 'text-slate-300'}`}" style="${emoji && !n ? 'filter:grayscale(1);opacity:.6' : ''}">${esc(icon)}</span></span>
@@ -3770,7 +3770,7 @@ function habitStep(name, delta) {
   const t = h.target || 1, cur = state.habitLog[date] || [];
   let doneNow;
   if (t > 1) {
-    const c = (state.habitCount[date] ||= {}), n = clamp((c[name] || 0) + delta, 0, t);
+    const c = (state.habitCount[date] ||= {}), n = clamp((c[name] || 0) + delta, 0, 99); // sigue contando por encima del objetivo
     if (n) c[name] = n; else delete c[name];
     if (!Object.keys(c).length) delete state.habitCount[date];
     doneNow = n >= t;
@@ -4226,6 +4226,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.37.4', ['⭕ Hábitos de varios toques (agua…): al llegar al objetivo siguen contando (10/8 vasos).'], 'quiet'],
   ['4.37.3', ['🍽️ Dieta: Desayuno, Comida, Puente, Cena y Otro caben en una sola fila.'], 'quiet'],
   ['4.37.2', ['📚 Progreso: el historial de sesiones va plegado, como los récords; a la derecha ves cuántas hay y la fecha de la última.'], 'quiet'],
   ['4.37.1', ['🕘 Novedades: al final del historial, «Ver novedades anteriores» va mostrando todas las versiones hasta el principio.'], 'admin'],
