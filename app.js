@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.34.1';
+const APP_VERSION = '4.35.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1969,11 +1969,13 @@ function muscleMapHTML() {
   return `<section class="card p-4 mb-3" id="muscleMap" data-noswipe>
     <div class="flex items-center justify-between"><h3 class="section-title">🔥 Mapa muscular</h3></div>
     <div class="seg mt-3" style="grid-template-columns:repeat(3,minmax(0,1fr))">${[['now', 'Ahora'], ['d7', '7 días'], ['d30', '30 días']].map(([k, l]) => `<button class="seg-btn py-1.5 ${tab === k ? 'seg-on' : ''}" data-act="mmTab" data-v="${k}" type="button">${l}</button>`).join('')}</div>
+    <div id="mmBody">
     <div class="mt-3">${bodySVG(vals, 150)}</div>
     <div class="flex items-center gap-2 mt-3 text-[10px] text-mute"><span>${tab === 'now' ? 'Descansado' : 'Poco'}</span><span class="flex-1 h-2 rounded-full" style="background:${grad}"></span><span>${tab === 'now' ? 'Muy cargado' : 'Mucho'}</span></div>
     <div class="mt-3 space-y-1">${rows}</div>
     <p class="text-[11px] text-mute mt-2">${foot}</p>
     ${unknown.length ? `<p class="text-[11px] text-mute mt-1">Sin mapa (no reconozco el ejercicio): ${unknown.map(esc).join(', ')}.</p>` : ''}
+    </div>
   </section>`;
 }
 /* Mini silueta para «Hoy te toca» */
@@ -3176,12 +3178,6 @@ function renderSettings() {
   ${accessSectionHTML()}
   <section class="card p-4 mt-3 space-y-3">
     <h3 class="section-title">📱 Aplicación</h3>
-    <div>
-      <div class="text-xs font-bold">Deslizar el dedo a izquierda o derecha</div>
-      <div class="seg mt-1.5" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-        ${[['tabs', 'Cambia de pestaña'], ['dietDay', 'Día en Dieta · bloque en Entreno'], ['off', 'Desactivado']].map(([k, l]) => `<button class="seg-btn py-2 px-1 ${swipeMode() === k ? 'seg-on' : ''}" data-act="swipeMode" data-mode="${k}" type="button">${l}</button>`).join('')}
-      </div>
-    </div>
     ${deferredInstall ? `<button class="btn-primary w-full" data-act="install" type="button">Instalar en la pantalla de inicio</button>` : `<p class="text-xs text-mute">${isStandalone() ? 'Instalada como app ✓' : 'Para instalar: menú ⋮ del navegador → «Instalar aplicación» o «Añadir a pantalla de inicio».'}</p>`}
     ${versionStatusHTML()}
     <div class="grid grid-cols-2 gap-2">
@@ -4143,6 +4139,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.35.0', ['👆 Desliza el dedo sobre el mapa muscular de Progreso para pasar de Ahora a 7 días y 30 días.', '👆 El gesto de deslizar queda fijo: en Dieta cambia de día y en Entreno, de bloque. Ya no hay que elegirlo en Ajustes.']],
   ['4.34.1', ['🧍 Mapa muscular: lo que entrenas (gimnasio o retos) se refleja al momento en «Ahora». Antes no aparecía hasta las 7 de la tarde. Los retos cuentan todas las series que haces y el test de máximo también suma.']],
   ['4.34.0', ['＋ Añadir ejercicio: ahora hay 141 ejercicios preparados, con máquinas, poleas, core y un grupo nuevo de 🎗️ bandas elásticas para entrenar en casa.', '⏱ Ejercicios por tiempo (plancha, plancha lateral, paseo del granjero): cada serie lleva su cronómetro. Pulsa ⏱, cuenta atrás de 3 s, te avisa al llegar al objetivo y guarda los segundos solo. En tus propios ejercicios puedes activarlo desde ✎ → «Por tiempo».']],
   ['4.33.1', ['＋ Añadir bloque: cada bloque sale una sola vez y, si ya lo tienes, pone «✓ Ya lo tienes» en vez de ofrecer otra copia.'], 'quiet'],
@@ -4270,7 +4267,7 @@ const GUIDE = [
     'Consumidas · Cardio · Neto: el cardio se muestra pero <b>no amplía</b> lo que te queda por comer, salvo que lo actives en Ajustes.',
     '🏋️ <b>Gym</b>: la app estima las kcal netas de cada sesión con la duración real, las series, los kilos y tu peso (MET 3,5 a 6). Salen en Dieta junto al cardio (Comidas · Cardio · Gym · Neto) y puedes corregirlas en Progreso → Historial → ajustar.',
     '🎯 La app se abre en la <b>dieta de hoy</b>: anillo exterior = kcal (ámbar); dentro, proteína (cian), carbohidratos (verde) y grasas (rosa). Si te pasas, el exceso da una segunda vuelta y sale una etiqueta «+…». Con un entreno a medias (últimas 3 h) se abre en Entreno. El <b>logo</b> siempre te trae aquí.',
-    '👆 Si en Ajustes → Aplicación eliges «Día en Dieta · bloque en Entreno», deslizar el dedo en Dieta pasa al día siguiente o anterior (como las flechas ‹ ›) y en Entreno, al bloque siguiente o anterior de tu fila de bloques. Con un entreno en curso, en Entreno no hace nada para no sacarte de la serie. Las pestañas se cambian con la barra de abajo.',
+    '👆 Deslizar el dedo: en Dieta pasa al día siguiente o anterior (como las flechas ‹ ›); en Entreno, al bloque siguiente o anterior (con un entreno en curso no hace nada, para no sacarte de la serie); en Progreso, sobre el mapa muscular, cambia entre Ahora, 7 días y 30 días. Las pestañas se cambian con la barra de abajo.',
     '📅 Toca la <b>fecha</b> de Dieta para abrir el calendario del mes: punto verde/ámbar/rojo según la dieta, 🏋️ si hubo pesas y 🔥 si hubo cardio. Al tocar un día ves el detalle y puedes ir a sus comidas.',
     '✎ en una comida la edita; ⭐ «Comidas habituales» repite tus platos más frecuentes de ese tipo, y el buscador encuentra cualquiera del historial.'
   ]],
@@ -4518,7 +4515,7 @@ function makePeek(view) {
 }
 function dropPeek() { swipe.peek?.remove(); swipe.peek = null; }
 /* Modo del gesto: 'tabs' (pestañas), 'dietDay' (solo días en Dieta) u 'off' */
-function swipeMode() { const m = state.settings.swipeMode; return m || (state.settings.swipeNav === false ? 'off' : 'tabs'); }
+function swipeMode() { return 'dietDay'; } // fijo: días en Dieta y bloques en Entreno (el mapa muscular de Progreso tiene su propio gesto)
 function swipeTarget(dir) {
   if (swipeMode() === 'dietDay') {
     if (ui.view === 'train') {
@@ -4667,6 +4664,41 @@ function swipeEnd() {
 }
 document.addEventListener('touchend', swipeEnd, { passive: true });
 document.addEventListener('touchcancel', swipeEnd, { passive: true });
+
+/* Mapa muscular: deslizar el dedo cambia entre Ahora · 7 días · 30 días */
+const MM_TABS = ['now', 'd7', 'd30'];
+const mms = { on: false, axis: null, x0: 0, y0: 0, dx: 0, busy: false };
+document.addEventListener('touchstart', e => {
+  mms.on = false; mms.axis = null;
+  if (mms.busy || ui.view !== 'progress' || e.touches.length !== 1 || !e.target.closest('#muscleMap') || e.target.closest('button')) return;
+  const t = e.touches[0]; Object.assign(mms, { on: true, x0: t.clientX, y0: t.clientY, dx: 0 });
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  if (!mms.on) return;
+  const t = e.touches[0], dx = t.clientX - mms.x0, dy = t.clientY - mms.y0;
+  if (!mms.axis) { if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return; mms.axis = Math.abs(dx) > Math.abs(dy) * 1.4 ? 'x' : 'y'; if (mms.axis === 'y') { mms.on = false; return; } }
+  const i = MM_TABS.indexOf(ui.mmTab || 'now'), has = MM_TABS[i + (dx < 0 ? 1 : -1)];
+  mms.dx = dx; const b = $('#mmBody'); if (b) { b.style.transition = ''; b.style.transform = `translate3d(${has ? dx : dx * 0.15}px,0,0)`; b.style.opacity = has ? String(1 - Math.min(0.6, Math.abs(dx) / W())) : ''; }
+}, { passive: true });
+function mmSwipeEnd() {
+  if (!mms.on) return; mms.on = false;
+  if (mms.axis !== 'x') return;
+  const b = $('#mmBody'); if (!b) return;
+  const dir = mms.dx < 0 ? 1 : -1, i = MM_TABS.indexOf(ui.mmTab || 'now'), next = MM_TABS[i + dir];
+  if (!next || Math.abs(mms.dx) < 50) { b.style.transition = 'transform 200ms ease, opacity 200ms ease'; b.style.transform = ''; b.style.opacity = ''; return; }
+  mms.busy = true;
+  b.style.transition = 'transform 160ms ease, opacity 160ms ease'; b.style.transform = `translate3d(${-dir * W()}px,0,0)`; b.style.opacity = '0';
+  setTimeout(() => {
+    ui.mmTab = next;
+    const sec = $('#muscleMap'); if (sec) sec.outerHTML = muscleMapHTML();
+    const nb = $('#mmBody');
+    if (nb) { nb.style.transform = `translate3d(${dir * W() * 0.4}px,0,0)`; nb.style.opacity = '0';
+      requestAnimationFrame(() => requestAnimationFrame(() => { nb.style.transition = 'transform 220ms cubic-bezier(.2,.7,.3,1), opacity 220ms ease'; nb.style.transform = ''; nb.style.opacity = ''; })); }
+    setTimeout(() => { mms.busy = false; }, 240);
+  }, 160);
+}
+document.addEventListener('touchend', mmSwipeEnd, { passive: true });
+document.addEventListener('touchcancel', mmSwipeEnd, { passive: true });
 
 const actions = {
   pickDay: b => { ui.dayId = b.dataset.day; render(); window.scrollTo({ top: 0 }); },
