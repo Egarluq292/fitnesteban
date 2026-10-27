@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.37.1';
+const APP_VERSION = '4.37.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3045,8 +3045,8 @@ function renderProgress() {
 
   ${renderRecords()}
 
-  <section class="card p-4 mt-3">
-    <h3 class="section-title">📚 Historial de sesiones</h3>
+  <details class="card p-4 mt-3" ${openAttr('history')}>
+    <summary class="flex items-center justify-between cursor-pointer select-none"><h3 class="section-title">📚 Historial de sesiones</h3><span class="flex items-center gap-2 text-[11px] text-mute">${hist.length ? `${hist.length === 20 ? 'últimas 20' : hist.length + (hist.length === 1 ? ' sesión' : ' sesiones')} · ${esc(fmtDateShort(hist[0].date))}` : 'sin sesiones'}<span class="tri"></span></span></summary>
     <div class="space-y-2 mt-3">
       ${hist.length ? hist.map(s => s.reto ? `<div class="bg-ink rounded-xl border border-line px-3 py-2.5 text-sm">
         <div class="flex justify-between items-center"><span class="font-semibold truncate">🏆 Reto ${esc(s.reto.r.name)} <span class="text-mute font-normal text-xs">· nivel ${s.reto.h.level}</span></span><span class="text-[11px] text-mute shrink-0 ml-2">${fmtDate(s.date)}</span></div>
@@ -3064,7 +3064,7 @@ function renderProgress() {
         </div>
       </details>`).join('') : '<p class="text-sm text-mute">Sin sesiones todavía.</p>'}
     </div>
-  </section>`;
+  </details>`;
 }
 
 /* =========================================================================
@@ -4226,6 +4226,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.37.2', ['📚 Progreso: el historial de sesiones va plegado, como los récords; a la derecha ves cuántas hay y la fecha de la última.'], 'quiet'],
   ['4.37.1', ['🕘 Novedades: al final del historial, «Ver novedades anteriores» va mostrando todas las versiones hasta el principio.'], 'admin'],
   ['4.37.0', ['👨‍🍳 Recetas del Coach: cuando el Coach IA te propone un plato, pulsa «Receta» y verás cómo prepararlo paso a paso, con los mismos ingredientes y gramos que se apuntan en Dieta. Se guarda en la conversación y con «¿Cambiar algo?» la rehaces (a la plancha, en airfryer…).']],
   ['4.36.0', ['🏆 Tus retos ya salen en Progreso → Historial, junto a tus sesiones, y en el calendario de Dieta (con su 🏆 en cada día).']],
