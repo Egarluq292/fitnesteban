@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.37.2';
+const APP_VERSION = '4.37.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2521,7 +2521,7 @@ function renderDiet() {
   else if (leftK >= 0) advice = `Llevas ${Math.round(t.kcal)} kcal consumidas.${cardioTxt} Proteína cumplida ✓. Margen: ${leftK} kcal.`;
   else advice = `Llevas ${Math.round(t.kcal)} kcal consumidas.${cardioTxt} Te has pasado ${-leftK} kcal. Sin drama: mañana vuelve a tu objetivo, no compenses de más.`;
 
-  const typeChips = MEAL_TYPES.map(tp => `<button class="chip chip-sm ${ui.mealType === tp ? 'chip-on' : ''}" data-act="mealType" data-type="${tp}" type="button">${tp}</button>`).join('');
+  const typeChips = MEAL_TYPES.map(tp => `<button class="chip chip-sm meal-chip ${ui.mealType === tp ? 'chip-on' : ''}" data-act="mealType" data-type="${tp}" type="button">${tp}</button>`).join('');
   const hasHistory = Object.keys(state.meals).length > 0;
   const grouped = MEAL_TYPES.map(tp => {
     const items = mealsOf(date).filter(m => (m.type || 'Otro') === tp);
@@ -2567,7 +2567,7 @@ function renderDiet() {
 
   <section class="card p-4 mt-3 space-y-3 ${ui.editing ? 'border-brand/50' : ''}" id="mealCard">
     ${ui.editing ? `<div class="flex items-center justify-between"><h3 class="section-title">✏️ Editar comida</h3><span class="text-[11px] text-mute">${esc(fmtDate(ui.editing.date))}</span></div>` : '<h3 class="section-title">➕ Añadir comida</h3>'}
-    <div class="flex flex-wrap gap-1.5">${typeChips}</div>
+    <div class="flex gap-1" data-noswipe>${typeChips}</div>
     ${ui.editing ? '' : `<textarea class="field" id="mealDesc" rows="2" placeholder="${ui.img ? 'Opcional: añade lo que sepas para afinar (ej: 150 g de arroz, aceite de oliva)' : 'Ej: 200 g de pechuga a la plancha y 150 g de arroz'}">${esc(ui.mealDesc)}</textarea>
     ${ui.img ? `<div class="relative rounded-xl overflow-hidden border border-line">
         <img src="${ui.img}" alt="Foto del plato" class="w-full max-h-56 object-cover" />
@@ -4226,6 +4226,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.37.3', ['🍽️ Dieta: Desayuno, Comida, Puente, Cena y Otro caben en una sola fila.'], 'quiet'],
   ['4.37.2', ['📚 Progreso: el historial de sesiones va plegado, como los récords; a la derecha ves cuántas hay y la fecha de la última.'], 'quiet'],
   ['4.37.1', ['🕘 Novedades: al final del historial, «Ver novedades anteriores» va mostrando todas las versiones hasta el principio.'], 'admin'],
   ['4.37.0', ['👨‍🍳 Recetas del Coach: cuando el Coach IA te propone un plato, pulsa «Receta» y verás cómo prepararlo paso a paso, con los mismos ingredientes y gramos que se apuntan en Dieta. Se guarda en la conversación y con «¿Cambiar algo?» la rehaces (a la plancha, en airfryer…).']],
