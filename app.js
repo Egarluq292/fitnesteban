@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.33.0';
+const APP_VERSION = '4.33.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -133,7 +133,7 @@ function exLibraryModal() {
   const has = n => day.exercises.some(e => e.variants.some(v => v.name.toLowerCase() === n.toLowerCase()));
   const list = () => exLibAll().filter(x => (!st.g || x[0] === st.g) && (!st.q || normTxt(x[1] + ' ' + x[0] + ' ' + x[9].map(a => a[0]).join(' ')).includes(normTxt(st.q))));
   const rows = () => { const L = list(); return L.length ? L.map(x => { const i = exLibAll().indexOf(x), added = has(x[1]); return `<div class="flex items-center justify-between gap-2 bg-ink rounded-xl border border-line px-3 py-2">
-      <div class="min-w-0"><div class="font-semibold text-[14px] truncate">${esc(x[1])}${x[10] ? ' <span class="text-[10px] font-bold text-brand">NUEVO</span>' : ''}</div><div class="text-[11px] text-mute truncate">${EX_LIB_ICON[x[0]] || ''} ${esc(x[0])} · ${x[3]}×${x[4]}–${x[5]}${x[8] ? ' · peso corporal' : ''} · +${x[9].length} alternativas</div></div>
+      <div class="min-w-0"><div class="font-semibold text-[14px] truncate">${esc(x[1])}${x[10] && !access.me?.admin ? ' <span class="text-[10px] font-bold text-brand">NUEVO</span>' : ''}</div><div class="text-[11px] text-mute truncate">${EX_LIB_ICON[x[0]] || ''} ${esc(x[0])} · ${x[3]}×${x[4]}–${x[5]}${x[8] ? ' · peso corporal' : ''} · +${x[9].length} alternativas</div></div>
       <button class="${added ? 'btn-mini text-emerald-300' : 'btn-mini text-brand'} shrink-0" data-mact="add" data-i="${i}" type="button">${added ? '✓ Añadido' : '＋ Añadir'}</button></div>`; }).join('') : '<p class="text-xs text-mute text-center py-4">No está entre los preparados. Créalo con «✏️ Crear uno nuevo».</p>'; };
   const html = () => `<h3 class="modal-title">＋ Añadir ejercicio</h3>
     <button class="btn-ghost w-full" data-mact="create" type="button">✏️ Crear uno nuevo</button>
@@ -186,7 +186,14 @@ async function fetchRemoteLib() {
   } catch { /* sin conexión o aún no hay bloques publicados: se usa lo guardado */ }
   return remoteLib;
 }
-const libAll = () => [...remoteLib.map(x => ({ ...x, pub: true, days: () => x.days })), ...LIB_BLOCKS];
+// Un bloque compartido por Esteban sustituye al preparado de fábrica con el mismo nombre (base = id del de fábrica).
+const libKey = n => String(n || '').trim().toLowerCase();
+const libAll = () => [
+  ...remoteLib.map(x => ({ ...x, pub: true, base: LIB_BLOCKS.find(b => libKey(b.name) === libKey(x.name))?.lib, days: () => x.days })),
+  ...LIB_BLOCKS.filter(b => !remoteLib.some(x => libKey(x.name) === libKey(b.name)))
+];
+const libHave = L => state.plan.programs.some(p => p.lib === L.lib || p.pubId === L.lib || (L.base && p.lib === L.base));
+const libIsNew = L => L.pub && !access.me?.admin && (!L.at || L.at >= addDays(todayISO(), -30));
 /* Publicar (solo administrador, con GitHub conectado): copia limpia del bloque, sin ids */
 function blockForLib(p) {
   return p.days.map(d => ({ label: d.label, rotation: d.rotation, title: d.title, subtitle: d.subtitle,
@@ -280,14 +287,14 @@ function libraryModal() {
   const html = () => `<h3 class="modal-title">＋ Añadir bloque</h3>
     <button class="btn-ghost w-full" data-mact="empty" type="button">✏️ Crear un bloque vacío</button>
     <div class="text-[11px] font-bold uppercase tracking-wider text-mute pt-1">O elige uno preparado por Esteban</div>
-    <div class="space-y-2">${libAll().map(L => {
-      const days = L.days(), nEx = days.reduce((a, d) => a + d.exercises.length, 0), have = state.plan.programs.some(p => p.lib === L.lib), open = ui.libOpen === L.lib;
+    <div class="space-y-2">${libAll().sort((a, b) => libHave(a) - libHave(b)).map(L => {
+      const days = L.days(), nEx = days.reduce((a, d) => a + d.exercises.length, 0), have = libHave(L), open = ui.libOpen === L.lib;
       return `<div class="card p-3 space-y-2">
-        <div class="flex items-start justify-between gap-2"><div class="min-w-0"><div class="font-extrabold">${L.icon ? L.icon + ' ' : ''}${esc(L.name)}${L.pub ? ' <span class="text-[10px] font-bold text-brand align-middle">NUEVO</span>' : ''}</div><div class="text-[11px] text-mute">${days.length} ${days.length === 1 ? 'día' : 'días'} · ${nEx} ejercicios${have ? ' · <span class="text-emerald-300">ya lo tienes</span>' : ''}</div></div>
+        <div class="flex items-start justify-between gap-2"><div class="min-w-0"><div class="font-extrabold">${L.icon ? L.icon + ' ' : ''}${esc(L.name)}${libIsNew(L) && !have ? ' <span class="text-[10px] font-bold text-brand align-middle">NUEVO</span>' : ''}</div><div class="text-[11px] text-mute">${days.length} ${days.length === 1 ? 'día' : 'días'} · ${nEx} ejercicios${L.pub && access.me?.admin ? ' · <span class="text-brand">compartido por ti</span>' : ''}</div></div>
           <button class="btn-mini text-brand shrink-0" data-mact="see" data-lib="${L.lib}" type="button">${open ? 'Ocultar' : 'Ver'}</button></div>
         <p class="text-[12px] text-slate-300 leading-snug">${esc(L.desc)}</p>
         ${open ? days.map(d => `<div class="text-[12px]"><div class="text-brand font-bold">${esc(d.label)} · ${esc(d.title)}</div><ul class="text-mute list-disc pl-5">${d.exercises.map(e => `<li>${esc(e.variants[0].name)} <span class="opacity-70">${e.sets}×${e.minReps}–${e.maxReps}</span></li>`).join('')}</ul></div>`).join('') : ''}
-        <button class="${have ? 'btn-ghost' : 'btn-primary'} w-full" data-mact="add" data-lib="${L.lib}" type="button">${have ? '＋ Añadir otra copia' : '＋ Añadir'}</button></div>`;
+        ${have ? '<div class="w-full text-center text-[13px] font-bold text-emerald-300 py-2 rounded-xl" style="background:rgba(16,185,129,.08)">✓ Ya lo tienes</div>' : `<button class="btn-primary w-full" data-mact="add" data-lib="${L.lib}" type="button">＋ Añadir</button>`}</div>`;
     }).join('')}</div>
     <p class="text-[11px] text-mute">Al añadir uno se copia a tus bloques y lo puedes cambiar como quieras.</p>`;
   fetchRemoteLib().then(() => { const sh = $('#modalRoot .modal-sheet'); if (sh && sh.querySelector('[data-mact=empty]')) sh.innerHTML = html(); });
@@ -4025,6 +4032,7 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.33.1', ['＋ Añadir bloque: cada bloque sale una sola vez y, si ya lo tienes, pone «✓ Ya lo tienes» en vez de ofrecer otra copia.'], 'quiet'],
   ['4.33.0', ['📤 Compartir con todos: en el ✎ de cualquier bloque o ejercicio tuyo verás «Compartir con todos». Les aparecerá al pulsar ＋ (con la etiqueta NUEVO). Puedes actualizarlo o dejar de compartirlo desde el mismo sitio.'], 'admin'],
   ['4.32.0', ['＋ Añadir ejercicio: además de crear el tuyo, eliges entre más de 60 ejercicios preparados (por grupos y con buscador), ya configurados con series, reps, descanso, técnica y 2 alternativas.']],
   ['4.31.0', ['＋ Añadir bloque: el botón ＋ junto a ✎ en Entreno te deja crear un bloque vacío o elegir uno preparado por Esteban. Estreno: 🔔 KETTLEBELL, para entrenar en casa. Irán llegando más.', '🧹 Si nunca usaste ni cambiaste PPT o FULL BODY, se han quitado para dejarte la app limpia: si los quieres, están en ＋. Los bloques que usas o editaste siguen igual.']],
