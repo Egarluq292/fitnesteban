@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.41.5';
+const APP_VERSION = '4.41.6';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4343,6 +4343,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.41.6', ['🔧 Script v7: si falla, la app muestra el error en «Este dispositivo», y tiene una función «probar» para autorizar permisos. Reconfigurar reutiliza la clave actual, así el código siempre cuadra.'], 'admin'],
   ['4.41.5', ['🔧 Ajustes → Aplicación: «Este dispositivo» muestra si está registrado en el límite de dispositivos o qué responde el script, con un botón «Comprobar».'], 'quiet'],
   ['4.41.4', ['🔑 El registro del dispositivo espera más al script de Google y, si no contesta, lo vuelve a intentar al volver a la app. En Acceso, tu fila pone «sin límite (administrador)». «Enviármelo» manda el script como archivo, sin cortes.'], 'admin'],
   ['4.41.3', ['🔑 Pantalla de acceso: «Cada código es personal. Válido solo en 2 dispositivos.» Invitación por WhatsApp: «Es personal. Válido solo en 2 dispositivos.»'], 'quiet'],
@@ -5524,7 +5525,7 @@ async function deviceAllowed(code, me) {
     const txt = await r.text(); let d = {};
     try { d = JSON.parse(txt); } catch { deviceDiag = `respuesta no válida (HTTP ${r.status}): ${txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90)}`; return true; }
     deviceSure = typeof d.allowed === 'boolean';
-    deviceDiag = d.allowed === true ? `registrado ✓ (${d.n} dispositivo${d.n === 1 ? '' : 's'})` : d.allowed === false ? 'bloqueado (límite de dispositivos)' : `el script contestó ${txt.slice(0, 60)}${d.error === 'clave' ? ' → script antiguo' : !d.ok ? ' → no reconoce el código' : ''}`;
+    deviceDiag = d.allowed === true ? `registrado ✓ (${d.n} dispositivo${d.n === 1 ? '' : 's'})` : d.allowed === false ? 'bloqueado (límite de dispositivos)' : (d.error && d.error !== 'clave' ? `error del script: ${String(d.error).slice(0, 140)}` : `el script contestó ${txt.slice(0, 60)}${d.error === 'clave' ? ' → script antiguo' : !d.ok ? ' → no reconoce el código' : ''}`);
     return d.allowed !== false || !!me?.admin;
   } catch (e) { deviceDiag = e.name === 'AbortError' ? 'el script no contestó en 20 s' : `no se pudo conectar (${e.message})`; return true; }
 }
@@ -5726,7 +5727,7 @@ function usageLine(hash) {
   return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} de ${DEVICE_LIMIT} dispositivos`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="truncate text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 truncate">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
 }
 function usageScript(key) {
-  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código, máx. 2) · v6
+  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código, máx. 2) · v7
 const READ_KEY = '${key}';
 const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
 const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre', 'correo', 'alta', 'dispositivos', 'bloqueos'];
@@ -5805,7 +5806,15 @@ function doPost(e) {
     return salida_({ ok: true });
   } catch (err) { return salida_({ ok: false }); }
 }
+// ▶ Para comprobar permisos: elige «probar» arriba y pulsa Ejecutar. Debe decir cuántos códigos y filas hay.
+function probar() {
+  const n = huellas_().length, f = hoja_().getLastRow() - 1;
+  Logger.log('OK · códigos en acceso.txt: ' + n + ' · filas en la hoja: ' + f);
+}
 function doGet(e) {
+  try { return doGet_(e); } catch (err) { return salida_({ ok: false, error: 'script: ' + String((err && err.message) || err).slice(0, 200) }); }
+}
+function doGet_(e) {
   const q = (e && e.parameter) || {};
   // ¿puede este dispositivo usar este código? (máx. LIMITE dispositivos; el administrador, sin límite)
   if (q.c === 'check') {
@@ -5827,7 +5836,7 @@ function doGet(e) {
   if (q.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
   const datos = hoja_().getDataRange().getValues().slice(1);
   const dd = disp_();
-  return salida_({ ok: true, ver: 6, rows: datos.map(r => ({ h: String(r[0]), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []) })) });
+  return salida_({ ok: true, ver: 7, rows: datos.map(r => ({ h: String(r[0]), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []) })) });
 }`;
 }
 /* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
@@ -5844,9 +5853,11 @@ function syncUsageNames() {
     } catch { /* se reintenta la próxima vez que abras Acceso */ }
   }, 600);
 }
-function usageSetupModal() {
+async function usageSetupModal() {
   // la misma clave hasta que se active: así da igual cerrar y reabrir esta ventana
   let key = lsGet('fitnesteban_usekey_pending');
+  // si ya hay una clave activa (y Acceso está abierto con el PIN), se reutiliza: así el código nuevo siempre cuadra con la app
+  if (!/^[0-9a-f]{36}$/.test(key || '') && lsGet(USE_KEY) && ui.accessPin) { try { const k = await secretDec(lsGet(USE_KEY), ui.accessPin); if (/^[0-9a-f]{36}$/.test(k)) { key = k; lsSet('fitnesteban_usekey_pending', key); } } catch { /* nada */ } }
   if (!/^[0-9a-f]{36}$/.test(key || '')) { key = [...crypto.getRandomValues(new Uint8Array(18))].map(b => b.toString(16).padStart(2, '0')).join(''); lsSet('fitnesteban_usekey_pending', key); }
   const code = usageScript(key);
   openModal(`<h3 class="modal-title">📶 Ver quién usa la app</h3>
