@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.37.4';
+const APP_VERSION = '4.38.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2251,6 +2251,14 @@ function mealGroups() {
   }
   return [...g.values()];
 }
+/* ★ Comidas favoritas: se guardan por descripción y salen las primeras en «Favoritas y habituales» */
+const isFavMeal = key => !!key && (state.settings.favMeals || []).includes(key);
+function toggleFavMeal(key) {
+  if (!key) return;
+  const l = state.settings.favMeals || [], on = !l.includes(key);
+  state.settings.favMeals = on ? [...l, key] : l.filter(k => k !== key);
+  persist(); render(); toast(on ? '★ Guardada en favoritas' : 'Quitada de favoritas');
+}
 function mealPicks() {
   const groups = mealGroups();
   const q = normName(ui.mealSearch || '');
@@ -2260,13 +2268,14 @@ function mealPicks() {
   const t = ui.mealType;
   const byFreq = (a, b, ka, kb) => kb - ka || (a.lastDate < b.lastDate ? 1 : a.lastDate > b.lastDate ? -1 : 0);
   const ofType = groups.filter(e => e.byType[t]).sort((a, b) => byFreq(a, b, a.byType[t], b.byType[t]));
-  return { mode: 'top', list: ofType.slice(0, 10) };
+  const favs = ofType.filter(e => isFavMeal(e.key)), rest = ofType.filter(e => !isFavMeal(e.key));
+  return { mode: 'top', list: [...favs, ...rest.slice(0, 10)], nFav: favs.length };
 }
 function renderPickList() {
   const { mode, list } = mealPicks();
   ui._picks = list;
   if (!list.length) return `<p class="text-xs text-mute">${mode === 'search' ? 'Nada encontrado en tu historial.' : `Aún no has registrado ninguna comida como «${esc(ui.mealType)}». Usa el buscador para encontrar otras.`}</p>`;
-  return list.map((e, i) => `<button class="chip chip-sm text-left" data-act="repeatMeal" data-i="${i}" type="button">${esc((e.last.desc || e.last.type).slice(0, 34))} <span class="text-mute">· <span class="${MAC.kcal.text}">${Math.round(e.last.kcal)}</span>${e.count > 1 ? ` · ×${e.count}` : ''}</span></button>`).join('');
+  return list.map((e, i) => isFavMeal(e.key) ? `<span class="chip chip-sm !p-0 overflow-hidden" style="border-color:rgba(252,211,77,.45)"><button class="pl-2.5 pr-1.5 py-1.5 text-amber-300 text-sm leading-none" data-act="favMeal" data-key="${esc(e.key)}" type="button" aria-label="Quitar de favoritas">★</button><button class="pr-3 py-1.5 text-left" data-act="repeatMeal" data-i="${i}" type="button">${esc((e.last.desc || e.last.type).slice(0, 34))} <span class="text-mute">· <span class="${MAC.kcal.text}">${Math.round(e.last.kcal)}</span>${e.count > 1 ? ` · ×${e.count}` : ''}</span></button></span>` : `<button class="chip chip-sm text-left" data-act="repeatMeal" data-i="${i}" type="button">${esc((e.last.desc || e.last.type).slice(0, 34))} <span class="text-mute">· <span class="${MAC.kcal.text}">${Math.round(e.last.kcal)}</span>${e.count > 1 ? ` · ×${e.count}` : ''}</span></button>`).join('');
 }
 /* ---------- Colores fijos de cada macro (mismos en toda la app) ---------- */
 const MAC = {
@@ -2534,6 +2543,7 @@ function renderDiet() {
           <div class="text-sm font-semibold truncate ${ui.editing?.id === m.id ? 'text-brand' : ''}">${ui.editing?.id === m.id ? '✏️ ' : ''}${esc(m.desc || tp)}</div>
           <div class="text-[11px] font-mono mt-0.5">${macroLine(m)}</div>
         </div>
+        ${normName(m.desc) ? `<button class="iconbtn iconbtn-sm" style="${isFavMeal(normName(m.desc)) ? 'color:#fcd34d;border-color:rgba(252,211,77,.5)' : ''}" data-act="favMeal" data-key="${esc(normName(m.desc))}" type="button" aria-label="${isFavMeal(normName(m.desc)) ? 'Quitar de favoritas' : 'Guardar en favoritas'}">${isFavMeal(normName(m.desc)) ? '★' : '☆'}</button>` : ''}
         <button class="iconbtn iconbtn-sm" data-act="editMeal" data-id="${esc(m.id)}" type="button" aria-label="Editar">✎</button>
         <button class="iconbtn iconbtn-sm" data-act="delMeal" data-id="${esc(m.id)}" type="button" aria-label="Borrar">✕</button>
       </div>`).join('')}
@@ -2587,8 +2597,8 @@ function renderDiet() {
   </section>
 
   ${hasHistory && !ui.editing ? `<section class="card p-4 mt-3">
-    <h3 class="section-title">⭐ Tus comidas habituales</h3>
-    <p class="text-[11px] text-mute mt-1">Las que más repites en «${esc(ui.mealType)}» (hasta 10). Al tocar una podrás ajustar cantidades antes de añadirla.</p>
+    <h3 class="section-title">⭐ Favoritas y habituales</h3>
+    <p class="text-[11px] text-mute mt-1">En «${esc(ui.mealType)}»: primero tus favoritas ★ y luego las que más repites (hasta 10). Márcalas con ☆ en el registro. Al tocar una podrás ajustar cantidades antes de añadirla.</p>
     <input class="field mt-2.5 py-2 text-xs" id="mealSearch" type="search" autocomplete="off" placeholder="🔍 Buscar en todo tu historial…" value="${esc(ui.mealSearch || '')}" />
     <div class="flex flex-wrap gap-1.5 mt-2.5" id="mealPicks">${renderPickList()}</div>
   </section>` : ''}
@@ -4226,6 +4236,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.38.0', ['★ Comidas favoritas: en el registro de Dieta toca ☆ en cualquier comida para guardarla. Sale la primera en «Favoritas y habituales» (según el tipo: Desayuno, Comida…) y la repites en un toque. Toca la ★ para quitarla.']],
   ['4.37.4', ['⭕ Hábitos de varios toques (agua…): al llegar al objetivo siguen contando (10/8 vasos).'], 'quiet'],
   ['4.37.3', ['🍽️ Dieta: Desayuno, Comida, Puente, Cena y Otro caben en una sola fila.'], 'quiet'],
   ['4.37.2', ['📚 Progreso: el historial de sesiones va plegado, como los récords; a la derecha ves cuántas hay y la fecha de la última.'], 'quiet'],
@@ -4362,7 +4373,7 @@ const GUIDE = [
     '🎯 La app se abre en la <b>dieta de hoy</b>: anillo exterior = kcal (ámbar); dentro, proteína (cian), carbohidratos (verde) y grasas (rosa). Si te pasas, el exceso da una segunda vuelta y sale una etiqueta «+…». Con un entreno a medias (últimas 3 h) se abre en Entreno. El <b>logo</b> siempre te trae aquí.',
     '👆 Deslizar el dedo: en Dieta pasa al día siguiente o anterior (como las flechas ‹ ›); en Entreno, al bloque siguiente o anterior (con un entreno en curso no hace nada, para no sacarte de la serie); en Progreso, sobre el mapa muscular, cambia entre Ahora, 7 días y 30 días. Las pestañas se cambian con la barra de abajo.',
     '📅 Toca la <b>fecha</b> de Dieta para abrir el calendario del mes: punto verde/ámbar/rojo según la dieta, 🏋️ si hubo pesas y 🔥 si hubo cardio. Al tocar un día ves el detalle y puedes ir a sus comidas.',
-    '✎ en una comida la edita; ⭐ «Comidas habituales» repite tus platos más frecuentes de ese tipo, y el buscador encuentra cualquiera del historial.'
+    '✎ en una comida la edita y ☆ la guarda en favoritas; ⭐ «Favoritas y habituales» te enseña primero tus favoritas y luego tus platos más frecuentes de ese tipo, y el buscador encuentra cualquiera del historial.'
   ]],
   ['⚡ Coach IA', [
     'El botón ⚡ de arriba (junto al «?») abre un chat con Gemini que <b>lee tus datos</b>: plan y recomendación del coach en cada ejercicio, últimas 8 sesiones, comidas de hoy y lo que te queda, dieta de la semana, cardio y medidas.',
@@ -4935,6 +4946,7 @@ const actions = {
     ui.aiResult = null; ui.img = null; ui.mealDesc = '';
     render(); toast('Comida registrada ✓');
   },
+  favMeal: b => toggleFavMeal(b.dataset.key),
   repeatMeal: b => {
     const e = (ui._picks || [])[parseInt(b.dataset.i, 10)]; if (!e) return;
     ui.editing = null; ui.img = null;
