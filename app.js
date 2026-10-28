@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.41.3';
+const APP_VERSION = '4.41.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4342,6 +4342,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.41.4', ['🔑 El registro del dispositivo espera más al script de Google y, si no contesta, lo vuelve a intentar al volver a la app. En Acceso, tu fila pone «sin límite (administrador)». «Enviármelo» manda el script como archivo, sin cortes.'], 'admin'],
   ['4.41.3', ['🔑 Pantalla de acceso: «Cada código es personal. Válido solo en 2 dispositivos.» Invitación por WhatsApp: «Es personal. Válido solo en 2 dispositivos.»'], 'quiet'],
   ['4.41.1', ['🔑 Acceso: cada dispositivo sale por separado (Android · Chrome, Windows · Chrome…) con su último uso y un botón «Quitar» que libera solo ese; el quitado ya no puede volver a entrar con ese código. Requiere el script v6 (Reconfigurar → nueva versión).'], 'admin'],
   ['4.41.0', ['🔑 Tu código es solo tuyo: funciona como mucho en 2 dispositivos (por ejemplo, tu móvil y tu tablet). Para ello la app envía a Esteban un identificador del dispositivo, sin datos personales. Si cambias de móvil y no puedes entrar, escribe a fitnestebanapp@gmail.com.']],
@@ -5507,14 +5508,16 @@ async function accessCheck(list) {
    Si el script no responde o aún no está actualizado, se deja entrar: nadie se queda fuera por un fallo ajeno. */
 const DEVICE_LIMIT = 2;
 const blockedMsg = () => `Este código ya se usa en ${DEVICE_LIMIT} dispositivos. Si has cambiado de móvil, escribe a <a class="text-brand underline" href="mailto:${CONTACT_MAIL}?subject=${encodeURIComponent('FITNESTEBAN · cambio de móvil')}">${CONTACT_MAIL}</a> y te lo libero.`;
+let deviceSure = false; // ¿el script ha contestado de verdad? (si no, se vuelve a preguntar al volver a la app)
 async function deviceAllowed(code, me) {
-  const url = access.usageUrl;
+  const url = access.usageUrl; deviceSure = false;
   if (!url || !navigator.onLine) return true;
   try {
-    const h = await codeHash(code), ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 7000);
+    const h = await codeHash(code), ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000); // el script de Google puede tardar en «despertar»
     const r = await fetch(`${url}?c=check&h=${h}&d=${encodeURIComponent(deviceId())}&l=${encodeURIComponent(deviceLabel())}&t=${Date.now()}`, { cache: 'no-store', signal: ctl.signal });
     clearTimeout(t);
     const d = await r.json();
+    deviceSure = typeof d.allowed === 'boolean';
     return d.allowed !== false || !!me?.admin;
   } catch { return true; }
 }
@@ -5522,7 +5525,7 @@ let deviceChecked = false;
 async function deviceGuard() {
   if (deviceChecked || !access.ok) return; deviceChecked = true;
   const code = lsGet(ACCESS_KEY)?.code; if (!code) return;
-  if (await deviceAllowed(code, access.me)) return;
+  if (await deviceAllowed(code, access.me)) { if (!deviceSure) deviceChecked = false; return; }
   access.ok = false; try { localStorage.removeItem(ACCESS_KEY); } catch { /* nada */ }
   closeModal(); lockScreen('code', blockedMsg());
 }
@@ -5549,7 +5552,7 @@ function lockScreen(mode, msg = '') {
       if (!me) { const live = await fetchAclLive(); if (live) { list = live; me = live.find(x => x.hash === h); } }
       if (!me) { toast(list ? 'Código no válido' : 'Sin conexión para comprobar el código', 'error'); $('#lockGo').disabled = false; return; }
       if (!(await deviceAllowed(v, me))) { lockScreen('code', blockedMsg()); return; }
-      deviceChecked = true;
+      deviceChecked = deviceSure;
       lsSet(ACCESS_KEY, { code: normCode(v), at: Date.now() });
       unlock(me); toast('Acceso concedido 👋');
     } catch { $('#lockGo').disabled = false; }
@@ -5603,7 +5606,7 @@ async function accessBoot() {
   if (me) { if (!access.ok) unlock(me); else access.me = me; usagePing(); deviceGuard(); }
   else lockScreen('code', lsGet(ACCESS_KEY)?.code ? `Tu código ya no es válido. Pide uno nuevo a <a class="text-brand underline" href="mailto:${CONTACT_MAIL}?subject=${encodeURIComponent('FITNESTEBAN · código de acceso')}">${CONTACT_MAIL}</a>` : '');
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { usagePing(); if (l && !(await accessCheck(l))) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', `Tu código ya no es válido. Pide uno nuevo a <a class="text-brand underline" href="mailto:${CONTACT_MAIL}?subject=${encodeURIComponent('FITNESTEBAN · código de acceso')}">${CONTACT_MAIL}</a>`); } }); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { usagePing(); deviceGuard(); if (l && !(await accessCheck(l))) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', `Tu código ya no es válido. Pide uno nuevo a <a class="text-brand underline" href="mailto:${CONTACT_MAIL}?subject=${encodeURIComponent('FITNESTEBAN · código de acceso')}">${CONTACT_MAIL}</a>`); } }); });
 
 /* Gestión (solo administrador): crear el código de una persona y la línea para acceso.txt */
 function newCode() { const a = crypto.getRandomValues(new Uint8Array(8)); const s = [...a].map(x => CODE_ABC[x % CODE_ABC.length]).join(''); return s.slice(0, 4) + '-' + s.slice(4); }
@@ -5713,7 +5716,7 @@ function usageLine(hash) {
   if (!u) return '<div class="text-[11px] text-mute">⚪ Aún no la ha abierto (o sin conexión desde que tiene el código)</div>';
   const ago = daysBetween(u.last, todayISO()), old = u.v && cmpVer(APP_VERSION, String(u.v)) > 0;
   const when = ago <= 0 ? 'Hoy' : ago === 1 ? 'Ayer' : `Hace ${ago} días`;
-  return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${u.n} de ${DEVICE_LIMIT} dispositivos${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="truncate text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 truncate">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
+  return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} de ${DEVICE_LIMIT} dispositivos`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="truncate text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 truncate">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
 }
 function usageScript(key) {
   return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código, máx. 2) · v6
@@ -5848,12 +5851,17 @@ function usageSetupModal() {
       <li><b class="text-brand">4.</b> Copia la <b>URL de la aplicación web</b> (acaba en /exec) y pégala aquí.</li>
       <li class="text-amber-300"><b>Si ya lo habías implementado antes:</b> pega el código nuevo, guarda y en <b>Implementar → Gestionar implementaciones → ✏️ → Versión: Nueva versión → Implementar</b>. Si no, Google sigue usando el código viejo. La URL no cambia.</li>
     </ol>
-    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="copy" type="button">📋 Copiar código</button><button class="btn-ghost" data-mact="share" type="button">📤 Enviármelo</button></div>
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="copy" type="button">📋 Copiar código</button><button class="btn-ghost" data-mact="share" type="button">📤 Enviármelo (archivo)</button></div>
     <label class="lbl">URL de la aplicación web<input class="field mt-1 font-mono text-xs" name="url" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec" /></label>
     <button class="btn-primary w-full" data-mact="save" type="button">Guardar y activar</button>
     <p class="text-[11px] text-mute">El código lleva una clave de lectura única: solo tu app (con tu PIN) puede consultar la hoja. Los móviles de los demás solo pueden apuntar su visita.</p>`, {
     copy: () => navigator.clipboard.writeText(code).then(() => toast('Código copiado: pégalo en Apps Script')).catch(() => toast('No se pudo copiar', 'error')),
-    share: () => { if (navigator.share) navigator.share({ title: 'FITNESTEBAN · script de uso', text: code }).catch(() => {}); else navigator.clipboard.writeText(code).then(() => toast('Copiado (este navegador no permite compartir)')); },
+    // como archivo: compartido como texto, algunas apps lo cortan a los 4.096 caracteres
+    share: async () => {
+      const file = new File([code], 'fitnesteban-script.txt', { type: 'text/plain' });
+      if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: 'FITNESTEBAN · script de uso' }); } catch { /* cancelado */ } return; }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; document.body.appendChild(a); a.click(); a.remove(); toast('Descargado: fitnesteban-script.txt');
+    },
     save: root => {
       const url = mval(root, 'url').trim();
       if (!USAGE_RE.test('#uso ' + url)) return toast('Pega la URL que acaba en /exec', 'warn');
