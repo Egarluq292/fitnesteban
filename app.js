@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.38.0';
+const APP_VERSION = '4.39.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3598,28 +3598,32 @@ function startTimer(sec) {
   timer.total = sec; timer.endAt = Date.now() + sec * 1000;
   clearInterval(timer.int); timer.int = setInterval(tickTimer, 250);
   $('#timerPill').classList.remove('timer-ready'); $('#timerPill').classList.add('timer-run');
+  document.body.classList.add('timer-on'); // «?» y ✉️ se apartan y la cuenta atrás ocupa su sitio
   tickTimer(); wakeOn();
 }
 function addTimer(sec) { if (!timer.endAt) return startTimer(sec); timer.endAt += sec * 1000; timer.total += sec; tickTimer(); }
 function stopTimer() {
   clearInterval(timer.int); timer.endAt = 0;
   $('#timerDisplay').textContent = 'Descanso'; $('#timerBar').style.width = '0%';
-  $('#timerPill').classList.remove('timer-run', 'timer-ready'); wakeOff();
+  $('#timerPill').classList.remove('timer-run', 'timer-ready', 'timer-low'); document.body.classList.remove('timer-on'); wakeOff();
 }
 function tickTimer() {
   const leftMs = timer.endAt - Date.now();
   if (leftMs <= 0) {
     clearInterval(timer.int); timer.endAt = 0;
     $('#timerDisplay').textContent = '¡Ya!'; $('#timerBar').style.width = '0%';
-    $('#timerPill').classList.remove('timer-run'); $('#timerPill').classList.add('timer-ready');
+    $('#timerPill').classList.remove('timer-run', 'timer-low'); $('#timerPill').classList.add('timer-ready');
     try { navigator.vibrate?.([250, 120, 250, 120, 400]); } catch { /* nada */ }
     beep(); wakeOff();
-    setTimeout(() => { if (!timer.endAt) { $('#timerDisplay').textContent = 'Descanso'; $('#timerPill').classList.remove('timer-ready'); } }, 5000);
+    setTimeout(() => { if (!timer.endAt) { $('#timerDisplay').textContent = 'Descanso'; $('#timerPill').classList.remove('timer-ready'); document.body.classList.remove('timer-on'); } }, 5000);
     return;
   }
   const left = Math.ceil(leftMs / 1000);
   $('#timerDisplay').textContent = `${pad(Math.floor(left / 60))}:${pad(left % 60)}`;
-  $('#timerBar').style.width = `${Math.max(0, Math.min(100, leftMs / (timer.total * 1000) * 100))}%`;
+  const pct = Math.max(0, Math.min(100, leftMs / (timer.total * 1000) * 100));
+  $('#timerBar').style.width = `${pct}%`;
+  $('#timerPill').style.setProperty('--p', `${pct}%`);
+  $('#timerPill').classList.toggle('timer-low', left <= 5);
 }
 /* ⏱ Cronómetro de una serie por tiempo: cuenta atrás 3-2-1, cuenta hacia arriba, avisa al llegar al objetivo y guarda los segundos */
 function tone(freq = 880, dur = 0.15) {
@@ -3807,10 +3811,69 @@ function calcTargets(d) {
   const carbs = Math.max(50, Math.round((kcal - prot * 4 - fat * 9) / 4));
   return { kcal, prot, carbs, fat };
 }
+/* ✉️ Correo de contacto: con aviso claro, va a la hoja de uso de Esteban (columna «correo») */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const CONTACT_MAIL = 'fitnestebanapp@gmail.com';
+const EMAIL_NOTICE = `FITNESTEBAN guardará tu correo para enviarte la guía de la app y, si tú le escribes, resolverte dudas. Nadie más verá tu correo. La app sigue siendo privada. Puedes cambiar el correo en los Ajustes. Si quieres que lo borre, escribe a ${CONTACT_MAIL}.`;
+async function googleEmail() {
+  if (!navigator.onLine) throw new Error('Sin conexión a internet');
+  await loadGis();
+  return new Promise((resolve, reject) => {
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID, scope: 'openid email',
+      callback: async r => {
+        if (r.error) return reject(new Error(r.error_description || r.error));
+        try {
+          const u = await (await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${r.access_token}` } })).json();
+          if (!u.email) throw new Error('Google no ha dado el correo');
+          resolve(String(u.email).toLowerCase());
+        } catch (e) { reject(e); }
+      },
+      error_callback: e => reject(new Error(e?.type === 'popup_closed' ? 'Ventana de Google cerrada' : e?.type === 'popup_failed_to_open' ? 'El móvil bloqueó la ventana de Google' : (e?.message || 'Error de Google')))
+    });
+    client.requestAccessToken({ prompt: 'select_account' });
+  });
+}
+const gBtn = (act = 'google') => `<button class="w-full flex items-center justify-center gap-2.5 rounded-xl py-3 font-bold text-[15px]" style="background:#fff;color:#1f1f1f" data-mact="${act}" type="button"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-3.1-.4-4.6H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.7c-2.1 1.4-4.8 2.3-8.5 2.3-6.2 0-11.5-4.1-13.4-9.8l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>Continuar con Google</button>`;
+const emailFormHTML = (val = '') => `${gBtn()}
+    <div class="flex items-center gap-2 text-[11px] text-mute"><span class="flex-1 h-px bg-line"></span>o escríbelo<span class="flex-1 h-px bg-line"></span></div>
+    <input class="field" name="email" type="email" inputmode="email" autocomplete="email" placeholder="tucorreo@gmail.com" value="${esc(val)}" />
+    <p class="text-[11px] text-mute leading-snug">✉️ ${EMAIL_NOTICE}</p>`;
+async function emailSync() {
+  try {
+    const st = state.settings, url = access.usageUrl, code = lsGet(ACCESS_KEY)?.code, m = st.email || '';
+    if (!url || !code || !access.ok || !navigator.onLine || !m || st.emailSent === m) return; // solo se envía un correo nuevo o cambiado; quitarlo de la app no lo borra de la hoja (lo dice el aviso)
+    const h = await codeHash(code);
+    await fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ h, v: APP_VERSION, m }) });
+    st.emailSent = m; persist();
+  } catch { /* se reintenta al volver a abrir la app */ }
+}
+function setEmail(m) { state.settings.email = m || ''; persist(); emailSync(); }
+/* Usuarios que ya tenían la app: se les pide una vez, con «Ahora no» */
+function emailAskModal() {
+  state.settings.emailAsked = todayISO(); persist();
+  const html = (val = '') => `<div class="text-center"><div class="text-4xl">✉️</div><h3 class="modal-title mt-1">¿Nos dejas tu correo?</h3>
+      <p class="text-sm text-mute mt-1">Así Esteban te puede mandar la guía de la app y ayudarte si tienes dudas.</p></div>
+    ${emailFormHTML(val)}
+    <button class="btn-primary w-full" data-mact="save" type="button">Guardar correo</button>
+    <button class="btn-ghost w-full" data-close type="button">Ahora no</button>`;
+  const save = m => { setEmail(m); closeModal(); render(); toast('Correo guardado ✓ Gracias'); };
+  openModal(html(), {
+    google: async root => { try { save(await googleEmail()); } catch (e) { toast(e.message, 'warn'); } },
+    save: root => { const m = mval(root, 'email').trim().toLowerCase(); if (!EMAIL_RE.test(m)) return toast('Revisa el correo', 'warn'); save(m); }
+  });
+}
+function maybeAskEmail(tries = 0) {
+  const st = state.settings;
+  if (access.me?.admin || st.email || st.emailAsked || !access.usageUrl) return;
+  if ($('#modalRoot').classList.contains('open')) { if (tries < 20) setTimeout(() => maybeAskEmail(tries + 1), 3000); return; }
+  emailAskModal();
+}
+
 function onboarding() {
-  const d = { step: 0, ok: false, name: '', sex: '', age: '', height: '', weight: '', activity: 'mid', goal: 'recomp', key: '', keyOk: false, testing: false };
+  const d = { step: 0, ok: false, email: '', name: '', sex: '', age: '', height: '', weight: '', activity: 'mid', goal: 'recomp', key: '', keyOk: false, testing: false };
   const valid = () => d.sex && +d.age >= 14 && +d.age <= 100 && +d.height >= 120 && +d.height <= 230 && +d.weight >= 35 && +d.weight <= 250;
-  const dots = () => `<div class="flex gap-1.5 justify-center">${[0, 1, 2].map(i => `<span style="height:7px;border-radius:9px;width:${i === d.step ? 22 : 7}px;background:${i === d.step ? '#22d3ee' : '#334155'}"></span>`).join('')}</div><div class="text-[11px] text-mute text-center -mt-1">Paso ${d.step + 1} de 3</div>`;
+  const dots = () => `<div class="flex gap-1.5 justify-center">${[0, 1, 2, 3].map(i => `<span style="height:7px;border-radius:9px;width:${i === d.step ? 22 : 7}px;background:${i === d.step ? '#22d3ee' : '#334155'}"></span>`).join('')}</div><div class="text-[11px] text-mute text-center -mt-1">Paso ${d.step + 1} de 4</div>`;
   const seg = (f, opts, cols) => `<div class="seg" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${Object.entries(opts).map(([k, v]) => `<button class="seg-btn py-2 ${d[f] === k ? 'seg-on' : ''}" data-mact="pick" data-f="${f}" data-v="${k}" type="button">${Array.isArray(v) ? v[0] : v}</button>`).join('')}</div>`;
   const s0 = () => `${dots()}<h3 class="modal-title">👋 Te damos la bienvenida</h3>
     <p class="text-sm text-mute">FITNESTEBAN es un proyecto personal de Esteban que comparte con amigos. Antes de empezar:</p>
@@ -3820,9 +3883,14 @@ function onboarding() {
       <p>🩺 <b>No sustituye a un profesional.</b> Las cifras son orientativas: si tienes lesiones, embarazo o algún problema de salud, consulta antes.</p>
       <p>🛠️ <b>Es un proyecto vivo.</b> Irá mejorando, pero puede tener fallos o cambiar.</p>
       <p>📶 <b>Para mantener la app</b>, envía a Esteban solo el día de último uso y la versión instalada. Nada de tu dieta ni de tus entrenos.</p>
+      <p>✉️ <b>Tu correo</b> lo guarda Esteban para enviarte la guía de la app y, si tú le escribes, resolverte dudas. Para escribirle, toca ✉️ arriba.</p>
     </div>
     <label class="flex items-start gap-2 text-[13px]"><input type="checkbox" name="ok" ${d.ok ? 'checked' : ''} style="margin-top:3px;accent-color:#22d3ee;width:18px;height:18px" /> Lo he leído y estoy de acuerdo.</label>
     <button class="btn-primary w-full" data-mact="next" type="button">Empezar</button>`;
+  const sMail = () => `${dots()}<h3 class="modal-title">✉️ Tu correo</h3>
+    <p class="text-xs text-mute">Lo necesitamos para mandarte la guía de la app y poder ayudarte.</p>
+    ${emailFormHTML(d.email)}
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="back" type="button">Atrás</button><button class="btn-primary" data-mact="next" type="button">Siguiente</button></div>`;
   const s1 = () => {
     const t = valid() ? calcTargets(d) : null;
     return `${dots()}<h3 class="modal-title">🎯 Tu perfil y tus objetivos</h3>
@@ -3858,17 +3926,18 @@ function onboarding() {
     <div class="text-[13px] ${d.keyOk ? 'text-emerald-300' : 'text-mute'}" id="obKeyMsg">${d.keyOk ? '✓ Clave correcta: el Coach ya te puede responder.' : d.testing ? '<span class="spinner"></span> Comprobando la clave…' : ''}</div>
     <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="finish" data-skip="1" type="button">Saltar por ahora</button><button class="btn-primary" data-mact="finish" type="button">Terminar</button></div>
     <p class="text-[11px] text-mute text-center">La clave se queda solo en este móvil. Sin ella la app funciona igual, pero sin IA. También puedes ponerla luego en Ajustes.</p>`;
-  const html = () => [s0, s1, s2][d.step]();
+  const html = () => [s0, sMail, s1, s2][d.step]();
   const keep = root => {
     const g = n => root.querySelector(`[name="${n}"]`);
     if (g('ok')) d.ok = g('ok').checked;
+    if (g('email')) d.email = g('email').value.trim().toLowerCase();
     if (g('name')) { d.name = g('name').value.trim(); d.age = g('age').value.replace(/\D/g, ''); d.height = g('height').value.replace(/\D/g, ''); d.weight = g('weight').value.replace(',', '.').replace(/[^\d.]/g, ''); }
     if (g('key')) d.key = g('key').value.trim();
   };
   const draw = root => { root.querySelector('.modal-sheet').innerHTML = html(); root.querySelector('.modal-sheet').scrollTop = 0; bindLive(root); };
   const bindLive = root => {
-    if (d.step === 1) root.querySelectorAll('[name=age],[name=height],[name=weight]').forEach(i => i.oninput = () => { keep(root); const box = root.querySelector('#obTargets'), tmp = document.createElement('div'); tmp.innerHTML = s1(); box.innerHTML = tmp.querySelector('#obTargets').innerHTML; });
-    if (d.step === 2) { const k = root.querySelector('[name=key]'); if (k) k.oninput = () => { d.keyOk = false; const m = root.querySelector('#obKeyMsg'); if (m) m.textContent = ''; }; }
+    if (d.step === 2) root.querySelectorAll('[name=age],[name=height],[name=weight]').forEach(i => i.oninput = () => { keep(root); const box = root.querySelector('#obTargets'), tmp = document.createElement('div'); tmp.innerHTML = s1(); box.innerHTML = tmp.querySelector('#obTargets').innerHTML; });
+    if (d.step === 3) { const k = root.querySelector('[name=key]'); if (k) k.oninput = () => { d.keyOk = false; const m = root.querySelector('#obKeyMsg'); if (m) m.textContent = ''; }; }
   };
   const test = async root => {
     keep(root); if (!d.key) { toast('Pega primero la clave', 'warn'); return false; }
@@ -3883,11 +3952,13 @@ function onboarding() {
   openModal(html(), {
     noClose: true,
     pick: (root, b) => { keep(root); d[b.dataset.f] = b.dataset.v; draw(root); },
+    google: async root => { keep(root); try { d.email = await googleEmail(); d.step++; draw(root); toast(`✓ ${d.email}`); } catch (e) { toast(e.message, 'warn'); } },
     back: root => { keep(root); d.step--; draw(root); },
     next: root => {
       keep(root);
       if (d.step === 0 && !d.ok) return toast('Marca la casilla para continuar', 'warn');
-      if (d.step === 1) {
+      if (d.step === 1 && !EMAIL_RE.test(d.email)) return toast('Escribe tu correo o usa «Continuar con Google»', 'warn');
+      if (d.step === 2) {
         if (!d.name) return toast('Escribe tu nombre', 'warn');
         if (!valid()) return toast('Revisa sexo, edad, altura (cm) y peso (kg)', 'warn');
       }
@@ -3902,10 +3973,10 @@ function onboarding() {
       if (!b.dataset.skip && !d.keyOk && !(await test(root))) return;
       const t = calcTargets(d), st = state.settings;
       st.profile = { name: d.name.slice(0, 24), sex: d.sex, age: d.age, height: d.height, goal: d.goal, activity: d.activity };
-      Object.assign(st, { targetKcal: t.kcal, targetProt: t.prot, targetCarbs: t.carbs, targetFat: t.fat, onboarded: todayISO(), usageOk: true });
+      Object.assign(st, { targetKcal: t.kcal, targetProt: t.prot, targetCarbs: t.carbs, targetFat: t.fat, onboarded: todayISO(), usageOk: true, email: d.email, emailAsked: todayISO() });
       if (!b.dataset.skip && d.keyOk) st.apiKey = d.key;
       state.bodyMetrics.push({ id: uid('m_'), date: todayISO(), weight: r2(+d.weight), waist: null });
-      persist(); closeModal(); ui._animRings = true; render();
+      persist(); emailSync(); closeModal(); ui._animRings = true; render();
       toast(`¡Listo, ${d.name}! Tus objetivos ya están puestos 💪`);
     }
   });
@@ -3924,7 +3995,7 @@ function profileText() {
 function profileModal(after) {
   const p = profileOf() || { name: '', sex: '', age: '', goal: 'recomp' };
   const seg = (name, opts, cur) => `<div class="seg" style="grid-template-columns:repeat(${name === 'goal' ? 2 : Object.keys(opts).length},minmax(0,1fr))">${Object.entries(opts).map(([k, v]) => `<button class="seg-btn py-2 ${cur === k ? 'seg-on' : ''}" data-mact="pick" data-f="${name}" data-v="${k}" type="button">${Array.isArray(v) ? v[0] : v}</button>`).join('')}</div>`;
-  const draft = { ...p };
+  const draft = { ...p, email: state.settings.email || '' };
   const html = () => `<h3 class="modal-title">👤 Mi perfil</h3>
     <p class="text-xs text-mute">El Coach IA y el resumen semanal lo usan para darte consejos a tu medida. Solo se guarda en este móvil y en tus copias.</p>
     <label class="lbl">Nombre<input class="field mt-1" name="name" maxlength="24" value="${esc(draft.name || '')}" /></label>
@@ -3934,17 +4005,24 @@ function profileModal(after) {
       <label class="lbl">Altura en cm (opcional)<input class="field mt-1" name="height" inputmode="numeric" maxlength="3" placeholder="Ej: 175" value="${esc(draft.height || '')}" /></label>
     </div>
     <div><div class="lbl mb-1">Objetivo</div>${seg('goal', GOALS, draft.goal)}</div>
+    <div class="card p-3 space-y-2"><div class="lbl">✉️ Correo de contacto${access.me?.admin ? '' : ' (opcional)'}</div>
+      <div class="flex gap-2"><input class="field flex-1 min-w-0" name="email" type="email" inputmode="email" autocomplete="email" placeholder="tucorreo@gmail.com" value="${esc(draft.email)}" /></div>
+      ${draft.email ? '' : gBtn()}
+      <p class="text-[10px] text-mute leading-snug">${EMAIL_NOTICE}</p></div>
     <button class="btn-primary w-full" data-mact="save" type="button">Guardar</button>`;
-  const keep = root => { draft.name = mval(root, 'name').trim(); draft.age = mval(root, 'age').replace(/\D/g, ''); draft.height = mval(root, 'height').replace(/\D/g, ''); };
+  const keep = root => { draft.name = mval(root, 'name').trim(); draft.age = mval(root, 'age').replace(/\D/g, ''); draft.height = mval(root, 'height').replace(/\D/g, ''); draft.email = mval(root, 'email').trim().toLowerCase(); };
   const handlers = {
     autofocus: !p.name,
     pick: (root, b) => { keep(root); draft[b.dataset.f] = b.dataset.v; root.querySelector('.modal-sheet').innerHTML = html(); },
+    google: async root => { keep(root); try { draft.email = await googleEmail(); root.querySelector('.modal-sheet').innerHTML = html(); } catch (e) { toast(e.message, 'warn'); } },
     save: root => {
       keep(root);
+      if (draft.email && !EMAIL_RE.test(draft.email)) return toast('Revisa el correo', 'warn');
       if (!draft.name) return toast('Pon tu nombre', 'warn');
       if (!draft.sex) return toast('Elige una opción de sexo', 'warn');
       if (draft.height && (+draft.height < 100 || +draft.height > 230)) return toast('La altura va en centímetros (ej. 175)', 'warn');
-      state.settings.profile = { name: draft.name.slice(0, 24), sex: draft.sex, age: draft.age ? String(Math.min(110, +draft.age)) : '', height: draft.height || '', goal: draft.goal || 'recomp' };
+      state.settings.profile = { ...(p.activity ? { activity: p.activity } : {}), name: draft.name.slice(0, 24), sex: draft.sex, age: draft.age ? String(Math.min(110, +draft.age)) : '', height: draft.height || '', goal: draft.goal || 'recomp' };
+      if ((state.settings.email || '') !== draft.email) setEmail(draft.email);
       persist(); closeModal(); render(); toast('Perfil guardado ✓');
       if (after) after();
     }
@@ -3956,7 +4034,7 @@ function profileSectionHTML() {
   return `<section class="card p-4 mt-3">
     <div class="flex items-center justify-between gap-3">
       <div class="min-w-0"><h3 class="section-title">👤 Mi perfil</h3>
-        <p class="text-xs ${p ? 'text-slate-300' : 'text-amber-300'} mt-1 truncate">${p ? `${esc(p.name)} · ${esc(SEXES[p.sex] || '')}${p.age ? ` · ${esc(p.age)} años` : ''}${p.height ? ` · ${esc(p.height)} cm` : ''} · ${esc((GOALS[p.goal] || GOALS.recomp)[0])}` : 'Sin rellenar: el Coach IA no sabe a quién aconseja'}</p></div>
+        <p class="text-xs ${p ? 'text-slate-300' : 'text-amber-300'} mt-1 truncate">${p ? `${esc(p.name)} · ${esc(SEXES[p.sex] || '')}${p.age ? ` · ${esc(p.age)} años` : ''}${p.height ? ` · ${esc(p.height)} cm` : ''} · ${esc((GOALS[p.goal] || GOALS.recomp)[0])}${state.settings.email ? ` · ✉️ ${esc(state.settings.email)}` : ''}` : 'Sin rellenar: el Coach IA no sabe a quién aconseja'}</p></div>
       <button class="btn-ghost px-3 py-2 shrink-0" data-act="editProfile" type="button">${p ? 'Editar' : 'Rellenar'}</button>
     </div></section>`;
 }
@@ -4236,6 +4314,10 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.39.3', ['⏱ Descanso: con la cuenta atrás en marcha, «?» y ✉️ se apartan y el temporizador se hace grande y se va vaciando; en los últimos 5 segundos se pone ámbar y late.'], 'quiet'],
+  ['4.39.2', ['🔧 Cabecera: con la cuenta atrás en marcha, los botones ya no tapan el logotipo.'], 'quiet'],
+  ['4.39.1', ['✉️ Nuevo botón con un sobre arriba (junto a «?»): abre tu correo para escribir a fitnestebanapp@gmail.com si tienes dudas, encuentras un fallo o tienes ideas.']],
+  ['4.39.0', ['✉️ Correo de contacto: FITNESTEBAN guardará tu correo para enviarte la guía de la app y, si tú le escribes, resolverte dudas. Puedes ponerlo con «Continuar con Google» o escribirlo, y cambiarlo en Ajustes → Mi perfil.']],
   ['4.38.0', ['★ Comidas favoritas: en el registro de Dieta toca ☆ en cualquier comida para guardarla. Sale la primera en «Favoritas y habituales» (según el tipo: Desayuno, Comida…) y la repites en un toque. Toca la ★ para quitarla.']],
   ['4.37.4', ['⭕ Hábitos de varios toques (agua…): al llegar al objetivo siguen contando (10/8 vasos).'], 'quiet'],
   ['4.37.3', ['🍽️ Dieta: Desayuno, Comida, Puente, Cena y Otro caben en una sola fila.'], 'quiet'],
@@ -4395,7 +4477,8 @@ const GUIDE = [
   ]],
   ['🔄 Actualizar la app', [
     'Cuando subes una versión nueva a GitHub aparece «Hay una versión nueva» → Actualizar. Comprueba el número en Ajustes → Aplicación.',
-    'Tras actualizar verás una vez las novedades. Puedes volver a verlas desde esta guía.'
+    'Tras actualizar verás una vez las novedades. Puedes volver a verlas desde esta guía.',
+    '✉️ El sobre de arriba abre tu correo para escribir a fitnestebanapp@gmail.com: dudas, fallos o ideas.'
   ]]
 ];
 
@@ -5416,7 +5499,8 @@ function unlock(me) {
   $('#lockScreen')?.remove(); document.body.classList.remove('overflow-hidden');
   if (ui.view === 'settings') render();
   if (needsOnboarding(me)) setTimeout(onboarding, 300);
-  else if (!newsChecked) { newsChecked = true; maybeShowNews(); }
+  else if (!newsChecked) { newsChecked = true; maybeShowNews(); setTimeout(maybeAskEmail, 2500); }
+  setTimeout(emailSync, 4000);
 }
 let newsChecked = false;
 /* acceso.txt: huellas + (opcional) una línea «#uso https://script.google.com/…» con la dirección del registro de uso */
@@ -5452,9 +5536,9 @@ async function accessBoot() {
   let me = await accessCheck(fresh);
   if (!me && lsGet(ACCESS_KEY)?.code) { const live = await fetchAclLive(); if (live) me = await accessCheck(live); }
   if (me) { if (!access.ok) unlock(me); else access.me = me; usagePing(); }
-  else lockScreen('code', lsGet(ACCESS_KEY)?.code ? 'Tu código ya no es válido. Pide uno nuevo a Esteban.' : '');
+  else lockScreen('code', lsGet(ACCESS_KEY)?.code ? `Tu código ya no es válido. Pide uno nuevo a <a class="text-brand underline" href="mailto:${CONTACT_MAIL}?subject=${encodeURIComponent('FITNESTEBAN · código de acceso')}">${CONTACT_MAIL}</a>` : '');
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { usagePing(); if (l && !(await accessCheck(l))) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', 'Tu código ya no es válido. Pide uno nuevo a Esteban.'); } }); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { usagePing(); if (l && !(await accessCheck(l))) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', `Tu código ya no es válido. Pide uno nuevo a <a class="text-brand underline" href="mailto:${CONTACT_MAIL}?subject=${encodeURIComponent('FITNESTEBAN · código de acceso')}">${CONTACT_MAIL}</a>`); } }); });
 
 /* Gestión (solo administrador): crear el código de una persona y la línea para acceso.txt */
 function newCode() { const a = crypto.getRandomValues(new Uint8Array(8)); const s = [...a].map(x => CODE_ABC[x % CODE_ABC.length]).join(''); return s.slice(0, 4) + '-' + s.slice(4); }
@@ -5551,7 +5635,7 @@ async function loadUsage() {
     const d = await r.json();
     if (!d.ok) throw new Error(d.error === 'clave' ? 'La clave del registro no coincide con la del script' : 'El registro no respondió bien');
     ui.usage = {}; for (const x of d.rows || []) ui.usage[String(x.h).toLowerCase()] = x;
-    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2);
+    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 3);
     if (!ui.usageOld) syncUsageNames();
   } catch (e) { ui.usageErr = e.message || 'No se pudo leer el registro de uso'; ui.usage = null; }
   ui.usageLoading = false; ui.usageAt = Date.now();
@@ -5564,18 +5648,19 @@ function usageLine(hash) {
   if (!u) return '<div class="text-[11px] text-mute">⚪ Aún no la ha abierto (o sin conexión desde que tiene el código)</div>';
   const ago = daysBetween(u.last, todayISO()), old = u.v && cmpVer(APP_VERSION, String(u.v)) > 0;
   const when = ago <= 0 ? 'Hoy' : ago === 1 ? 'Ayer' : `Hace ${ago} días`;
-  return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>`;
+  return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>${u.m ? `<div class="text-[11px] text-slate-300 truncate">✉️ ${esc(u.m)}</div>` : ''}`;
 }
 function usageScript(key) {
-  return `// FITNESTEBAN · registro de uso (día de último uso, versión y nombre puesto por el administrador) · v2
+  return `// FITNESTEBAN · registro de uso (día de último uso, versión, nombre puesto por el administrador y correo que da cada usuario) · v3
 const READ_KEY = '${key}';
 const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
-const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre'];
+const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre', 'correo'];
 function hoja_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sh = ss.getSheetByName('uso');
   if (!sh) { sh = ss.insertSheet('uso'); sh.getRange('A:E').setNumberFormat('@'); sh.appendRow(COLS); }
   if (String(sh.getRange(1, 6).getValue()) !== 'nombre') sh.getRange(1, 6).setValue('nombre');
+  if (String(sh.getRange(1, 7).getValue()) !== 'correo') sh.getRange(1, 7).setValue('correo');
   return sh;
 }
 function fecha_(x) { return x instanceof Date ? Utilities.formatDate(x, 'Europe/Madrid', 'yyyy-MM-dd') : String(x); }
@@ -5606,8 +5691,10 @@ function doPost(e) {
     try {
       const sh = hoja_(), hoy = fecha_(new Date()), datos = sh.getDataRange().getValues(), nom = nombres_()[h] || '';
       let fila = -1; for (let i = 1; i < datos.length; i++) if (String(datos[i][0]) === h) { fila = i + 1; break; }
-      if (fila < 0) sh.appendRow([h, hoy, v, hoy, '1', nom]);
-      else { const antes = fecha_(datos[fila - 1][1]); sh.getRange(fila, 2, 1, 2).setValues([[hoy, v]]); if (antes !== hoy) sh.getRange(fila, 5).setValue(String((+datos[fila - 1][4] || 0) + 1)); sh.getRange(fila, 6).setValue(nom); }
+      // correo: solo si lo manda el propio usuario; un correo nuevo sustituye al anterior (vacío no borra)
+      const m = typeof b.m === 'string' ? b.m.trim().toLowerCase().slice(0, 100) : null, mOk = m !== null && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(m);
+      if (fila < 0) sh.appendRow([h, hoy, v, hoy, '1', nom, mOk ? m : '']);
+      else { const antes = fecha_(datos[fila - 1][1]); sh.getRange(fila, 2, 1, 2).setValues([[hoy, v]]); if (antes !== hoy) sh.getRange(fila, 5).setValue(String((+datos[fila - 1][4] || 0) + 1)); sh.getRange(fila, 6).setValue(nom); if (mOk) sh.getRange(fila, 7).setValue(m); }
     } finally { lock.releaseLock(); }
     return salida_({ ok: true });
   } catch (err) { return salida_({ ok: false }); }
@@ -5615,7 +5702,7 @@ function doPost(e) {
 function doGet(e) {
   if (!e || !e.parameter || e.parameter.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
   const datos = hoja_().getDataRange().getValues().slice(1);
-  return salida_({ ok: true, ver: 2, rows: datos.map(r => ({ h: String(r[0]), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1 })) });
+  return salida_({ ok: true, ver: 3, rows: datos.map(r => ({ h: String(r[0]), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || '') })) });
 }`;
 }
 /* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
@@ -5736,7 +5823,7 @@ function accessSectionHTML() {
     ${gh ? '<p class="text-[11px] text-mute">✎ nombre · 🔄 nuevo código (el anterior deja de funcionar) · 🗑 quitar acceso</p>' : ''}
     ${list.length ? '<button class="btn-ghost w-full" data-act="copyHashes" type="button">📋 Copiar huellas y nombres (para tu hoja)</button>' : ''}
     ${access.usageUrl && lsGet(USE_KEY)
-      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : 'actualizado ahora · nombres sincronizados con la hoja') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
+      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión) para guardar los correos</span>' : 'actualizado ahora · nombres y correos en la hoja') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
       : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
     ${gh ? `<button class="btn-primary w-full" data-act="newAccess" type="button">＋ Crear código para alguien</button>
       <p class="text-[11px] text-mute flex justify-between">GitHub conectado ✓ (token cifrado con tu PIN)<button class="underline" data-act="ghDisconnect" type="button">Desconectar</button></p>`
