@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.41.4';
+const APP_VERSION = '4.41.5';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3203,6 +3203,7 @@ function renderSettings() {
     <h3 class="section-title">📱 Aplicación</h3>
     ${deferredInstall ? `<button class="btn-primary w-full" data-act="install" type="button">Instalar en la pantalla de inicio</button>` : `<p class="text-xs text-mute">${isStandalone() ? 'Instalada como app ✓' : 'Para instalar: menú ⋮ del navegador → «Instalar aplicación» o «Añadir a pantalla de inicio».'}</p>`}
     ${versionStatusHTML()}
+    ${access.usageUrl ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span class="min-w-0">🔑 Este dispositivo: <span class="${/✓/.test(deviceDiag) ? 'text-emerald-300' : 'text-amber-300'}">${esc(deviceDiag || 'sin comprobar')}</span><br><span class="opacity-70">${esc(deviceLabel())} · script …${esc(access.usageUrl.replace(/\/exec.*$/, '').slice(-6))}</span></span><button class="underline text-brand shrink-0" data-act="devCheck" type="button">Comprobar</button></div>` : ''}
     <div class="grid grid-cols-2 gap-2">
       <button class="btn-ghost" data-act="checkUpdate" type="button">Buscar actualización</button>
       <button class="btn-danger" data-act="wipe" type="button">Borrar todo</button>
@@ -4342,6 +4343,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.41.5', ['🔧 Ajustes → Aplicación: «Este dispositivo» muestra si está registrado en el límite de dispositivos o qué responde el script, con un botón «Comprobar».'], 'quiet'],
   ['4.41.4', ['🔑 El registro del dispositivo espera más al script de Google y, si no contesta, lo vuelve a intentar al volver a la app. En Acceso, tu fila pone «sin límite (administrador)». «Enviármelo» manda el script como archivo, sin cortes.'], 'admin'],
   ['4.41.3', ['🔑 Pantalla de acceso: «Cada código es personal. Válido solo en 2 dispositivos.» Invitación por WhatsApp: «Es personal. Válido solo en 2 dispositivos.»'], 'quiet'],
   ['4.41.1', ['🔑 Acceso: cada dispositivo sale por separado (Android · Chrome, Windows · Chrome…) con su último uso y un botón «Quitar» que libera solo ese; el quitado ya no puede volver a entrar con ese código. Requiere el script v6 (Reconfigurar → nueva versión).'], 'admin'],
@@ -5238,6 +5240,7 @@ const actions = {
     const txt = ['huella\tnombre', ...rows].join('\n');
     navigator.clipboard.writeText(txt).then(() => toast(`Copiadas ${rows.length} huellas: pégalas en A1 de una hoja «nombres»`)).catch(() => toast('No se pudo copiar', 'error'));
   },
+  devCheck: async () => { deviceDiag = 'comprobando…'; render(); deviceChecked = false; await deviceGuard(); render(); },
   relDev: async b => {
     const h = b.dataset.hash, enc = lsGet(USE_KEY);
     if (!enc || !ui.accessPin || !access.usageUrl) return toast('Abre Acceso con tu PIN', 'warn');
@@ -5509,17 +5512,21 @@ async function accessCheck(list) {
 const DEVICE_LIMIT = 2;
 const blockedMsg = () => `Este código ya se usa en ${DEVICE_LIMIT} dispositivos. Si has cambiado de móvil, escribe a <a class="text-brand underline" href="mailto:${CONTACT_MAIL}?subject=${encodeURIComponent('FITNESTEBAN · cambio de móvil')}">${CONTACT_MAIL}</a> y te lo libero.`;
 let deviceSure = false; // ¿el script ha contestado de verdad? (si no, se vuelve a preguntar al volver a la app)
+let deviceDiag = ''; // qué contestó el script la última vez (se ve en Ajustes → Aplicación)
 async function deviceAllowed(code, me) {
   const url = access.usageUrl; deviceSure = false;
-  if (!url || !navigator.onLine) return true;
+  if (!url) { deviceDiag = 'sin dirección del script en acceso.txt'; return true; }
+  if (!navigator.onLine) { deviceDiag = 'sin conexión'; return true; }
   try {
     const h = await codeHash(code), ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000); // el script de Google puede tardar en «despertar»
     const r = await fetch(`${url}?c=check&h=${h}&d=${encodeURIComponent(deviceId())}&l=${encodeURIComponent(deviceLabel())}&t=${Date.now()}`, { cache: 'no-store', signal: ctl.signal });
     clearTimeout(t);
-    const d = await r.json();
+    const txt = await r.text(); let d = {};
+    try { d = JSON.parse(txt); } catch { deviceDiag = `respuesta no válida (HTTP ${r.status}): ${txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90)}`; return true; }
     deviceSure = typeof d.allowed === 'boolean';
+    deviceDiag = d.allowed === true ? `registrado ✓ (${d.n} dispositivo${d.n === 1 ? '' : 's'})` : d.allowed === false ? 'bloqueado (límite de dispositivos)' : `el script contestó ${txt.slice(0, 60)}${d.error === 'clave' ? ' → script antiguo' : !d.ok ? ' → no reconoce el código' : ''}`;
     return d.allowed !== false || !!me?.admin;
-  } catch { return true; }
+  } catch (e) { deviceDiag = e.name === 'AbortError' ? 'el script no contestó en 20 s' : `no se pudo conectar (${e.message})`; return true; }
 }
 let deviceChecked = false;
 async function deviceGuard() {
