@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.41.6';
+const APP_VERSION = '4.41.7';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4343,6 +4343,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.41.7', ['🔧 Script v8: la comprobación del dispositivo usaba un parámetro que Google reserva («c») y fallaba siempre. Hay que pegar el script nuevo (Reconfigurar) y publicar una «Nueva versión».'], 'admin'],
   ['4.41.6', ['🔧 Script v7: si falla, la app muestra el error en «Este dispositivo», y tiene una función «probar» para autorizar permisos. Reconfigurar reutiliza la clave actual, así el código siempre cuadra.'], 'admin'],
   ['4.41.5', ['🔧 Ajustes → Aplicación: «Este dispositivo» muestra si está registrado en el límite de dispositivos o qué responde el script, con un botón «Comprobar».'], 'quiet'],
   ['4.41.4', ['🔑 El registro del dispositivo espera más al script de Google y, si no contesta, lo vuelve a intentar al volver a la app. En Acceso, tu fila pone «sin límite (administrador)». «Enviármelo» manda el script como archivo, sin cortes.'], 'admin'],
@@ -5520,7 +5521,7 @@ async function deviceAllowed(code, me) {
   if (!navigator.onLine) { deviceDiag = 'sin conexión'; return true; }
   try {
     const h = await codeHash(code), ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000); // el script de Google puede tardar en «despertar»
-    const r = await fetch(`${url}?c=check&h=${h}&d=${encodeURIComponent(deviceId())}&l=${encodeURIComponent(deviceLabel())}&t=${Date.now()}`, { cache: 'no-store', signal: ctl.signal });
+    const r = await fetch(`${url}?op=check&h=${h}&d=${encodeURIComponent(deviceId())}&l=${encodeURIComponent(deviceLabel())}&t=${Date.now()}`, { cache: 'no-store', signal: ctl.signal });
     clearTimeout(t);
     const txt = await r.text(); let d = {};
     try { d = JSON.parse(txt); } catch { deviceDiag = `respuesta no válida (HTTP ${r.status}): ${txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90)}`; return true; }
@@ -5711,7 +5712,7 @@ async function loadUsage() {
     const d = await r.json();
     if (!d.ok) throw new Error(d.error === 'clave' ? 'La clave del registro no coincide con la del script' : 'El registro no respondió bien');
     ui.usage = {}; for (const x of d.rows || []) ui.usage[String(x.h).toLowerCase()] = x;
-    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 6);
+    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8);
     if (!ui.usageOld) syncUsageNames();
   } catch (e) { ui.usageErr = e.message || 'No se pudo leer el registro de uso'; ui.usage = null; }
   ui.usageLoading = false; ui.usageAt = Date.now();
@@ -5727,7 +5728,7 @@ function usageLine(hash) {
   return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} de ${DEVICE_LIMIT} dispositivos`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="truncate text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 truncate">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
 }
 function usageScript(key) {
-  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código, máx. 2) · v7
+  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código, máx. 2) · v8
 const READ_KEY = '${key}';
 const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
 const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre', 'correo', 'alta', 'dispositivos', 'bloqueos'];
@@ -5817,7 +5818,7 @@ function doGet(e) {
 function doGet_(e) {
   const q = (e && e.parameter) || {};
   // ¿puede este dispositivo usar este código? (máx. LIMITE dispositivos; el administrador, sin límite)
-  if (q.c === 'check') {
+  if (q.op === 'check') { // ojo: «c» y «sid» son parámetros reservados de Google, no se pueden usar
     const h = String(q.h || '').toLowerCase(), d = String(q.d || '').slice(0, 40), n = String(q.l || '').slice(0, 40), hoy = fecha_(new Date());
     if (!/^[0-9a-f]{32}$/.test(h) || !d || huellas_().indexOf(h) < 0) return salida_({ ok: false });
     const lock = LockService.getScriptLock(); lock.waitLock(10000);
@@ -5836,7 +5837,7 @@ function doGet_(e) {
   if (q.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
   const datos = hoja_().getDataRange().getValues().slice(1);
   const dd = disp_();
-  return salida_({ ok: true, ver: 7, rows: datos.map(r => ({ h: String(r[0]), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []) })) });
+  return salida_({ ok: true, ver: 8, rows: datos.map(r => ({ h: String(r[0]), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []) })) });
 }`;
 }
 /* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
