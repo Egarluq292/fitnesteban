@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.41.7';
+const APP_VERSION = '4.41.8';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4343,6 +4343,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.41.8', ['📊 Acceso: botón «Abrir hoja de uso». Pega una vez el enlace de la hoja (se guarda solo en ese dispositivo).'], 'admin'],
   ['4.41.7', ['🔧 Script v8: la comprobación del dispositivo usaba un parámetro que Google reserva («c») y fallaba siempre. Hay que pegar el script nuevo (Reconfigurar) y publicar una «Nueva versión».'], 'admin'],
   ['4.41.6', ['🔧 Script v7: si falla, la app muestra el error en «Este dispositivo», y tiene una función «probar» para autorizar permisos. Reconfigurar reutiliza la clave actual, así el código siempre cuadra.'], 'admin'],
   ['4.41.5', ['🔧 Ajustes → Aplicación: «Este dispositivo» muestra si está registrado en el límite de dispositivos o qué responde el script, con un botón «Comprobar».'], 'quiet'],
@@ -5242,6 +5243,13 @@ const actions = {
     const txt = ['huella\tnombre', ...rows].join('\n');
     navigator.clipboard.writeText(txt).then(() => toast(`Copiadas ${rows.length} huellas: pégalas en A1 de una hoja «nombres»`)).catch(() => toast('No se pudo copiar', 'error'));
   },
+  sheetEdit: () => { ui.sheetEdit = true; render(); },
+  sheetSave: () => {
+    const v = ($('#sheetUrl')?.value || '').trim();
+    if (v && !/^https:\/\/docs\.google\.com\/spreadsheets\//.test(v)) return toast('Pega el enlace de la hoja (empieza por https://docs.google.com/spreadsheets/)', 'warn');
+    if (v) lsSet(SHEET_KEY, v.split('#')[0]); else { try { localStorage.removeItem(SHEET_KEY); } catch { /* nada */ } }
+    ui.sheetEdit = false; render(); toast(v ? 'Enlace guardado ✓' : 'Enlace quitado');
+  },
   devCheck: async () => { deviceDiag = 'comprobando…'; render(); deviceChecked = false; await deviceGuard(); render(); },
   relDev: async b => {
     const h = b.dataset.hash, enc = lsGet(USE_KEY);
@@ -5682,7 +5690,7 @@ async function reencryptSecrets(oldPin, newPin) {
 }
 /* ---------- Registro de uso: día de último uso y versión (una vez al día por móvil) ----------
    Va a una hoja de Google del administrador mediante un Apps Script. Solo se envía la huella del código y la versión. */
-const USE_KEY = 'fitnesteban_usekey', PING_KEY = 'fitnesteban_ping';
+const USE_KEY = 'fitnesteban_usekey', PING_KEY = 'fitnesteban_ping', SHEET_KEY = 'fitnesteban_sheet'; // enlace a la hoja: solo en este dispositivo, nunca en GitHub
 async function secretEnc(text, pin) {
   const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await pinKey(pin, salt), new TextEncoder().encode(text));
@@ -5967,6 +5975,9 @@ function accessSectionHTML() {
     ${access.usageUrl && lsGet(USE_KEY)
       ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : 'actualizado ahora · nombres, correos, altas y dispositivos') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
       : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
+    ${access.usageUrl && lsGet(USE_KEY) ? (lsGet(SHEET_KEY) && !ui.sheetEdit
+      ? `<div class="flex items-center gap-2"><a class="btn-ghost flex-1 text-center block" href="${esc(lsGet(SHEET_KEY))}" target="_blank" rel="noopener">📊 Abrir hoja de uso</a><button class="text-[11px] text-mute underline shrink-0" data-act="sheetEdit" type="button">Cambiar</button></div>`
+      : `<div class="flex gap-2"><input class="field flex-1 min-w-0 text-xs" id="sheetUrl" placeholder="Pega el enlace de tu hoja de uso" autocomplete="off" value="${esc(lsGet(SHEET_KEY) || '')}" /><button class="btn-ghost px-3 shrink-0" data-act="sheetSave" type="button">Guardar</button></div><p class="text-[10px] text-mute -mt-1">Ábrela en el navegador y copia la dirección (docs.google.com/spreadsheets/…). Solo se guarda en este dispositivo.</p>`) : ''}
     ${gh ? `<button class="btn-primary w-full" data-act="newAccess" type="button">＋ Crear código para alguien</button>
       <p class="text-[11px] text-mute flex justify-between">GitHub conectado ✓ (token cifrado con tu PIN)<button class="underline" data-act="ghDisconnect" type="button">Desconectar</button></p>`
     : `<p class="text-[11px] text-mute">Conecta GitHub para crear y quitar códigos con un botón, sin editar archivos.</p>
