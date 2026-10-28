@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.39.3';
+const APP_VERSION = '4.40.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -662,6 +662,7 @@ $('#modalRoot').addEventListener('click', e => {
   const b = e.target.closest('[data-mact]');
   if (b && modalHandlers[b.dataset.mact]) modalHandlers[b.dataset.mact]($('#modalRoot'), b);
 });
+['input', 'change'].forEach(ev => $('#modalRoot').addEventListener(ev, e => { if (e.target.name === 'birth') { const sp = e.target.closest('label')?.querySelector('#pfAge,#obAge'); if (sp) sp.textContent = birthHint(e.target.value); } }));
 const mval = (root, name) => root.querySelector(`[name="${name}"]`)?.value ?? '';
 
 /* =========================================================================
@@ -3801,8 +3802,18 @@ function needsOnboarding(me) {
   const st = state.settings;
   return !me?.admin && !st.onboarded && !st.profile && !state.sessions.length && !Object.keys(state.meals).length && !state.bodyMetrics.length;
 }
+/* 🎂 Edad a partir de la fecha de nacimiento (se recalcula sola cada día) */
+function ageFrom(birth, at = todayISO()) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birth || '')) return null;
+  let a = +at.slice(0, 4) - +birth.slice(0, 4);
+  if (at.slice(5) < birth.slice(5)) a--;
+  return a >= 0 && a < 120 ? a : null;
+}
+const profileAge = p => (p?.birth ? ageFrom(p.birth) : (+p?.age || null));
+const BIRTH_MIN = '1920-01-01', birthMax = () => addDays(todayISO(), -14 * 365 - 3);
+const birthHint = b => { const a = ageFrom(b); return a !== null ? `→ ${a} años` : ''; };
 function calcTargets(d) {
-  const w = +d.weight, h = +d.height, a = +d.age;
+  const w = +d.weight, h = +d.height, a = ageFrom(d.birth) ?? +d.age;
   const bmr = 10 * w + 6.25 * h - 5 * a + (d.sex === 'h' ? 5 : d.sex === 'm' ? -161 : -78);
   const adj = { fat: 0.8, recomp: 0.9, muscle: 1.1, maint: 1 }[d.goal] ?? 0.9;
   const kcal = Math.round(bmr * (ACTIVITY[d.activity] || ACTIVITY.mid)[1] * adj / 10) * 10;
@@ -3871,8 +3882,8 @@ function maybeAskEmail(tries = 0) {
 }
 
 function onboarding() {
-  const d = { step: 0, ok: false, email: '', name: '', sex: '', age: '', height: '', weight: '', activity: 'mid', goal: 'recomp', key: '', keyOk: false, testing: false };
-  const valid = () => d.sex && +d.age >= 14 && +d.age <= 100 && +d.height >= 120 && +d.height <= 230 && +d.weight >= 35 && +d.weight <= 250;
+  const d = { step: 0, ok: false, email: '', birth: '', name: '', sex: '', age: '', height: '', weight: '', activity: 'mid', goal: 'recomp', key: '', keyOk: false, testing: false };
+  const valid = () => d.sex && ageFrom(d.birth) >= 14 && ageFrom(d.birth) <= 100 && +d.height >= 120 && +d.height <= 230 && +d.weight >= 35 && +d.weight <= 250;
   const dots = () => `<div class="flex gap-1.5 justify-center">${[0, 1, 2, 3].map(i => `<span style="height:7px;border-radius:9px;width:${i === d.step ? 22 : 7}px;background:${i === d.step ? '#22d3ee' : '#334155'}"></span>`).join('')}</div><div class="text-[11px] text-mute text-center -mt-1">Paso ${d.step + 1} de 4</div>`;
   const seg = (f, opts, cols) => `<div class="seg" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${Object.entries(opts).map(([k, v]) => `<button class="seg-btn py-2 ${d[f] === k ? 'seg-on' : ''}" data-mact="pick" data-f="${f}" data-v="${k}" type="button">${Array.isArray(v) ? v[0] : v}</button>`).join('')}</div>`;
   const s0 = () => `${dots()}<h3 class="modal-title">👋 Te damos la bienvenida</h3>
@@ -3897,8 +3908,8 @@ function onboarding() {
     <p class="text-xs text-mute">Con esto calculamos tus objetivos de partida. Los puedes cambiar cuando quieras en Ajustes.</p>
     <label class="lbl">Nombre<input class="field mt-1" name="name" maxlength="24" value="${esc(d.name)}" /></label>
     <div><div class="lbl mb-1">Sexo</div>${seg('sex', SEXES, 3)}</div>
-    <div class="grid grid-cols-3 gap-2">
-      <label class="lbl">Edad<input class="field mt-1" name="age" inputmode="numeric" maxlength="3" value="${esc(d.age)}" /></label>
+    <label class="lbl">Fecha de nacimiento <span class="text-brand font-bold" id="obAge">${birthHint(d.birth)}</span><input class="field mt-1" name="birth" type="date" min="${BIRTH_MIN}" max="${birthMax()}" value="${esc(d.birth)}" /></label>
+    <div class="grid grid-cols-2 gap-2">
       <label class="lbl">Altura (cm)<input class="field mt-1" name="height" inputmode="numeric" maxlength="3" placeholder="170" value="${esc(d.height)}" /></label>
       <label class="lbl">Peso (kg)<input class="field mt-1" name="weight" inputmode="decimal" maxlength="5" value="${esc(d.weight)}" /></label>
     </div>
@@ -3910,7 +3921,7 @@ function onboarding() {
         <div><div class="text-lg font-black">${t.prot} g</div><div class="text-[10px] text-mute">proteína</div></div>
         <div><div class="text-lg font-black">${t.carbs} g</div><div class="text-[10px] text-mute">hidratos</div></div>
         <div><div class="text-lg font-black">${t.fat} g</div><div class="text-[10px] text-mute">grasa</div></div></div>`
-      : '<div class="text-[12px] text-mute text-center">Rellena sexo, edad, altura y peso para calcular tus objetivos.</div>'}</div>
+      : '<div class="text-[12px] text-mute text-center">Rellena sexo, fecha de nacimiento, altura y peso para calcular tus objetivos.</div>'}</div>
     <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="back" type="button">Atrás</button><button class="btn-primary" data-mact="next" type="button">Siguiente</button></div>`;
   };
   const s2 = () => `${dots()}<h3 class="modal-title">🤖 Activa el Coach IA</h3>
@@ -3931,12 +3942,12 @@ function onboarding() {
     const g = n => root.querySelector(`[name="${n}"]`);
     if (g('ok')) d.ok = g('ok').checked;
     if (g('email')) d.email = g('email').value.trim().toLowerCase();
-    if (g('name')) { d.name = g('name').value.trim(); d.age = g('age').value.replace(/\D/g, ''); d.height = g('height').value.replace(/\D/g, ''); d.weight = g('weight').value.replace(',', '.').replace(/[^\d.]/g, ''); }
+    if (g('name')) { d.name = g('name').value.trim(); d.birth = g('birth').value; d.height = g('height').value.replace(/\D/g, ''); d.weight = g('weight').value.replace(',', '.').replace(/[^\d.]/g, ''); }
     if (g('key')) d.key = g('key').value.trim();
   };
   const draw = root => { root.querySelector('.modal-sheet').innerHTML = html(); root.querySelector('.modal-sheet').scrollTop = 0; bindLive(root); };
   const bindLive = root => {
-    if (d.step === 2) root.querySelectorAll('[name=age],[name=height],[name=weight]').forEach(i => i.oninput = () => { keep(root); const box = root.querySelector('#obTargets'), tmp = document.createElement('div'); tmp.innerHTML = s1(); box.innerHTML = tmp.querySelector('#obTargets').innerHTML; });
+    if (d.step === 2) root.querySelectorAll('[name=birth],[name=height],[name=weight]').forEach(i => i.oninput = i.onchange = () => { keep(root); const box = root.querySelector('#obTargets'), tmp = document.createElement('div'); tmp.innerHTML = s1(); box.innerHTML = tmp.querySelector('#obTargets').innerHTML; const ag = root.querySelector('#obAge'); if (ag) ag.textContent = birthHint(d.birth); });
     if (d.step === 3) { const k = root.querySelector('[name=key]'); if (k) k.oninput = () => { d.keyOk = false; const m = root.querySelector('#obKeyMsg'); if (m) m.textContent = ''; }; }
   };
   const test = async root => {
@@ -3960,7 +3971,7 @@ function onboarding() {
       if (d.step === 1 && !EMAIL_RE.test(d.email)) return toast('Escribe tu correo o usa «Continuar con Google»', 'warn');
       if (d.step === 2) {
         if (!d.name) return toast('Escribe tu nombre', 'warn');
-        if (!valid()) return toast('Revisa sexo, edad, altura (cm) y peso (kg)', 'warn');
+        if (!valid()) return toast('Revisa sexo, fecha de nacimiento, altura (cm) y peso (kg)', 'warn');
       }
       d.step++; draw(root);
     },
@@ -3972,7 +3983,7 @@ function onboarding() {
       keep(root);
       if (!b.dataset.skip && !d.keyOk && !(await test(root))) return;
       const t = calcTargets(d), st = state.settings;
-      st.profile = { name: d.name.slice(0, 24), sex: d.sex, age: d.age, height: d.height, goal: d.goal, activity: d.activity };
+      st.profile = { name: d.name.slice(0, 24), sex: d.sex, birth: d.birth, height: d.height, goal: d.goal, activity: d.activity };
       Object.assign(st, { targetKcal: t.kcal, targetProt: t.prot, targetCarbs: t.carbs, targetFat: t.fat, onboarded: todayISO(), usageOk: true, email: d.email, emailAsked: todayISO() });
       if (!b.dataset.skip && d.keyOk) st.apiKey = d.key;
       state.bodyMetrics.push({ id: uid('m_'), date: todayISO(), weight: r2(+d.weight), waist: null });
@@ -3989,7 +4000,7 @@ const SEXES = { h: 'Hombre', m: 'Mujer', x: 'Prefiero no decirlo' };
 function profileOf() { return state.settings.profile || null; }
 function profileText() {
   const p = profileOf() || {};
-  const who = [p.sex === 'h' ? 'hombre' : p.sex === 'm' ? 'mujer' : 'persona', p.age ? `de ${p.age} años` : 'adulta'].join(' ') + (p.height ? `, ${p.height} cm de altura` : '');
+  const who = [p.sex === 'h' ? 'hombre' : p.sex === 'm' ? 'mujer' : 'persona', profileAge(p) ? `de ${profileAge(p)} años` : 'adulta'].join(' ') + (p.height ? `, ${p.height} cm de altura` : '');
   return `${p.name || 'el usuario'} (${who}), objetivo: ${(GOALS[p.goal] || GOALS.recomp)[1]}`;
 }
 function profileModal(after) {
@@ -4001,7 +4012,7 @@ function profileModal(after) {
     <label class="lbl">Nombre<input class="field mt-1" name="name" maxlength="24" value="${esc(draft.name || '')}" /></label>
     <div><div class="lbl mb-1">Sexo</div>${seg('sex', SEXES, draft.sex)}</div>
     <div class="grid grid-cols-2 gap-2">
-      <label class="lbl">Edad (opcional)<input class="field mt-1" name="age" inputmode="numeric" maxlength="3" value="${esc(draft.age || '')}" /></label>
+      <label class="lbl col-span-2">Fecha de nacimiento (opcional) <span class="text-brand font-bold" id="pfAge">${birthHint(draft.birth)}</span><input class="field mt-1" name="birth" type="date" min="${BIRTH_MIN}" max="${birthMax()}" value="${esc(draft.birth || '')}" />${!draft.birth && p.age ? `<span class="block text-[11px] text-amber-300 font-normal mt-1">Ahora pone ${esc(p.age)} años. Pon tu fecha y se actualizará sola en cada cumpleaños.</span>` : ''}</label>
       <label class="lbl">Altura en cm (opcional)<input class="field mt-1" name="height" inputmode="numeric" maxlength="3" placeholder="Ej: 175" value="${esc(draft.height || '')}" /></label>
     </div>
     <div><div class="lbl mb-1">Objetivo</div>${seg('goal', GOALS, draft.goal)}</div>
@@ -4010,7 +4021,7 @@ function profileModal(after) {
       ${draft.email ? '' : gBtn()}
       <p class="text-[10px] text-mute leading-snug">${EMAIL_NOTICE}</p></div>
     <button class="btn-primary w-full" data-mact="save" type="button">Guardar</button>`;
-  const keep = root => { draft.name = mval(root, 'name').trim(); draft.age = mval(root, 'age').replace(/\D/g, ''); draft.height = mval(root, 'height').replace(/\D/g, ''); draft.email = mval(root, 'email').trim().toLowerCase(); };
+  const keep = root => { draft.name = mval(root, 'name').trim(); draft.birth = mval(root, 'birth'); draft.height = mval(root, 'height').replace(/\D/g, ''); draft.email = mval(root, 'email').trim().toLowerCase(); };
   const handlers = {
     autofocus: !p.name,
     pick: (root, b) => { keep(root); draft[b.dataset.f] = b.dataset.v; root.querySelector('.modal-sheet').innerHTML = html(); },
@@ -4021,7 +4032,8 @@ function profileModal(after) {
       if (!draft.name) return toast('Pon tu nombre', 'warn');
       if (!draft.sex) return toast('Elige una opción de sexo', 'warn');
       if (draft.height && (+draft.height < 100 || +draft.height > 230)) return toast('La altura va en centímetros (ej. 175)', 'warn');
-      state.settings.profile = { ...(p.activity ? { activity: p.activity } : {}), name: draft.name.slice(0, 24), sex: draft.sex, age: draft.age ? String(Math.min(110, +draft.age)) : '', height: draft.height || '', goal: draft.goal || 'recomp' };
+      if (draft.birth && !(ageFrom(draft.birth) >= 10)) return toast('Revisa la fecha de nacimiento', 'warn');
+      state.settings.profile = { ...(p.activity ? { activity: p.activity } : {}), name: draft.name.slice(0, 24), sex: draft.sex, ...(draft.birth ? { birth: draft.birth } : p.age ? { age: p.age } : {}), height: draft.height || '', goal: draft.goal || 'recomp' };
       if ((state.settings.email || '') !== draft.email) setEmail(draft.email);
       persist(); closeModal(); render(); toast('Perfil guardado ✓');
       if (after) after();
@@ -4034,7 +4046,7 @@ function profileSectionHTML() {
   return `<section class="card p-4 mt-3">
     <div class="flex items-center justify-between gap-3">
       <div class="min-w-0"><h3 class="section-title">👤 Mi perfil</h3>
-        <p class="text-xs ${p ? 'text-slate-300' : 'text-amber-300'} mt-1 truncate">${p ? `${esc(p.name)} · ${esc(SEXES[p.sex] || '')}${p.age ? ` · ${esc(p.age)} años` : ''}${p.height ? ` · ${esc(p.height)} cm` : ''} · ${esc((GOALS[p.goal] || GOALS.recomp)[0])}${state.settings.email ? ` · ✉️ ${esc(state.settings.email)}` : ''}` : 'Sin rellenar: el Coach IA no sabe a quién aconseja'}</p></div>
+        <p class="text-xs ${p ? 'text-slate-300' : 'text-amber-300'} mt-1 truncate">${p ? `${esc(p.name)} · ${esc(SEXES[p.sex] || '')}${profileAge(p) ? ` · ${profileAge(p)} años` : ''}${p.height ? ` · ${esc(p.height)} cm` : ''} · ${esc((GOALS[p.goal] || GOALS.recomp)[0])}${state.settings.email ? ` · ✉️ ${esc(state.settings.email)}` : ''}` : 'Sin rellenar: el Coach IA no sabe a quién aconseja'}</p></div>
       <button class="btn-ghost px-3 py-2 shrink-0" data-act="editProfile" type="button">${p ? 'Editar' : 'Rellenar'}</button>
     </div></section>`;
 }
@@ -4314,6 +4326,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.40.0', ['🎂 Mi perfil: ahora pones tu fecha de nacimiento en lugar de la edad, y la app y el Coach calculan tu edad solos (en tu cumpleaños sube sola). Si ya tenías la edad puesta, se mantiene hasta que añadas la fecha en Ajustes → Mi perfil.']],
   ['4.39.3', ['⏱ Descanso: con la cuenta atrás en marcha, «?» y ✉️ se apartan y el temporizador se hace grande y se va vaciando; en los últimos 5 segundos se pone ámbar y late.'], 'quiet'],
   ['4.39.2', ['🔧 Cabecera: con la cuenta atrás en marcha, los botones ya no tapan el logotipo.'], 'quiet'],
   ['4.39.1', ['✉️ Nuevo botón con un sobre arriba (junto a «?»): abre tu correo para escribir a fitnestebanapp@gmail.com si tienes dudas, encuentras un fallo o tienes ideas.']],
