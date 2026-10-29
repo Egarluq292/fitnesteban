@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.44.0';
+const APP_VERSION = '4.44.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4456,6 +4456,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.44.1', ['🏠 Fotos de Inicio en la raíz.'], 'quiet'],
   ['4.44.0', ['🏠 Pantalla de inicio con 4 tarjetas: Entrenamientos, Nutrición, Progreso y Asistente IA.'], 'quiet'],
   ['4.43.0', ['🔥 Cardio a tu medida: pulsa el ✎ de «Registrar cardio» para elegir tus actividades (correr, natación, pádel, remo…) o crear la tuya. Lo ya registrado no cambia.', '✎ Al editar un bloque se indica dónde cambiar sus ejercicios.']],
   ['4.42.1', ['⚡ Scroll más fluido con el aspecto nuevo.'], 'quiet'],
@@ -4791,7 +4792,7 @@ function renderHome() {
   const name = profileOf()?.name || access.me?.name || '';
   const f = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   return `<div class="pb-3"><div class="text-mute text-sm">${esc(f.charAt(0).toUpperCase() + f.slice(1))}</div><h1 class="text-2xl font-black mt-0.5">Hola${name ? ', ' + esc(name.split(' ')[0]) : ''} 👋</h1></div>
-  <div id="homeCards" class="home-cards">${HOME_CARDS.map(c => `<button class="home-card" style="--c:${c.c};background-image:url(img/${c.img}.webp);background-position:${c.pos}" data-act="homeGo" data-v="${c.view}" type="button">
+  <div id="homeCards" class="home-cards">${HOME_CARDS.map(c => `<button class="home-card" style="--c:${c.c};background-image:url(${c.img}.webp);background-position:${c.pos}" data-act="homeGo" data-v="${c.view}" type="button">
     <span class="home-shade"></span>
     <span class="home-txt"><span class="block font-black text-[19px] leading-tight">${c.t}</span><span class="block text-[13px] mt-1 text-slate-300">${esc(homeSub(c.view))}</span></span>
     <span class="home-go">›</span></button>`).join('')}</div>`;
