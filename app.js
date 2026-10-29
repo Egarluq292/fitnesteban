@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.44.1';
+const APP_VERSION = '4.44.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4456,6 +4456,8 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.44.3', ['🏠 Inicio: aviso muscular, lo que te queda de dieta y kilos totales en las tarjetas.'], 'quiet'],
+  ['4.44.2', ['🏠 Inicio con fondo negro.'], 'quiet'],
   ['4.44.1', ['🏠 Fotos de Inicio en la raíz.'], 'quiet'],
   ['4.44.0', ['🏠 Pantalla de inicio con 4 tarjetas: Entrenamientos, Nutrición, Progreso y Asistente IA.'], 'quiet'],
   ['4.43.0', ['🔥 Cardio a tu medida: pulsa el ✎ de «Registrar cardio» para elegir tus actividades (correr, natación, pádel, remo…) o crear la tuya. Lo ya registrado no cambia.', '✎ Al editar un bloque se indica dónde cambiar sus ejercicios.']],
@@ -4771,30 +4773,39 @@ const HOME_CARDS = [
 function homeSub(v) {
   const T = todayISO();
   if (v === 'train') {
-    if (activeWip()) return 'Sesión en curso';
-    const pr = prog().days.length ? prog() : state.plan.programs.find(p => p.type !== 'cardio' && p.type !== 'retos' && p.days.length);
-    const id = pr && nextDayId(pr), d = id && pr.days.find(x => x.id === id);
-    return d ? `Hoy toca: ${d.label}` : 'Retos, cardio y tus bloques';
+    if (activeWip()) return ['Sesión en curso'];
+    const pr = mainStrengthProg(); if (!pr) return ['Retos, cardio y tus bloques'];
+    if (sortedSessions().some(x => x.date === T && programOfDay(x.dayId)?.id === pr.id)) return ['Hoy ya entrenaste ✓', '<span class="text-brand">Toca recuperar</span>'];
+    const d = pr.days.find(x => x.id === nextDayId(pr)); if (!d) return ['Retos, cardio y tus bloques'];
+    const prim = new Set(); for (const e of d.exercises) for (const [m, w] of Object.entries(musclesOf(variantOf(e).variant.name))) if (w === 1) prim.add(m);
+    const f = muscleFatigue(), loaded = [...prim].filter(m => (f[m]?.frac || 0) >= 0.5).map(m => (MUSCLE_NAMES[m] || m).toLowerCase());
+    const tip = !prim.size ? '' : `<span class="text-brand">${loaded.length ? `Aún cargado${loaded.length > 1 ? 's' : ''}: ${esc(loaded.join(', '))}` : 'Músculos recuperados ✓'}</span>`;
+    return [`Hoy toca: ${esc(d.label)}`, tip];
   }
   if (v === 'diet') {
-    const st = state.settings, k = Math.round(totalsOf(T).kcal), budget = st.targetKcal + (st.eatBackCardio ? exerciseBurnOf(T) : 0);
-    return `${fmtNum(k)} de ${fmtNum(Math.round(budget))} kcal`;
+    const st = state.settings, t = totalsOf(T), budget = Math.round(st.targetKcal + (st.eatBackCardio ? exerciseBurnOf(T) : 0));
+    const left = budget - Math.round(t.kcal), pl = Math.round((st.targetProt || 0) - t.prot);
+    return [`${fmtNum(Math.round(t.kcal))} de ${fmtNum(budget)} kcal`, left >= 0 ? `Quedan ${fmtNum(left)} kcal${pl > 0 ? ` · ${fmtNum(pl)} g prot.` : ''}` : `<span class="text-amber-200">Te pasas ${fmtNum(-left)} kcal</span>`];
   }
   if (v === 'progress') {
-    const w = latestWeight(); if (!w) return 'Apunta tu peso y medidas';
-    const old = bodyweightAt(addDays(T, -30)), first = [...state.bodyMetrics].filter(m => m.weight !== null).sort((a, b) => (a.date < b.date ? -1 : 1))[0];
-    const dlt = first && first.date <= addDays(T, -30) && old ? Math.round((w - old) * 10) / 10 : null;
-    return fmtKg(w) + (dlt ? ` · ${dlt > 0 ? '+' : '−'}${fmtNum(Math.abs(dlt))} kg en 30 días` : '');
+    const ws = [...state.bodyMetrics].filter(m => m.weight !== null).sort((a, b) => (a.date < b.date ? -1 : 1));
+    if (!ws.length) return ['Apunta tu peso y medidas'];
+    const w = ws[ws.length - 1].weight, first = ws[0];
+    const kg = x => `${x > 0 ? '+' : '−'}${fmtNum(Math.abs(x))} kg`, col = x => x < 0 ? 'text-emerald-300' : 'text-amber-200';
+    const old = first.date <= addDays(T, -30) ? bodyweightAt(addDays(T, -30)) : null, d30 = old ? Math.round((w - old) * 10) / 10 : null;
+    const tot = ws.length > 1 ? Math.round((w - first.weight) * 10) / 10 : null;
+    const l2 = tot ? `<span class="${col(tot)}">${kg(tot)}</span> desde el ${esc(fmtDateShort(first.date))}` : '';
+    return [fmtKg(w) + (d30 ? ` · ${kg(d30)} en 30 días` : ''), l2];
   }
-  return 'Pregunta a tu coach';
+  return ['Pregunta a tu coach'];
 }
 function renderHome() {
   const name = profileOf()?.name || access.me?.name || '';
   const f = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
-  return `<div class="pb-3"><div class="text-mute text-sm">${esc(f.charAt(0).toUpperCase() + f.slice(1))}</div><h1 class="text-2xl font-black mt-0.5">Hola${name ? ', ' + esc(name.split(' ')[0]) : ''} 👋</h1></div>
+  return `<div class="pb-3"><div class="text-mute text-sm">${esc(f.charAt(0).toUpperCase() + f.slice(1))}</div><h1 class="text-2xl font-black mt-0.5">Hola${name ? ', ' + esc(name.split(' ')[0]) : ''}</h1></div>
   <div id="homeCards" class="home-cards">${HOME_CARDS.map(c => `<button class="home-card" style="--c:${c.c};background-image:url(${c.img}.webp);background-position:${c.pos}" data-act="homeGo" data-v="${c.view}" type="button">
     <span class="home-shade"></span>
-    <span class="home-txt"><span class="block font-black text-[19px] leading-tight">${c.t}</span><span class="block text-[13px] mt-1 text-slate-300">${esc(homeSub(c.view))}</span></span>
+    <span class="home-txt"><span class="block font-black text-[19px] leading-tight">${c.t}</span>${homeSub(c.view).filter(Boolean).map((l, i) => `<span class="block text-[13px] ${i ? 'mt-0.5' : 'mt-1'} text-slate-300 truncate">${l}</span>`).join('')}</span>
     <span class="home-go">›</span></button>`).join('')}</div>`;
 }
 function fitHome() {
