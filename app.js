@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.42.1';
+const APP_VERSION = '4.43.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -330,6 +330,35 @@ const CARDIO_TYPES = {
     hint: { baja: 'Paseo tranquilo (~3 km/h)', 'media-baja': 'Paseo normal (~4 km/h)', media: 'Paso ligero (~5 km/h)', 'media-alta': 'Paso rápido (~5,5 km/h)', alta: 'Muy rápido o con cuestas (~6,5 km/h)' }
   }
 };
+
+/* Actividades extra que cada usuario puede activar (MET orientativos, Compendium) */
+const CARDIO_HINT = { baja: 'Suave, hablas sin esfuerzo', 'media-baja': 'Algo de esfuerzo, conversación fácil', media: 'Respiras fuerte, frases cortas', 'media-alta': 'Cuesta hablar, sudas bastante', alta: 'Casi sin poder hablar / a tope' };
+const CARDIO_EXTRA = {
+  run: { label: 'Correr', icon: '🏃', met: { baja: 6, 'media-baja': 8, media: 9.8, 'media-alta': 11, alta: 12.8 }, hint: { baja: 'Trote muy suave (~7 km/h)', 'media-baja': 'Trote cómodo (~8 km/h)', media: 'Ritmo medio (~9,5 km/h)', 'media-alta': 'Ritmo vivo (~11 km/h)', alta: 'Muy rápido o series' } },
+  elliptical: { label: 'Elíptica', icon: '🏋️', met: { baja: 4, 'media-baja': 5, media: 6, 'media-alta': 7.5, alta: 9 } },
+  swim: { label: 'Natación', icon: '🏊', met: { baja: 4.8, 'media-baja': 5.8, media: 7, 'media-alta': 8.3, alta: 10 } },
+  row: { label: 'Remo', icon: '🚣', met: { baja: 3.5, 'media-baja': 4.8, media: 7, 'media-alta': 8.5, alta: 12 } },
+  spin: { label: 'Spinning', icon: '🚲', met: { baja: 5, 'media-baja': 6.8, media: 8.5, 'media-alta': 10, alta: 12 } },
+  mtb: { label: 'BTT', icon: '🚵', met: { baja: 5.8, 'media-baja': 7, media: 8.5, 'media-alta': 10, alta: 14 } },
+  hike: { label: 'Senderismo', icon: '🥾', met: { baja: 4.5, 'media-baja': 5.3, media: 6, 'media-alta': 7, alta: 7.8 } },
+  padel: { label: 'Pádel', icon: '🎾', met: { baja: 4, 'media-baja': 5, media: 6, 'media-alta': 7, alta: 8 } },
+  football: { label: 'Fútbol', icon: '⚽', met: { baja: 5, 'media-baja': 6, media: 7, 'media-alta': 8, alta: 10 } },
+  rope: { label: 'Comba', icon: '🪢', met: { baja: 7, 'media-baja': 8.8, media: 10, 'media-alta': 11.8, alta: 12.3 } },
+  dance: { label: 'Baile', icon: '💃', met: { baja: 3, 'media-baja': 4, media: 5, 'media-alta': 6, alta: 7.3 } },
+  stairs: { label: 'Escaleras', icon: '🪜', met: { baja: 4, 'media-baja': 5, media: 6.8, 'media-alta': 8.8, alta: 9 } }
+};
+const CARDIO_GENERIC_MET = { baja: 3, 'media-baja': 4, media: 5.5, 'media-alta': 7.5, alta: 9.5 };
+function cardioType(k) {
+  const T = CARDIO_TYPES[k] || CARDIO_EXTRA[k];
+  if (T) return { key: k, hint: CARDIO_HINT, ...T };
+  const c = (state.settings.cardioCustom || []).find(x => x.id === k);
+  return { key: k, label: c ? c.label : 'Cardio', icon: c ? c.icon || '🔥' : '🔥', met: CARDIO_GENERIC_MET, hint: CARDIO_HINT, custom: true };
+}
+const cardioOnKeys = () => state.settings.cardioOn || ['bike', 'walk'];
+function cardioVisible() {
+  const on = cardioOnKeys();
+  return [...[...Object.keys(CARDIO_TYPES), ...Object.keys(CARDIO_EXTRA)].filter(k => on.includes(k)), ...(state.settings.cardioCustom || []).filter(c => !c.off).map(c => c.id)].map(cardioType);
+}
 
 /* ---------- Utilidades ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1365,7 +1394,7 @@ function editProgModal(progId) {
   openModal(`
     <h3 class="modal-title">${isNew ? 'Nuevo bloque' : 'Editar bloque'}</h3>
     <label class="lbl">Nombre del bloque<input class="field mt-1" name="name" maxlength="16" value="${esc(p.name)}" placeholder="TORSO-PIERNA" /></label>
-    ${!isNew && p.type === 'cardio' ? '<p class="text-[11px] text-mute">Bloque de cardio: registra bicicleta y caminata. Se puede renombrar, no eliminar.</p>' : !isNew && p.type === 'retos' ? '<p class="text-[11px] text-mute">Bloque de retos: dominadas, flexiones, fondos, sentadillas, burpees, plancha y rueda abdominal por niveles. Se puede renombrar, no eliminar.</p>' : isNew ? '<p class="text-[11px] text-mute">Se crea con un día vacío. Añade días con «＋ Día» y ejercicios con «＋ Añadir ejercicio».</p>' : `<p class="text-[11px] text-mute">${p.days.length} días: ${esc(p.days.map(d => d.label).join(' · '))}</p>`}
+    ${!isNew && p.type === 'cardio' ? '<p class="text-[11px] text-mute">Bloque de cardio. Se puede renombrar, no eliminar.</p><button class="btn-ghost w-full mt-2" data-mact="cdTypes" type="button">✎ Mis actividades de cardio</button>' : !isNew && p.type === 'retos' ? '<p class="text-[11px] text-mute">Bloque de retos: dominadas, flexiones, fondos, sentadillas, burpees, plancha y rueda abdominal por niveles. Se puede renombrar, no eliminar.</p>' : isNew ? '<p class="text-[11px] text-mute">Se crea con un día vacío. Añade días con «＋ Día» y ejercicios con «＋ Añadir ejercicio».</p>' : `<p class="text-[11px] text-mute">${p.days.length} días: ${esc(p.days.map(d => d.label).join(' · '))}</p><p class="text-[11px] text-mute">Para cambiar ejercicios, usa «＋ Añadir ejercicio» y el ✎ de cada ejercicio, en la pantalla del bloque.</p>`}
     <div class="flex gap-2 mt-4">
       ${!isNew ? `<button class="btn-ghost" data-mact="left" type="button" aria-label="Mover a la izquierda">◀</button><button class="btn-ghost" data-mact="right" type="button" aria-label="Mover a la derecha">▶</button>` : ''}
       <button class="btn-primary flex-1" data-mact="save" type="button">Guardar</button>
@@ -1374,6 +1403,7 @@ function editProgModal(progId) {
     ${!isNew && p.type === 'strength' && state.plan.programs.length > 1 ? `<button class="btn-danger w-full mt-3" data-mact="del" type="button">Eliminar este bloque</button><p class="text-[11px] text-mute mt-2">Eliminar un bloque no borra el historial de sesiones ya guardadas.</p>` : ''}
   `, {
     share: () => { closeModal(); publishBlockModal(progId); },
+    cdTypes: () => { closeModal(); cardioTypesModal(); },
     autofocus: isNew,
     save: root => {
       const name = mval(root, 'name').trim().toUpperCase();
@@ -1735,7 +1765,7 @@ function latestWeight() {
   return w ? w.weight : null;
 }
 function metKcal(type, intensity, minutes, kg) {
-  const met = CARDIO_TYPES[type]?.met[intensity] ?? 3.5;
+  const met = cardioType(type).met[intensity] ?? 3.5;
   return Math.max(0, Math.round((met - 1) * kg * minutes / 60)); // netas: descontado el gasto en reposo
 }
 function cardioOf(date) { return state.cardio.filter(c => c.date === date); }
@@ -2138,7 +2168,9 @@ function retoTestModal(id) {
 
 function renderCardio() {
   const c = ui.cardio;
-  const T = CARDIO_TYPES[c.type];
+  const vis = cardioVisible();
+  if (!vis.some(t => t.key === c.type) && vis.length) c.type = vis[0].key;
+  const T = cardioType(c.type);
   const w = latestWeight();
   const today = todayISO();
   const dayMin = cardioOf(c.date).reduce((a, x) => a + x.minutes, 0);
@@ -2146,10 +2178,10 @@ function renderCardio() {
   const est = c.est;
   return `
   <section class="card p-4 mt-1 space-y-3">
-    <h2 class="font-extrabold text-lg">🔥 Registrar cardio</h2>
+    <div class="flex items-center justify-between gap-2"><h2 class="font-extrabold text-lg">🔥 Registrar cardio</h2><button class="iconbtn iconbtn-sm" data-act="cdTypes" type="button" aria-label="Mis actividades">✎</button></div>
     <label class="lbl">Fecha<input class="field mt-1 px-2" type="date" id="cdDate" value="${c.date}" max="${today}" /></label>
-    <div class="grid grid-cols-2 gap-2">
-      ${Object.entries(CARDIO_TYPES).map(([k, v]) => `<button class="cardio-type ${c.type === k ? 'cardio-type-on' : ''}" data-act="cdType" data-type="${k}" type="button"><span class="text-2xl">${v.icon}</span><span>${v.label}</span></button>`).join('')}
+    <div class="flex flex-wrap justify-center gap-2">
+      ${vis.map(v => `<button class="cardio-type ${c.type === v.key ? 'cardio-type-on' : ''}" style="width:${vis.length === 2 || vis.length === 4 ? 'calc(50% - 4px)' : 'calc(33.333% - 5.34px)'}" data-act="cdType" data-type="${esc(v.key)}" type="button"><span class="text-2xl">${esc(v.icon)}</span><span class="truncate max-w-full px-1">${esc(v.label)}</span></button>`).join('')}
     </div>
     <label class="lbl">Minutos<input class="field mt-1 text-lg" id="cdMin" inputmode="numeric" value="${esc(c.minutes)}" placeholder="Ej: 30" /></label>
     <div>
@@ -2179,15 +2211,67 @@ function renderCardio() {
     <p class="text-[11px] text-mute mt-1">Estas calorías aparecen también en la pestaña Dieta de ese día.</p>
     <div class="space-y-1.5 mt-3">
       ${recent.map(x => `<div class="meal">
-        <span class="text-xl">${CARDIO_TYPES[x.type]?.icon || '🔥'}</span>
+        <span class="text-xl">${esc(cardioType(x.type).icon)}</span>
         <div class="min-w-0 flex-1">
-          <div class="text-sm font-semibold">${esc(CARDIO_TYPES[x.type]?.label || 'Cardio')} · ${x.minutes} min · ${esc((INTENSITIES.find(i => i[0] === x.intensity) || ['', x.intensity])[1])}</div>
+          <div class="text-sm font-semibold">${esc(cardioType(x.type).label)} · ${x.minutes} min · ${esc((INTENSITIES.find(i => i[0] === x.intensity) || ['', x.intensity])[1])}</div>
           <div class="text-[11px] text-mute">${esc(fmtDate(x.date))} · <span class="text-amber-300">${x.kcal} kcal</span>${x.ai ? ' · IA' : ''}</div>
         </div>
         <button class="iconbtn iconbtn-sm" data-act="cdDel" data-id="${esc(x.id)}" type="button" aria-label="Borrar">✕</button>
       </div>`).join('') || '<p class="text-sm text-mute">Aún no has registrado cardio.</p>'}
     </div>
   </section>`;
+}
+
+function cardioTypesModal() {
+  const st = state.settings;
+  const keys = [...Object.keys(CARDIO_TYPES), ...Object.keys(CARDIO_EXTRA)];
+  const row = (t, on, act, extra = '') => `<div class="flex items-center justify-between gap-2 bg-ink rounded-xl border ${on ? 'border-amber-400/60' : 'border-line'} px-3 py-2">
+      <div class="flex items-center gap-2.5 min-w-0"><span class="text-xl">${esc(t.icon)}</span><span class="font-semibold text-[14px] truncate">${esc(t.label)}</span>${extra}</div>
+      ${act}</div>`;
+  let more = false;
+  const html = () => {
+    const on = cardioOnKeys(), cus = (st.cardioCustom || []).filter(c => !c.off);
+    const act = keys.filter(k => on.includes(k)), rest = keys.filter(k => !on.includes(k));
+    return `<h3 class="modal-title">✎ Mis actividades de cardio</h3>
+    <p class="text-xs text-mute">Estas son las que verás al registrar. Lo que ya tienes registrado no cambia.</p>
+    <div class="space-y-1.5">${act.map(k => row(cardioType(k), true, `<button class="btn-mini text-rose-300 shrink-0" data-mact="tog" data-k="${k}" type="button">✕ Quitar</button>`)).join('')}
+    ${cus.map(c => row(c, true, `<button class="btn-mini text-rose-300 shrink-0" data-mact="delc" data-k="${esc(c.id)}" type="button">✕ Quitar</button>`, '<span class="text-[10px] font-bold text-mute">PROPIA</span>')).join('')}</div>
+    ${rest.length ? `<button class="btn-ghost w-full" data-mact="more" type="button">${more ? '▴ Ocultar' : `＋ Más actividades (${rest.length})`}</button>
+    ${more ? `<div class="space-y-1.5">${rest.map(k => row(cardioType(k), false, `<button class="btn-mini text-brand shrink-0" data-mact="tog" data-k="${k}" type="button">＋ Añadir</button>`)).join('')}</div>` : ''}` : ''}
+    <div class="border-t border-line pt-3 space-y-2">
+      <div class="lbl">¿No está? Crea la tuya</div>
+      <div class="flex gap-2"><input class="field text-center px-1" style="width:56px;flex:none" name="cico" maxlength="4" placeholder="🔥" autocomplete="off" /><input class="field flex-1 min-w-0" name="cname" maxlength="18" placeholder="Ej: Kayak, boxeo…" autocomplete="off" /><button class="btn-ghost px-4" data-mact="addc" type="button">Añadir</button></div>
+      <p class="text-[11px] text-mute">Las calorías de una actividad propia las calcula la IA. Sin clave de IA se usa un cálculo genérico, más aproximado.</p>
+    </div>
+    <button class="btn-primary w-full" data-mact="done" type="button">Listo</button>`;
+  };
+  const redraw = root => { root.querySelector('.modal-sheet').innerHTML = html(); };
+  const count = () => cardioOnKeys().length + (st.cardioCustom || []).filter(c => !c.off).length;
+  openModal(html(), {
+    more: root => { more = !more; redraw(root); },
+    tog: (root, b) => {
+      const k = b.dataset.k, on = cardioOnKeys();
+      if (on.includes(k) && count() <= 1) return toast('Deja al menos una actividad', 'warn');
+      st.cardioOn = on.includes(k) ? on.filter(x => x !== k) : [...on, k];
+      persist(); render(); redraw(root);
+    },
+    delc: (root, b) => {
+      if (count() <= 1) return toast('Deja al menos una actividad', 'warn');
+      st.cardioCustom = (st.cardioCustom || []).map(c => c.id === b.dataset.k ? { ...c, off: true } : c); // se conserva para que los registros antiguos sigan con su nombre
+      persist(); render(); redraw(root);
+    },
+    addc: root => {
+      const name = mval(root, 'cname').trim(); if (!name) return toast('Escribe el nombre de la actividad', 'warn');
+      const dup = keys.find(k => normTxt(cardioType(k).label) === normTxt(name));
+      if (dup) { if (!cardioOnKeys().includes(dup)) st.cardioOn = [...cardioOnKeys(), dup]; persist(); render(); redraw(root); return toast(`${cardioType(dup).label} ya estaba en la lista: activada`); }
+      const old = (st.cardioCustom || []).find(c => normTxt(c.label) === normTxt(name));
+      if (old) { if (!old.off) return toast('Ya la tienes', 'warn'); old.off = false; persist(); render(); redraw(root); return toast(`Añadida: ${old.label}`); }
+      const icon = mval(root, 'cico').trim() || '🔥';
+      st.cardioCustom = [...(st.cardioCustom || []), { id: uid('ct_'), label: name.charAt(0).toUpperCase() + name.slice(1), icon }];
+      persist(); render(); redraw(root); toast(`Añadida: ${name}`);
+    },
+    done: () => closeModal()
+  });
 }
 
 async function estimateCardio() {
@@ -2200,17 +2284,17 @@ async function estimateCardio() {
     kg = num(c.weight);
     if (!(kg >= 30 && kg <= 300)) return toast('Indica tu peso para calcularlo', 'warn');
   }
-  const T = CARDIO_TYPES[c.type];
+  const T = cardioType(c.type);
   const ref = metKcal(c.type, c.intensity, minutes, kg);
   const intLabel = INTENSITIES.find(i => i[0] === c.intensity)[1].toLowerCase();
   if (!state.settings.apiKey || !navigator.onLine) {
-    c.est = { kcal: ref, ai: false, note: `Cálculo estándar (MET ${fmtNum(T.met[c.intensity])}): ${T.label.toLowerCase()} ${minutes} min a intensidad ${intLabel} con ${fmtKg(kg)}.${!state.settings.apiKey ? ' Sin clave de IA configurada.' : ' Sin conexión.'}` };
+    c.est = { kcal: ref, ai: false, note: `${T.custom ? 'Cálculo genérico, aproximado' : 'Cálculo estándar'} (MET ${fmtNum(T.met[c.intensity])}): ${T.label.toLowerCase()} ${minutes} min a intensidad ${intLabel} con ${fmtKg(kg)}.${!state.settings.apiKey ? ' Sin clave de IA configurada.' : ' Sin conexión.'}` };
     return render();
   }
   c.busy = true; render();
   try {
     const prompt = `Eres fisiólogo del ejercicio. Estima las calorías NETAS (por encima del gasto en reposo) que ha quemado esta persona.
-Actividad: ${T.label} (${c.type === 'bike' ? 'bicicleta estática o exterior' : 'caminar'}).
+Actividad: ${T.label}${c.type === 'bike' ? ' (bicicleta estática o exterior)' : c.type === 'walk' ? ' (caminar)' : ''}.
 Duración: ${minutes} minutos.
 Intensidad percibida: ${intLabel} (escala: baja, media-baja, media, media-alta, alta). Descripción: ${T.hint[c.intensity]}.
 Peso corporal: ${kg} kg. Hombre adulto.
@@ -2481,7 +2565,7 @@ function renderCalDetail(date) {
     </div>
     <div>
       <div class="text-[11px] font-bold uppercase tracking-wider text-brand">🔥 Cardio</div>
-      ${act.cardio.length ? act.cardio.map(c => `<div class="text-xs mt-0.5">${CARDIO_TYPES[c.type]?.icon || '🔥'} ${esc(CARDIO_TYPES[c.type]?.label || 'Cardio')} · ${c.minutes} min · ${esc((INTENSITIES.find(i => i[0] === c.intensity) || ['', c.intensity])[1])} · <span class="text-amber-300">${c.kcal} kcal</span></div>`).join('') : '<div class="text-xs text-mute mt-0.5">Sin cardio.</div>'}
+      ${act.cardio.length ? act.cardio.map(c => `<div class="text-xs mt-0.5">${esc(cardioType(c.type).icon)} ${esc(cardioType(c.type).label)} · ${c.minutes} min · ${esc((INTENSITIES.find(i => i[0] === c.intensity) || ['', c.intensity])[1])} · <span class="text-amber-300">${c.kcal} kcal</span></div>`).join('') : '<div class="text-xs text-mute mt-0.5">Sin cardio.</div>'}
     </div>
     <button class="btn-primary w-full py-2.5" data-mact="calGo" type="button">🍽️ Ver comidas de este día</button>
   </div>`;
@@ -3171,7 +3255,7 @@ function renderSettings() {
         <div class="text-sm font-extrabold ${p.id === prog().id ? 'text-brand' : ''}">${progLabel(p)}${p.id === prog().id ? ' <span class="text-[10px] font-semibold">· activo</span>' : ''}</div>
         <button class="iconbtn iconbtn-sm" data-act="editProgId" data-prog="${esc(p.id)}" type="button" aria-label="Editar bloque">✎</button>
       </div>
-      ${p.type === 'cardio' ? '<p class="text-[11px] text-mute bg-ink rounded-xl border border-line px-3 py-2">Bicicleta y caminata con estimación de calorías.</p>' : p.type === 'retos' ? '<p class="text-[11px] text-mute bg-ink rounded-xl border border-line px-3 py-2">Retos por niveles con ajuste según cómo te sientas.</p>' : ''}
+      ${p.type === 'cardio' ? `<p class="text-[11px] text-mute bg-ink rounded-xl border border-line px-3 py-2">${esc(cardioVisible().map(t => t.label).join(' · '))} · con estimación de calorías.</p>` : p.type === 'retos' ? '<p class="text-[11px] text-mute bg-ink rounded-xl border border-line px-3 py-2">Retos por niveles con ajuste según cómo te sientas.</p>' : ''}
       ${p.days.map(d => `<div class="flex items-center justify-between bg-ink rounded-xl border border-line px-3 py-2">
         <div class="min-w-0"><div class="text-sm font-bold">${esc(d.label)} <span class="text-mute font-normal text-xs">· ${d.exercises.length} ejercicios${d.rotation ? '' : ' · fuera de rotación'}</span></div>
         <div class="text-[11px] text-mute truncate">${esc(d.title)}</div></div>
@@ -4125,7 +4209,7 @@ function chatContext() {
     ultimas_sesiones: last,
     musculos: (() => { const f = muscleFatigue(), v = muscleVolume(30); return { fatiga_ahora_pct: Object.fromEntries(Object.entries(f).filter(([, x]) => x.frac > 0.1).map(([m, x]) => [MUSCLE_NAMES[m], Math.round(x.frac * 100)])), series_30_dias: Object.fromEntries(Object.keys(MUSCLE_NAMES).map(m => [MUSCLE_NAMES[m], Math.round((v[m] || 0) * 2) / 2])) }; })(),
     entreno_en_curso: w ? { dia: allDays().find(d => d.id === w.dayId)?.label, minutos: sessionMinutes(w.d) } : null,
-    cardio_14_dias: state.cardio.filter(c => c.date >= addDays(T, -13)).map(c => ({ fecha: c.date, tipo: CARDIO_TYPES[c.type]?.label || c.type, min: c.minutes, intensidad: c.intensity, kcal: c.kcal })),
+    cardio_14_dias: state.cardio.filter(c => c.date >= addDays(T, -13)).map(c => ({ fecha: c.date, tipo: cardioType(c.type).label, min: c.minutes, intensidad: c.intensity, kcal: c.kcal })),
     medidas_corporales: [...state.bodyMetrics].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8).map(m => ({ fecha: m.date, peso: m.weight, cintura: m.waist })),
     semana_de_descarga: deloadActive(),
     retos: RETO_IDS.filter(id => state.retos[id]).map(id => { const r = RETOS[id], st = state.retos[id]; return { reto: r.name, unidad: r.unit, nivel: st.level, meta: r.max, mejor_marca: st.best, proxima_sesion: retoSets(id, st.level), ultimas: st.history.slice(-3).map(h => ({ fecha: h.date, hecho: h.got, sensacion: h.feel })) }; })
@@ -4371,6 +4455,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.43.0', ['🔥 Cardio a tu medida: pulsa el ✎ de «Registrar cardio» para elegir tus actividades (correr, natación, pádel, remo…) o crear la tuya. Lo ya registrado no cambia.', '✎ Al editar un bloque se indica dónde cambiar sus ejercicios.']],
   ['4.42.1', ['⚡ Scroll más fluido con el aspecto nuevo.'], 'quiet'],
   ['4.42.0', ['🎨 Nuevo aspecto: tarjetas con un brillo suave, iconos de línea en cada sección, un icono para cada tipo de comida en Dieta y la pestaña activa iluminada abajo. Todo sigue en su sitio.']],
   ['4.41.9', ['🔒 Nueva página de política de privacidad, enlazada desde la guía «?» y los primeros pasos.'], 'quiet'],
@@ -4980,6 +5065,7 @@ const actions = {
   publishProg: b => publishBlockModal(b.dataset.prog),
   editProg: () => editProgModal(prog().id),
   editProgId: b => editProgModal(b.dataset.prog),
+  cdTypes: () => { keepCardioInputs(); cardioTypesModal(); },
   cdType: b => { keepCardioInputs(); ui.cardio.type = b.dataset.type; ui.cardio.est = null; render(); },
   cdInt: b => { keepCardioInputs(); ui.cardio.intensity = b.dataset.int; ui.cardio.est = null; render(); },
   cdEstimate: () => estimateCardio(),
