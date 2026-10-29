@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.44.3';
+const APP_VERSION = '4.44.6';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4456,6 +4456,8 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.44.6', ['Barras de arriba y abajo con degradado oscuro translúcido.'], 'quiet'],
+  ['4.44.4', ['Barra inferior más transparente, sin línea.'], 'quiet'],
   ['4.44.3', ['🏠 Inicio: aviso muscular, lo que te queda de dieta y kilos totales en las tarjetas.'], 'quiet'],
   ['4.44.2', ['🏠 Inicio con fondo negro.'], 'quiet'],
   ['4.44.1', ['🏠 Fotos de Inicio en la raíz.'], 'quiet'],
