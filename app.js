@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.41.8';
+const APP_VERSION = '4.41.9';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3912,6 +3912,7 @@ function onboarding() {
       <p>📶 <b>Para mantener la app</b>, envía a Esteban solo el día de último uso, la versión instalada y un identificador del dispositivo (sin datos personales). Nada de tu dieta ni de tus entrenos.</p>
       <p>🔑 <b>Tu código es solo tuyo:</b> funciona como mucho en 2 dispositivos.</p>
       <p>✉️ <b>Tu correo</b> lo guarda Esteban para enviarte la guía de la app y, si tú le escribes, resolverte dudas. Para escribirle, toca ✉️ arriba.</p>
+      <p class="text-mute">Todo, con detalle, en la <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.</p>
     </div>
     <label class="flex items-start gap-2 text-[13px]"><input type="checkbox" name="ok" ${d.ok ? 'checked' : ''} style="margin-top:3px;accent-color:#22d3ee;width:18px;height:18px" /> Lo he leído y estoy de acuerdo.</label>
     <button class="btn-primary w-full" data-mact="next" type="button">Empezar</button>`;
@@ -4343,6 +4344,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.41.9', ['🔒 Nueva página de política de privacidad, enlazada desde la guía «?» y los primeros pasos.'], 'quiet'],
   ['4.41.8', ['📊 Acceso: botón «Abrir hoja de uso». Pega una vez el enlace de la hoja (se guarda solo en ese dispositivo).'], 'admin'],
   ['4.41.7', ['🔧 Script v8: la comprobación del dispositivo usaba un parámetro que Google reserva («c») y fallaba siempre. Hay que pegar el script nuevo (Reconfigurar) y publicar una «Nueva versión».'], 'admin'],
   ['4.41.6', ['🔧 Script v7: si falla, la app muestra el error en «Este dispositivo», y tiene una función «probar» para autorizar permisos. Reconfigurar reutiliza la clave actual, así el código siempre cuadra.'], 'admin'],
@@ -4517,7 +4519,8 @@ const GUIDE = [
   ['🔄 Actualizar la app', [
     'Cuando subes una versión nueva a GitHub aparece «Hay una versión nueva» → Actualizar. Comprueba el número en Ajustes → Aplicación.',
     'Tras actualizar verás una vez las novedades. Puedes volver a verlas desde esta guía.',
-    '✉️ El sobre de arriba abre tu correo para escribir a fitnestebanapp@gmail.com: dudas, fallos o ideas.'
+    '✉️ El sobre de arriba abre tu correo para escribir a fitnestebanapp@gmail.com: dudas, fallos o ideas.',
+    '🔒 Qué datos usa la app y dónde se guardan: <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.'
   ]]
 ];
 
