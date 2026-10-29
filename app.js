@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.44.6';
+const APP_VERSION = '4.45.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -360,6 +360,26 @@ function cardioVisible() {
   return [...[...Object.keys(CARDIO_TYPES), ...Object.keys(CARDIO_EXTRA)].filter(k => on.includes(k)), ...(state.settings.cardioCustom || []).filter(c => !c.off).map(c => c.id)].map(cardioType);
 }
 
+/* Datos del reloj por actividad: qué campos tiene sentido apuntar */
+const CARDIO_DIST = ['bike', 'mtb', 'spin', 'run', 'walk', 'hike'];
+function watchFields(k) { return k === 'swim' ? ['m', 'hr', 'wkcal'] : CARDIO_DIST.includes(k) ? ['km', 'gain', 'hr', 'wkcal'] : ['hr', 'wkcal']; }
+const WATCH_LBL = { km: ['Distancia', 'km', 'Ej: 42,5'], m: ['Distancia', 'm', 'Ej: 1500'], gain: ['Desnivel +', 'm', 'Ej: 650'], hr: ['FC media', 'ppm', 'Ej: 142'], wkcal: ['Kcal del reloj', 'kcal', 'Ej: 980'] };
+/* Velocidad (km/h) o ritmo de natación (min/100 m) a partir de distancia y minutos */
+function watchSpeed(x) {
+  const min = +x.minutes; if (!(min > 0)) return '';
+  if (x.m > 0) { const s = min * 60 / (x.m / 100); return `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')} /100 m`; }
+  if (x.km > 0) return `${fmtNum(Math.round(x.km / (min / 60) * 10) / 10)} km/h`;
+  return '';
+}
+function watchLine(x) {
+  return [x.km > 0 ? `${fmtNum(x.km)} km` : x.m > 0 ? `${fmtNum(x.m)} m` : '', x.gain > 0 ? `↑${fmtNum(x.gain)} m` : '', watchSpeed(x), x.hr > 0 ? `❤ ${x.hr}` : ''].filter(Boolean).join(' · ');
+}
+/* Intensidad según la FC media (% de la FC máxima estimada, 220 − edad) */
+function hrIntensity(hr) {
+  const age = profileAge(profileOf()) || 40, pct = Math.round(hr / (220 - age) * 100);
+  return { pct, k: pct < 60 ? 'baja' : pct < 70 ? 'media-baja' : pct < 80 ? 'media' : pct < 88 ? 'media-alta' : 'alta' };
+}
+
 /* ---------- Utilidades ---------- */
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -649,7 +669,7 @@ const ui = {
   mealSearch: '',
   calMonth: '',
   calSel: '',
-  cardio: { type: 'bike', minutes: '', intensity: 'media', date: todayISO(), weight: '', est: null, busy: false }
+  cardio: { type: 'bike', minutes: '', intensity: 'media', date: todayISO(), weight: '', est: null, busy: false, km: '', m: '', gain: '', hr: '', wkcal: '' }
 };
 function guessMealType() {
   const h = new Date().getHours();
@@ -1052,6 +1072,11 @@ function keepCardioInputs() {
   const m = $('#cdMin'); if (m) ui.cardio.minutes = m.value;
   const d = $('#cdDate'); if (d) ui.cardio.date = d.value || todayISO();
   const w = $('#cdWeight'); if (w) ui.cardio.weight = w.value;
+  for (const f of ['km', 'm', 'gain', 'hr', 'wkcal']) { const el = $('#cdW_' + f); if (el) ui.cardio[f] = el.value; }
+}
+function watchVals(c) {
+  const o = {}; for (const f of watchFields(c.type)) { const v = num(c[f]); if (v > 0) o[f] = f === 'km' ? Math.round(v * 100) / 100 : Math.round(v); }
+  return o;
 }
 
 /* ⇄ Cambiar por una alternativa: lista de variantes + proponer con IA + añadir a mano */
@@ -2189,12 +2214,21 @@ function renderCardio() {
       <div class="flex flex-wrap gap-1.5">${INTENSITIES.map(([k, l]) => `<button class="chip chip-sm ${c.intensity === k ? 'chip-on' : ''}" data-act="cdInt" data-int="${k}" type="button">${l}</button>`).join('')}</div>
       <p class="text-[11px] text-mute mt-2">${esc(T.hint[c.intensity])}</p>
     </div>
+    <div class="rounded-xl border border-line bg-ink">
+      <button class="w-full flex items-center justify-between px-3 py-2.5 text-sm font-bold" data-act="cdWatch" type="button"><span>⌚ Datos del reloj <span class="text-mute font-normal text-xs">(opcional)</span></span><span class="tri ${state.settings.watchOpen ? '' : '-rotate-90'}"></span></button>
+      ${state.settings.watchOpen ? `<div class="px-3 pb-3 space-y-2">
+        <div class="grid grid-cols-2 gap-2">${watchFields(c.type).map((f, i, L) => `<label class="lbl ${L.length % 2 && i === L.length - 1 ? 'col-span-2' : ''}">${WATCH_LBL[f][0]} <span class="text-mute font-normal">(${WATCH_LBL[f][1]})</span><input class="field mt-1" id="cdW_${f}" inputmode="${f === 'km' ? 'decimal' : 'numeric'}" value="${esc(c[f])}" placeholder="${WATCH_LBL[f][2]}" /></label>`).join('')}</div>
+        <p class="text-[11px] text-mute">${c.type === 'swim' ? 'El ritmo por 100 m lo calcula la app con los metros y los minutos. ' : CARDIO_DIST.includes(c.type) ? 'La velocidad media la calcula la app con la distancia y los minutos. ' : ''}Con la FC media, la intensidad se calcula sola y las calorías son más fiables.</p>
+      </div>` : ''}
+    </div>
     ${w ? `<p class="text-[11px] text-mute">Se calcula con tu último peso registrado: <strong class="text-white">${fmtKg(w)}</strong>.</p>`
         : `<label class="lbl">Tu peso (kg)<input class="field mt-1" id="cdWeight" inputmode="decimal" value="${esc(c.weight)}" placeholder="Ej: 84" /></label>`}
     ${!est ? `<button class="btn-primary w-full" data-act="cdEstimate" type="button" ${c.busy ? 'disabled' : ''}>${c.busy ? '<span class="spinner"></span> Calculando…' : '⚡ Calcular calorías con IA'}</button>` : `
     <div class="border-t border-line pt-3 space-y-3">
       <div class="text-xs text-mute bg-ink rounded-xl p-2.5 border border-line leading-relaxed">${est.ai ? '🤖 ' : '📐 '}${esc(est.note)}</div>
       <label class="lbl text-amber-300">Calorías quemadas (netas)<input class="field mt-1 text-center text-xl font-black" id="cdKcal" inputmode="numeric" value="${est.kcal}" /></label>
+      ${est.wkcal ? `<div class="flex items-center justify-between gap-2 text-[12px] bg-ink rounded-xl border border-line px-3 py-2"><span class="text-slate-300">⌚ Reloj: <strong class="text-white">${est.wkcal} kcal</strong> <span class="text-mute">(cada reloj calcula a su manera)</span></span><button class="btn-mini text-brand shrink-0" data-act="cdUseWatch" type="button">Usar</button></div>` : ''}
+      ${est.speed ? `<p class="text-[11px] text-mute">Media: <strong class="text-white">${esc(est.speed)}</strong></p>` : ''}
       ${est.warn ? `<p class="text-[11px] text-amber-300">${esc(est.warn)}</p>` : ''}
       <div class="grid grid-cols-3 gap-2">
         <button class="btn-ghost" data-act="cdCancel" type="button">Cancelar</button>
@@ -2214,7 +2248,8 @@ function renderCardio() {
         <span class="text-xl">${esc(cardioType(x.type).icon)}</span>
         <div class="min-w-0 flex-1">
           <div class="text-sm font-semibold">${esc(cardioType(x.type).label)} · ${x.minutes} min · ${esc((INTENSITIES.find(i => i[0] === x.intensity) || ['', x.intensity])[1])}</div>
-          <div class="text-[11px] text-mute">${esc(fmtDate(x.date))} · <span class="text-amber-300">${x.kcal} kcal</span>${x.ai ? ' · IA' : ''}</div>
+          ${watchLine(x) ? `<div class="text-[11px] text-slate-300">${esc(watchLine(x))}</div>` : ''}
+          <div class="text-[11px] text-mute">${esc(fmtDate(x.date))} · <span class="text-amber-300">${x.kcal} kcal</span>${x.ai ? ' · IA' : ''}${x.wkcal ? ` · ⌚ ${x.wkcal}` : ''}</div>
         </div>
         <button class="iconbtn iconbtn-sm" data-act="cdDel" data-id="${esc(x.id)}" type="button" aria-label="Borrar">✕</button>
       </div>`).join('') || '<p class="text-sm text-mute">Aún no has registrado cardio.</p>'}
@@ -2285,10 +2320,15 @@ async function estimateCardio() {
     if (!(kg >= 30 && kg <= 300)) return toast('Indica tu peso para calcularlo', 'warn');
   }
   const T = cardioType(c.type);
-  const ref = metKcal(c.type, c.intensity, minutes, kg);
+  const wv = watchVals(c), speed = watchSpeed({ minutes, ...wv });
+  const hi = wv.hr >= 60 && wv.hr <= 220 ? hrIntensity(wv.hr) : null, ik = hi ? hi.k : c.intensity;
+  const ref = metKcal(c.type, ik, minutes, kg);
+  const refTxt = hi ? `MET ${fmtNum(T.met[ik])}, intensidad ${INTENSITIES.find(i => i[0] === ik)[1].toLowerCase()} por tu FC: ${hi.pct} % de tu máxima` : `MET ${fmtNum(T.met[c.intensity])}`;
+  const extra = { wkcal: wv.wkcal || 0, speed, ik };
+  if (hi) c.intensity = ik; // la FC manda: se marca la intensidad que corresponde
   const intLabel = INTENSITIES.find(i => i[0] === c.intensity)[1].toLowerCase();
   if (!state.settings.apiKey || !navigator.onLine) {
-    c.est = { kcal: ref, ai: false, note: `${T.custom ? 'Cálculo genérico, aproximado' : 'Cálculo estándar'} (MET ${fmtNum(T.met[c.intensity])}): ${T.label.toLowerCase()} ${minutes} min a intensidad ${intLabel} con ${fmtKg(kg)}.${!state.settings.apiKey ? ' Sin clave de IA configurada.' : ' Sin conexión.'}` };
+    c.est = { ...extra, kcal: ref, ai: false, note: `${T.custom ? 'Cálculo genérico, aproximado' : 'Cálculo estándar'} (${refTxt}): ${T.label.toLowerCase()} ${minutes} min${hi ? '' : ` a intensidad ${intLabel}`} con ${fmtKg(kg)}.${!state.settings.apiKey ? ' Sin clave de IA configurada.' : ' Sin conexión.'}` };
     return render();
   }
   c.busy = true; render();
@@ -2297,7 +2337,8 @@ async function estimateCardio() {
 Actividad: ${T.label}${c.type === 'bike' ? ' (bicicleta estática o exterior)' : c.type === 'walk' ? ' (caminar)' : ''}.
 Duración: ${minutes} minutos.
 Intensidad percibida: ${intLabel} (escala: baja, media-baja, media, media-alta, alta). Descripción: ${T.hint[c.intensity]}.
-Peso corporal: ${kg} kg. Hombre adulto.
+Peso corporal: ${kg} kg. ${(() => { const p = profileOf(); return `${p?.sex === 'm' ? 'Mujer' : p?.sex === 'h' ? 'Hombre' : 'Persona'}${profileAge(p) ? ` de ${profileAge(p)} años` : ' adulta'}.`; })()}
+${[wv.km ? `Distancia: ${wv.km} km.` : '', wv.m ? `Distancia: ${wv.m} m nadando.` : '', wv.gain ? `Desnivel positivo: ${wv.gain} m.` : '', speed ? `Media: ${speed}.` : '', wv.hr ? `Frecuencia cardiaca media: ${wv.hr} ppm (dato de su reloj; dale mucho peso).` : '', wv.wkcal ? `Su reloj marca ${wv.wkcal} kcal (probablemente totales y algo sobrestimadas).` : ''].filter(Boolean).join('\n')}
 Sé conservador: relojes y máquinas suelen sobrestimar.
 Responde SOLO con JSON válido: {"kcal": número entero, "explanation": "una frase breve con el razonamiento"}`;
     const r = parseJSONLoose(await callGemini([{ text: prompt }], { timeout: 30000 }));
@@ -2305,12 +2346,12 @@ Responde SOLO con JSON válido: {"kcal": número entero, "explanation": "una fra
     if (!(k > 0)) throw new Error('respuesta sin calorías');
     const dev = ref ? Math.abs(k - ref) / ref : 0;
     c.est = {
-      kcal: k, ai: true,
-      note: `${r.explanation || 'Estimación de la IA.'} Referencia estándar (MET): ${ref} kcal.`,
+      ...extra, kcal: k, ai: true,
+      note: `${r.explanation || 'Estimación de la IA.'} Referencia estándar (${hi ? `MET con tu FC` : 'MET'}): ${ref} kcal.`,
       warn: dev > 0.35 ? `La IA se aleja un ${Math.round(dev * 100)} % del cálculo estándar (${ref} kcal). Revisa el número antes de registrar.` : ''
     };
   } catch (e) {
-    c.est = { kcal: ref, ai: false, note: `La IA no respondió (${e.message}). Uso el cálculo estándar (MET ${fmtNum(T.met[c.intensity])}).` };
+    c.est = { ...extra, kcal: ref, ai: false, note: `La IA no respondió (${e.message}). Uso el cálculo estándar (${refTxt}).` };
   } finally {
     c.busy = false; render();
   }
@@ -4210,7 +4251,7 @@ function chatContext() {
     ultimas_sesiones: last,
     musculos: (() => { const f = muscleFatigue(), v = muscleVolume(30); return { fatiga_ahora_pct: Object.fromEntries(Object.entries(f).filter(([, x]) => x.frac > 0.1).map(([m, x]) => [MUSCLE_NAMES[m], Math.round(x.frac * 100)])), series_30_dias: Object.fromEntries(Object.keys(MUSCLE_NAMES).map(m => [MUSCLE_NAMES[m], Math.round((v[m] || 0) * 2) / 2])) }; })(),
     entreno_en_curso: w ? { dia: allDays().find(d => d.id === w.dayId)?.label, minutos: sessionMinutes(w.d) } : null,
-    cardio_14_dias: state.cardio.filter(c => c.date >= addDays(T, -13)).map(c => ({ fecha: c.date, tipo: cardioType(c.type).label, min: c.minutes, intensidad: c.intensity, kcal: c.kcal })),
+    cardio_14_dias: state.cardio.filter(c => c.date >= addDays(T, -13)).map(c => ({ fecha: c.date, tipo: cardioType(c.type).label, min: c.minutes, intensidad: c.intensity, kcal: c.kcal, ...(watchLine(c) ? { reloj: watchLine(c) } : {}) })),
     medidas_corporales: [...state.bodyMetrics].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8).map(m => ({ fecha: m.date, peso: m.weight, cintura: m.waist })),
     semana_de_descarga: deloadActive(),
     retos: RETO_IDS.filter(id => state.retos[id]).map(id => { const r = RETOS[id], st = state.retos[id]; return { reto: r.name, unidad: r.unit, nivel: st.level, meta: r.max, mejor_marca: st.best, proxima_sesion: retoSets(id, st.level), ultimas: st.history.slice(-3).map(h => ({ fecha: h.date, hecho: h.got, sensacion: h.feel })) }; })
@@ -4456,6 +4497,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.45.0', ['⌚ Cardio: nuevo desplegable «Datos del reloj» (opcional). Apunta distancia, desnivel, frecuencia cardiaca y las kcal de tu reloj; la app calcula la velocidad media (o el ritmo en natación) y, con la FC, la intensidad.']],
   ['4.44.6', ['Barras de arriba y abajo con degradado oscuro translúcido.'], 'quiet'],
   ['4.44.4', ['Barra inferior más transparente, sin línea.'], 'quiet'],
   ['4.44.3', ['🏠 Inicio: aviso muscular, lo que te queda de dieta y kilos totales en las tarjetas.'], 'quiet'],
@@ -5131,6 +5173,8 @@ const actions = {
   editProg: () => editProgModal(prog().id),
   editProgId: b => editProgModal(b.dataset.prog),
   homeGo: b => go(b.dataset.v),
+  cdWatch: () => { keepCardioInputs(); state.settings.watchOpen = !state.settings.watchOpen; persist(); render(); },
+  cdUseWatch: () => { const e = ui.cardio.est; if (!e?.wkcal) return; $('#cdKcal').value = e.wkcal; toast('Puestas las kcal del reloj'); },
   cdTypes: () => { keepCardioInputs(); cardioTypesModal(); },
   cdType: b => { keepCardioInputs(); ui.cardio.type = b.dataset.type; ui.cardio.est = null; render(); },
   cdInt: b => { keepCardioInputs(); ui.cardio.intensity = b.dataset.int; ui.cardio.est = null; render(); },
@@ -5140,9 +5184,9 @@ const actions = {
     const c = ui.cardio;
     const k = Math.round(num($('#cdKcal').value) ?? -1);
     if (!(k >= 0 && k <= 5000)) return toast('Revisa las calorías', 'warn');
-    state.cardio.push({ id: uid('k_'), date: c.date, type: c.type, minutes: parseInt(c.minutes, 10), intensity: c.intensity, kcal: k, ai: !!c.est?.ai });
+    state.cardio.push({ id: uid('k_'), date: c.date, type: c.type, minutes: parseInt(c.minutes, 10), intensity: c.est?.ik || c.intensity, kcal: k, ai: !!c.est?.ai, ...watchVals(c) });
     persist();
-    c.est = null; c.minutes = '';
+    c.est = null; c.minutes = ''; for (const f of ['km', 'm', 'gain', 'hr', 'wkcal']) c[f] = '';
     render(); toast(`Cardio registrado: ${k} kcal ✓`);
   },
   cdDel: b => { if (!confirm('¿Borrar este registro de cardio?')) return; state.cardio = state.cardio.filter(x => x.id !== b.dataset.id); persist(); render(); },
