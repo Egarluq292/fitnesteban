@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.41.9';
+const APP_VERSION = '4.42.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2307,6 +2307,33 @@ function ringsSVG(vals, animate) {
   }).join('');
   return `<svg viewBox="0 0 ${size} ${size}" class="w-full h-auto swipe-ok" role="img" aria-label="Anillos de calorías, proteína, carbohidratos y grasas">${rings}</svg>`;
 }
+/* ===== Interfaz 2 (en pruebas): iconos de línea y anillos separados. Se activa con la clase «ui2» en <body> ===== */
+const isUI2 = () => document.body.classList.contains('ui2');
+const IC = {
+  plus: '<path d="M12 5v14M5 12h14"/>', star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+  plate: '<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="3.5"/>', check: '<circle cx="12" cy="12" r="9"/><path d="m8 12 2.7 2.7L16 9.5"/>',
+  coffee: '<path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M16 10h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 3.5v2.5M12 3.5v2.5"/>',
+  utensils: '<path d="M6 3v8a2 2 0 0 0 4 0V3M8 11v10"/><path d="M17 21V3c-2 1.5-3 4-3 7v3h3"/>', apple: '<path d="M12 7c-1.5-2-5-2.5-6.5 0-1.8 3 0 9 3 12 1.2 1.1 2.3 1 3.5.3 1.2.7 2.3.8 3.5-.3 3-3 4.8-9 3-12-1.5-2.5-5-2-6.5 0z"/><path d="M12 7c0-2 1-3.5 3-4"/>',
+  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>', dots: '<circle cx="6" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18" cy="12" r="1.3"/>',
+  flame: '<path d="M12 21c4 0 6.5-2.6 6.5-6.3 0-3.7-3-6-4.3-9.2-.9 2.4-2.2 3.7-3.7 4.6-.5-1.3-.6-2.6-.2-4.1C7.7 7.8 5.5 11 5.5 14.7 5.5 18.4 8 21 12 21z"/>',
+  dumbbell: '<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/>', book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/>', save: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 17v2.5h15V17"/>',
+  ruler: '<rect x="3" y="8" width="18" height="8" rx="1.5"/><path d="M7 8v3M11 8v4M15 8v3M19 8v2"/>', phone: '<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 8.5-8.5M16 7l2.5 2.5M14 9l2 2"/>', lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
+  calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>', sparkles: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>',
+  chart: '<path d="M4 19h16"/><path d="M5 15l4-4 3 3 6-7"/><path d="M15 7h3v3"/>',
+  trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a2.5 2.5 0 0 0 3 4M16 6h3a2.5 2.5 0 0 1-3 4M12 13v4M8.5 20h7"/>', target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8"/>'
+};
+const icon = (k, cls = 'w-4 h-4') => `<svg viewBox="0 0 24 24" class="${cls}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[k] || ''}</svg>`;
+const MEAL_IC = { Desayuno: 'coffee', Comida: 'utensils', Puente: 'apple', Cena: 'moon', Otro: 'dots' };
+const TITLE_IC = { '➕': 'plus', '⭐': 'star', '🍽️': 'utensils', '✅': 'check', '🏋️': 'dumbbell', '🔥': 'flame', '📚': 'book', '🏆': 'trophy', '🎯': 'target', '👤': 'user', '💾': 'save', '📏': 'ruler', '📱': 'phone', '🔑': 'key', '🔒': 'lock', '🗓️': 'calendar', '🤖': 'sparkles', '🧠': 'chart', '📈': 'chart', '⚖️': 'ruler' };
+function ui2Titles(root) {
+  if (!isUI2()) return;
+  root.querySelectorAll('.section-title').forEach(h => {
+    const t = h.textContent.trim(), k = Object.keys(TITLE_IC).find(e => t.startsWith(e));
+    if (k) h.innerHTML = `<span class="ti">${icon(TITLE_IC[k], 'w-[15px] h-[15px]')}</span>${esc(t.slice(k.length).trim())}`;
+  });
+}
 function ringsCard(t, st, budget, eatBack) {
   const vals = [
     { k: 'kcal', val: t.kcal, target: budget, hex: MAC.kcal.hex },
@@ -2538,7 +2565,7 @@ function renderDiet() {
     if (!items.length) return '';
     const sub = items.reduce((a, m) => a + m.kcal, 0);
     return `<div class="mt-3 first:mt-0">
-      <div class="flex justify-between text-[11px] uppercase tracking-wider text-mute font-bold mb-1.5"><span>${tp}</span><span><span class="${MAC.kcal.text}">${Math.round(sub)} kcal</span>${PROT_TYPES.includes(tp) ? (() => { const pg = Math.round(items.reduce((a, m) => a + (m.prot || 0), 0)); return `<span class="text-mute"> · </span><span class="${MAC.prot.text}">P ${pg} g</span>${pg >= minProt() ? '<span class="text-emerald-300"> ✓</span>' : '<span class="ml-1 normal-case rounded px-1.5 py-px bg-white/10 text-white">baja</span>'}`; })() : ''}</span></div>
+      <div class="flex justify-between text-[11px] uppercase tracking-wider text-mute font-bold mb-1.5"><span class="${isUI2() ? 'meal-h' : ''}">${isUI2() ? `<span class="meal-ic">${icon(MEAL_IC[tp] || 'dots', 'w-[15px] h-[15px]')}</span>` : ''}${tp}</span><span><span class="${MAC.kcal.text}">${Math.round(sub)} kcal</span>${PROT_TYPES.includes(tp) ? (() => { const pg = Math.round(items.reduce((a, m) => a + (m.prot || 0), 0)); return `<span class="text-mute"> · </span><span class="${MAC.prot.text}">P ${pg} g</span>${pg >= minProt() ? '<span class="text-emerald-300"> ✓</span>' : '<span class="ml-1 normal-case rounded px-1.5 py-px bg-white/10 text-white">baja</span>'}`; })() : ''}</span></div>
       ${items.map(m => `<div class="meal">
         <div class="min-w-0 flex-1">
           <div class="text-sm font-semibold truncate ${ui.editing?.id === m.id ? 'text-brand' : ''}">${ui.editing?.id === m.id ? '✏️ ' : ''}${esc(m.desc || tp)}</div>
@@ -4344,6 +4371,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.42.0', ['🎨 Nuevo aspecto: tarjetas con un brillo suave, iconos de línea en cada sección, un icono para cada tipo de comida en Dieta y la pestaña activa iluminada abajo. Todo sigue en su sitio.']],
   ['4.41.9', ['🔒 Nueva página de política de privacidad, enlazada desde la guía «?» y los primeros pasos.'], 'quiet'],
   ['4.41.8', ['📊 Acceso: botón «Abrir hoja de uso». Pega una vez el enlace de la hoja (se guarda solo en ese dispositivo).'], 'admin'],
   ['4.41.7', ['🔧 Script v8: la comprobación del dispositivo usaba un parámetro que Google reserva («c») y fallaba siempre. Hay que pegar el script nuevo (Reconfigurar) y publicar una «Nueva versión».'], 'admin'],
@@ -4633,6 +4661,7 @@ function renderInner() {
   else if (ui.view === 'diet') app.innerHTML = installBannerHTML() + renderDiet();
   else if (ui.view === 'progress') app.innerHTML = installBannerHTML() + renderProgress();
   else app.innerHTML = renderSettings();
+  ui2Titles(app);
   document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('navbtn-on', b.dataset.view === ui.view));
   const sub = { train: 'Entreno · coach', diet: 'Nutrición', progress: 'Tu progreso', settings: 'Ajustes' };
   $('#headerSub').textContent = sub[ui.view];
