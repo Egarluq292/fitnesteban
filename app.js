@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.43.0';
+const APP_VERSION = '4.44.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3835,6 +3835,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); hiddenDay = todayISO(); if (ui.accessOpen) { ui.accessOpen = false; if (ui.view === 'settings') render(); } return; }
   if (timer.endAt) { tickTimer(); wakeOn(); }
   if (ui.dietDate > todayISO()) ui.dietDate = todayISO();
+  if (hiddenAt && Date.now() - hiddenAt > 60 * 60000 && !workoutInProgress() && !$('#modalRoot').classList.contains('open')) { go('home'); return; }
   if (hiddenAt && (Date.now() - hiddenAt > 30 * 60000 || hiddenDay !== todayISO()) && dietBackToToday() && ui.view === 'diet' && !$('#modalRoot').classList.contains('open')) { ui._animRings = true; render(); window.scrollTo({ top: 0 }); }
 });
 
@@ -4455,6 +4456,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.44.0', ['🏠 Pantalla de inicio con 4 tarjetas: Entrenamientos, Nutrición, Progreso y Asistente IA.'], 'quiet'],
   ['4.43.0', ['🔥 Cardio a tu medida: pulsa el ✎ de «Registrar cardio» para elegir tus actividades (correr, natación, pádel, remo…) o crear la tuya. Lo ya registrado no cambia.', '✎ Al editar un bloque se indica dónde cambiar sus ejercicios.']],
   ['4.42.1', ['⚡ Scroll más fluido con el aspecto nuevo.'], 'quiet'],
   ['4.42.0', ['🎨 Nuevo aspecto: tarjetas con un brillo suave, iconos de línea en cada sección, un icono para cada tipo de comida en Dieta y la pestaña activa iluminada abajo. Todo sigue en su sitio.']],
@@ -4743,17 +4745,64 @@ function render() {
 }
 function renderInner() {
   const app = $('#app');
-  if (ui.view === 'train') app.innerHTML = installBannerHTML() + renderTrain();
+  document.body.classList.toggle('home-on', ui.view === 'home');
+  if (ui.view === 'home') app.innerHTML = renderHome();
+  else if (ui.view === 'train') app.innerHTML = installBannerHTML() + renderTrain();
   else if (ui.view === 'diet') app.innerHTML = installBannerHTML() + renderDiet();
   else if (ui.view === 'progress') app.innerHTML = installBannerHTML() + renderProgress();
   else app.innerHTML = renderSettings();
   ui2Titles(app);
   document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('navbtn-on', b.dataset.view === ui.view));
-  const sub = { train: 'Entreno · coach', diet: 'Nutrición', progress: 'Tu progreso', settings: 'Ajustes' };
+  const sub = { home: 'Inicio', train: 'Entreno · coach', diet: 'Nutrición', progress: 'Tu progreso', settings: 'Ajustes' };
   $('#headerSub').textContent = sub[ui.view];
   watchWipInline();
   if (ui.view === 'train') fixProgRow();
+  if (ui.view === 'home') fitHome();
 }
+
+/* ---------- Inicio: 4 tarjetas con foto que llenan la pantalla ---------- */
+const HOME_CARDS = [
+  { view: 'train', img: 'home-entreno', t: 'Entrenamientos', c: '#22d3ee', pos: '70% 50%' },
+  { view: 'diet', img: 'home-dieta', t: 'Nutrición', c: '#34d399', pos: '80% 50%' },
+  { view: 'progress', img: 'home-progreso', t: 'Progreso', c: '#fbbf24', pos: '85% 50%' },
+  { view: 'coach', img: 'home-coach', t: 'Asistente IA', c: '#a78bfa', pos: '85% 35%' }
+];
+function homeSub(v) {
+  const T = todayISO();
+  if (v === 'train') {
+    if (activeWip()) return 'Sesión en curso';
+    const pr = prog().days.length ? prog() : state.plan.programs.find(p => p.type !== 'cardio' && p.type !== 'retos' && p.days.length);
+    const id = pr && nextDayId(pr), d = id && pr.days.find(x => x.id === id);
+    return d ? `Hoy toca: ${d.label}` : 'Retos, cardio y tus bloques';
+  }
+  if (v === 'diet') {
+    const st = state.settings, k = Math.round(totalsOf(T).kcal), budget = st.targetKcal + (st.eatBackCardio ? exerciseBurnOf(T) : 0);
+    return `${fmtNum(k)} de ${fmtNum(Math.round(budget))} kcal`;
+  }
+  if (v === 'progress') {
+    const w = latestWeight(); if (!w) return 'Apunta tu peso y medidas';
+    const old = bodyweightAt(addDays(T, -30)), first = [...state.bodyMetrics].filter(m => m.weight !== null).sort((a, b) => (a.date < b.date ? -1 : 1))[0];
+    const dlt = first && first.date <= addDays(T, -30) && old ? Math.round((w - old) * 10) / 10 : null;
+    return fmtKg(w) + (dlt ? ` · ${dlt > 0 ? '+' : '−'}${fmtNum(Math.abs(dlt))} kg en 30 días` : '');
+  }
+  return 'Pregunta a tu coach';
+}
+function renderHome() {
+  const name = profileOf()?.name || access.me?.name || '';
+  const f = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+  return `<div class="pb-3"><div class="text-mute text-sm">${esc(f.charAt(0).toUpperCase() + f.slice(1))}</div><h1 class="text-2xl font-black mt-0.5">Hola${name ? ', ' + esc(name.split(' ')[0]) : ''} 👋</h1></div>
+  <div id="homeCards" class="home-cards">${HOME_CARDS.map(c => `<button class="home-card" style="--c:${c.c};background-image:url(img/${c.img}.webp);background-position:${c.pos}" data-act="homeGo" data-v="${c.view}" type="button">
+    <span class="home-shade"></span>
+    <span class="home-txt"><span class="block font-black text-[19px] leading-tight">${c.t}</span><span class="block text-[13px] mt-1 text-slate-300">${esc(homeSub(c.view))}</span></span>
+    <span class="home-go">›</span></button>`).join('')}</div>`;
+}
+function fitHome() {
+  const hc = $('#homeCards'); if (!hc) return;
+  const nav = document.querySelector('nav');
+  const h = window.innerHeight - (hc.getBoundingClientRect().top + window.scrollY) - (nav?.offsetHeight || 0) - 12;
+  hc.style.height = Math.max(4 * 92 + 36, h) + 'px';
+}
+window.addEventListener('resize', () => { if (ui.view === 'home') fitHome(); });
 /* Mantiene a la vista el bloque activo en la fila de bloques (la fila se repinta en cada render) */
 /* El bloque activo se coloca a la izquierda de la fila (si se puede), dejando ver los siguientes */
 function progScrollFor(row, chip) {
@@ -4830,6 +4879,7 @@ $('#wipBar')?.addEventListener('click', e => { if (e.target.closest('[data-wip]'
 setInterval(updateWipBar, 30000);
 
 function go(view) {
+  if (view === 'coach') return openChat();
   if (view === 'diet' && ui.view !== 'diet') { ui._animRings = true; dietBackToToday(); }
   if (view === 'train' && ui.view !== 'train') trainToRetos();
   ui.view = view;
@@ -4874,6 +4924,7 @@ function dropPeek() { swipe.peek?.remove(); swipe.peek = null; }
 /* Modo del gesto: 'tabs' (pestañas), 'dietDay' (solo días en Dieta) u 'off' */
 function swipeMode() { return 'dietDay'; } // fijo: días en Dieta y bloques en Entreno (el mapa muscular de Progreso tiene su propio gesto)
 function swipeTarget(dir) {
+  if (ui.view === 'home') return null;
   if (swipeMode() === 'dietDay') {
     if (ui.view === 'train') {
       if (activeWip()) return null;
@@ -5065,6 +5116,7 @@ const actions = {
   publishProg: b => publishBlockModal(b.dataset.prog),
   editProg: () => editProgModal(prog().id),
   editProgId: b => editProgModal(b.dataset.prog),
+  homeGo: b => go(b.dataset.v),
   cdTypes: () => { keepCardioInputs(); cardioTypesModal(); },
   cdType: b => { keepCardioInputs(); ui.cardio.type = b.dataset.type; ui.cardio.est = null; render(); },
   cdInt: b => { keepCardioInputs(); ui.cardio.intensity = b.dataset.int; ui.cardio.est = null; render(); },
@@ -6151,7 +6203,7 @@ function delAccess(hash) {
 }
 
 /* ---------- Arranque ----------
-   Se abre en Dieta (anillos del día). Excepción: si hay un entreno a medias de las últimas 3 horas, se abre en Entreno. */
+   Se abre en Inicio (y vuelve a Inicio tras 1 hora sin usarla). Excepción: si hay un entreno a medias de las últimas 3 horas, se abre en Entreno. */
 function workoutInProgress() {
   const now = Date.now();
   for (const [dayId, d] of Object.entries(state.drafts || {})) {
@@ -6166,15 +6218,14 @@ function goHome() {
   closeModal();
   ui.editing = null; ui.aiResult = null;
   ui.dietDate = todayISO();
-  if (ui.view === 'diet') { ui._animRings = true; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-  else go('diet');
+  go('home');
 }
 $('#homeBtn').addEventListener('click', goHome);
 ui.dayId = nextDayId();
 {
   const wip = workoutInProgress();
   if (wip) { state.plan.active = wip.prog; ui.dayId = wip.day; ui.view = 'train'; }
-  else ui._animRings = true;
+  else ui.view = 'home';
 }
 render();
 accessBoot(); // las novedades se comprueban al entrar (unlock), cuando ya se sabe si es el administrador

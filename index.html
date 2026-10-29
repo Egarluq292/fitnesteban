@@ -21,7 +21,7 @@
 
   <header class="sticky top-0 z-30 bg-ink/90 backdrop-blur border-b border-line pt-safe">
     <div class="max-w-xl mx-auto flex items-center justify-between px-4 h-14">
-      <button id="homeBtn" type="button" class="flex items-center gap-2.5 min-w-0 text-left rounded-xl active:opacity-70" aria-label="Ir al inicio: dieta de hoy">
+      <button id="homeBtn" type="button" class="flex items-center gap-2.5 min-w-0 text-left rounded-xl active:opacity-70" aria-label="Ir al inicio">
         <img src="icons/logo-128.png" alt="" class="w-9 h-9 rounded-full" />
         <span class="block leading-none min-w-0">
           <svg xmlns="http://www.w3.org/2000/svg" class="block" width="124.9" height="14.4" overflow="visible" viewBox="0 0 14386 1658" role="img" aria-label="FITNESTEBAN"><defs><linearGradient id="wSil" gradientUnits="userSpaceOnUse" x1="0" y1="1490" x2="0" y2="0"><stop offset="0" stop-color="#ffffff"/><stop offset=".42" stop-color="#eef3f5"/><stop offset=".5" stop-color="#c3ced4"/><stop offset=".62" stop-color="#e9eef1"/><stop offset="1" stop-color="#ffffff"/></linearGradient>
@@ -50,7 +50,11 @@
   <main id="app" class="max-w-xl mx-auto px-4 pt-4 pb-36"></main>
 
   <nav class="fixed bottom-0 inset-x-0 z-30 bg-panel/95 backdrop-blur border-t border-line pb-safe">
-    <div class="max-w-xl mx-auto grid grid-cols-4">
+    <div class="max-w-xl mx-auto grid grid-cols-5">
+      <button class="navbtn" data-view="home" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/></svg>
+        <span>Inicio</span>
+      </button>
       <button class="navbtn" data-view="train" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg>
         <span>Entreno</span>

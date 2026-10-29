@@ -1,6 +1,6 @@
 /* FITNESTEBAN service worker: funciona sin conexión.
    Al cambiar cualquier archivo de la app, sube el número de CACHE para que el móvil descargue la versión nueva. */
-const CACHE = 'fitnesteban-4.43.0';
+const CACHE = 'fitnesteban-4.44.0';
 const ASSETS = [
   './',
   './index.html',
@@ -14,7 +14,11 @@ const ASSETS = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/maskable-512.png',
-  './icons/apple-touch-icon.png'
+  './icons/apple-touch-icon.png',
+  './img/home-entreno.webp',
+  './img/home-dieta.webp',
+  './img/home-progreso.webp',
+  './img/home-coach.webp'
 ];
 
 self.addEventListener('install', event => {
