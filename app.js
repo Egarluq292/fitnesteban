@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.24.1';
+const APP_VERSION = '4.42.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -14,6 +14,19 @@ const DEFAULT_HABITS = [
   'Puente proteico (19:30): batido / yogur / pavo',
   'Pacto 0,0: cero alcohol hoy entre semana'
 ];
+
+/* Hábitos: días en orden de getDay() (0 = domingo); se muestran de lunes a domingo */
+const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0], DAY_LETTER = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+function daysLabel(days) {
+  const set = new Set(days);
+  if (set.size === 7) return 'Todos los días';
+  if (set.size === 5 && [1, 2, 3, 4, 5].every(d => set.has(d))) return 'L–V';
+  if (set.size === 2 && set.has(6) && set.has(0)) return 'Fines de semana';
+  return WEEK_ORDER.filter(d => set.has(d)).map(d => DAY_LETTER[d]).join(' · ') || 'Ningún día';
+}
+const dailyHabitsFor = date => (state.settings.habitList || []).filter(h => h.where === 'daily' && h.days.includes(parseISO(date).getDay()));
+const habitDone = (date, name) => (state.habitLog[date] || []).includes(name);
 
 /* ---------- Plan por defecto (tu Push / Pull / Torso) ---------- */
 const mkEx = (id, block, sets, minReps, maxReps, increment, rest, variants) => ({
@@ -105,12 +118,199 @@ const FULLBODY_DAYS = [
   }
 ];
 
+/* 4.27: alternativas para los ejercicios de serie (se añaden una sola vez al final de sus variantes) */
+const EX_ALTS = {"d1_goblet": [["Prensa de piernas", "Pies a media altura, sin bloquear rodillas."], ["Sentadilla frontal con barra", "Codos altos, torso erguido."]], "d1_bench": [["Press en suelo con mancuernas", "Codos a 45º, pausa abajo."], ["Press de pecho en máquina", "Recorrido completo."]], "d1_incline": [["Press inclinado con barra", "Banco a 30º."]], "d1_shoulder": [["Press Arnold", "Gira las muñecas al subir."], ["Press de hombro con kettlebell", "A una mano, core firme."]], "d1_lat": [["Elevaciones laterales en polea", "Tensión constante."], ["Elevaciones laterales con banda", "Controla la bajada."]], "d1_triceps": [["Press francés con mancuernas + rueda", "Anota repeticiones de tríceps."], ["Extensión de tríceps en polea + rueda", "Anota repeticiones de tríceps."]], "d2_rdl": [["Peso muerto rumano con mancuernas", "Mancuernas pegadas a las piernas."], ["Buenos días con barra", "Cadera atrás, rodillas suaves."]], "d2_swings": [["Swing a una mano", "Cambia de mano a mitad de serie."], ["Thruster con kettlebell", "Sentadilla + press en un solo gesto."]], "d2_pullup": [["Dominadas asistidas con banda", "Banda bajo las rodillas. 0 kg = peso corporal."], ["Dominadas negativas", "Baja en 4–5 s. 0 kg = peso corporal."]], "d2_row": [["Remo en polea baja", "Espalda neutra, codos atrás."], ["Remo con barra", "Torso a ~45º."]], "d2_rear": [["Pájaros con mancuernas", "Torso inclinado, codos suaves."], ["Apertura con banda", "Brazos rectos a la altura del pecho."]], "d2_biceps": [["Curl con mancuernas alterno", "Supina al subir."], ["Curl en polea", "Tensión constante."]], "d3_ss1_push": [["Press de banca con barra", "Alterna con A2."], ["Press en suelo con mancuernas", "Alterna con A2."]], "d3_ss1_pull": [["Remo invertido en TRX", "Cuerpo recto. 0 kg = peso corporal."], ["Dominadas con agarre neutro", "0 kg = peso corporal."]], "d3_ss2_push": [["Flexiones diamante", "Codos pegados. 0 kg = peso corporal."], ["Fondos en banco", "Hombros abajo. 0 kg = peso corporal."]], "d3_ss2_pull": [["Remo en polea baja", "Aprieta escápulas."], ["Remo con barra", "Aprieta escápulas."]], "d3_arms": [["Curl martillo + press francés", "Superserie sin descanso."], ["Curl en polea + extensión en polea", "Superserie sin descanso."]], "d3_spartan": [["Sentadilla goblet + swings + plancha", "A tope de intensidad."], ["Zancadas con mancuernas + remo + rueda", "A tope de intensidad."]], "fa_squat": [["Sentadilla frontal", "Codos altos."], ["Prensa de piernas", "Sin bloquear rodillas."]], "fa_bench": [["Press de banca con mancuernas", "Bajada en 2 s."], ["Press de pecho en máquina", "Recorrido completo."]], "fa_row": [["Remo con mancuerna a una mano", "Codo hacia la cadera."], ["Remo en polea baja", "Espalda neutra."]], "fa_legcurl": [["Curl femoral sentado", "Bajada lenta."], ["Peso muerto rumano con mancuernas", "Cadera atrás, espalda neutra."]], "fa_ohp": [["Press militar sentado con mancuernas", "Rango completo."], ["Press Arnold", "Gira las muñecas al subir."]], "fa_lat": [["Elevaciones laterales en polea", "Tensión constante."], ["Elevaciones laterales con banda", "Controla la bajada."]], "fa_curl": [["Curl con mancuernas alterno", "Supina al subir."], ["Curl en polea", "Tensión constante."]], "fa_hammer": [["Curl martillo en polea con cuerda", "Codos fijos."], ["Curl Zottman", "Sube supino, baja prono."]], "fb_deadlift": [["Peso muerto con barra hexagonal", "Empuja el suelo."], ["Peso muerto rumano", "Cadera atrás, espalda neutra."]], "fb_pullup": [["Dominadas asistidas con banda", "Banda bajo las rodillas. 0 kg = peso corporal."], ["Dominadas negativas", "Baja en 4–5 s. 0 kg = peso corporal."]], "fb_incline": [["Press inclinado con barra", "Banco a 30º."], ["Press inclinado en máquina", "Recorrido completo."]], "fb_squat": [["Sentadilla búlgara", "Reps por pierna."], ["Prensa de piernas", "Sin bloquear rodillas."]], "fb_hipthrust": [["Puente de glúteo con barra", "Pausa arriba."], ["Hip thrust a una pierna", "Reps por pierna."]], "fb_face": [["Pájaros con mancuernas", "Torso inclinado."], ["Apertura con banda", "Brazos rectos."]], "fb_triceps": [["Press francés con mancuernas", "Codos fijos."], ["Fondos en banco con lastre", "Hombros abajo."]], "fb_calf": [["Elevación de gemelos sentado", "Pausa arriba."], ["Elevación de gemelos a una pierna", "Apoyado en un escalón."]]};
+
+/* Biblioteca de ejercicios sueltos (preparados por Esteban): se añaden a cualquier día, también a FREE.
+   [grupo, nombre, nota, series, reps mín, reps máx, incremento, descanso, peso corporal, alternativas] */
+const EX_LIB = [["Pecho","Press de banca con barra","Escápulas retraídas, pies firmes.",4,6,10,2.5,120,false,[["Press de banca con mancuernas","Bajada en 2 s."],["Press de pecho en máquina","Recorrido completo."]]],["Pecho","Press de banca con mancuernas","Bajada controlada en 2 s.",4,8,12,2,90,false,[["Press en suelo con mancuernas","Codos a 45º."],["Press de banca con barra","Escápulas retraídas."]]],["Pecho","Press inclinado con mancuernas","Banco a 30º.",3,8,12,2,90,false,[["Press inclinado con barra","Banco a 30º."],["Press inclinado en máquina","Recorrido completo."]]],["Pecho","Aperturas con mancuernas","Codos algo flexionados, abre hasta notar estiramiento.",3,10,15,1,60,false,[["Aperturas en polea","Tensión constante."],["Contractora (pec deck)","Pausa al cerrar."]]],["Pecho","Cruce de poleas","Junta las manos delante del pecho.",3,12,15,1,60,false,[["Aperturas con mancuernas","Codos algo flexionados."],["Contractora (pec deck)","Pausa al cerrar."]]],["Pecho","Fondos en paralelas","Torso inclinado hacia delante. 0 kg = peso corporal.",3,6,12,2,90,true,[["Fondos asistidos con banda","0 kg = peso corporal."],["Flexiones declinadas","Pies elevados."]]],["Pecho","Flexiones","Cuerpo en bloque, pecho al suelo. 0 kg = peso corporal.",3,10,20,2,60,true,[["Flexiones declinadas","Pies elevados."],["Flexiones con palmada","Explosivas."]]],["Pecho","Press inclinado con barra","Banco a 30º, barra a la parte alta del pecho.",4,6,10,2.5,120,false,[["Press inclinado con mancuernas","Banco a 30º."],["Press inclinado en máquina","Recorrido completo."]]],["Pecho","Press declinado con barra","Barra a la parte baja del pecho, pies sujetos.",3,8,10,2.5,90,false,[["Fondos en paralelas","Torso inclinado."],["Press declinado con mancuernas","Bajada controlada."]]],["Pecho","Press de pecho en máquina","Asiento a la altura del pecho, recorrido completo.",3,8,12,2.5,90,false,[["Press de banca con mancuernas","Bajada en 2 s."],["Flexiones","Cuerpo en bloque."]]],["Pecho","Contractora (pec deck)","Pausa de 1 s al cerrar.",3,12,15,2.5,60,false,[["Aperturas con mancuernas","Codos algo flexionados."],["Cruce de poleas","Junta las manos delante."]]],["Pecho","Aperturas en banco inclinado","Banco a 30º, abre hasta notar estiramiento.",3,10,15,1,60,false,[["Cruce de poleas de abajo arriba","Sube las manos a la barbilla."],["Aperturas con mancuernas","Codos algo flexionados."]]],["Pecho","Cruce de poleas de abajo arriba","Poleas abajo, sube las manos a la altura de la barbilla.",3,12,15,1,60,false,[["Aperturas en banco inclinado","Banco a 30º."],["Cruce de poleas","Junta las manos delante."]]],["Pecho","Flexiones inclinadas","Manos en un banco o mesa. Más fácil que en el suelo. 0 kg = peso corporal.",3,10,20,2,60,true,[["Flexiones de rodillas","Cuerpo recto de rodillas a cabeza."],["Flexiones","Pecho al suelo."]]],["Pecho","Flexiones declinadas","Pies en un banco, cuerpo en bloque. 0 kg = peso corporal.",3,8,15,2,60,true,[["Flexiones","Pecho al suelo."],["Press inclinado con mancuernas","Banco a 30º."]]],["Espalda","Dominadas pronas","Pecho a la barra. 0 kg = peso corporal.",4,5,10,2,120,true,[["Dominadas asistidas con banda","Banda bajo las rodillas."],["Dominadas negativas","Baja en 4–5 s."]]],["Espalda","Dominadas supinas","Agarre cerrado. 0 kg = peso corporal.",3,6,10,2,120,true,[["Dominadas con agarre neutro","0 kg = peso corporal."],["Dominadas asistidas con banda","Banda bajo las rodillas."]]],["Espalda","Jalón al pecho en polea","Pecho arriba, codos hacia abajo.",4,8,12,2.5,90,false,[["Jalón con agarre neutro","Codos pegados."],["Jalón supino","Agarre estrecho."]]],["Espalda","Remo con barra","Torso a unos 45º, barra al ombligo.",4,8,10,2.5,90,false,[["Remo Pendlay","Desde el suelo en cada rep."],["Remo en máquina","Pecho apoyado."]]],["Espalda","Remo con mancuerna a una mano","Codo hacia la cadera.",3,8,12,2,90,false,[["Remo con kettlebell a una mano","Codo hacia la cadera."],["Remo en banco inclinado","Pecho apoyado en el banco."]]],["Espalda","Remo en polea baja","Espalda neutra, codos atrás.",3,10,12,2.5,90,false,[["Remo en máquina","Pecho apoyado."],["Remo con mancuerna a una mano","Codo a la cadera."]]],["Espalda","Remo invertido en TRX","Cuerpo recto, pecho a las asas. 0 kg = peso corporal.",3,8,15,2,60,true,[["Remo invertido en barra","Cuerpo recto."],["Dominadas australianas","Barra a la altura de la cadera."]]],["Espalda","Pullover en polea","Brazos casi rectos, lleva la barra a los muslos.",3,12,15,2.5,60,false,[["Pullover con mancuerna","Tumbado en banco."],["Jalón con brazos rectos","Codos fijos."]]],["Espalda","Face pull","Codos altos, abre al final.",3,12,20,1,60,false,[["Pájaros con mancuernas","Torso inclinado."],["Apertura con banda","Brazos rectos."]]],["Espalda","Jalón con agarre estrecho","Triángulo al pecho, codos pegados.",3,8,12,2.5,90,false,[["Jalón al pecho en polea","Codos hacia abajo."],["Remo en polea baja","Codos atrás."]]],["Espalda","Jalón con agarre supino","Palmas hacia ti, barra a la clavícula.",3,8,12,2.5,90,false,[["Dominadas supinas","Agarre cerrado."],["Jalón al pecho en polea","Pecho arriba."]]],["Espalda","Remo en máquina con pecho apoyado","Pecho pegado al respaldo, aprieta las escápulas.",3,10,12,2.5,90,false,[["Remo en polea baja","Espalda neutra."],["Remo con mancuernas en banco inclinado","Pecho apoyado."]]],["Espalda","Remo con mancuernas en banco inclinado","Pecho apoyado en el banco a 30º, codos atrás.",3,10,12,2,90,false,[["Remo en máquina con pecho apoyado","Aprieta escápulas."],["Remo con mancuerna a una mano","Codo a la cadera."]]],["Espalda","Remo en T","Pecho alto, tira hacia el abdomen.",3,8,12,2.5,90,false,[["Remo con barra","Torso a 45º."],["Remo en máquina con pecho apoyado","Aprieta escápulas."]]],["Espalda","Dominadas asistidas","Con máquina o banda. Pon en kg la ayuda que te da la máquina, o 0 si usas banda.",3,6,12,2,90,false,[["Jalón al pecho en polea","Codos hacia abajo."],["Dominadas negativas","Baja en 4–5 s."]]],["Espalda","Hiperextensiones","Sube hasta la línea del cuerpo, sin pasarte. 0 kg = peso corporal.",3,12,15,2.5,60,true,[["Buenos días con barra","Rodillas suaves."],["Superman","Brazos y piernas a la vez."]]],["Hombro","Press militar de pie con barra","Glúteos y abdomen apretados.",4,6,10,2.5,120,false,[["Press militar sentado con mancuernas","Rango completo."],["Press de hombro en máquina","Recorrido completo."]]],["Hombro","Press de hombro sentado con mancuernas","Rango completo.",3,8,12,2,90,false,[["Press Arnold","Gira las muñecas al subir."],["Press de hombro en máquina","Recorrido completo."]]],["Hombro","Press Arnold","Gira las muñecas al subir.",3,8,12,2,90,false,[["Press de hombro sentado con mancuernas","Rango completo."],["Press militar de pie con barra","Core firme."]]],["Hombro","Elevaciones laterales con mancuernas","Sin impulso, codos algo flexionados.",3,12,20,1,60,false,[["Elevaciones laterales en polea","Tensión constante."],["Elevaciones laterales con banda","Controla la bajada."]]],["Hombro","Pájaros con mancuernas","Torso inclinado, codos suaves.",3,12,15,1,60,false,[["Face pull","Codos altos."],["Pájaros en máquina","Brazos casi rectos."]]],["Hombro","Elevaciones frontales","Sube hasta la altura de los ojos.",3,10,15,1,60,false,[["Elevaciones frontales con disco","Agarre por los lados."],["Elevaciones frontales en polea","Tensión constante."]]],["Hombro","Encogimientos con mancuernas","Sube los hombros hacia las orejas, pausa arriba.",3,10,15,2,60,false,[["Encogimientos con barra","Sin girar los hombros."],["Encogimientos en máquina","Pausa arriba."]]],["Hombro","Press de hombro en máquina","Espalda apoyada, sin bloquear los codos.",3,8,12,2.5,90,false,[["Press de hombro sentado con mancuernas","Rango completo."],["Press Arnold","Gira las muñecas."]]],["Hombro","Elevaciones laterales en polea","Polea baja, tensión constante. Reps por brazo.",3,12,15,1,60,false,[["Elevaciones laterales con mancuernas","Sin impulso."],["Elevaciones laterales en máquina","Pausa arriba."]]],["Hombro","Elevaciones laterales en máquina","Codos guían el movimiento, pausa arriba.",3,12,15,2.5,60,false,[["Elevaciones laterales con mancuernas","Sin impulso."],["Elevaciones laterales en polea","Tensión constante."]]],["Hombro","Pájaros en máquina","Contractora al revés, brazos casi rectos.",3,12,15,2.5,60,false,[["Pájaros con mancuernas","Torso inclinado."],["Face pull","Codos altos."]]],["Hombro","Remo al mentón en polea","Agarre ancho, codos por encima de las manos, sube hasta el pecho.",3,10,12,2.5,60,false,[["Elevaciones laterales con mancuernas","Sin impulso."],["Remo al mentón con mancuernas","Sube hasta el pecho."]]],["Hombro","Press landmine","Barra anclada en una esquina, empuja hacia arriba y adelante. Reps por brazo.",3,8,12,2.5,90,false,[["Press de hombro sentado con mancuernas","Rango completo."],["Press de hombro en máquina","Recorrido completo."]]],["Hombro","Encogimientos con barra","Sube los hombros hacia las orejas, pausa arriba.",3,10,15,2.5,60,false,[["Encogimientos con mancuernas","Pausa arriba."],["Paseo del granjero","Hombros abajo."]]],["Bíceps","Curl con barra","Codos pegados, sin balanceo.",3,8,12,2,60,false,[["Curl con barra Z","Agarre más cómodo para muñecas."],["Curl en polea","Tensión constante."]]],["Bíceps","Curl con mancuernas alterno","Supina al subir.",3,10,12,1,60,false,[["Curl en banco inclinado","Brazos por detrás del cuerpo."],["Curl concentrado","Codo apoyado en el muslo."]]],["Bíceps","Curl martillo","Agarre neutro.",3,10,12,1,60,false,[["Curl martillo en polea con cuerda","Codos fijos."],["Curl Zottman","Sube supino, baja prono."]]],["Bíceps","Curl en banco inclinado","Brazos por detrás del cuerpo.",3,10,12,1,60,false,[["Curl con mancuernas alterno","Supina al subir."],["Curl concentrado","Codo apoyado."]]],["Bíceps","Curl concentrado","Codo apoyado en el muslo.",3,10,12,1,60,false,[["Curl en banco inclinado","Brazos atrás."],["Curl en polea a una mano","Tensión constante."]]],["Bíceps","Curl en polea","Codos pegados, tensión constante.",3,10,15,2.5,60,false,[["Curl con barra","Sin balanceo."],["Curl con banda","Codos fijos."]]],["Bíceps","Curl predicador","Brazos apoyados en el banco Scott, baja del todo.",3,8,12,2,60,false,[["Curl concentrado","Codo apoyado."],["Curl en polea","Tensión constante."]]],["Bíceps","Curl con barra Z","Codos pegados, agarre cómodo para las muñecas.",3,8,12,2,60,false,[["Curl con barra","Sin balanceo."],["Curl con mancuernas alterno","Supina al subir."]]],["Bíceps","Curl spider","Pecho apoyado en banco inclinado, brazos colgando.",3,10,12,1,60,false,[["Curl predicador","Brazos apoyados."],["Curl concentrado","Codo apoyado."]]],["Bíceps","Curl martillo en polea con cuerda","Agarre neutro, codos fijos.",3,10,15,2.5,60,false,[["Curl martillo","Agarre neutro."],["Curl en polea","Tensión constante."]]],["Tríceps","Extensión de tríceps en polea","Codos fijos pegados al cuerpo.",3,10,15,2.5,60,false,[["Extensión de tríceps en polea con cuerda","Abre la cuerda abajo."],["Patada de tríceps","Brazo paralelo al suelo."]]],["Tríceps","Press francés con barra Z","Baja a la frente con los codos fijos.",3,8,12,2,60,false,[["Press francés con mancuernas","Codos fijos."],["Extensión sobre la cabeza con mancuerna","Codos hacia el techo."]]],["Tríceps","Extensión sobre la cabeza con mancuerna","Codos hacia el techo.",3,10,12,1,60,false,[["Extensión sobre la cabeza en polea","Tensión constante."],["Press francés con mancuernas","Codos fijos."]]],["Tríceps","Patada de tríceps","Brazo paralelo al suelo, extiende del todo.",3,12,15,1,60,false,[["Patada de tríceps en polea","Tensión constante."],["Extensión de tríceps en polea","Codos fijos."]]],["Tríceps","Press cerrado con barra","Manos a la anchura de los hombros.",3,6,10,2.5,90,false,[["Press cerrado con mancuernas","Mancuernas juntas."],["Fondos en banco","Hombros abajo."]]],["Tríceps","Fondos en banco","Hombros abajo. 0 kg = peso corporal.",3,10,20,2,60,true,[["Flexiones diamante","Codos pegados."],["Fondos en paralelas","Torso erguido."]]],["Tríceps","Extensión en polea con cuerda","Abre la cuerda abajo, codos fijos.",3,10,15,2.5,60,false,[["Extensión de tríceps en polea","Codos pegados."],["Patada de tríceps","Brazo paralelo al suelo."]]],["Tríceps","Extensión sobre la cabeza en polea","De espaldas a la polea, codos hacia delante.",3,10,15,2.5,60,false,[["Extensión sobre la cabeza con mancuerna","Codos al techo."],["Press francés con barra Z","Codos fijos."]]],["Tríceps","Extensión a una mano en polea","Codo pegado al costado. Reps por brazo.",3,10,15,1,60,false,[["Patada de tríceps","Extiende del todo."],["Extensión en polea con cuerda","Abre abajo."]]],["Tríceps","Press francés con mancuernas","Tumbado, baja las mancuernas junto a las orejas.",3,10,12,1,60,false,[["Press francés con barra Z","Codos fijos."],["Extensión sobre la cabeza con mancuerna","Codos al techo."]]],["Tríceps","Fondos en máquina","Torso erguido, codos atrás.",3,10,12,2.5,60,false,[["Fondos en banco","Hombros abajo."],["Press cerrado con barra","Manos a la anchura de hombros."]]],["Pierna","Sentadilla trasera con barra","Profundidad paralela o más, core apretado.",4,5,8,2.5,150,false,[["Sentadilla frontal con barra","Codos altos."],["Sentadilla goblet","Mancuerna al pecho."]]],["Pierna","Sentadilla goblet","Pega la mancuerna al esternón.",3,10,15,2,90,false,[["Sentadilla con kettlebell en rack","Kettlebell en el antebrazo."],["Sentadilla búlgara","Reps por pierna."]]],["Pierna","Prensa de piernas","Pies a media altura, sin bloquear rodillas.",4,10,15,5,120,false,[["Sentadilla hack","Espalda apoyada."],["Sentadilla en máquina Smith","Pies algo adelantados."]]],["Pierna","Sentadilla búlgara","Pie trasero en el banco. Reps por pierna.",3,8,12,2,90,false,[["Zancadas con mancuernas","Paso largo."],["Step-up con mancuernas","Sube con el talón."]]],["Pierna","Zancadas con mancuernas","Rodilla trasera rozando el suelo.",3,10,12,2,90,false,[["Zancadas inversas","Paso atrás controlado."],["Zancadas caminando","Paso largo y continuo."]]],["Pierna","Extensión de cuádriceps","Pausa de 1 s arriba.",3,12,15,2.5,60,false,[["Extensión de cuádriceps a una pierna","Pausa arriba."],["Sentadilla goblet","Mancuerna al pecho."]]],["Pierna","Step-up con mancuernas","Sube empujando con el talón.",3,10,12,2,90,false,[["Sentadilla búlgara","Reps por pierna."],["Zancadas con mancuernas","Paso largo."]]],["Pierna","Sentadilla frontal","Barra sobre los hombros delante, codos altos.",4,6,10,2.5,120,false,[["Sentadilla goblet","Mancuerna al pecho."],["Sentadilla trasera con barra","Core apretado."]]],["Pierna","Hack squat","Espalda apoyada, baja hasta la paralela.",3,8,12,5,120,false,[["Prensa de piernas","Sin bloquear rodillas."],["Sentadilla en multipower","Pies algo adelantados."]]],["Pierna","Sentadilla en multipower","Pies algo adelantados, baja controlado.",3,8,12,2.5,120,false,[["Sentadilla trasera con barra","Core apretado."],["Hack squat","Espalda apoyada."]]],["Pierna","Prensa a una pierna","Pie en el centro de la plataforma. Reps por pierna.",3,10,12,2.5,90,false,[["Prensa de piernas","Sin bloquear rodillas."],["Sentadilla búlgara","Reps por pierna."]]],["Pierna","Zancadas caminando","Paso largo y continuo, rodilla trasera rozando el suelo. Reps por pierna.",3,10,12,2,90,false,[["Zancadas con mancuernas","Paso largo."],["Zancadas inversas","Paso atrás."]]],["Pierna","Zancadas inversas","Paso atrás controlado, menos carga en la rodilla. Reps por pierna.",3,10,12,2,90,false,[["Zancadas con mancuernas","Paso largo."],["Step-up con mancuernas","Sube con el talón."]]],["Pierna","Sentadilla sumo con mancuerna","Pies abiertos y puntas fuera, mancuerna colgando.",3,10,15,2,90,false,[["Sentadilla goblet","Mancuerna al pecho."],["Peso muerto sumo","Rodillas hacia fuera."]]],["Pierna","Sentadilla a una pierna en cajón","Siéntate en un cajón con una pierna y levántate. Reps por pierna. 0 kg = peso corporal.",3,6,10,2,90,true,[["Sentadilla búlgara","Reps por pierna."],["Step-up con mancuernas","Sube con el talón."]]],["Femoral y glúteo","Peso muerto con barra","Espalda neutra, empuja el suelo.",3,5,8,5,180,false,[["Peso muerto con barra hexagonal","Empuja el suelo."],["Peso muerto rumano","Cadera atrás."]]],["Femoral y glúteo","Peso muerto rumano","Cadera atrás, espalda neutra, rodillas suaves.",3,8,12,2.5,120,false,[["Peso muerto rumano con mancuernas","Mancuernas pegadas a las piernas."],["Buenos días con barra","Rodillas suaves."]]],["Femoral y glúteo","Curl femoral tumbado","Bajada lenta en 3 s.",3,10,12,2.5,60,false,[["Curl femoral sentado","Bajada lenta."],["Curl nórdico asistido","Baja lo más lento posible."]]],["Femoral y glúteo","Curl femoral sentado","Bajada lenta en 3 s.",3,10,12,2.5,60,false,[["Curl femoral tumbado","Bajada lenta."],["Peso muerto rumano con mancuernas","Cadera atrás."]]],["Femoral y glúteo","Hip thrust con barra","Pausa de 1 s arriba, barbilla al pecho.",4,8,12,5,90,false,[["Puente de glúteo con barra","Pausa arriba."],["Hip thrust a una pierna","Reps por pierna."]]],["Femoral y glúteo","Patada de glúteo en polea","Pierna estirada hacia atrás, sin arquear la espalda.",3,12,15,1,60,false,[["Patada de glúteo en máquina","Pausa arriba."],["Puente de glúteo a una pierna","Reps por pierna."]]],["Femoral y glúteo","Abducción de cadera en máquina","Pausa al abrir.",3,12,20,2.5,60,false,[["Abducción con banda (paso lateral)","Rodillas algo flexionadas."],["Abducción en polea","De pie, pierna estirada."]]],["Femoral y glúteo","Buenos días con barra","Cadera atrás, rodillas suaves.",3,8,12,2.5,90,false,[["Peso muerto rumano","Cadera atrás."],["Hiperextensiones","Sin pasar de la línea del cuerpo."]]],["Femoral y glúteo","Peso muerto sumo","Pies abiertos, rodillas hacia fuera, espalda neutra.",3,5,8,5,150,false,[["Peso muerto con barra","Empuja el suelo."],["Sentadilla sumo con mancuerna","Puntas fuera."]]],["Femoral y glúteo","Peso muerto rumano con mancuernas","Mancuernas pegadas a las piernas, cadera atrás.",3,8,12,2,90,false,[["Peso muerto rumano","Cadera atrás."],["Peso muerto a una pierna","Reps por pierna."]]],["Femoral y glúteo","Peso muerto a una pierna","Cadera nivelada, pierna libre estirada atrás. Reps por pierna.",3,8,12,2,90,false,[["Peso muerto rumano con mancuernas","Cadera atrás."],["Puente de glúteo a una pierna","Pausa arriba."]]],["Femoral y glúteo","Puente de glúteo","Tumbado, sube la cadera y aprieta 1 s arriba.",3,12,15,2.5,60,false,[["Hip thrust con barra","Barbilla al pecho."],["Puente de glúteo a una pierna","Reps por pierna."]]],["Femoral y glúteo","Hip thrust en máquina","Pausa de 1 s arriba.",3,10,12,5,90,false,[["Hip thrust con barra","Pausa arriba."],["Puente de glúteo","Aprieta arriba."]]],["Femoral y glúteo","Hip thrust a una pierna","Espalda en el banco, pausa arriba. Reps por pierna. 0 kg = peso corporal.",3,8,12,2,60,true,[["Puente de glúteo a una pierna","En el suelo."],["Hip thrust con barra","Pausa arriba."]]],["Femoral y glúteo","Aducción en máquina","Cierra controlado, pausa al juntar.",3,12,15,2.5,60,false,[["Aducción en polea","De pie, pierna estirada."],["Sentadilla sumo con mancuerna","Puntas fuera."]]],["Femoral y glúteo","Abducción con banda","Banda en las rodillas, sentado o de lado, abre y aguanta 1 s.",3,15,20,1,45,true,[["Abducción de cadera en máquina","Pausa al abrir."],["Paso lateral con banda","Rodillas flexionadas."]]],["Gemelos","Elevación de gemelos de pie","Pausa abajo y arriba.",4,10,15,2.5,60,false,[["Elevación de gemelos sentado","Pausa arriba."],["Elevación de gemelos a una pierna","Apoyado en un escalón."]]],["Gemelos","Elevación de gemelos sentado","Pausa arriba.",4,12,15,2.5,60,false,[["Elevación de gemelos de pie","Pausa abajo y arriba."],["Elevación de gemelos en prensa","Recorrido completo."]]],["Gemelos","Gemelo en prensa","Solo las puntas en la plataforma, recorrido completo.",4,12,15,5,60,false,[["Elevación de gemelos de pie","Pausa abajo y arriba."],["Elevación de gemelos sentado","Pausa arriba."]]],["Gemelos","Elevación de gemelos a una pierna","De pie en un escalón, apoyado con una mano. Reps por pierna.",3,10,15,2,60,true,[["Elevación de gemelos de pie","Pausa abajo y arriba."],["Gemelo en prensa","Recorrido completo."]]],["Core","Rueda abdominal","Pelvis metida, sin hundir la zona lumbar. 0 kg = peso corporal.",3,8,15,1,60,true,[["Rueda abdominal de rodillas","Bajada lenta."],["Plancha con toque de hombros","Sin girar la cadera."]]],["Core","Elevación de piernas colgado","Sin balanceo, sube las rodillas al pecho. 0 kg = peso corporal.",3,8,15,1,60,true,[["Elevación de rodillas en paralelas","Espalda apoyada."],["Elevación de piernas tumbado","Zona lumbar pegada al suelo."]]],["Core","Crunch en polea","Enrolla la columna, cadera quieta.",3,12,15,2.5,60,false,[["Crunch en máquina","Pausa abajo."],["Crunch con peso en el suelo","Sube solo los hombros."]]],["Core","Pallof press","Resiste el giro, brazos al frente. Reps por lado.",3,10,12,1,60,false,[["Pallof press con banda","Resiste el giro."],["Plancha lateral con peso","Cadera alta."]]],["Core","Leñador en polea","Gira desde el tronco, brazos estirados. Reps por lado.",3,10,12,1,60,false,[["Leñador con mancuerna","Gira desde el tronco."],["Russian twist con disco","Pies en el suelo."]]],["Core","Plancha","Codos bajo los hombros, cuerpo en bloque, glúteos apretados. ⏱ Por tiempo.",3,30,60,2.5,60,true,[["Plancha con toque de hombros","Sin girar la cadera."],["Plancha de rodillas","Más suave."]],null,"t"],["Core","Plancha lateral","Codo bajo el hombro, cadera alta. Segundos por lado. ⏱ Por tiempo.",3,20,45,2.5,60,true,[["Plancha lateral de rodillas","Más suave."],["Pallof press","Resiste el giro."]],null,"t"],["Core","Dead bug","Zona lumbar pegada al suelo, brazo y pierna contrarios. Reps por lado.",3,8,12,1,45,true,[["Bird dog","Espalda quieta."],["Elevación de piernas tumbado","Lumbar pegada."]]],["Core","Bird dog","A cuatro patas, brazo y pierna contrarios sin mover la espalda. Reps por lado.",3,8,12,1,45,true,[["Dead bug","Lumbar pegada."],["Plancha","Cuerpo en bloque."]]],["Core","Crunch abdominal","Sube solo los hombros, sin tirar del cuello.",3,15,20,1,45,true,[["Crunch en polea","Enrolla la columna."],["Elevación de piernas tumbado","Lumbar pegada."]]],["Core","Elevación de piernas tumbado","Zona lumbar pegada al suelo, baja lento.",3,10,15,1,45,true,[["Elevación de piernas colgado","Sin balanceo."],["Crunch abdominal","Sube los hombros."]]],["Core","Russian twist","Sentado, pies en el suelo o elevados, gira el tronco. Reps por lado.",3,12,20,1,45,false,[["Leñador en polea","Gira desde el tronco."],["Pallof press","Resiste el giro."]]],["Core","Paseo del granjero","Una mancuerna o kettlebell pesada en cada mano, camina erguido. ⏱ Por tiempo.",3,30,45,2,90,false,[["Paseo con una mano","Sin inclinarte."],["Encogimientos con mancuernas","Pausa arriba."]],null,"t"],["Kettlebell","Kettlebell swing","Bisagra de cadera, potencia con glúteos.",4,15,20,2,60,false,[["Swing a una mano","Cambia de mano a mitad."],["Peso muerto con kettlebell","Cadera atrás."]]],["Kettlebell","Clean & press con kettlebell","Carga limpia al pecho y press estricto. Reps por brazo.",3,8,12,2,90,false,[["Press de hombro con kettlebell","Sin impulso."],["Push press con kettlebell","Pequeño impulso de piernas."]]],["Kettlebell","Snatch con kettlebell","De la cadera a arriba en un solo gesto. Reps por brazo.",3,8,12,2,90,false,[["Swing a una mano","Cambia de mano a mitad."],["Clean & press con kettlebell","Reps por brazo."]]],["Kettlebell","Turkish get-up","Lento y controlado, la vista en la kettlebell. Reps por lado.",3,3,5,2,90,false,[["Media turkish get-up","Hasta sentado."],["Press en suelo con kettlebell","Una mano."]]],["Kettlebell","Gorilla row","Apoyo firme, tira de los codos sin rotar el tronco.",3,10,12,2,90,false,[["Remo a una mano con kettlebell","Codo a la cadera."],["Remo renegado","En plancha."]]],["Kettlebell","Goblet squat con kettlebell","Codos por dentro de las rodillas.",4,10,15,2,90,false,[["Sentadilla con kettlebell en rack","Kettlebell en el antebrazo."],["Zancadas con kettlebell en rack","Rodilla trasera rozando el suelo."]]],["Kettlebell","Swing a una mano","Bisagra de cadera, cambia de mano a mitad.",3,10,15,2,60,false,[["Kettlebell swing","Potencia con glúteos."],["Snatch con kettlebell","Reps por brazo."]]],["Kettlebell","Sentadilla en rack con kettlebell","Kettlebell apoyada en el antebrazo, codo pegado.",3,8,12,2,90,false,[["Goblet squat con kettlebell","Codos dentro."],["Sentadilla goblet","Mancuerna al pecho."]]],["Kettlebell","Peso muerto con kettlebell","Kettlebell entre los pies, cadera atrás.",3,10,15,2,90,false,[["Kettlebell swing","Bisagra de cadera."],["Peso muerto rumano con mancuernas","Cadera atrás."]]],["Kettlebell","Press de hombro con kettlebell","Desde el rack, sin impulso. Reps por brazo.",3,6,10,2,90,false,[["Clean & press con kettlebell","Reps por brazo."],["Press de hombro sentado con mancuernas","Rango completo."]]],["Kettlebell","Halo con kettlebell","Rodea la cabeza con la kettlebell, core firme. Reps por lado.",3,8,10,2,45,false,[["Turkish get-up","Lento."],["Pallof press","Resiste el giro."]]],["Peso corporal","Flexiones diamante","Codos pegados al cuerpo. 0 kg = peso corporal.",3,8,15,2,60,true,[["Flexiones cerradas","Manos a la anchura de los hombros."],["Fondos en banco","Hombros abajo."]]],["Peso corporal","Burpees","Ritmo constante, pecho al suelo.",3,10,15,1,60,true,[["Burpees sin salto","Más suave para las rodillas."],["Sentadilla con salto","Aterriza suave."]]],["Peso corporal","Sentadilla con salto","Aterriza suave, rodillas hacia fuera.",3,10,15,1,60,true,[["Sentadilla al aire","Ritmo constante."],["Zancadas con salto","Alterna piernas."]]],["Peso corporal","Escaladores","Rodillas al pecho, cadera baja. Reps por pierna.",3,15,30,1,45,true,[["Escaladores cruzados","Rodilla al codo contrario."],["Plancha con toque de hombros","Sin girar la cadera."]]],["Peso corporal","Flexiones pike","Cadera alta en V, baja la cabeza hacia el suelo. 0 kg = peso corporal.",3,6,12,2,60,true,[["Press de hombro con mancuernas","Rango completo."],["Flexiones declinadas","Pies elevados."]]],["Peso corporal","Zancadas con salto","Alterna piernas en el aire, aterriza suave. Reps por pierna.",3,8,12,1,60,true,[["Zancadas inversas","Paso atrás."],["Sentadilla con salto","Aterriza suave."]]],["Peso corporal","Sentadilla búlgara sin peso","Pie trasero en una silla o banco. Reps por pierna.",3,10,15,2,60,true,[["Sentadilla búlgara","Con mancuernas."],["Zancadas inversas","Paso atrás."]]],["Peso corporal","Superman","Tumbado boca abajo, sube brazos y piernas y aguanta 2 s.",3,10,15,1,45,true,[["Hiperextensiones","Sin pasarte."],["Bird dog","Espalda quieta."]]],["Peso corporal","Jumping jacks","Ritmo constante, brazos arriba.",3,20,40,1,30,true,[["Burpees","Ritmo constante."],["Escaladores","Cadera baja."]]],["Bandas elásticas","Press de pecho con banda","Banda por la espalda o anclada detrás, empuja al frente.",3,12,20,1,60,false,[["Flexiones","Pecho al suelo."],["Press de banca con mancuernas","Bajada en 2 s."]]],["Bandas elásticas","Remo con banda","Banda anclada delante, codos atrás y aprieta escápulas.",3,12,20,1,60,false,[["Remo en polea baja","Codos atrás."],["Remo invertido en TRX","Cuerpo recto."]]],["Bandas elásticas","Jalón con banda","Banda anclada arriba, tira de los codos hacia abajo.",3,12,20,1,60,false,[["Jalón al pecho en polea","Codos hacia abajo."],["Dominadas asistidas","Con banda."]]],["Bandas elásticas","Face pull con banda","Banda a la altura de la cara, codos altos y abre al final.",3,15,20,1,45,false,[["Face pull","Codos altos."],["Pájaros con mancuernas","Torso inclinado."]]],["Bandas elásticas","Elevaciones laterales con banda","Pisa la banda, sube hasta la altura de los hombros.",3,12,20,1,45,false,[["Elevaciones laterales con mancuernas","Sin impulso."],["Elevaciones laterales en polea","Tensión constante."]]],["Bandas elásticas","Curl con banda","Pisa la banda, codos pegados.",3,12,20,1,45,false,[["Curl con mancuernas alterno","Supina al subir."],["Curl en polea","Tensión constante."]]],["Bandas elásticas","Sentadilla con banda","Banda bajo los pies y sobre los hombros, baja a la paralela.",3,12,20,1,60,false,[["Sentadilla goblet","Mancuerna al pecho."],["Sentadilla al aire","Ritmo constante."]]]];
+const EX_LIB_GROUPS = ['Pecho', 'Espalda', 'Hombro', 'Bíceps', 'Tríceps', 'Pierna', 'Femoral y glúteo', 'Gemelos', 'Core', 'Kettlebell', 'Peso corporal', 'Bandas elásticas'];
+const EX_LIB_ICON = { 'Pecho': '💪', 'Espalda': '🦅', 'Hombro': '🎯', 'Bíceps': '💪', 'Tríceps': '💪', 'Pierna': '🦵', 'Femoral y glúteo': '🍑', 'Gemelos': '🦵', 'Core': '🧱', 'Kettlebell': '🔔', 'Peso corporal': '🤸', 'Bandas elásticas': '🎗️' };
+const normTxt = t => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+function exLibraryModal() {
+  const day = currentDay(); if (!day) return;
+  const st = { q: '', g: '' };
+  const has = n => day.exercises.some(e => e.variants.some(v => v.name.toLowerCase() === n.toLowerCase()));
+  const list = () => { const q = normTxt(st.q), L = exLibAll().filter(x => (!st.g || x[0] === st.g) && (!q || normTxt(x[1] + ' ' + x[0] + ' ' + x[9].map(a => a[0]).join(' ')).includes(q))); return q ? [...L.filter(x => normTxt(x[1]).includes(q)), ...L.filter(x => !normTxt(x[1]).includes(q))] : L; };
+  const rows = () => { const L = list(); return L.length ? L.map(x => { const i = exLibAll().indexOf(x), added = has(x[1]); return `<div class="flex items-center justify-between gap-2 bg-ink rounded-xl border border-line px-3 py-2">
+      <div class="min-w-0"><div class="font-semibold text-[14px] truncate">${esc(x[1])}${x[10] && !access.me?.admin ? ' <span class="text-[10px] font-bold text-brand">NUEVO</span>' : ''}</div><div class="text-[11px] text-mute truncate">${EX_LIB_ICON[x[0]] || ''} ${esc(x[0])} · ${x[3]}×${x[4]}–${x[5]}${x[11] === 't' ? ' s ⏱' : ''}${x[8] ? ' · peso corporal' : ''} · +${x[9].length} alternativas</div></div>
+      <button class="${added ? 'btn-mini text-emerald-300' : 'btn-mini text-brand'} shrink-0" data-mact="add" data-i="${i}" type="button">${added ? '✓ Añadido' : '＋ Añadir'}</button></div>`; }).join('') : '<p class="text-xs text-mute text-center py-4">No está entre los preparados. Créalo con «✏️ Crear uno nuevo».</p>'; };
+  const html = () => `<h3 class="modal-title">＋ Añadir ejercicio</h3>
+    <button class="btn-ghost w-full" data-mact="create" type="button">✏️ Crear uno nuevo</button>
+    <p class="text-xs text-mute">O elige uno preparado (con 2 alternativas ⇄). Se añaden a <b class="text-slate-300">${esc(day.label === prog().name ? day.label : day.label + ' · ' + prog().name)}</b>. Puedes añadir varios.</p>
+    <input class="field" name="q" placeholder="Buscar: press, remo, glúteo, kettlebell…" value="${esc(st.q)}" autocomplete="off" />
+    <div class="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" data-noswipe>${['', ...EX_LIB_GROUPS].map(g => `<button class="chip ${st.g === g ? 'chip-on' : ''} shrink-0" data-mact="grp" data-g="${esc(g)}" type="button">${g ? (EX_LIB_ICON[g] || '') + ' ' + esc(g) : 'Todos'}</button>`).join('')}</div>
+    <div class="space-y-1.5" id="exLibRows">${rows()}</div>`;
+  openModal(html(), {
+    grp: (root, b) => { st.g = b.dataset.g; root.querySelector('.modal-sheet').innerHTML = html(); bindQ(root); },
+    create: () => { closeModal(); editExModal(null); },
+    add: (root, b) => {
+      const x = exLibAll()[+b.dataset.i]; if (!x) return;
+      if (has(x[1])) return toast('Ya está en este día', 'warn');
+      day.exercises.push(normalizeExercise({ id: uid('c_'), alts27: true, block: `${EX_LIB_ICON[x[0]] || '⚡'} ${x[0]}`, sets: x[3], minReps: x[4], maxReps: x[5], increment: x[6], rest: x[7], bw: !!x[8], timed: x[11] === 't', variants: [{ name: x[1], note: x[2] }, ...x[9].map(([name, note]) => ({ name, note }))] }));
+      persist(); render(); root.querySelector('#exLibRows').innerHTML = rows(); toast(`Añadido: ${x[1]}`);
+    }
+  });
+  const bindQ = root => { const q = root.querySelector('[name=q]'); if (q) q.oninput = () => { st.q = q.value; root.querySelector('#exLibRows').innerHTML = rows(); }; };
+  bindQ($('#modalRoot'));
+  fetchRemoteEx().then(() => { const r = $('#exLibRows'); if (r) r.innerHTML = rows(); });
+}
+
+/* Biblioteca: bloques recomendados (preparados por Esteban) que cada usuario puede añadir a los suyos */
+const KB_DAYS = [{
+  id: 'kb_day', label: 'KB', rotation: false,
+  title: 'Kettlebell · potencia y quema-grasa',
+  subtitle: 'Kettlebell ajustable (hasta 18 kg) y fija (24 kg)',
+  exercises: [
+    mkEx('kb_swing', '💥 Potencia y cadena posterior', 4, 15, 20, 2, 60, [['Kettlebell swing explosivo', 'Bisagra de cadera pura: la potencia sale de los glúteos.'], ['Swing a una mano', 'Cambia de mano a mitad de serie.'], ['Peso muerto con kettlebell', 'Cadera atrás, espalda neutra.']]),
+    mkEx('kb_goblet', '🦵 Cuádriceps y core', 4, 10, 15, 2, 90, [['Goblet squat profundo', 'Codos por dentro de las rodillas, espalda recta.'], ['Sentadilla con kettlebell en rack', 'Kettlebell apoyada en el antebrazo.'], ['Sentadilla búlgara con kettlebell', 'Reps por pierna.']]),
+    mkEx('kb_clean', '💪 Hombro y estabilidad unilateral', 3, 8, 12, 2, 90, [['Clean & press unilateral', 'Carga limpia al pecho y press estricto arriba. Reps por brazo.'], ['Press de hombro con kettlebell', 'Sin impulso de piernas.'], ['Push press con kettlebell', 'Pequeño impulso de piernas.']]),
+    mkEx('kb_lunge', '🎯 Pierna unilateral y glúteo', 3, 10, 12, 2, 90, [['Zancadas con kettlebell en rack', 'Rodilla trasera rozando el suelo.'], ['Zancadas inversas con kettlebell', 'Paso atrás controlado.'], ['Step-up con kettlebell', 'Sube empujando con el talón.']]),
+    mkEx('kb_row', '🦅 Espalda y grosor', 3, 10, 12, 2, 90, [['Gorilla row (remo alterno)', 'Apoyo firme, tira de los codos sin rotar el tronco.'], ['Remo a una mano con kettlebell', 'Codo hacia la cadera.'], ['Remo renegado', 'En plancha, sin girar la cadera.']])
+  ]
+}];
+const LIB_BLOCKS = [
+  { lib: 'kb', name: 'KETTLEBELL', icon: '🔔', desc: 'Potencia y quema-grasa con kettlebell: swing, goblet, clean & press, zancadas y remo. Ideal en casa.', days: () => KB_DAYS },
+  { lib: 'ppt', name: 'PPT', icon: '', desc: 'Push / Pull / Torso en 3 días, con «peaje» de pierna al inicio de cada sesión.', days: () => PPT_DAYS },
+  { lib: 'fullbody', name: 'FULL BODY', icon: '', desc: 'Cuerpo completo en 2 días alternos (A y B): básicos pesados y accesorios.', days: () => FULLBODY_DAYS }
+];
+/* Bloques que Esteban publica desde su app (bloques.json del repositorio). Se leen al abrir la biblioteca. */
+const LIB_FILE = 'bloques.json', LIB_CACHE = 'fitnesteban_lib';
+let remoteLib = (() => { try { return JSON.parse(localStorage.getItem(LIB_CACHE) || '[]'); } catch { return []; } })();
+async function fetchRemoteLib() {
+  try {
+    const r = await fetch(LIB_FILE + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    const list = await r.json();
+    if (Array.isArray(list)) { remoteLib = list.filter(x => x && x.lib && x.name && Array.isArray(x.days)); try { localStorage.setItem(LIB_CACHE, JSON.stringify(remoteLib)); } catch { /* nada */ } }
+  } catch { /* sin conexión o aún no hay bloques publicados: se usa lo guardado */ }
+  return remoteLib;
+}
+// Un bloque compartido por Esteban sustituye al preparado de fábrica con el mismo nombre (base = id del de fábrica).
+const libKey = n => String(n || '').trim().toLowerCase();
+const libAll = () => [
+  ...remoteLib.map(x => ({ ...x, pub: true, base: LIB_BLOCKS.find(b => libKey(b.name) === libKey(x.name))?.lib, days: () => x.days })),
+  ...LIB_BLOCKS.filter(b => !remoteLib.some(x => libKey(x.name) === libKey(b.name)))
+];
+const libHave = L => state.plan.programs.some(p => p.lib === L.lib || p.pubId === L.lib || (L.base && p.lib === L.base));
+const libIsNew = L => L.pub && !access.me?.admin && (!L.at || L.at >= addDays(todayISO(), -30));
+/* Publicar (solo administrador, con GitHub conectado): copia limpia del bloque, sin ids */
+function blockForLib(p) {
+  return p.days.map(d => ({ label: d.label, rotation: d.rotation, title: d.title, subtitle: d.subtitle,
+    exercises: d.exercises.map(e => ({ id: e.id, block: e.block, sets: e.sets, minReps: e.minReps, maxReps: e.maxReps, increment: e.increment, rest: e.rest, bw: e.bw, ...(e.timed ? { timed: true } : {}), alts27: true, variants: e.variants.map(v => ({ name: v.name, note: v.note || '' })) })) }));
+}
+async function ghEditJson(pin, file, fn, message) {
+  const token = await ghToken(pin);
+  const cur = await ghApi(token, 'GET', null, file);
+  let list = []; try { list = JSON.parse(b64utf8(cur.content || '') || '[]'); } catch { list = []; }
+  const next = fn(Array.isArray(list) ? list : []);
+  await ghApi(token, 'PUT', { message, content: utf8b64(JSON.stringify(next, null, 1) + '\n'), ...(cur.sha ? { sha: cur.sha } : {}) }, file);
+  return next;
+}
+async function ghEditLib(pin, fn, message) {
+  const next = await ghEditJson(pin, LIB_FILE, fn, message);
+  remoteLib = next; try { localStorage.setItem(LIB_CACHE, JSON.stringify(next)); } catch { /* nada */ }
+}
+/* Ejercicios sueltos publicados por Esteban (ejercicios.json). Mismo formato que EX_LIB + id de publicación al final */
+const EXLIB_FILE = 'ejercicios.json', EXLIB_CACHE = 'fitnesteban_exlib';
+let remoteEx = (() => { try { return JSON.parse(localStorage.getItem(EXLIB_CACHE) || '[]'); } catch { return []; } })();
+async function fetchRemoteEx() {
+  try {
+    const r = await fetch(EXLIB_FILE + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    const list = await r.json();
+    if (Array.isArray(list)) { remoteEx = list.filter(x => Array.isArray(x) && x[1] && x[10]); try { localStorage.setItem(EXLIB_CACHE, JSON.stringify(remoteEx)); } catch { /* nada */ } }
+  } catch { /* sin conexión o aún no hay ejercicios publicados */ }
+  return remoteEx;
+}
+const exLibAll = () => [...remoteEx, ...EX_LIB.filter(x => !remoteEx.some(r => r[1].toLowerCase() === x[1].toLowerCase()))];
+function publishExModal(exId) {
+  const f = findEx(exId); if (!f) return;
+  const e = f.ex, pubId = e.pubId || ('ex_' + uid('').slice(0, 10)), existing = remoteEx.find(x => x[10] === pubId);
+  let g = existing?.[0] || (/kettlebell/i.test(e.variants[0].name) ? 'Kettlebell' : e.bw ? 'Peso corporal' : 'Pecho');
+  const html = () => `<h3 class="modal-title">📤 Compartir «${esc(e.variants[0].name)}»</h3>
+    <p class="text-xs text-mute">Aparecerá en «＋ Añadir ejercicio» de todos, con sus series (${e.sets}×${e.minReps}–${e.maxReps}${e.timed ? ' s' : ''}), descanso, nota y alternativas (${e.variants.length - 1}). Si lo cambias después, vuelve a publicarlo.</p>
+    <div><div class="lbl mb-1">Grupo</div><div class="flex flex-wrap gap-1.5">${EX_LIB_GROUPS.map(x => `<button class="chip ${g === x ? 'chip-on' : ''}" data-mact="grp" data-g="${esc(x)}" type="button">${EX_LIB_ICON[x] || ''} ${esc(x)}</button>`).join('')}</div></div>
+    <button class="btn-primary w-full" data-mact="go" type="button">${existing ? 'Actualizar' : 'Compartir'}</button>
+    ${existing ? '<button class="btn-danger w-full" data-mact="remove" type="button">Dejar de compartir</button>' : ''}`;
+  openModal(html(), {
+    grp: (root, b) => { g = b.dataset.g; root.querySelector('.modal-sheet').innerHTML = html(); },
+    go: () => askPin({ title: '📤 Compartir ejercicio', text: 'Tu PIN abre la llave de GitHub para compartirlo.', onPin: async pin => {
+      const v0 = e.variants[0], item = [g, v0.name, v0.note || '', e.sets, e.minReps, e.maxReps, e.increment, e.rest, !!e.bw, e.variants.slice(1, 4).map(v => [v.name, v.note || '']), pubId, e.timed ? 't' : ''];
+      remoteEx = await ghEditJson(pin, EXLIB_FILE, list => [item, ...list.filter(x => x[10] !== pubId)], `Biblioteca de ejercicios: ${existing ? 'actualiza' : 'publica'} ${v0.name}`);
+      try { localStorage.setItem(EXLIB_CACHE, JSON.stringify(remoteEx)); } catch { /* nada */ }
+      e.pubId = pubId; persist(); closeModal(); render(); toast(`«${v0.name}» compartido con todos ✓`);
+    } }),
+    remove: () => askPin({ title: 'Dejar de compartir', text: 'Dejará de aparecer para los demás. Quien ya lo añadió lo conserva.', onPin: async pin => {
+      remoteEx = await ghEditJson(pin, EXLIB_FILE, list => list.filter(x => x[10] !== pubId), `Biblioteca de ejercicios: retira ${e.variants[0].name}`);
+      try { localStorage.setItem(EXLIB_CACHE, JSON.stringify(remoteEx)); } catch { /* nada */ }
+      delete e.pubId; persist(); closeModal(); render(); toast('Ya no se comparte');
+    } })
+  });
+}
+function publishBlockModal(progId) {
+  const p = state.plan.programs.find(x => x.id === progId); if (!p) return;
+  const pubId = p.pubId || ('pub_' + uid('').slice(0, 10));
+  const existing = remoteLib.find(x => x.lib === pubId);
+  openModal(`<h3 class="modal-title">📤 Compartir «${esc(p.name)}» con todos</h3>
+    <p class="text-xs text-mute">Aparecerá en «＋ Añadir bloque» de todos los usuarios. Se comparte una copia: si después cambias tu bloque, vuelve aquí para actualizarla.</p>
+    <label class="lbl">Descripción (una o dos frases)<textarea class="field mt-1" name="desc" rows="3" maxlength="200" placeholder="Ej: Circuito de 30 min con mancuernas para días con poco tiempo.">${esc(existing?.desc || '')}</textarea></label>
+    <button class="btn-primary w-full" data-mact="go" type="button">${existing ? 'Actualizar' : 'Compartir'}</button>
+    ${existing ? '<button class="btn-danger w-full" data-mact="remove" type="button">Dejar de compartir</button>' : ''}`, {
+    go: root => {
+      const desc = mval(root, 'desc').trim(); if (!desc) return toast('Escribe una descripción', 'warn');
+      askPin({ title: '📤 Compartir bloque', text: 'Tu PIN abre la llave de GitHub para compartirlo.', onPin: async pin => {
+        const item = { lib: pubId, name: p.name, icon: p.icon || '', desc, author: 'Esteban', at: todayISO(), days: blockForLib(p) };
+        await ghEditLib(pin, list => [item, ...list.filter(x => x.lib !== pubId)], `Biblioteca: ${existing ? 'actualiza' : 'publica'} ${p.name}`);
+        p.pubId = pubId; p.lib = pubId; persist(); closeModal(); render(); toast(`«${p.name}» compartido con todos ✓`);
+      } });
+    },
+    remove: () => askPin({ title: 'Dejar de compartir', text: `«${esc(p.name)}» dejará de aparecer para los demás. Quien ya lo añadió lo conserva.`, onPin: async pin => {
+      await ghEditLib(pin, list => list.filter(x => x.lib !== pubId), `Biblioteca: retira ${p.name}`);
+      delete p.pubId; persist(); closeModal(); render(); toast('Ya no se comparte');
+    } })
+  });
+}
+function addLibBlock(lib) {
+  const L = libAll().find(x => x.lib === lib); if (!L) return;
+  const days = clone(L.days()).map(d => {
+    const nd = normalizeDay(d); nd.id = uid('d_');
+    nd.exercises = nd.exercises.map(e => ({ ...e, id: uid('c_'), alts27: true }));
+    return nd;
+  });
+  const np = { id: uid('p_'), name: L.name, icon: L.icon, lib: L.lib, type: 'strength', days };
+  state.plan.programs.push(np); state.plan.active = np.id; ui.dayId = days[0].id;
+  persist(); closeModal(); ui.view = 'train'; render(); window.scrollTo({ top: 0 });
+  toast(`Bloque ${L.name} añadido ✓`);
+}
+function libraryModal() {
+  const html = () => `<h3 class="modal-title">＋ Añadir bloque</h3>
+    <button class="btn-ghost w-full" data-mact="empty" type="button">✏️ Crear un bloque vacío</button>
+    <div class="text-[11px] font-bold uppercase tracking-wider text-mute pt-1">O elige uno preparado por Esteban</div>
+    <div class="space-y-2">${libAll().sort((a, b) => libHave(a) - libHave(b)).map(L => {
+      const days = L.days(), nEx = days.reduce((a, d) => a + d.exercises.length, 0), have = libHave(L), open = ui.libOpen === L.lib;
+      return `<div class="card p-3 space-y-2">
+        <div class="flex items-start justify-between gap-2"><div class="min-w-0"><div class="font-extrabold">${L.icon ? L.icon + ' ' : ''}${esc(L.name)}${libIsNew(L) && !have ? ' <span class="text-[10px] font-bold text-brand align-middle">NUEVO</span>' : ''}</div><div class="text-[11px] text-mute">${days.length} ${days.length === 1 ? 'día' : 'días'} · ${nEx} ejercicios${L.pub && access.me?.admin ? ' · <span class="text-brand">compartido por ti</span>' : ''}</div></div>
+          <button class="btn-mini text-brand shrink-0" data-mact="see" data-lib="${L.lib}" type="button">${open ? 'Ocultar' : 'Ver'}</button></div>
+        <p class="text-[12px] text-slate-300 leading-snug">${esc(L.desc)}</p>
+        ${open ? days.map(d => `<div class="text-[12px]"><div class="text-brand font-bold">${esc(d.label)} · ${esc(d.title)}</div><ul class="text-mute list-disc pl-5">${d.exercises.map(e => `<li>${esc(e.variants[0].name)} <span class="opacity-70">${e.sets}×${e.minReps}–${e.maxReps}</span></li>`).join('')}</ul></div>`).join('') : ''}
+        ${have ? '<div class="w-full text-center text-[13px] font-bold text-emerald-300 py-2 rounded-xl" style="background:rgba(16,185,129,.08)">✓ Ya lo tienes</div>' : `<button class="btn-primary w-full" data-mact="add" data-lib="${L.lib}" type="button">＋ Añadir</button>`}</div>`;
+    }).join('')}</div>
+    <p class="text-[11px] text-mute">Al añadir uno se copia a tus bloques y lo puedes cambiar como quieras.</p>`;
+  fetchRemoteLib().then(() => { const sh = $('#modalRoot .modal-sheet'); if (sh && sh.querySelector('[data-mact=empty]')) sh.innerHTML = html(); });
+  openModal(html(), {
+    see: (root, b) => { ui.libOpen = ui.libOpen === b.dataset.lib ? null : b.dataset.lib; root.querySelector('.modal-sheet').innerHTML = html(); },
+    add: (root, b) => addLibBlock(b.dataset.lib),
+    empty: () => { closeModal(); editProgModal(null); }
+  });
+}
+
+/* 4.31: quien instala la app desde cero empieza sin bloques de fuerza y los elige en «📚 Bloques recomendados».
+   Quien ya tiene sus bloques guardados los conserva tal cual. */
 const DEFAULT_PLAN = {
-  active: 'ppt',
+  active: 'retos',
   programs: [
     { id: 'retos', name: 'RETOS', icon: '🏆', type: 'retos', days: [] },
-    { id: 'ppt', name: 'PPT', days: PPT_DAYS },
-    { id: 'fullbody', name: 'FULL BODY', days: FULLBODY_DAYS },
     { id: 'cardio', name: 'CARDIO', icon: '🔥', type: 'cardio', days: [] },
     { id: 'free', name: 'FREE', days: FREE_DAYS }
   ]
@@ -156,10 +356,10 @@ const isStandalone = () => window.matchMedia('(display-mode: standalone)').match
 
 /* ---------- Estado ---------- */
 function defaultSettings() {
-  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [...DEFAULT_HABITS], lastBackup: null, eatBackCardio: false, minProtMeal: 25, pinHash: '', lastSeenVersion: '', driveConnected: false, driveEmail: '', driveFolderId: '', autoDrive: true, lastDriveBackup: null, swipeNav: true, swipeMode: '', profile: null };
+  return { targetKcal: 1620, targetProt: 180, targetCarbs: 90, targetFat: 60, apiKey: '', model: DEFAULT_MODEL, habits: [], habitList: [], lastBackup: null, eatBackCardio: false, minProtMeal: 25, pinHash: '', lastSeenVersion: '', driveConnected: false, driveEmail: '', driveFolderId: '', autoDrive: true, lastDriveBackup: null, swipeNav: true, swipeMode: '', profile: null };
 }
 function defaultState() {
-  return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {}, chat: null, chats: [], retos: {}, accessNames: {}, accessCodes: {} };
+  return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {}, chat: null, chats: [], retos: {}, accessNames: {}, accessCodes: {}, habitLog: {}, habitCount: {} };
 }
 const safeUrl = u => { const t = String(u || '').trim(); return /^https:\/\/[^\s"'<>]+$/i.test(t) ? t : ''; };
 const videoUrl = v => v.video || `https://www.youtube.com/results?search_query=${encodeURIComponent(v.name + ' técnica correcta')}`;
@@ -169,14 +369,18 @@ function normalizeExercise(e) {
   const out = {
     id: e.id || uid('c_'), block: e.block || 'Ejercicio',
     sets: clamp(parseInt(e.sets, 10) || 3, 1, 10),
-    minReps: clamp(parseInt(e.minReps, 10) || 8, 1, 100),
-    maxReps: clamp(parseInt(e.maxReps, 10) || 12, 1, 100),
+    minReps: clamp(parseInt(e.minReps, 10) || 8, 1, e.timed ? 600 : 100),
+    maxReps: clamp(parseInt(e.maxReps, 10) || 12, 1, e.timed ? 600 : 100),
     increment: num(e.increment) ?? 2,
     rest: clamp(parseInt(e.rest, 10) || 90, 10, 600),
     bw: typeof e.bw === 'boolean' ? e.bw : BW_DEFAULT.has(e.id),
     variants: Array.isArray(e.variants) && e.variants.length ? e.variants.map(v => ({ name: String(v.name || 'Ejercicio'), note: String(v.note || ''), video: safeUrl(v.video) })) : [{ name: 'Ejercicio', note: '', video: '' }]
   };
   if (out.maxReps < out.minReps) out.maxReps = out.minReps;
+  out.alts27 = true;
+  if (e.timed) out.timed = true;
+  if (e.pubId) out.pubId = String(e.pubId);
+  if (!e.alts27 && EX_ALTS[out.id]) for (const [name, note] of EX_ALTS[out.id]) if (!out.variants.some(v => v.name.toLowerCase() === name.toLowerCase())) out.variants.push({ name, note, video: '' });
   return out;
 }
 function normalizeDay(day) {
@@ -191,7 +395,7 @@ function normalizePlan(plan) {
   if (plan && Array.isArray(plan.programs) && plan.programs.length) programs = plan.programs;
   else if (plan && Array.isArray(plan.days) && plan.days.length) {
     // plan antiguo (solo días): pasa a ser el bloque PPT y se añade FULL BODY
-    programs = [{ id: 'ppt', name: 'PPT', days: plan.days }, ...clone(DEFAULT_PLAN.programs.filter(p => p.id !== 'ppt' && p.id !== 'free'))];
+    programs = [{ id: 'ppt', name: 'PPT', days: plan.days }, { id: 'fullbody', name: 'FULL BODY', days: clone(FULLBODY_DAYS) }, ...clone(DEFAULT_PLAN.programs.filter(p => p.id !== 'free'))];
   } else programs = clone(DEFAULT_PLAN.programs);
   // FREE va como bloque propio, no dentro de PPT
   if (!programs.some(p => p.id === 'free')) {
@@ -206,7 +410,7 @@ function normalizePlan(plan) {
   if (!programs.some(p => p.type === 'cardio')) programs.push(clone(DEFAULT_PLAN.programs.find(p => p.type === 'cardio')));
   if (!programs.some(p => p.type === 'retos')) programs.push(clone(DEFAULT_PLAN.programs.find(p => p.type === 'retos')));
   programs = programs.map(p => ({
-    id: p.id || uid('p_'), name: String(p.name || 'BLOQUE').slice(0, 16), icon: p.icon || '',
+    id: p.id || uid('p_'), name: String(p.name || 'BLOQUE').slice(0, 16), icon: p.icon || '', lib: p.lib || (p.id === 'ppt' ? 'ppt' : p.id === 'fullbody' ? 'fullbody' : ''), ...(p.pubId ? { pubId: p.pubId } : {}),
     type: p.type === 'cardio' || p.type === 'retos' ? p.type : 'strength',
     days: p.type === 'cardio' || p.type === 'retos' ? [] : (p.days || []).map(normalizeDay)
   }));
@@ -219,6 +423,12 @@ function normalize(s) {
   const out = { ...d, ...s };
   out.settings = { ...d.settings, ...(s.settings || {}) };
   if (!Array.isArray(out.settings.habits)) out.settings.habits = [...DEFAULT_HABITS];
+  // 4.25: hábitos con sitio (Entreno o Diario) y días; settings.habits sigue siendo la lista de los de Entreno
+  if (!Array.isArray(s.settings?.habitList)) out.settings.habitList = out.settings.habits.map(name => ({ name, where: 'train', days: [...ALL_DAYS] }));
+  out.settings.habitList = out.settings.habitList.filter(h => h && h.name).map(h => ({ name: String(h.name).slice(0, 60), where: h.where === 'daily' ? 'daily' : 'train', days: Array.isArray(h.days) && h.days.length ? h.days.filter(d => d >= 0 && d <= 6) : [...ALL_DAYS], target: clamp(parseInt(h.target, 10) || 1, 1, 20), unit: String(h.unit || '').slice(0, 12) }));
+  out.settings.habits = out.settings.habitList.filter(h => h.where === 'train').map(h => h.name);
+  if (!out.habitLog || typeof out.habitLog !== 'object' || Array.isArray(out.habitLog)) out.habitLog = {};
+  if (!out.habitCount || typeof out.habitCount !== 'object' || Array.isArray(out.habitCount)) out.habitCount = {};
   out.plan = normalizePlan(out.plan);
   for (const k of ['selectedVariants', 'memory', 'meals', 'drafts']) if (!out[k] || typeof out[k] !== 'object' || Array.isArray(out[k])) out[k] = {};
   for (const k of ['sessions', 'bodyMetrics', 'cardio', 'reports']) if (!Array.isArray(out[k])) out[k] = [];
@@ -320,7 +530,7 @@ let saveTimer = null;
 function hashStr(t) { let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0; return h; }
 function dataSig() {
   const retos = {}; for (const [k, r] of Object.entries(state.retos || {})) retos[k] = { level: r.level, best: r.best, history: r.history, tests: r.tests };
-  return hashStr(JSON.stringify([state.plan, state.sessions, state.meals, state.cardio, state.bodyMetrics, retos, state.reports, state.selectedVariants]));
+  return hashStr(JSON.stringify([state.plan, state.sessions, state.meals, state.cardio, state.bodyMetrics, retos, state.reports, state.selectedVariants, state.habitLog, state.habitCount]));
 }
 function latestContentDate(st) {
   let d = '';
@@ -349,6 +559,39 @@ if (state._migrated) { delete state._migrated; persist(); }
 const PREV_KEY = 'fitnesteban_prev';
 function savePrevCopy(raw, ver) { if (!raw) return; try { localStorage.setItem(PREV_KEY, JSON.stringify({ ver, at: new Date().toISOString(), data: raw })); } catch { /* sin espacio: no es grave */ } }
 function prevCopy() { try { const p = JSON.parse(localStorage.getItem(PREV_KEY) || 'null'); return p && p.data ? p : null; } catch { return null; } }
+/* 4.31: quien nunca usó ni editó los bloques de serie (PPT / FULL BODY) los pierde y elige en la biblioteca.
+   Se conservan si hay alguna sesión o borrador en ellos o si se modificó cualquier cosa (días, ejercicios, series, reps…). */
+function untouchedDefault(p) {
+  const base = p.id === 'ppt' ? PPT_DAYS : p.id === 'fullbody' ? FULLBODY_DAYS : null;
+  if (!base || p.type !== 'strength') return false;
+  const ids = new Set(p.days.map(d => d.id));
+  if (state.sessions.some(x => ids.has(x.dayId)) || p.days.some(d => state.drafts[d.id])) return false;
+  const sig = days => JSON.stringify(days.map(d => [d.id, d.label, d.title, d.exercises.map(e => [e.id, e.block, e.sets, e.minReps, e.maxReps, e.increment, e.rest, e.variants[0]?.name])]));
+  return sig(p.days) === sig(base.map(normalizeDay));
+}
+if (!state.settings.planClean431) {
+  state.settings.planClean431 = true;
+  const before = state.plan.programs.length;
+  state.plan.programs = state.plan.programs.filter(p => !untouchedDefault(p));
+  if (state.plan.programs.length !== before) {
+    if (!state.plan.programs.some(p => p.id === state.plan.active)) state.plan.active = 'retos';
+    for (const k of Object.keys(state.selectedVariants)) if (!allDays().some(d => d.exercises.some(e => e.id === k))) delete state.selectedVariants[k];
+  }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* nada */ }
+}
+/* 4.25.2: la 4.25.1 dejaba vacía la lista de hábitos al venir de una versión anterior. Se recuperan (una sola vez)
+   de la copia que la app guarda antes de cada actualización. */
+if (!state.settings.habitsFix252) {
+  state.settings.habitsFix252 = true;
+  if (!state.settings.habitList.length) {
+    try {
+      const old = JSON.parse(prevCopy()?.data || 'null')?.settings || {};
+      const back = Array.isArray(old.habitList) && old.habitList.length ? old.habitList : Array.isArray(old.habits) ? old.habits.map(name => ({ name, where: 'train', days: [...ALL_DAYS] })) : [];
+      if (back.length) { state.settings.habitList = normalize({ settings: { habitList: back } }).settings.habitList; state.settings.habits = state.settings.habitList.filter(h => h.where === 'train').map(h => h.name); }
+    } catch { /* sin copia previa: nada que recuperar */ }
+  }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* nada */ }
+}
 { const seen = state.settings.lastSeenVersion; if (bootRaw && seen && seen !== APP_VERSION && prevCopy()?.ver !== seen) savePrevCopy(bootRaw, seen); }
 
 /* ---------- Estado de interfaz ---------- */
@@ -393,8 +636,9 @@ function toast(msg, kind = 'ok') {
   el.className = `toast toast-${kind}`;
   el.textContent = msg;
   $('#toastRoot').appendChild(el);
-  setTimeout(() => el.classList.add('toast-out'), 2600);
-  setTimeout(() => el.remove(), 3000);
+  const ms = kind === 'pr' ? 5000 : 2600;
+  setTimeout(() => el.classList.add('toast-out'), ms);
+  setTimeout(() => el.remove(), ms + 400);
 }
 let modalHandlers = {};
 function openModal(html, handlers = {}) {
@@ -418,6 +662,7 @@ $('#modalRoot').addEventListener('click', e => {
   const b = e.target.closest('[data-mact]');
   if (b && modalHandlers[b.dataset.mact]) modalHandlers[b.dataset.mact]($('#modalRoot'), b);
 });
+['input', 'change'].forEach(ev => $('#modalRoot').addEventListener(ev, e => { if (e.target.name === 'birth') { const sp = e.target.closest('label')?.querySelector('#pfAge,#obAge'); if (sp) sp.textContent = birthHint(e.target.value); } }));
 const mval = (root, name) => root.querySelector(`[name="${name}"]`)?.value ?? '';
 
 /* =========================================================================
@@ -446,15 +691,27 @@ function bodyweightAt(date) {
   return v;
 }
 const isBwEx = exId => !!(exId && findEx(exId)?.ex.bw);
+/* ⏱ Ejercicios por tiempo: las «reps» son segundos */
+const isTimedEx = x => !!(x && (x.timed || (x.exId && findEx(x.exId)?.ex.timed)));
+const setStr = (x, bw, timed) => timed ? `${x.w > 0 || !bw ? wLabel(x.w, bw) + '·' : ''}${x.r}s` : `${wLabel(x.w, bw)}×${x.r}`;
+const secTxt = sec => sec >= 60 ? `${Math.floor(sec / 60)}:${pad(sec % 60)}` : `${sec} s`;
 /* «PC», «PC + 5» o «24» según el ejercicio */
 const wLabel = (w, bw) => (bw ? (w > 0 ? `PC+${fmtNum(w)}` : 'PC') : fmtNum(w || 0));
 /* 1RM estimado: en ejercicios de peso corporal suma tu peso registrado al lastre */
 function oneRM(e, x, date) {
+  if (isTimedEx(e)) return 0;
   if (isBwEx(e.exId)) { const b = bodyweightAt(date); return b ? e1rm(b + (x.w || 0), x.r) : 0; }
   return e1rm(x.w, x.r);
 }
 
+const timedTxt = x => String(x || '').replace(/\+1 rep por serie/g, '+5 s por serie').replace(/\breps limpias\b/g, 'series limpias').replace(/Tope de reps/g, 'Tope de tiempo').replace(/sin sumar reps/g, 'sin sumar segundos').replace(/(\d+)(–\d+)? reps?\b/g, '$1$2 s').replace(/\breps\b/g, 's').replace(/llegues a (\d+) en/g, 'llegues a $1 s en');
 function coach(e, exKey) {
+  const c = coachCore(e, exKey);
+  if (!e.timed) return c;
+  if (c.tone === 'new') return { ...c, text: e.bw ? `Aguanta ${e.minReps}–${e.maxReps} s con buena técnica. Pulsa ⏱ en cada serie y te cronometro. Desde la próxima te digo cuánto aguantar.` : `Busca un peso con el que aguantes ${e.minReps}–${e.maxReps} s. Pulsa ⏱ en cada serie y te cronometro. Desde la próxima te digo qué peso poner.` };
+  return { ...c, title: timedTxt(c.title), text: timedTxt(c.text) };
+}
+function coachCore(e, exKey) {
   const { minReps: min, maxReps: max, increment: inc, sets: n } = e;
   const fill = v => Array.from({ length: n }, () => v);
   const K = v => (e.bw ? (v > 0 ? `PC + ${fmtKg(v)}` : 'peso corporal') : fmtKg(v));
@@ -466,7 +723,7 @@ function coach(e, exKey) {
   const last = hist[hist.length - 1];
   const { t: topW, valid, work } = lastTop;
   const bw = topW === 0;
-  const lastStr = valid.map(s => `${wLabel(s.w, e.bw)}×${s.r}`).join(' · ');
+  const lastStr = valid.map(s => setStr(s, e.bw, e.timed)).join(' · ');
   const gap = daysBetween(last.date, todayISO());
   const deloadW = e.bw ? Math.max(0, r2(topW - (inc || 1))) : Math.max(inc || 1, roundStep(topW * 0.9, inc || 0.5));
 
@@ -497,7 +754,7 @@ function coach(e, exKey) {
       }
     }
   }
-  const targets = Array.from({ length: n }, (_, i) => (work[i] ? Math.min(max, work[i].r + 1) : min));
+  const targets = Array.from({ length: n }, (_, i) => (work[i] ? Math.min(max, work[i].r + (e.timed ? 5 : 1)) : min));
   const wTxt = K(topW);
   if (below) {
     return { tone: 'hold', title: `Repite ${wTxt}`, text: `Alguna serie quedó por debajo de ${min} reps. Mismo peso y busca ${min} en todas; si vuelve a pasar, bajamos.`, weight: topW, targets, last: lastStr };
@@ -510,6 +767,11 @@ const TONE = {
   down: { icon: '⬇️', cls: 'coach-down' }, stall: { icon: '⚠️', cls: 'coach-stall' }, break: { icon: '🔁', cls: 'coach-break' }
 };
 
+function bestSecs(exKey, sessions = state.sessions) {
+  let best = 0;
+  for (const s of sessions) for (const e of s.exercises) if (e.exKey === exKey) for (const x of e.sets) best = Math.max(best, x.r || 0);
+  return best;
+}
 function bestE1rm(exKey, sessions = state.sessions) {
   let best = 0;
   for (const s of sessions) for (const e of s.exercises) if (e.exKey === exKey) for (const x of e.sets) best = Math.max(best, oneRM(e, x, s.date));
@@ -542,7 +804,30 @@ function draftHasData(dayId) {
   return Object.values(d.sets || {}).some(arr => (arr || []).some(c => c && (c.r !== undefined && c.r !== '')));
 }
 function setCount(e, key, d) { return d.counts[key] ?? (deloadActive() ? Math.max(1, Math.ceil(e.sets / 2)) : e.sets); }
-function coachFor(e, key) { const c = coach(e, key); return deloadActive() ? deloadCoach(c, e, key) : c; }
+/* Comentarios al Coach por ejercicio */
+const NOTE_TAGS = { pain: '😣 Molestia', hard: '🥵 Muy duro', easy: '😌 Fácil', time: '⏱ Poco tiempo' };
+const noteTxt = n => [...(n.tags || []).map(t => NOTE_TAGS[t]).filter(Boolean), n.text ? `«${n.text}»` : ''].filter(Boolean).join(' · ');
+/* Comentario de la última sesión en la que apareció el ejercicio (si lo hubo) */
+function lastExNote(exId) {
+  const ss = sortedSessions();
+  for (let i = ss.length - 1; i >= 0; i--) {
+    const s = ss[i], n = (s.notes || []).find(x => x.exId === exId);
+    if (n) return { ...n, date: s.date };
+    if (s.exercises.some(x => x.exId === exId)) return null; // la última vez lo hizo sin comentar
+  }
+  return null;
+}
+function coachFor(e, key) {
+  let c = coach(e, key);
+  const n = lastExNote(e.id);
+  if (c.tone === 'up' && n && (n.tags || []).some(t => t === 'pain' || t === 'hard')) {
+    const w = Math.max(0, r2((c.weight || 0) - e.increment));
+    const wTxt = e.bw ? (w ? `PC + ${fmtKg(w)}` : 'tu peso') : fmtKg(w);
+    c = { ...c, tone: 'hold', title: `Mantén ${wTxt}`, text: `Llegaste a las reps, pero la última vez anotaste ${(n.tags || []).filter(t => t === 'pain' || t === 'hard').map(t => NOTE_TAGS[t]).join(' y ')}. Hoy no subimos: repite ${wTxt} y comprueba sensaciones.`, weight: w };
+  }
+  c = deloadActive() ? deloadCoach(c, e, key) : c;
+  return e.timed ? { ...c, title: timedTxt(c.title), text: timedTxt(c.text) } : c;
+}
 function cellValue(d, key, i, field, c) {
   const v = d.sets[key]?.[i]?.[field];
   if (v !== undefined) return v;
@@ -566,12 +851,21 @@ function nextDayId(pr = prog()) {
 
 function progLabel(p) { return `${p.icon ? p.icon + ' ' : ''}${esc(p.name)}`; }
 function renderProgHeader() {
-  const progRow = state.plan.programs.map(p => `<button class="prog ${p.id === prog().id ? 'prog-on' : ''}" data-act="pickProg" data-prog="${esc(p.id)}" type="button">${progLabel(p)}</button>`).join('')
-    + `<button class="prog prog-add" data-act="addProg" type="button" aria-label="Añadir bloque">＋ Bloque</button>`;
+  const progRow = state.plan.programs.map(p => `<button class="prog ${p.id === prog().id ? 'prog-on' : ''}" data-act="pickProg" data-prog="${esc(p.id)}" type="button">${progLabel(p)}</button>`).join('');
   return `<div class="flex items-center gap-2 -mx-4 px-4 mb-2.5">
     <div class="chips-row flex-1 relative" id="progRow">${progRow}</div>
+    <button class="iconbtn iconbtn-sm shrink-0 text-brand font-black" data-act="addProg" type="button" aria-label="Añadir bloque" title="Añadir bloque">＋</button>
     <button class="iconbtn iconbtn-sm shrink-0" data-act="editProg" type="button" aria-label="Editar bloque">✎</button>
-  </div>`;
+  </div>${libCtaHTML()}`;
+}
+/* Sin bloques de fuerza propios: invitación grande a la biblioteca */
+function libCtaHTML() {
+  const hasOwn = state.plan.programs.some(p => p.type === 'strength' && p.id !== 'free' && p.days.some(d => d.exercises.length));
+  if (hasOwn) return '';
+  return `<button class="w-full card p-4 mb-3 text-left flex items-center gap-3" style="border-color:rgba(34,211,238,.45);background:linear-gradient(135deg,rgba(34,211,238,.10),rgba(34,211,238,.02))" data-act="addProg" type="button">
+    <span class="text-3xl">🏋️</span>
+    <span class="flex-1 min-w-0"><span class="block font-extrabold">Elige tu primer bloque de entreno</span><span class="block text-[12px] text-mute mt-0.5">Preparados por Esteban: Kettlebell, PPT, Full Body… O crea el tuyo.</span></span>
+    <span class="text-brand font-black text-lg">›</span></button>`;
 }
 
 function renderTrain() {
@@ -621,7 +915,7 @@ function renderTrain() {
     ${exercises || `<div class="card p-6 text-center text-sm text-mute">Este día no tiene ejercicios todavía.</div>`}
   </div>
 
-  <button class="btn-dashed w-full mt-3" data-act="addEx" type="button">＋ Añadir ejercicio a este día</button>
+  <button class="btn-dashed w-full mt-3" data-act="exLibrary" type="button">＋ Añadir ejercicio</button>
 
   ${state.settings.habits.length ? `<section class="card p-4 mt-4 space-y-2.5">
     <h3 class="section-title">🔥 Remate y hábitos</h3>
@@ -635,8 +929,22 @@ function renderTrain() {
   `;
 }
 
+function noteBoxHTML(e, d) {
+  const nt = d.notes?.[e.id] || { tags: [], text: '' }, has = nt.tags.length || nt.text, open = !!ui.noteOpen?.[e.id];
+  if (!open) return `<button class="w-full flex items-center justify-between gap-2 mt-2 rounded-xl border ${has ? 'border-amber-300/40' : 'border-line'} bg-ink px-3 py-2 text-[13px]" data-act="noteOpen" data-ex="${esc(e.id)}" type="button">
+    <span class="font-semibold ${has ? 'text-amber-200' : 'text-slate-300'} truncate">💬 ${has ? esc(noteTxt(nt)) : 'Comenta al Coach'}</span><span class="text-mute text-[11px] shrink-0">${has ? 'editar' : 'opcional'} ▼</span></button>`;
+  return `<div class="mt-2 rounded-xl border border-brand/40 bg-ink p-3 space-y-2">
+    <button class="w-full flex items-center justify-between text-[13px]" data-act="noteOpen" data-ex="${esc(e.id)}" type="button"><span class="font-semibold text-brand">💬 Comenta al Coach</span><span class="text-mute text-[11px]">▲</span></button>
+    <div class="flex flex-wrap gap-1.5">${Object.entries(NOTE_TAGS).map(([k, l]) => `<button class="rounded-full border px-2.5 py-1 text-[12px] font-semibold ${nt.tags.includes(k) ? 'border-amber-300/70 bg-amber-300/10 text-amber-200' : 'border-line bg-panel text-slate-300'}" data-act="noteTag" data-ex="${esc(e.id)}" data-t="${k}" type="button">${l}</button>`).join('')}</div>
+    <input class="field text-[13px]" data-note-ex="${esc(e.id)}" maxlength="140" value="${esc(nt.text)}" placeholder="Ej: el hombro izquierdo tira en la bajada" />
+    <p class="text-[10px] text-mute">Lo verá el Coach IA y te lo recordaré la próxima vez. Con 😣 o 🥵 no te subo peso.</p></div>`;
+}
+function skippedToday(d) { return d.skip && d.skip.date === todayISO() ? d.skip.ids : []; }
 function renderExerciseCard(e, idx, day, d) {
   const { key, variant } = variantOf(e);
+  if (skippedToday(d).includes(e.id)) return `<article class="card px-4 py-3 opacity-70 flex items-center justify-between gap-3" id="ex-${esc(e.id)}">
+    <div class="min-w-0"><div class="text-[11px] font-bold uppercase tracking-wider text-mute">⏭ Hoy no</div><div class="font-semibold text-sm truncate line-through decoration-slate-500">${esc(variant.name)}</div></div>
+    <button class="btn-mini text-brand shrink-0" data-act="skipEx" data-ex="${esc(e.id)}" type="button">Deshacer</button></article>`;
   const c = coachFor(e, key);
   const n = setCount(e, key, d);
   const tone = TONE[c.tone];
@@ -659,17 +967,18 @@ function renderExerciseCard(e, idx, day, d) {
           <input class="field field-set" inputmode="decimal" autocomplete="off" data-in="w" data-key="${esc(key)}" data-i="${i}" value="${esc(w)}" placeholder="${e.bw ? 'PC' : 'kg'}" aria-label="${e.bw ? 'Lastre' : 'Peso'} serie ${i + 1}" />
           <span class="unit">${e.bw ? '+kg' : 'kg'}</span>
         </div>
-        <span class="text-mute text-xs">×</span>
+        <span class="text-mute text-xs">${e.timed ? '·' : '×'}</span>
         <div class="relative flex-1">
-          <input class="field field-set text-brand" inputmode="numeric" autocomplete="off" data-in="r" data-key="${esc(key)}" data-i="${i}" value="${esc(r)}" placeholder="${esc(target)}" aria-label="Repeticiones serie ${i + 1}" />
-          <span class="unit">reps</span>
+          <input class="field field-set text-brand" inputmode="numeric" autocomplete="off" data-in="r" data-key="${esc(key)}" data-i="${i}" value="${esc(r)}" placeholder="${esc(e.timed ? String(target).split('-')[0] : target)}" aria-label="${e.timed ? 'Segundos' : 'Repeticiones'} serie ${i + 1}" />
+          <span class="unit">${e.timed ? 's' : 'reps'}</span>
         </div>
+        ${e.timed ? `<button class="checkbtn swbtn" data-act="swSet" data-ex="${esc(e.id)}" data-key="${esc(key)}" data-i="${i}" type="button" aria-label="Cronómetro serie ${i + 1}">⏱</button>` : ''}
         <button class="checkbtn" data-act="doneSet" data-ex="${esc(e.id)}" data-key="${esc(key)}" data-i="${i}" type="button" aria-label="Serie hecha">✓</button>
       </div>`;
     if (i > 0 && !done) {
       const pw = num(cellValue(d, key, i - 1, 'w', c)), pr = num(cellValue(d, key, i - 1, 'r', c));
       const same = String(num(w) ?? '') === String(pw ?? '') && String(num(r) ?? '') === String(pr ?? '');
-      if (pr > 0 && !same) rows += `<button class="copy-set" data-act="copySet" data-ex="${esc(e.id)}" data-key="${esc(key)}" data-i="${i}" type="button">↺ igual que S${i} (${wLabel(pw || 0, e.bw)} × ${pr})</button>`;
+      if (pr > 0 && !same) rows += `<button class="copy-set" data-act="copySet" data-ex="${esc(e.id)}" data-key="${esc(key)}" data-i="${i}" type="button">↺ igual que S${i} (${e.timed ? setStr({ w: pw || 0, r: pr }, e.bw, true) : `${wLabel(pw || 0, e.bw)} × ${pr}`})</button>`;
     }
   }
   return `
@@ -678,10 +987,11 @@ function renderExerciseCard(e, idx, day, d) {
       <div class="min-w-0">
         <div class="text-[11px] font-bold uppercase tracking-wider text-brand">${esc(e.block)}</div>
         <h3 class="font-extrabold text-[17px] leading-snug mt-0.5">${esc(variant.name)}</h3>
-        <div class="text-[11px] text-mute mt-1">${e.sets} × ${e.minReps}–${e.maxReps} reps · descanso ${e.rest}s · +${fmtNum(e.increment)} kg${e.bw ? ' de lastre · peso corporal' : ''}</div>
+        <div class="text-[11px] text-mute mt-1">${e.sets} × ${e.minReps}–${e.maxReps} ${e.timed ? 's ⏱' : 'reps'} · descanso ${e.rest}s · +${fmtNum(e.increment)} kg${e.bw ? ' de lastre · peso corporal' : ''}</div>
       </div>
       <div class="flex gap-1.5 shrink-0">
-        ${e.variants.length > 1 ? `<button class="iconbtn" data-act="variant" data-ex="${esc(e.id)}" type="button" aria-label="Cambiar variante">⇄</button>` : ''}
+        <button class="iconbtn" data-act="skipEx" data-ex="${esc(e.id)}" type="button" aria-label="Hoy no hago este ejercicio">⏭</button>
+        <button class="iconbtn" data-act="variant" data-ex="${esc(e.id)}" type="button" aria-label="Cambiar por una alternativa">⇄</button>
         <button class="iconbtn" data-act="editEx" data-ex="${esc(e.id)}" type="button" aria-label="Editar ejercicio">✎</button>
       </div>
     </div>
@@ -694,6 +1004,7 @@ function renderExerciseCard(e, idx, day, d) {
       <p class="text-xs mt-1 opacity-90 leading-relaxed">${esc(c.text)}</p>
       ${c.last ? `<p class="text-[11px] mt-1.5 opacity-70">Última vez: ${esc(c.last)}</p>` : ''}
     </div>
+    ${(() => { const ln = lastExNote(e.id); return ln ? `<div class="mt-2 rounded-lg px-3 py-2 text-[12px]" style="background:rgba(252,211,77,.08);border:1px solid rgba(252,211,77,.3)"><b class="text-amber-200">📝 La última vez (${esc(fmtDateShort(ln.date))}):</b> <span class="text-slate-300">${esc(noteTxt(ln))}</span></div>` : ''; })()}
     <button class="sets-toggle ${isOpen ? 'sets-toggle-open' : ''} ${doneCount === n ? 'sets-toggle-done' : ''}" data-act="toggleSets" data-key="${esc(key)}" type="button" aria-expanded="${isOpen}">
       <span class="font-bold">${doneCount === n ? '✅' : '📝'} ${isOpen ? 'Ocultar series' : 'Registrar series'}</span>
       <span class="flex items-center gap-2 text-mute">${doneCount ? `${doneCount}/${n} hechas` : logged ? `${logged}/${n} apuntadas` : esc(plan)}<span class="tri"></span></span>
@@ -704,6 +1015,7 @@ function renderExerciseCard(e, idx, day, d) {
       <span class="text-[11px] text-mute">${n} ${n === 1 ? 'serie' : 'series'} hoy</span>
       <button class="btn-mini text-emerald-300" data-act="setCount" data-key="${esc(key)}" data-ex="${esc(e.id)}" data-delta="1" type="button">+ Serie</button>
     </div>` : ''}
+    ${noteBoxHTML(e, d)}
   </article>`;
 }
 
@@ -713,6 +1025,35 @@ function keepCardioInputs() {
   const w = $('#cdWeight'); if (w) ui.cardio.weight = w.value;
 }
 
+/* ⇄ Cambiar por una alternativa: lista de variantes + proponer con IA + añadir a mano */
+function variantPicker(exId) {
+  const f = findEx(exId); if (!f) return;
+  const e = f.ex, cur = variantOf(e).v;
+  const html = () => `<h3 class="modal-title">⇄ Alternativas</h3>
+    <p class="text-xs text-mute -mt-1">${esc(e.block)} · el progreso y el peso sugerido se guardan por separado para cada alternativa.</p>
+    <div class="space-y-1.5">${e.variants.map((v, i) => `<button class="w-full text-left rounded-xl border px-3 py-2.5 ${i === cur ? 'border-brand bg-brand/10' : 'border-line bg-ink'}" data-mact="pick" data-i="${i}" type="button">
+      <div class="flex items-center justify-between gap-2"><span class="font-semibold text-[14px]">${esc(v.name)}</span>${i === cur ? '<span class="text-brand text-xs font-bold shrink-0">✓ Hoy</span>' : ''}</div>
+      ${v.note ? `<div class="text-[11px] text-mute mt-0.5">${esc(v.note)}</div>` : ''}</button>`).join('')}</div>
+    ${e.variants.length < 8 ? `<button class="btn-ghost w-full" data-mact="ai" type="button">✨ Proponer 2 alternativas con IA</button>
+    <div class="flex gap-2"><input class="field flex-1 min-w-0" name="alt" maxlength="60" placeholder="O escribe una alternativa" /><button class="btn-ghost px-4" data-mact="add" type="button">Añadir</button></div>` : ''}`;
+  const redraw = root => { root.querySelector('.modal-sheet').innerHTML = html(); };
+  const add = (name, note = '') => { name = String(name || '').trim().slice(0, 60); if (!name || e.variants.some(v => v.name.toLowerCase() === name.toLowerCase()) || e.variants.length >= 8) return false; e.variants.push({ name, note: String(note || '').slice(0, 80), video: '' }); return true; };
+  openModal(html(), {
+    pick: (root, b) => { state.selectedVariants[e.id] = +b.dataset.i; persist(); closeModal(); render(); document.getElementById(`ex-${e.id}`)?.scrollIntoView({ block: 'nearest' }); },
+    add: root => { const v = mval(root, 'alt'); if (!add(v)) return toast('Escribe una alternativa nueva', 'warn'); persist(); redraw(root); toast('Alternativa añadida'); },
+    ai: async (root, b) => {
+      if (!state.settings.apiKey) return toast('Necesitas tu clave de Gemini (Ajustes)', 'warn');
+      b.disabled = true; b.innerHTML = '<span class="spinner"></span> Buscando alternativas…';
+      try {
+        const prompt = `Eres entrenador personal. Para el ejercicio «${variantOf(e).variant.name}» (bloque: ${e.block}; ${e.sets} series de ${e.minReps}-${e.maxReps} reps${e.bw ? '; se registra como peso corporal + lastre' : '; se registra con kilos'}) propone 2 alternativas que trabajen los mismos músculos con un patrón parecido${e.bw ? ', también con peso corporal' : ', con carga externa (mancuernas, barra, kettlebell, polea o máquina)'}. No repitas: ${e.variants.map(v => v.name).join(', ')}. Responde SOLO JSON: {"alternativas":[{"nombre":"…","nota":"consejo técnico de máximo 8 palabras"}]}`;
+        const r = parseJSONLoose(await callGemini([{ text: prompt }], { timeout: 30000 }));
+        const n = (r.alternativas || []).filter(x => add(x.nombre, x.nota)).length;
+        persist(); if ($('#modalRoot').classList.contains('open')) redraw(root);
+        toast(n ? `${n} alternativa${n === 1 ? '' : 's'} añadida${n === 1 ? '' : 's'}` : 'No ha propuesto nada nuevo', n ? 'ok' : 'warn');
+      } catch (err) { toast('IA: ' + err.message, 'error'); b.disabled = false; b.textContent = '✨ Proponer 2 alternativas con IA'; }
+    }
+  });
+}
 function findEx(exId) {
   for (const d of allDays()) { const i = d.exercises.findIndex(e => e.id === exId); if (i >= 0) return { day: d, ex: d.exercises[i], idx: i }; }
   return null;
@@ -746,7 +1087,9 @@ function sessionMinutes(d) {
 function estimateMinutes(day, d) {
   if (!day.exercises.length) return 0;
   let sec = 5 * 60; // calentamiento
+  const sk = d ? skippedToday(d) : [];
   for (const e of day.exercises) {
+    if (sk.includes(e.id)) continue;
     const { key } = variantOf(e);
     const n = d ? setCount(e, key, d) : (deloadActive() ? Math.max(1, Math.ceil(e.sets / 2)) : e.sets);
     const reps = (e.minReps + e.maxReps) / 2;
@@ -759,6 +1102,30 @@ function realAverage(dayId) {
   return list.length >= 2 ? Math.round(list.reduce((a, s) => a + s.durationMin, 0) / list.length) : null;
 }
 
+/* Récord en el momento: al marcar ✓ una serie que supera tu mejor 1RM estimado de esa variante (una vez por mejora) */
+function checkSetPR(ex, key, cell, d, day) {
+  if (ex.timed) {
+    const sec = Math.round(num(cell.r) || 0), prevS = bestSecs(key, state.sessions.filter(s => !(s.date === todayISO() && s.dayId === day.id)));
+    if (!(prevS > 0 && sec > prevS)) return;
+    d.prBest = d.prBest || {};
+    if (sec <= (d.prBest[key] || 0)) return;
+    d.prBest[key] = sec;
+    const nm = (ex.variants[parseInt(key.split('_v').pop(), 10)] || ex.variants[0]).name;
+    toast(`🏆 ¡Récord personal! ${nm}: ${secTxt(sec)} (antes ${secTxt(prevS)})`, 'pr');
+    try { navigator.vibrate?.([90, 60, 90, 60, 180]); } catch { /* nada */ }
+    return;
+  }
+  const today = todayISO(), st = { w: num(cell.w) ?? 0, r: Math.round(num(cell.r) || 0) };
+  const val = oneRM({ exId: ex.id, exKey: key }, st, today);
+  const prev = bestE1rm(key, state.sessions.filter(s => !(s.date === today && s.dayId === day.id)));
+  if (!(prev > 0 && val > prev + 0.05)) return;
+  d.prBest = d.prBest || {};
+  if (val <= (d.prBest[key] || 0) + 0.05) return; // ya avisado con esta marca o una mejor
+  d.prBest[key] = val;
+  const name = (ex.variants[parseInt(key.split('_v').pop(), 10)] || ex.variants[0]).name;
+  toast(`🏆 ¡Récord personal! ${name}: ${fmtNum(Math.round(val * 10) / 10)} kg de 1RM estimado (antes ${fmtNum(Math.round(prev * 10) / 10)})`, 'pr');
+  try { navigator.vibrate?.([90, 60, 90, 60, 180]); } catch { /* nada */ }
+}
 function markSetDone(exId, key, i) {
   const f = findEx(exId); if (!f) return;
   const day = currentDay();
@@ -774,7 +1141,7 @@ function markSetDone(exId, key, i) {
     if ((cell.r === undefined || cell.r === '') && typeof c.targets[i] === 'number') cell.r = String(c.targets[i]);
     if (cell.w === undefined && c.weight !== null) cell.w = fmtNum(c.weight);
     touchSession(d, exId);
-    if (num(cell.r) > 0) startTimer(f.ex.rest);
+    if (num(cell.r) > 0) { startTimer(f.ex.rest); checkSetPR(f.ex, key, cell, d, day); }
     else toast('Apunta las repeticiones de la serie', 'warn');
   }
   persist();
@@ -785,8 +1152,9 @@ function saveSession() {
   const day = currentDay();
   const d = draftOf(day.id);
   const today = todayISO();
-  const exs = [];
+  const exs = [], skipIds = skippedToday(d);
   for (const e of day.exercises) {
+    if (skipIds.includes(e.id)) continue;
     const { key, variant } = variantOf(e);
     const c = coachFor(e, key);
     const n = setCount(e, key, d);
@@ -796,7 +1164,7 @@ function saveSession() {
       const w = num(cellValue(d, key, i, 'w', c));
       if (r && r > 0) sets.push({ w: w ?? 0, r: Math.round(r) });
     }
-    if (sets.length) exs.push({ exId: e.id, exKey: key, name: variant.name, sets });
+    if (sets.length) exs.push({ exId: e.id, exKey: key, name: variant.name, sets, ...(e.timed ? { timed: true } : {}) });
   }
   if (!exs.length) return toast('Apunta al menos una serie con repeticiones.', 'warn');
 
@@ -810,11 +1178,16 @@ function saveSession() {
     const prev = bestE1rm(x.exKey, others);
     const now = Math.max(...x.sets.map(st => oneRM(x, st, today)));
     if (prev > 0 && now > prev + 0.05) prs.push(`${x.name}: ${fmtNum(Math.round(now * 10) / 10)} kg de 1RM estimado`);
-    for (const s of x.sets) { volume += s.w * s.r; nSets++; }
+    if (x.timed) { const pS = bestSecs(x.exKey, others), nS = Math.max(...x.sets.map(st => st.r)); if (pS > 0 && nS > pS) prs.push(`${x.name}: ${secTxt(nS)} (antes ${secTxt(pS)})`); }
+    for (const s of x.sets) { if (!x.timed) volume += s.w * s.r; nSets++; }
     state.memory[x.exKey] = { date: today, sets: x.sets };
   }
   const habits = state.settings.habits.filter(h => d.habits[h]);
-  const session = { id: uid('s_'), date: today, dayId: day.id, dayTitle: day.title, habits, exercises: exs };
+  const session = { id: uid('s_'), date: today, endedAt: Date.now(), dayId: day.id, dayTitle: day.title, habits, exercises: exs };
+  const skippedNames = day.exercises.filter(e => skipIds.includes(e.id)).map(e => variantOf(e).variant.name);
+  if (skippedNames.length) session.skipped = skippedNames;
+  const notes = day.exercises.map(e => { const nt = d.notes?.[e.id]; return nt && (nt.tags.length || nt.text.trim()) ? { exId: e.id, name: variantOf(e).variant.name, tags: nt.tags, text: nt.text.trim() } : null; }).filter(Boolean);
+  if (notes.length) session.notes = notes;
   if (deloadActive()) session.deload = true;
   const mins = sessionMinutes(d);
   if (mins) session.durationMin = mins;
@@ -997,8 +1370,10 @@ function editProgModal(progId) {
       ${!isNew ? `<button class="btn-ghost" data-mact="left" type="button" aria-label="Mover a la izquierda">◀</button><button class="btn-ghost" data-mact="right" type="button" aria-label="Mover a la derecha">▶</button>` : ''}
       <button class="btn-primary flex-1" data-mact="save" type="button">Guardar</button>
     </div>
+    ${!isNew && p.type === 'strength' && p.id !== 'free' && access.me?.admin && lsGet(GH_KEY) ? `<button class="btn-ghost w-full mt-3" data-mact="share" type="button">${p.pubId ? '📢 Compartido con todos · actualizar o retirar' : '📤 Compartir con todos'}</button>` : ''}
     ${!isNew && p.type === 'strength' && state.plan.programs.length > 1 ? `<button class="btn-danger w-full mt-3" data-mact="del" type="button">Eliminar este bloque</button><p class="text-[11px] text-mute mt-2">Eliminar un bloque no borra el historial de sesiones ya guardadas.</p>` : ''}
   `, {
+    share: () => { closeModal(); publishBlockModal(progId); },
     autofocus: isNew,
     save: root => {
       const name = mval(root, 'name').trim().toUpperCase();
@@ -1052,19 +1427,22 @@ function editExModal(exId) {
     <label class="lbl">Bloque / etiqueta<input class="field mt-1" name="block" value="${esc(e.block)}" /></label>
     <div class="grid grid-cols-3 gap-2">
       <label class="lbl">Series<input class="field mt-1" name="sets" inputmode="numeric" value="${e.sets}" /></label>
-      <label class="lbl">Reps mín<input class="field mt-1" name="minReps" inputmode="numeric" value="${e.minReps}" /></label>
-      <label class="lbl">Reps máx<input class="field mt-1" name="maxReps" inputmode="numeric" value="${e.maxReps}" /></label>
+      <label class="lbl">${e.timed ? 'Seg. mín' : 'Reps mín'}<input class="field mt-1" name="minReps" inputmode="numeric" value="${e.minReps}" /></label>
+      <label class="lbl">${e.timed ? 'Seg. máx' : 'Reps máx'}<input class="field mt-1" name="maxReps" inputmode="numeric" value="${e.maxReps}" /></label>
       <label class="lbl">Subida (kg)<input class="field mt-1" name="increment" inputmode="decimal" value="${fmtNum(e.increment)}" /></label>
       <label class="lbl col-span-2">Descanso (seg)<input class="field mt-1" name="rest" inputmode="numeric" value="${e.rest}" /></label>
     </div>
     <label class="habit"><input type="checkbox" name="bw" ${e.bw ? 'checked' : ''} /><span class="text-xs">Con peso corporal <span class="text-mute">(dominadas, fondos… el campo de peso pasa a ser el lastre; vacío = solo tu peso)</span></span></label>
+    <label class="habit"><input type="checkbox" name="timed" ${e.timed ? 'checked' : ''} /><span class="text-xs">⏱ Por tiempo <span class="text-mute">(plancha, paseo del granjero… mín y máx pasan a ser segundos y cada serie lleva cronómetro)</span></span></label>
     <p class="text-[11px] text-mute">El coach sube el peso cuando haces las reps máximas en todas las series, y baja un 10 % si fallas el mínimo dos sesiones seguidas.</p>
     <div class="flex gap-2 mt-4">
       ${!isNew ? `<button class="btn-ghost" data-mact="up" type="button" aria-label="Subir">▲</button><button class="btn-ghost" data-mact="down" type="button" aria-label="Bajar">▼</button>` : ''}
       <button class="btn-primary flex-1" data-mact="save" type="button">Guardar</button>
     </div>
     ${!isNew ? `<button class="btn-danger w-full mt-3" data-mact="del" type="button">Quitar del día</button>` : ''}
+    ${!isNew && access.me?.admin && lsGet(GH_KEY) ? `<button class="btn-ghost w-full mt-2" data-mact="publish" type="button">${e.pubId ? '📢 Compartido con todos · actualizar o retirar' : '📤 Compartir con todos'}</button>` : ''}
   `, {
+    publish: () => { closeModal(); publishExModal(exId); },
     autofocus: isNew,
     save: root => {
       const variants = mval(root, 'variants').split('\n').map(l => l.trim()).filter(Boolean).map(l => {
@@ -1074,10 +1452,10 @@ function editExModal(exId) {
       });
       if (!variants.length) return toast('Escribe al menos el nombre del ejercicio', 'warn');
       const minReps = parseInt(mval(root, 'minReps'), 10), maxReps = parseInt(mval(root, 'maxReps'), 10);
-      if (!(minReps > 0) || !(maxReps >= minReps)) return toast('Revisa el rango de reps (mín ≤ máx)', 'warn');
+      if (!(minReps > 0) || !(maxReps >= minReps)) return toast('Revisa el rango (mín ≤ máx)', 'warn');
       const data = normalizeExercise({
-        id: isNew ? uid('c_') : e.id, block: mval(root, 'block').trim() || 'Ejercicio', variants,
-        sets: mval(root, 'sets'), minReps, maxReps, increment: num(mval(root, 'increment')) ?? 2, rest: mval(root, 'rest'), bw: root.querySelector('[name="bw"]').checked
+        id: isNew ? uid('c_') : e.id, alts27: true, pubId: isNew ? undefined : e.pubId, block: mval(root, 'block').trim() || 'Ejercicio', variants,
+        sets: mval(root, 'sets'), minReps, maxReps, increment: num(mval(root, 'increment')) ?? 2, rest: mval(root, 'rest'), bw: root.querySelector('[name="bw"]').checked, timed: root.querySelector('[name="timed"]').checked
       });
       if (isNew) day.exercises.push(data); else f.day.exercises[f.idx] = data;
       persist(); closeModal(); render();
@@ -1142,10 +1520,11 @@ function personalRecords() {
   const map = new Map();
   for (const s of sortedSessions()) for (const e of s.exercises) {
     if (!e.exKey) continue;
-    const r = map.get(e.exKey) || { bw: isBwEx(e.exId), name: e.name, bestW: -1, bestWReps: 0, bestWDate: '', best1: 0, best1Date: '', bestReps: 0, bestRepsDate: '', lastPR: '' };
+    const r = map.get(e.exKey) || { bw: isBwEx(e.exId), timed: isTimedEx(e), bestSec: 0, bestSecW: 0, bestSecDate: '', name: e.name, bestW: -1, bestWReps: 0, bestWDate: '', best1: 0, best1Date: '', bestReps: 0, bestRepsDate: '', lastPR: '' };
     r.name = e.name;
     for (const x of e.sets) {
       if (!(x.r > 0)) continue;
+      if (r.timed) { if (x.r > r.bestSec) { r.bestSec = x.r; r.bestSecW = x.w || 0; r.bestSecDate = s.date; r.lastPR = s.date; } r.bestW = Math.max(r.bestW, 0); continue; }
       if (x.w > r.bestW || (x.w === r.bestW && x.r > r.bestWReps)) { r.bestW = x.w; r.bestWReps = x.r; r.bestWDate = s.date; r.lastPR = s.date; }
       const one = oneRM(e, x, s.date);
       if (one > r.best1 + 0.05) { r.best1 = one; r.best1Date = s.date; r.lastPR = s.date; }
@@ -1163,7 +1542,9 @@ function renderRecords() {
     <div class="space-y-1.5 mt-3">
       ${recs.map(r => `<div class="bg-ink rounded-xl border border-line px-3 py-2">
         <div class="flex items-center justify-between gap-2"><span class="text-sm font-bold truncate">${esc(r.name)}</span>${r.lastPR >= addDays(todayISO(), -7) ? '<span class="text-[10px] font-bold text-emerald-300 shrink-0">NUEVO</span>' : ''}</div>
-        <div class="text-[11px] text-mute mt-0.5">${r.bw
+        <div class="text-[11px] text-mute mt-0.5">${r.timed
+          ? `⏱ Máx. <strong class="text-white">${secTxt(r.bestSec)}</strong>${r.bestSecW > 0 ? ` con ${r.bw ? 'PC + ' : ''}${fmtKg(r.bestSecW)}` : ''} (${fmtDateShort(r.bestSecDate)})`
+          : r.bw
           ? `Máx. <strong class="text-white">${wLabel(r.bestW, true)} × ${r.bestWReps}</strong> (${fmtDateShort(r.bestWDate)})${r.best1 > 0 ? ` · 1RM est. <strong class="text-brand">${fmtKg(Math.round(r.best1 * 10) / 10)}</strong> (${fmtDateShort(r.best1Date)})` : ''}`
           : r.bestW > 0
           ? `Máx. <strong class="text-white">${fmtKg(r.bestW)} × ${r.bestWReps}</strong> (${fmtDateShort(r.bestWDate)}) · 1RM est. <strong class="text-brand">${fmtKg(Math.round(r.best1 * 10) / 10)}</strong> (${fmtDateShort(r.best1Date)})`
@@ -1272,6 +1653,11 @@ function weekData() {
     cardio_sesiones: cardio.length, cardio_minutos: cardio.reduce((a, c) => a + c.minutes, 0), cardio_kcal: cardio.reduce((a, c) => a + c.kcal, 0), gym_kcal_estimadas: sess.reduce((a, x) => a + gymKcalOf(x), 0),
     peso_tendencia_kg: wt.ready ? wt.last.y : null, cambio_peso_kg_semana: wt.ready ? r2(wt.kgWeek) : null, cambio_cintura_cm_3_semanas: wt.ready ? wt.waistChange3 : null,
     habitos_cumplidos_en_sesiones: habits, semana_de_descarga: deloadActive(),
+    comentarios_del_usuario: sess.flatMap(s => (s.notes || []).map(n => `${s.date} ${n.name}: ${noteTxt(n)}`)),
+    habitos_diarios: (state.settings.habitList || []).filter(h => h.where === 'daily').map(h => {
+      const due = Array.from({ length: 7 }, (_, i) => addDays(to, -i)).filter(d => h.days.includes(parseISO(d).getDay()));
+      return { habito: h.name, cumplidos: due.filter(d => habitDone(d, h.name)).length, dias_que_tocaba: due.length };
+    }),
     duracion_media_sesion_min: (() => { const l = sess.filter(x => x.durationMin); return l.length ? Math.round(l.reduce((a, x) => a + x.durationMin, 0) / l.length) : null; })()
   };
 }
@@ -1299,6 +1685,14 @@ Responde SOLO con JSON válido:
 }
 /* Recuerda qué plegables abriste/cerraste para que no cambien al refrescar la pantalla */
 const openKeys = {};
+/* Apartado plegable de Ajustes: título + estado a la derecha; se recuerda abierto/cerrado mientras la app está abierta */
+const foldCard = (key, title, status, statusCls, body) => `<details class="card p-4 mt-3" ${openAttr('set_' + key)}>
+    <summary class="flex items-center justify-between gap-3 cursor-pointer select-none">
+      <h3 class="section-title shrink-0">${title}</h3>
+      <span class="flex items-center gap-2 text-[11px] min-w-0 ${statusCls || 'text-mute'}"><span class="truncate">${status}</span><span class="tri"></span></span>
+    </summary>
+    <div class="space-y-3 mt-3">${body}</div>
+  </details>`;
 const openAttr = (key, def = false) => `data-open-key="${key}" ${(openKeys[key] ?? def) ? 'open' : ''}`;
 
 function renderReport(r, open) {
@@ -1438,6 +1832,164 @@ function mainStrengthProg() {
   for (let i = ss.length - 1; i >= 0; i--) { const pr = programOfDay(ss[i].dayId); if (pr && pr.type === 'strength' && pr.id !== 'free') return pr; }
   return state.plan.programs.find(p => p.id === 'ppt') || state.plan.programs.find(p => p.type === 'strength');
 }
+/* Dibujo del cuerpo: react-native-body-highlighter (MIT License, Copyright (c) 2022 ELABBASSI Hicham). Trazados reutilizados con los colores de FITNESTEBAN. */
+const BODY_PATHS = {"front":[["chest",["M272.9 422.8c-18.9-17.1-22-57-12.6-78.7 5.5-12.9 26.5-24.3 39.9-25.8q20.3-2.2 37.0.75c9.7 1.7 16.1 15.6 18.4 25.0 3.9 16.4 3.2 31.3 1.6 48.0q-1.3 14.3-2.0 16.8c-6.5 23.5-38.0 29.2-58.2 24.5-9.1-2.1-17.2-4.3-24.1-10.6z","M416.0 435c-15.1.11-34.4-6.7-41.3-21.4q-1.8-3.9-2.8-12.1c-2.8-24.4-5.9-53.6 8.4-74.7 4.2-6.2 10.4-7.9 18.3-8.5q11.6-.92 23.3-.35c10.5.53 18.0 2.7 26.6 7.8 12.8 7.6 19.7 14.5 22.6 29.7 4.9 25.5.24 64.1-28.2 74.9q-12.2 4.6-26.9 4.7z"]],["obliques",["M438.7 444.3c-2.0-4.0-.13-6.8 3.6-8.8 10.2-5.3 16.7-11 24.2-18.0a1.7 1.7 0 012.8 1.1c.33 4.7-.81 14.3-5.5 17.2-4.6 2.8-18.7 10.0-24.3 9.1q-.57-.09-.83-.6z","M457.3 466.7c-3.7-1.0-13.2-10.2-16.5-14.4a.52.5 0 01.2-.81q10.9-3.7 21.3-9c3.9-2.0 6.3-5.9 8.5-9.5q.38-.59.5.09c.82 3.3 1.5 6.1.38 9.5-2.5 7.4-7.6 18.7-13.6 24.0a.96.9 0 01-.89.2z","M428.4 487.2c-1.0-1.7-.82-4.5-.71-6.7q.78-15.0.48-30.2-.01-.59.5-.4 1.7.59 3.0 1.6 11.5 9.3 18.8 16.9c3.8 4.0-16.2 17.4-19.5 19.4a1.8 1.8 59.6 01-2.6-.68z","M470.7 456.2a.25.2 0 01.4.13q2.0 19.6-9.8 35.2-.37.4-.6-.08c-1.3-3.2-5.8-16.1-3.5-18.9q6.3-7.4 13.4-16.3z","M452.2 478.5c1.1.49 4.2 12.4 4.7 14.3q.14.5-.23.8-1.2 1.3-2.6 2.4-10.4 8.1-21.7 14.9-1.4.9-2.9 1.3a.81.8 0 01-1.0-.71q-.73-8.6.67-17.1.08-.47.4-.8c1.7-1.6 21.9-15.7 22.3-15.5a.58.0 31 00.3.2z","M428.2 519.1q.11-.36.4-.56 15.3-9.6 28.8-21.6a.43.4-22.6 01.7.29c.51 8.2 2.2 18.6-4.4 25.4q-11.8 11.8-25.0 22.0-.43.3-.49-.2c-.75-6.8-1.9-18.9.01-25.3z","M456.5 524.5a.04.0 0 01.0.02q1.5 13.6.41 27.4-.04.4-.28.8c-4.9 8.3-18.2 19.6-27.8 22.6q-.57.1-.58-.43-.05-10.3-.27-20.5-.1-4.8 2.6-7.0c8.5-7.1 18.5-14.6 25.9-22.8z","M418.8 657.1q-1.1-1.6-.43-3.6 3.2-9.3 4.0-18.2 1.9-22.8 3.5-45.6c.16-2.3.72-6.4 2.8-7.7q14.9-9.2 27.1-21.9.41-.42.7.08 1.2 2.1 1.5 4.2 3.2 27.7 3.1 56.8a1.3 1.2-24.5 01-.33.8q-12.7 13.9-25.5 27.7c-4.8 5.1-9.0 7.8-15.7 7.9q-.61.0-.95-.5z","M264.2 435.5c-4.8-3.1-5.7-12.1-5.3-17.3q.03-.53.5-.75 1.8-.84 3.4.85 10.0 10.4 22.5 16.9c3.6 1.8 5.5 3.6 4.7 7.8q-.42 2.3-2.8 1.8-12.4-2.4-23.0-9.3z","M287.3 452.4c-4.0 4.4-10.3 11.3-16.2 14.3a.84.8 51.1 01-.9-.1c-6.2-5.1-12.5-18.9-14.2-25.0q-.91-3.3.85-8.8.12-.39.3-.05c2.4 3.6 4.5 7.7 8.6 9.7q10.1 5.0 21.2 9.0a.61.6 0 01.2.98z","M297.3 487.8c-7.3-4.2-16.6-11.3-20.5-17.5q-.32-.5.0-.92 8.7-9.0 19.8-17.8 1.4-1.1 2.8-1.6a.44.4 0 01.5.43c-.28 10.0-.4 20.4.65 30.4q.34 3.2-.68 6.1a1.9 1.9 0 01-2.7 1.0z","M257.3 456.1l13.6 16.6a1.8 1.8 22.9 01.4.9c.59 5.4-2.0 12.7-3.8 17.5q-.3.8-.84.1-11.8-15.5-9.7-35.1.04-.45.3-.1z","M271.6 494.0a1.5 1.5-61.8 01-.49-1.6l4.2-13.5a.98.9 0 011.5-.5c3.2 2.3 21.8 14.0 22.2 16.7q1.1 8.3.66 16.7a.9.9 0 01-1.3.73q-14.2-8.0-26.8-18.5z","M299.3 544.6c-7.5-6.0-16.1-13.4-24.2-21.2-6.9-6.7-6-17.1-4.8-26.0a.44.4 0 01.7-.28q13.3 11.8 28.4 21.3.43.2.6.7c2.3 6.4.95 18.3-.07 25.2q-.09.5-.55.2z","M299.0 575.5c-7.9-3.6-27.5-15.8-28.0-26.2q-.57-11.9.46-24.3a.36.3 0 01.6-.15q.84 1.3 2.1 2.5 10.5 9.4 21.6 18.3c4.3 3.4 4.3 6.4 4.1 11.7q-.3 8.8-.42 17.6-.01.7-.66.4z","M308.1 657.5c-7.3-.13-12.4-4.1-17.1-9.3q-11.8-13.2-23.9-26.3-.33-.36-.33-.85.0-23.1 1.8-46.2.53-7.1 2.4-14.4a.71.7 0 011.2-.3q11.5 12.0 25.8 21.1 3.3 2.1 3.6 5.1 2.0 23.6 3.8 47.3c.58 7.6 2.3 13.3 4.4 20.8q.47 1.6-.96 2.7-.39.3-.88.3z"]],["abs",["M311.0 531.7a.23.2 0 01-.19-.21q-.39-10.4 1.9-20.7c1.2-5.6 7.6-9.9 13.1-12.9 9.0-5.0 18.9-11.1 28.5-14.9a1.2 1.2-42.6 01.9.03c3.2 1.5 4.7 3.8 4.8 7.6q.13 13.1-.15 26.3c-.08 3.8.78 8.3-.87 13.1q-.17.4-.59.7-2.6 1.6-4.2 1.8-21.0 2.2-43.2-.87z","M321 577.7c-5.1-.33-8.7-.44-10-6.2q-3.2-14.4-.59-27.8.11-.53.6-.63c7.5-1.4 13.6-2.4 22.4-4.5q11.5-2.7 23.9-1.8c3.6.26 3.3 3.4 3.4 6.2q.46 12.5-.33 26.9-.25 4.4-1.8 8.0-.21.4-.73.6-1.3.28-3.2.29-16.8.14-33.7-.96z","M347.7 429.2c7.4-3.6 10.5 6.2 10.9 11.5.48 5.0 3.4 30.6-2.7 32.9q-4.1 1.5-6.8 3.3-17.5 11.5-35.8 21.4a1.6 1.5-21.9 01-2.3-.98c-2.8-10.4-10.5-43.9 1.6-50.9 11.3-6.4 23.9-11.8 35.2-17.3z","M350.3 712.8c-29.1-9.9-37.9-100.6-39.4-126.6a.99.9 0 01.3-.8c3.5-3.2 27.6-1.4 34.6-.93 4.4.34 15.2 1.3 15.2 7.5-.05 40.7.64 82.0-1.9 122.7a1.2 1.2 0 01-1.8 1.0c-2.3-1.1-4.1-2.0-6.9-2.9z","M371.9 473.3c-5.4-2.5-2.9-24.2-2.7-29.5.25-6.8 2.4-18.6 12.6-13.8q16.2 7.6 32.3 15.7 6.1 3.1 7.1 10.0c.58 4.2 1.3 8.4 1.0 12.7q-.84 12.5-4.3 26.5-.54 2.1-1.1 3.4-.25.5-.81.3c-15.7-7.2-30.7-19.0-44.1-25.4z","M382.5 533.2c-4.1-.18-9.5-.3-13.1-2.6q-.17-.11-.24-.31c-1.8-5.5-.86-11.1-.96-15.6-.18-8.4-.78-17.3.06-25.7.29-2.8 1.8-4.4 4.1-5.7q.42-.26.9-.19 1.7.25 3.2 1.0 12.4 6.4 24.7 13.2c4.9 2.7 12.2 7.0 13.7 12.4q2.9 10.5 2.3 21.4a.77.7-1.8 01-.67.7q-16.8 2.1-34.1 1.4z","M373.7 578.6c-2.4 0-4.3.22-5-2.7-1.8-7.7-3.0-34.2-.19-38.8q.27-.43.7-.47 13.1-1.2 25.7 1.8c8.4 2.0 14.5 3.0 21.8 4.3a1.2 1.2.6 011.0 1.0q2.1 14.1-.73 28.0c-1.0 5.2-5.2 5.2-10.3 5.6q-14.2 1.0-33.1 1.0z","M416.3 584.7q1.1.41 1.0 1.6c-1.6 26.4-9.9 116.6-40.4 126.7-2.2.75-4.1 2.1-6.3 2.7q-1.1.33-1.3-.89-.86-9.2-1.0-17.7c-.83-35.6-.91-71.2-1.0-106.8q0-.5.3-.89c4.9-6.4 41.6-7.2 48.7-4.6z"]],["biceps",["M189.5 492.5c-2.4.62-7.3.57-7.5-3.0-.56-16.0-.42-35.4 5.1-50.2 3.1-8.5 13.8-30.2 23.2-32.7 10.0-2.6 12.6 16.5 12.6 22.8-.22 15.9-7.5 34.7-15.0 48.7-4.2 7.9-9.9 12.3-18.4 14.5z","M526.6 486.3c-9.9-8.6-17.7-33.2-20.6-47.7-1.4-7.0-1.3-29.6 8.5-32.1 10.3-2.6 23.8 25.3 26.6 32.9q2.6 7.0 3.6 16.1 1.6 14.6 1.6 32.2c.03 11.0-16.4 1.4-19.7-1.4z"]],["triceps",["M206.2 514.2c-5.4-.67-6.5-7.2-4.6-11.4 11.0-24.5 22.8-50.6 30.5-75.5 1.3-4.4 3.0-8.5 3.9-12.4q2.9-13.1 5.7-26.2.42-1.9 1.8-3.3a.52.5 0 01.8.1q1.0 1.6 1.9 4.5 4.6 14.6 5.1 24.9c.57 11.3-5.1 24.5-8.6 35.5q-7.6 23.7-20.2 45.3c-2.4 4.2-11.5 19.1-16.4 18.5z","M517.6 512.0c-20.0-22.1-28.9-51.7-38.0-79.0-3.2-9.8-3.5-19.1-1.3-29.3 1.2-5.8 2.4-13.0 5.6-18.5q.32-.57.7-.06 1.3 1.6 1.7 3.6c2.6 12.3 5.1 24.4 9.0 36.5 8.2 25.2 18.5 49.8 31.1 77.2q1.4 3.1 1.0 5.3c-.81 4.8-5.4 9.2-9.9 4.2z"]],["neck",["M362.6 290.5q-1.1-1.3-1.8-3.4-5.3-15.1-12.1-29.7c-2.3-5.0-1.0-9.0-7.9-10.9q-1.0-.28.0-.47c5.9-1.0 15.2.91 21.3 2q2.3.42 4.8-.09 10.0-2.1 20.4-2.1a.37.3 0 01.0.73c-6.3 1.4-5.4 5.6-7.5 10.2q-6.1 13.1-11 26.6-1.3 3.6-2.9 6.8a1.9 1.9 0 01-3.3.3z","M354.0 315.0q-3.4-3.6-5.9-8.2c-6.4-12.3-11.0-25.4-16.1-38.7-2.9-7.6-1.9-19.4-1.6-27.6q.03-.58.4-.21c9.0 7.3 11.3 17.4 15.6 27.6 5.4 12.6 15.4 33.3 9.1 46.9a1 .99 35.5 01-1.6.27z","M345.7 316c-4.1-1.9-12.7-6.7-15.0-11.3-4.2-8.6-2.6-16.0-2.2-25.2a1 1 0 011.9-.28c4.2 12.4 10.5 24.4 15.7 36.6q.23.5-.31.3z","M372.7 314.7c-5.7-9.6 1.7-31.1 6.1-40.6 5.9-12.6 8.2-24.6 18.3-33.9a.49.4 0 01.8.35c.28 8.6.84 19.3-1.9 27.7-5.2 15.5-11.3 33.4-21.4 46.6a1.1 1.1 0 01-1.9-.11z","M398.0 278.4a.5.4 35.5 01.8-.14c2.0 2.7 1.6 11.6 1.6 15.1-.04 12.4-8.2 17.4-17.9 22.5a.35.3 0 01-.48-.46c5.5-12.0 11.8-24.4 15.9-37.1z"]],["trapezius",["M285.0 307.0a.89.8 0 01-.11-1.6q19.4-9.6 35.6-24.8 1.6-1.5 3.3-.31.4.3.45.8 1.2 12.6-1.5 25.4c-.74 3.3-2.5 4.2-5.9 4.4q-16.0 1.2-31.8-3.9z","M414 311.1c-5.2-.12-7.8-.64-8.9-6.2q-2.3-12.0-1.1-23.9.06-.61.6-.89 1.6-.85 3.6.99 16.1 14.8 33.9 23.6 3.6 1.7-.27 2.8-13.8 3.9-27.8 3.5z"]],["deltoids",["M274.0 311.6q3.9 2.7 4.3 8.1.04.4-.38.7c-9.9 5.8-24.3 7.4-28.8 19.7-2.3 6.3-.97 17.3-1.4 23.6q-.55 7.5-5.7 14.0-10.3 13.1-13.8 16.6c-3.4 3.5-6.8 1.7-10.6-.47-15.4-8.8-24.9-25.4-22.5-43.2 2.0-14.9 12.7-25.7 24.0-35.0 16.9-13.8 35.5-17.9 54.9-4.3z","M450.3 320.7q-.95-.52-.7-1.5c1.5-6.6 5.8-9.1 12.1-11.9 24.9-11.0 43.7 3.3 60.1 20.7 20.7 21.9 11.8 56.4-14.8 68.1-4.4 1.9-6.7-1.0-9.8-4.5-5.8-6.7-13.4-14.1-15.9-22.8-3.9-13.4 4.3-27.5-9.6-37.6q-8.2-5.9-17.9-9.0-1.8-.59-3.3-1.4z"]],["adductors",["M280.2 647.4c11.6 10.7 22.1 21.0 31.0 34.3 15.8 23.7 27.5 49.7 34.0 77.5 1.3 5.7-6.1 20.3-12.6 20.2q-.52-.01-.72-.49-.67-1.5-1.2-3.1c-14.6-41.7-27.9-79.7-46.8-117.0-1.9-3.7-3.0-7.3-4.0-11.2a.27.2 0 01.4-.27z","M331.6 898.3q-.17.5-.23-.02c-2.2-25.0-8.4-50.0-14.2-74.5q-19.4-82.1-42.4-163.6-.58-2.0.33-.13c19.8 42.5 38.9 86.5 51.6 132.0 9.4 34.0 15.5 71.6 4.9 106.3z","M334.4 789.1c1.5-2.6 14.3-20.3 16.2-20.3a1.7 1.7-89.2 011.7 1.7q-1.1 34.8-7.4 68.9c-.38 2.0-1.4 4.2-2.1 6.2q-.24.6-.34-.04-3.6-25.4-8.4-50.7c-.34-1.7-.63-4 .44-5.8z","M395.4 779.4c-5.7 1.3-11.3-11.8-12.4-15.8q-.61-2.1-.02-4.6 10.1-42.6 35.0-78.8c9.4-13.7 18.8-22.3 29.8-32.5q.55-.5.4.2-1.1 5.7-3.7 10.8c-19.4 38.3-33.3 79.2-47.7 119.6a1.8 1.8-86.4 01-1.3 1.1z","M453.6 658.9q.67-1.4.23.0-26.7 93.7-48.6 189.7c-1.9 8.7-3.6 17.9-5.4 26.8q-2.1 11.0-2.7 22.4a.15.1 0 01-.3.0c-8.1-24.4-6.7-51.9-1.8-76.8 11.0-56.4 34.4-110.4 58.7-162.2z","M377.9 768.6c1.4.84 1.7 1.4 2.6 2.6q6.1 8.0 12.2 16.1c1.8 2.5 1.9 4.1 1.3 7.4q-4.5 25.2-8.4 50.5-.11.7-.4.0-1.8-4.2-2.5-8.0-5.5-32.2-6.9-65.0-.09-2 .81-3.4a.95.9 30.8 011.2-.32z"]],["quadriceps",["M292.4 935.6q-.95-.52-1.5-1.4-4.1-5.7-7-13.5-7.8-20.7-13.3-42.3c-9.0-35.5-19.3-71.3-25.0-107.5-5.3-33.8 4-74.1 20.7-103.3q.35-.62.5.07c14.4 55.5 39.0 107.9 41.4 165.3 1.1 26.3.66 52.9-3.6 79.0-.63 3.8-4.7 27.8-12.1 23.7z","M275.1 942.9q-2.4-2.1-3.5-5.2c-3.9-10.6-7.6-21.0-12.8-31.3-7.8-15.7-10.7-34.5-13.2-51.4-2.1-14.6-2.3-31.4-3.9-47.1-.22-2.1-1.0-12.7.46-13.7q1.3-.92 2.0.55c1.5 3.0 3.1 6.1 3.6 9.5q8.2 52.3 26.3 102.1c2.8 7.8 9.9 30.5 1.8 36.7a.71.7-42.5 01-.9-.03z","M322.6 945.7c-3.7 6.1-10.7-2.4-12.6-5.6-3.1-5.4-2.6-14.9-1.7-20.8 4.0-28.0 5.6-52.8 3.4-80.7q-.06-.79.2-.08 15.7 32.8 14.2 68.9c-.4 9.5-2.9 22.4-2.9 34.1q.01 3.0-.73 4.2z","M437.8 933.5c-8.9 14.1-15.1-26.7-15.4-29.2q-5.2-43.0-1.1-86.0c4.9-51.8 26.9-99.3 40.3-150.9q.18-.66.5-.06c17.2 31.6 25.3 68.2 20.5 104.3q-2.2 17.0-8.7 42.7-7.5 30.2-15.2 60.4-6.1 24.2-15.0 47.6-1.8 4.7-5.8 11.1z","M451.7 942.6c-9.9-10.0 4.9-42.9 8.9-55.4q12.5-39.5 19.2-80.4c.49-2.9 2.6-12.3 5.4-13.2a.83.8 0 011.0.64q.74 4 .45 7.9c-1.9 26.5-3.3 58.9-11.0 87.7q-2.5 9.5-7.4 18.8c-4.3 8.2-6.9 16.7-10.0 25.2q-1.6 4.5-4.5 8.6a1.3 1.3 0 01-2.0.17z","M406.6 946.8c-3.2-2.7-1.4-10.6-2.0-14.7q-2.2-17.1-2.5-22.1c-1.7-25.0 3.6-49.1 13.9-71.9q.23-.51.2.0c-1.2 19.1-1.2 38.1.83 57.3q1.6 15.4 3.3 30.8c.43 3.9-.31 9.7-2.0 13.3-1.6 3.2-7.5 10.7-11.7 7.2z"]],["knees",["M297.6 1008.3c-7.2 7.2-16.3 3.4-19.6-5.1q-6.1-16.1-9.5-30.6c-1.9-8.6-2.2-19.6 9.7-19.9q13.1-.24 26.0 2.1 1.7.32 3.2 1.0a1.1 1.1 4.2 01.6.72c3.1 10.2 2.5 23.3.05 33.6q-2.3 10.0-10.5 18.1z","M288.0 1059.5c-6.9-5.8 13.7-46.4 17.3-53.9q7.3-15.3 10.9-32.0c.74-3.4 2-6.3 4.1-8.6a1.3 1.3 54.7 012.2.39c3.9 9.0 1.6 13.8-1.6 24.6q-10.2 33.1-27.2 63.5-1.8 3.2-4.2 5.8a1.1 1.1-49 01-1.5.11z","M430.4 1008.3c-12.9-12.6-14.3-33.4-10.9-50.3.31-1.5 1.0-2.5 2.7-2.8q11.4-2.2 23.0-2.5c14.1-.42 17.3 5.6 14.5 18.6q-3.1 14.6-9.1 30.3c-3.4 9.0-11.6 15.2-20.3 6.7z","M438.9 1059.5q-2.2-1.8-3.8-4.6-20.1-35.9-31.0-75.6-2.1-7.6 1.9-14.1a1.1 1.1 0 011.9-.08c2.2 3.0 3.4 5.4 4.2 9.3 3.9 18.5 10.9 32.5 20.0 51.0 3.5 7.1 11.3 26.1 8.5 33.6a1.1 1.1 0 01-1.8.47z"]],["tibialis",["M263.5 973.5a.6.6 0 011.0-.14q1.3 2.2 1.8 5.0c7.8 49.9 18.0 99.5 25 149.6q4.6 33.1 4.3 67.5-.04 3.4-2.1 5.7-.4.4-.75-.03-1.8-2.5-3.0-5.5c-11.6-28.6-20.4-58.1-24.2-88.6q-4.9-39.9-5.7-69.5c-.13-5.2-.17-12.5.35-18.9q1.7-20.7 2.5-41.6c.04-1.1.52-2.4.86-3.5z","M463.3 973.6a.7.7 0 011.2-.1c.27.4.64 1.3.68 1.9q1.2 20.8 2.5 41.7.66 10.8.39 19.9-1.2 40.7-7.5 82.2c-3.9 25.8-12.1 51.5-21.9 75.7q-1.1 2.7-3.2 6.1-.29.4-.71.1c-2.6-2.0-2.3-6.7-2.2-10.3.26-31.0 2.7-55.5 8.7-91.4q9.2-55.0 18.9-110.0c.8-4.5.9-10.5 3.1-16.0z"]],["calves",["M252.0 1032.5c.24-3.7 2.1-22.1 4.6-24.1a1.0 1.0-17.9 011.6.85c-.45 7.8-1.2 16-1.4 23.4q-.57 18.9-.66 37.8-.02 3.6.34 6.8c2.0 18.7 5.5 37.3 9.3 55.8 3.8 18.8 9.1 37.6 13.1 56.6q2.4 11.6 2.0 17.9c-.32 5.7-3.0 20.4-8.5 23.9a.62.6 0 01-.84-.16q-1.2-1.6-.95-3.5c.92-7.2 1.4-14.1-.3-21.5q-8.2-34.7-13.6-59.0c-1.8-8.4-3.1-17.1-3.9-26.3q-3.6-44.2-.83-88.5z","M315.0 1025.1a.16.1 0 01.3.02c4.0 25.7 8.9 52.7 8.7 77.8q-.13 12.0-5.7 26.3c-7.2 18.3-8.9 38.5-15.9 56.9q-.18.4-.21-.03c-1.8-34.4-5.6-65.9-8.5-103.2q-.97-12.4 4.4-23.1 7.4-14.6 15.1-29.2c.81-1.5 1.3-3.6 1.8-5.3z","M455.5 1231.6c-7.1-5.8-9.2-24.3-8.2-31.8 1.4-10.3 4.6-23.1 7.9-36.3q9.5-37.4 15.1-75.7c2.8-19.5 1.5-40.1.75-59.8-.22-5.6-.98-12.5-1.2-18.7a.97.9 0 011.8-.4c.35.8.92 1.7 1.1 2.6q2.9 14.3 3.3 20.5 2.3 43.2-.49 84.7-1.2 17.4-5.4 35.7-6.3 27.5-12.8 54.9-2.0 8.4-.11 18.3c.36 1.9.1 3.9-.68 5.5a.79.7 0 01-1.2.2z","M412.7 1025.4a.14.1 0 01.2-.04c4.8 11.6 10.9 22.0 17.2 34.7 4.0 8.1 4.7 14.4 4.1 24.2-2.1 34.3-6.2 68.8-8.4 101.5q-.05.6-.31.0-1.4-3.6-2.2-6.7c-4.3-16.7-8.7-38.3-16.3-57.5q-1.4-3.5-2.2-10.1c-1.7-14.7-.2-31.2 2.0-45.8q3.0-20.0 5.9-40.3z"]],["forearm",["M127.2 683.0c-4.0-2.1 1.2-27.0 2.2-31.5 4.9-23.0 9.1-46.1 13.9-69.2q1.5-7.4 2.1-15.1c.93-12.0.81-22.1 6.2-31.5 7.1-12.3 13.5-29.1 26.1-36.7a1.9 1.9 62.7 012.8.91c1.9 4.4 1.9 8.2 2.0 14.1.44 19.7-1.3 41.0-8.7 59.6-11 27.6-22.2 55.2-32.6 82.9-4.0 10.7-7.5 20.6-12.8 26.3q-.59.6-1.3.24z","M201.5 527.4a.84.8 0 01.6.65c3.9 17.1-2.9 39.3-10.9 54.4-4.6 8.6-13.0 20.4-18.2 31.3q-13.2 27.9-24.5 56.6-2.5 6.3-6.6 11.0a1.4 1.4 0 01-2.5-.81q-.36-3.7.84-7.1 10.3-29.1 21.5-57.9c6.3-16.1 14.5-31.6 20.6-47.8 3.6-9.8 5.3-22.3 7.3-30.6 1.4-6.2 4.1-11.0 11.7-9.5z","M207.3 540.4a.6.5-63.1 011.0-.34l5.3 6.0q.4.4.33 1.0-.52 4.1-1.2 5.8-6.9 15.6-13.6 31.3c-5.4 12.5-16.3 28.4-23.5 44.8-8.3 19.0-16.0 39.3-26.7 57.1a.36.3 0 01-.62 0l-.19-.32q-.17-.28-.06-.59 10.0-29.9 23.0-58.6 2.9-6.4 5.4-11.2c4.6-8.5 10.8-16.1 14.6-23.0q13.2-24.1 16.2-52.1z","M600.0 683.0c-5-4.1-8.9-15.4-11.2-21.5-5.8-15.2-11.3-30.5-17.5-45.7q-9.1-22.3-18.0-44.8c-5.5-14.1-7.3-31.4-7.9-46.5-.29-6.4-.68-19.4 2.6-25.0a1.7 1.7 0 012.2-.63c6.7 3.5 11.2 9.9 14.8 16.5q6.2 11.3 12.6 22.6c1.9 3.4 2.9 7.6 3.4 12.0 1.1 10.6 1.5 21.2 3.6 31.6 3.9 19.2 7.3 38.6 11.4 57.9 1.5 7.0 9.3 39.0 5.1 43.5a.91.9 0 01-1.2.08z","M586.5 681.4q-4.3-4.4-6.7-10.6-11.3-28.9-24.5-57.0c-5.7-12.1-14.3-22.8-19.9-35.1-7.1-15.3-12.9-33.3-9.2-50.3a1.4 1.4-87.1 011.2-1.1c7.4-.88 9.2 2.8 11.0 9.2 3.3 12.4 4.7 25.9 9.7 36.7 15.5 33.6 27.6 64.9 39.3 98.4 1.1 3.2 2.0 5.4 1.6 9.0a1.3 1.3 26.3 01-2.3.79z","M579.5 686.4q-3.9-5.7-6.8-12.1-8.0-17.3-19.7-44.5-2.6-6.2-6.4-13.6c-5.1-10.0-13.1-22.3-17.3-31.8q-9.5-21.6-13.6-31.3-1.0-2.5-1.3-5.8-.04-.61.3-1.0l5.2-5.8a.69.6 0 011.2.4q2.7 27.0 15.4 50.7 1.7 3.1 8.2 12.8 7.0 10.3 12.1 21.8 8.7 19.4 20.1 50.1 2.2 5.9 3.1 9.9a.36.3 0 01-.65.2z"]],["hands",["M100.9 745.8c-9.0-6.6-15.7-13.1-13.3-24.5 2.6-12.2 15.0-20.6 25.3-26.2 7.7-4.2 18.2-1.6 26.1.97 7.1 2.3 11.1 6.1 11.1 13.8q-.04 18.5-4.7 36.3c-5.4 20.7-34.4 6.9-44.5-.4z","M53.8 746.3a.91.9 0 01-.74-.95c.14-2.4-.23-6.3 2.2-7.8 4.6-2.7 11.3-5.5 14.1-10.3q6.3-10.8 16.5-20.3 1.2-1.1.64.4c-1.4 3.7-2.8 7.2-3.8 11.5-2.7 11.9-14.6 30-28.9 27.3z","M87.2 745.0c1.4.46 8.1 2.6 8.6 4.5 1.2 5.1-4.4 8.5-7 12.2-7.7 11.1-15.1 23.3-24.2 33.2a1.2 1.2 0 01-2.1-.86c.11-3.9.38-7.1 2.4-10.6q10.2-17.7 19.3-36.1.32-.65 2.1-2.2.38-.35.8-.19z","M108.1 758.1a2.1 2.1 0 011.0 2.8q-10.4 22.5-19.9 45.8c-1.4 3.5-4.3 5.1-7.8 6.0a1.3 1.3-8.1 01-1.6-1.2c-.11-3.0.37-5.8 1.5-8.9q8.1-20.2 15.1-40.9c.41-1.2.6-3.3 1.6-4.8a1.2 1.2 0 01.9-.49q4.7-.21 9.0 1.7z","M134.0 799.9q-1.1-1.7-1.4-3.7-2.1-17.0-1.1-34.2.03-.6.6-.75l6.9-1.8q.68-.19.6.52-.51 10.9-.85 21.7c-.28 8.5.1 12.6-4.1 18.4a.36.3 0 01-.58-.01z","M108.1 814.6a1.4 1.4 0 01-1.6-1.4c-.02-2.8-.14-5.6.32-8.5q2.9-17.7 5.4-35.6.53-3.8 1.5-7.5a.66.6 0 01.7-.48l7.2 1.2a.97.9 0 01.7 1.1q-4.7 23.9-9.1 46.2-.9 4.6-5.3 5.0z","M591.3 755.9c-8.0-2.9-8.6-9.7-10.2-17.0q-3.2-14.4-3.1-29.3.0-4.0 1.4-6.5c4.3-7.5 18.1-9.9 25.6-10.3 8.7-.51 18.3 6.9 24.9 12.2q8.9 7.1 10.7 17.5c2.4 13.8-12.1 23.4-22.7 29.0-6.9 3.6-18.6 7.3-26.7 4.4z","M641.9 706.7q10.8 9.6 17.6 21.9c1.6 2.9 9.7 6.7 12.8 8.5 2.9 1.7 3.0 4.8 2.5 8.5q-.06.4-.48.4c-8.1 1.3-11.9-1.9-17.7-7.2-10.3-9.5-10.5-20.3-15.3-31.9q-.54-1.2.5-.36z","M638 760.0c-2.5-3.4-7.5-6.0-5.4-11.1q.18-.44.6-.63l7.4-3.3q1.2-.58 2.0.62 3.3 5.2 5.6 10.0 6.8 13.9 14.7 27.3c1.3 2.2 4.2 10.1 2.2 12.1a1.2 1.2 0 01-1.7-.08c-9.4-10.9-16.8-23.3-25.5-34.9z","M647.8 812.6c-4 .24-7.7-2.8-9.1-6.3q-9.2-23.2-19.7-45.3a2.0 2.0 0 01.9-2.7q4.5-2.2 9.6-1.7a1.0 1.0 83.8 01.8.73q7.5 23.0 16.5 45.5 1.8 4.4 1.5 9.2a.7.7 0 01-.65.6z","M596.1 761.1a.84.8 0 01.6.81c-.01 4.8.95 35.3-2.7 37.6q-.49.3-.82-.17-3.4-5.2-3.5-8.4-.45-15.6-1.1-31.2-.03-.72.6-.52l6.9 1.9z","M621.0 814.2c-4.3 1.9-5.9-3.7-6.5-6.5q-4.5-21.9-8.8-43.9a1.4 1.4 0 011.1-1.6l6.8-1.1a.92.9 0 011.0.76q2.7 16.3 5.0 32.9c.85 6.1 2.2 12.2 1.8 18.9q-.03.5-.51.7z"]],["ankles",["M291.8 1208.1c5.4-1.0 11.8 5.5 13.3 10.3q2.4 7.7 1.4 16.8-.09.8-.45.0c-4.3-9.0-8-16.9-15.3-23.8a1.9 1.9 0 01.9-3.4z","M275.8 1270.9c-4.4-3.8-7.4-7.1-4.9-13.3q4.7-11.9 5.4-21.3.62-8.2 6.2-12.8c9-7.3 20.8 15 23.1 22.1 2.5 7.9 4.8 16.3 4.4 24.5-.31 7.1-2.0 17.4-6.4 23.1q-.3.3-.53-.05c-5.6-10.7-18.6-14.4-27.3-22.1z","M430.9 1209.1c2.2-1.3 10.5-2.0 6.0 2.6q-9.9 10.3-14.8 23.8a.28.2 0 01-.55-.08c-.52-10.2-.48-20.4 9.3-26.3z","M445.0 1223.2c8.4 6.5 6.4 16.6 9.3 25.5q1.7 5.4 3.4 10.8c3.8 12.2-27.7 21.4-32.2 32.4q-1.0 2.5-2.1.05c-6.9-14.8-6.7-29.3-1.7-44.5q2.8-8.5 8.0-16.0c3.0-4.3 9.6-12.7 15.3-8.3z"]],["feet",["M264.5 1334.5c-3.9-.34-18.5-4.2-19.0-9.4a1.4 1.4 0 01.2-.94c9.6-13.0 20.9-25.4 28.6-39.7q.25-.47.7-.37 9.7 1.7 17.7 7.6a1.1 1.1 43 01.0 1.8c-1.3 1.1-1.6 2.6-1.0 4.3 2.9 8.5-.92 16.5-4.8 25.3-1.7 4.0-1.7 8.9-2.8 13.6a1.5 1.5 0 01-1.9 1.1q-8.3-2.6-17.7-3.4z","M291.8 1340.1c-2.2-2.6-2.0-5.9-.78-9.3q3.3-8.8 4.0-18.3.43-6.0 1.2-8.7 1.3-4.3 3.4-8.2a.66.6 53.7 011.2.19q1.9 9.2 6.2 17.3c2.5 4.8-.82 11.4-2.9 16.1a1.8 1.7-35.8 00-.16.9q.42 4.3-1.9 7.9-.22.3-.61.4l-8.7 2.0a1.0 1.0 0 01-1.0-.34z","M444.6 1337.6q-1.0-1.3-1.2-3.0c-.52-4.4-.73-8.3-2.7-12.6-3.5-7.3-7.0-16.3-4.4-23.1.77-1.9.92-3.7-.76-5.1a1.2 1.2 46.4 01.0-2.0q7.9-5.7 17.5-7.6.46-.1.6.32c7.2 13.1 17.2 24.8 26.4 36.5q1.1 1.4 2.5 3.8a1.1 1.1-51 01.0.95c-1.7 5.0-12.9 7.8-17.7 8.5q-9.8 1.3-19.5 3.8a.82.8-26.2 01-.82-.27z","M426.9 1338.5c-2.0-.34-2.9-5.4-3-7.1-.15-6.0-6.2-11.6-3.1-17.8q4.3-8.5 6.3-17.7a.78.7 0 011.4-.17c2.1 4.5 4.1 9.0 4.3 14.3q.35 10.4 3.9 20.2c1.1 3.2 1.5 5.8.39 8.7a2.3 2.3 19.3 01-2.8 1.3q-3.4-1.0-7.5-1.8z"]],["head",["M 418.9 167.6 c 3.9 -1.7 6.5 0.4 7.0 4.3 c 1.4 11.9 -4.9 26.6 -11.7 36.4 c -2.2 3.1 -3.8 0.1 -4.7 -1.7 a 0.3 0.3 0 0 0 -0.7 0.1 c 0.0 8.3 1.0 17.0 -3.3 24.5 c -0.1 0.2 -4.3 4.6 -10.7 9.5 c -23.5 18.1 -41.5 16.1 -61.4 -0.7 c -4.7 -3.6 -5.9 -5.0 -8.8 -7.6 c -5.6 -5.0 -5.2 -17.3 -4.4 -24.9 c 0.0 -0.5 -0.4 -0.8 -0.9 -0.6 a 0.6 0.6 0 0 0 -0.3 0.3 c -0.5 1.6 -2.2 4.0 -4.0 1.4 c -6.2 -8.7 -16.0 -28.5 -11.1 -38.9 c 1.6 -3.6 3.7 -3.9 6.1 -0.8 a 182.8 182.8 0 0 1 3.7 23.2 a 1.0 1.0 0 0 0 1.5 0.7 c 2.7 -1.7 2.6 -18.9 2.6 -24.2 c 0.0 -4.5 1.1 -8.9 3.8 -13.1 c 4.3 -6.7 4.8 -11.5 5.5 -19.8 c 0.4 -5.5 4.3 -8.1 9.7 -8.2 c 6.3 -0.1 12.6 -0.0 19 -0.9 c 4.0 -0.5 7.4 -1.4 11.5 -0.7 c 6.7 1.1 13.4 1.6 20.2 1.6 c 4.6 -0.0 7.5 0.2 8.7 0.7 c 5.9 2.3 5.5 9.7 6.1 15.2 c 0.4 4.3 2.0 8.4 4.9 12.3 c 6.5 8.8 2.1 25.6 5.6 36.3 a 1.1 1.1 0 0 0 2.2 -0.2 c 0.8 -8.3 2.1 -16.4 3.8 -24.2 z z z z"]],["hair",["M418.9 167.6q-2.5 11.7-3.8 24.2a1.1 1.1 0 01-2.2.23c-3.4-10.7.93-27.4-5.6-36.3q-4.3-5.8-4.9-12.3c-.55-5.4-.15-12.8-6.1-15.2q-1.8-.74-8.7-.72-10.1.03-20.2-1.6c-4.1-.68-7.5.2-11.5.75-6.3.86-12.6.81-19 .93-5.4.09-9.3 2.6-9.7 8.2-.71 8.3-1.2 13.0-5.5 19.8-2.6 4.1-3.7 8.5-3.8 13.1-.02 5.2.16 22.4-2.6 24.2a1.0 1.0 0 01-1.5-.77q-1.1-11.7-3.7-23.2-1.4-6.9-1.9-9.7c-2.4-15.9.13-40.1 13.5-51.1 9.3-7.7 28.5-11.6 40.3-11.5 4.2.0 8.7-.3 12.6.22 13.8 1.8 31.6 5.8 39.4 18.9 9.0 15.2 9.8 35.1 5.3 51.9z"]]],"back":[["neck",["M1022.7 290.6a.62.6 25.9 01-.36-1.0q1.7-1.8 4.1-3.1c8.1-4.3 19.4-8.3 23.3-17.4q8.4-19.5 8.2-40.8-.05-4.3.57-5.7c1.9-4.3 9.6-3.6 13.8-2.9 4.3.7 4.7 3.2 4.6 7.3q-.2 24.1-.88 48.2c-.12 4.2 1.6 15.8-4.8 16.3-14.5 1.0-32.6 1.8-48.6-.68z","M1095.7 291.4c-4.3-.25-4.9-3.9-4.9-7.7q-.46-29.4-1-58.9c-.13-7.3 11.7-6.2 15.9-4.8 4.2 1.3 3.0 6.8 2.8 10.7-.28 8.8 5.1 41.1 15.3 46.7q8.6 4.8 17.2 9.5 1.9 1.0 3.2 2.3a.8.7 63.6 01-.45 1.3c-16.1 2.1-33.7 1.5-48.3.71z"]],["trapezius",["M1071.0 308.9c5.6 4.9 6.9 17.8 7.4 24.8q1.5 22.3.9 44.6-1.2 46.7-5.6 94a.57.5 3.7 01-.59.5q-.68-.03-.94-1.0-4.2-15.9-9.7-25.1c-10.2-17.3-18.8-31.8-25.5-49.4-10.1-26.3-15.6-54.2-26.4-80.5q-3.0-7.4-7.6-14.0-.3-.43.2-.6 12.4-4.2 25.4-4.8c5.5-.25 12.1.86 18.3 1.4 9.7.8 16.7 3.6 24.2 10.2z","M1163.9 302.1a.43.4 0 01.2.65q-7.0 10.7-11.4 23.3c-10.5 30.6-17.8 62.9-31.3 91.0-5.1 10.6-15.1 25.2-20.1 36.2q-4.0 9.0-6.5 18.8a.77.7 0 01-1.5-.12q-4.2-45.1-5.5-90.9c-.56-20.2-.74-39.9 2.7-60.4 1.0-6.1 2.7-9.9 7.8-13.8 9.8-7.4 18.0-7.7 30.1-9.1 12.0-1.3 23.9.4 35.5 4.3z"]],["deltoids",["M980.6 319.5c.19.1.55.1.65.3a.8.8 0 01-.16 1.1c-6.7 4.7-15.2 9.7-20.0 15.5-6.4 7.7-8.7 16.9-9.4 27.0-.39 5.9-1.6 9.5-5.5 13.4-10.0 10.0-19.0 16.4-31.1 20.4q-.75.2-.75-.55.1-18.4-.09-36.3-.14-9.4 1.0-14.2c4.0-16.0 22.8-33.8 39.6-35.6 9.9-1.0 17.3 2.4 25.8 8.7z","M1227.3 316.4c14.6 9.4 25.4 21.0 25.4 39.5q-.02 20.5-.01 41.3a.37.3 0 01-.51.3c-5.0-2.0-10.4-3.9-14.9-6.9-7.8-5.2-21.1-14.9-21.7-24.9-.69-10.7-2.8-20.8-9.7-29.2-4.6-5.6-12.9-10.5-19.6-15.2q-1.2-.87.0-1.7c4.6-3.1 9.9-6.7 15.2-7.9q13.5-3.0 25.8 4.8z"]],["upper-back",["M987.0 381.4c-8.4-5.0-14.1-13.2-18.8-22.9q-5.3-10.9-6.4-14.0c-1.4-4.0 35.1-19.2 39.6-20.9q2.7-1.0 4.3-.72c4.3.96 6.6 9.9 7.4 13.7q5.4 23.8 14.6 55.7.78 2.7-.88 4.3c-5.3 5.5-34.6-12.0-39.8-15.1z","M1017.4 583.3q-9.1-9.5-16.9-22.0-2.2-3.6-2.9-7.2c-3.2-18.8-5.7-38.0-10.5-56.5-3.5-13.7-4.7-25.1-6.6-41.4-.85-7.3-5.6-13.3-8.2-18.7q-4.9-10.4-6.4-22.8-.33-2.7 1.8-1.1c7.2 5.2 16.3 6.1 26.9 7.5 8.8 1.1 23.4-3.1 28.9-10.7 3.3-4.5 4.7-6.5 8.8-8.7a.67.6-26.4 01.9.3q10.0 21.8 19.9 43.7c2.5 5.6 12.1 15.8 10.7 21.8-3.6 16.0-9.8 31.9-16.2 47.1-9.7 23.2-18.6 46.7-27.2 70.3q-.24.6-.88.3-1.0-.52-2.2-1.7z","M1017.7 404.7c-23.8 13.2-54.3 7.1-60.4-22.7-1.2-5.8-2.5-15.8.64-20.5 3.6-5.4 7.1 4.1 8.1 6.1 7.7 15.1 31.6 29.1 48.2 31.1q1.8.21 5.2 2.0.4.2.26.6-.86 2.6-2.0 3.3z","M1141.4 397.6a2.1 2.1-3.6 01-1.8-1.6q-.71-2.9.18-5.9 8.7-29.1 11.7-43.2c1.7-8.1 3.0-16.7 6.9-22.0 1.9-2.6 4.2-2.2 7.1-1.1q20.5 7.9 39.0 18.7a1.3 1.3 25.9 01.5 1.6c-6.0 15.4-12.9 30.8-28.4 39.4-9.4 5.2-25.8 15.1-35.4 14.2z","M1149.6 404.8q-2.0-1.1-2.4-3.5-.09-.53.4-.75c4.6-2.0 9.7-2.5 14.6-3.8 11.0-3.1 22.0-10.8 30.3-18.5q6.3-5.8 7.5-8.9c1.0-2.4 3.7-9.5 7-9.4q.52.0.87.3 2.7 3.0 2.8 7.2c.33 13.7-2.2 26.9-13.2 35.9-13.8 11.3-33.1 9.9-47.9 1.5z","M1161.1 419.9c6.1 1.5 11.6.9 17.7.06 8.3-1.2 14.8-2.7 21.3-7.2a.54.5 74.1 01.8.47q-.64 11.8-5.7 22.8c-2.4 5.2-6.6 10.8-8.0 16.6q-1.0 4.2-1.4 8.9-1.6 18.7-6.3 37.4c-4.7 18.9-7.1 38.6-10.8 57.8q-.24 1.2-2.2 4.3c-4.5 7.1-12.2 19.4-19.3 23.8a.44.4-25.6 01-.64-.22c-8.2-22.5-16.6-45.1-25.9-67.2-6.6-15.8-13.2-32.1-17.2-48.4q-1.5-6.4 2.9-12.0 5.2-6.5 8.5-14.1 9.2-21 19.0-41.6a.47.4 0 01.6-.21q6.1 3.3 9.5 9.6c2.4 4.6 12.2 7.7 17.1 9.0z"]],["triceps",["M931.0 442.2c-2.0 2.5-6.5 9.7-10.1 9.1q-.52-.08-.8-.52-1.3-2.0-1.8-4.4c-2.2-10.8-3.2-22.8 1.3-33.3 5.4-12.3 18.2-23.6 29.6-31.2a.47.4 68.7 01.7.32l6.4 38.5q.09.5-.26.9c-.47.5-1.1 1.5-1.7 1.9q-9.1 6.5-18.0 13.3-2.9 2.2-5.2 5.2z","M958.1 427.1a.41.4 0 01.5.27q4.4 16.1-2.2 31.4-3.3 7.7-5.9 19.9c-1.5 7.2-8.9 12.2-11.8 18.8-2.4 5.5-2.4 12.5-3.5 16.6-2.1 8.0-8.5 14.1-13.9 20.1a.93.9 0 01-1.5-.25q-.57-1.3-.75-2.8c-1.9-16.9 2.5-33.5 5.7-49.9 2.1-11.2-1.5-24.1 9.6-34.5q9.5-8.8 19.5-17.2c1.3-1.0 2.7-1.7 4.1-2.3z","M903.5 519.6a1.8 1.8-5.4 01-1.1-.92q-3.5-6.9-3.6-15.1c-.37-21.2 3.8-42.5 9.5-63.4q.33-1.2.92-.1 4.6 8.7 8.6 18.6c2.8 7.2 4.1 12.9 1.8 20.5q-6.0 19.9-14.0 39.2-.65 1.5-2.0 1.1z","M1213.9 424.5q-2.0-1.5-3.0-3.0-.31-.46-.22-1 3.3-19.2 6.4-38.4.09-.56.5-.25 14.9 9.8 24.8 22.7c9.8 12.7 9.7 30.3 5.4 45.1a2.6 2.6 0 01-3.7 1.5c-3.2-1.7-6.2-6.7-8.6-9.6-5.2-6.4-14.7-12-21.5-17.0z","M1246.2 534.5q-.95-.3-1.7-1.2c-4.6-5.4-9.1-9.8-11.4-15.5-2.9-7.1-1.3-15.5-5.6-22.0-4.0-6.2-8.7-9.9-10.8-17.5-1.6-5.6-2.8-11.4-4.9-17.0-4.5-11.6-6.4-20.8-3.3-33.5a.59.5-74 01.7-.42q1.6.56 3.2 1.7 11.2 9.0 21.5 19.1c5.3 5.2 6.9 10.1 7.2 18.1.9 22.5 10.6 44.9 6.5 67.4a1.0 1 13.9 01-1.3.7z","M1258.4 439.9q2.0 5.3 3.1 10.6c3.5 17.3 7.1 34.7 6.8 52.6q-.11 8.3-3.9 15.6a1.6 1.6 33.4 01-2.4.5c-1.4-1.1-1.9-3.5-2.4-4.9q-9.2-23.4-13.1-38.1c-2.6-9.8 6.8-27.6 11.5-36.3q.28-.5.4.04z"]],["lower-back",["M986.7 627.1c-3.1-13.1-7.3-49.7 7.2-58.0 2.4-1.3 4.8-.82 6.7 1.2 6.1 6.8 16.2 18.5 18.7 28.1a1.3 1.3 52.6 01-.11.9c-2.5 4.5-9.9 8.0-15.8 11.3q-5.4 3.0-11.3 10.5c-1.2 1.5-2.6 4.3-4.5 6.0a.59.5-28.2 01-.97-.29z","M1023.1 607.9a2.0 2.0-74.3 01-.94-1.6c-.17-10.9 5.0-24.5 8.7-34.9q15.6-42.8 36-83.5a1.1 1.1-62.5 011.5-.48c1.2.66 3.2 12.9 3.4 15.0q6.9 59.2 2.8 116.8-.62 8.6-3.1 19.3-.13.5-.59.2l-47.9-30.9z","M1090.7 581.7q.62-5.1 0-10.2.22-29.7 3.0-59.5 1.1-11.5 3.9-22.8.31-1.2.44-1.4 1.0-1.4 1.8.17 23.3 46.9 40.1 96.1c1.8 5.2 5.8 16.6 4.3 22.9a1.6 1.6 0 01-.71 1.0l-47.6 30.7q-1.1.72-1.3-.6-4.5-28-4.1-56.3z","M1151.1 603.3q-5.3-3.3-2.1-9.0 8.0-14.2 17.8-24.6c3.4-3.6 9.0.89 10.9 3.9q2.9 4.6 3.8 10.1 3.5 21.7-1.2 43.0a.96.9 0 01-1.7.28c-6.9-11.8-16.0-16.5-27.4-23.7z"]],["forearm",["M878.4 534.3a.15.1 0 01.1-.13c.47.1 6.6 15.7 7.0 17.2q6.6 24.7 5.5 50.2c-.4 8.9-3.4 17.3-6.6 25.5-7.9 20.3-17.4 41.8-29.5 60.0a1.0 1.0-54.2 01-1.4.25c-.34-.26.3-1.4.47-1.8q5.5-20.8 8.9-42.0 8.6-54.1 15.5-109.3z","M893 518.9a.39.3 24.6 01.6-.25q5.9 7.8 13.1 15.2c8.0 8.4 1.4 28.7-5.8 37.1a1.0 1.0 0 01-1.6-.05c-6.0-7.9-5.4-18.7-4.9-28.4.36-8.1-.76-15.7-1.3-23.6z","M869.0 547.1c2.1.36 1.6 6.2 1.5 7.8q-2.5 38.8-9.1 77.1c-3.0 17.7-8.4 41.3-22.0 54.0a.38.3 0 01-.62-.41c14.5-40.4 19-84.2 26.8-126.3q.9-4.8 1.4-10.8.18-1.8 1.9-1.5z","M864.2 682.5q15.0-28.1 25.1-58.5c8.1-24.6 13.6-42.4 20.7-60.3q3.3-8.3 12.0-9.6c1.3-.2 3.6-.75 4.8.21q1.1.93.6 2.3-5.8 15.4-12.0 29.8c-5.7 13.3-14.9 28.6-20.3 40.1-6.1 13-28.0 59.1-31.6 56.6a.21.2 0 01.0-.36q.15-.07.3-.13.1-.04.1-.15z","M1272.9 519.4c.27-.33.3-.75.7-1.0a.32.3 0 01.5.2c-.7 7.2-1.7 14.3-1.6 21.5.13 8.9 2.1 24-5.3 31.1q-.37.3-.73 0c-7.6-7.5-14.2-28.2-6.5-36.9q6.6-7.4 13.0-15.0z","M1312.8 688.0c-4.7-6.0-7.2-10.8-11.7-19.5q-12.3-23.7-21.0-47.5c-4.8-13.3-5.2-26.1-3.8-40.1q1.1-11.5 2.6-19.5 2.7-13.9 9.5-26.7a.17.1 0 01.3.06q7.2 63.1 17.2 120.4 2.4 14.0 7.0 30.5c.22.7.74 1.3.36 2.4a.34.3 0 01-.59.1z","M1296.5 558.5c-.22-2.9-1.4-10.2 2-12.0a.62.6-18.4 01.8.44q6.2 35.6 12.2 71.0c3.8 23 8.7 46.2 16.7 68.1a.29.2 0 01-.47.3c-11.6-10.6-18.0-31.1-20.8-45.9q-7.2-38.5-10.4-81.9z","M1303.5 683.6c-2.8-.66-10.1-13.2-12.1-17.0-8.8-17.2-16.9-34.8-25.8-51.8-5.3-10.2-10.9-20.4-15.3-30.9q-5.8-13.8-11.0-27.8a1.6 1.6 79.5 011.5-2.2c13.0-.16 15.5 7.1 19.6 18.8q9.0 25.3 17.4 50.8 9.6 29.3 23.8 56.8.87 1.6 2.1 3.1.24.2-.12.2z"]],["gluteal",["M1045.0 626.1q1.4.61 4.1 4.4.2.39-.19.5c-14.4 4.1-26.1 7.4-38.1 15.7q-15.3 10.7-30.5 21.6a.55.5 74.9 01-.86-.5c1.1-13.1 10.3-35.2 20.4-45.0 9.1-8.8 34.9-1.1 45.1 3.2z","M1007.9 762.8c-16.9-16.6-29.3-37.6-31.4-61-2.0-22.8 15.6-34.9 32.1-45.7 8.2-5.3 46.5-27.3 54.3-17.6 5.9 7.2 13.3 15.8 15.4 25.2q3.0 13.6 2.4 27.6-.94 22.5-6.2 44.4c-2.4 9.9-2.9 17.1-2.5 26.7.47 14.8-18.5 17.1-29.1 14.0-6.3-1.8-13.7-4.8-21.3-6.2q-7.3-1.3-13.6-7.5z","M1117.9 631.0q-.13-.03-.27-.06-.12-.02-.06-.13 2.5-4.2 7.0-5.9 12.7-4.8 26.1-5.8c12.9-.91 17.1 3.0 23.2 13.0 5.7 9.2 13.3 24.7 13.4 36.0q.01.7-.61.3-16.6-11.7-33.2-23.5c-10.0-7.1-23.7-10.5-35.7-14.0z","M1124.1 776.6c-9.2 2.7-26.7 1.2-28.8-10.8-1.0-6.0.27-14.8-1.3-23.2q-.54-2.9-2.1-9.3c-3.2-12.8-4.0-23.3-5.0-35.2-1.0-12.0-.57-22 1.6-33.1q1.1-5.6 4.1-10.4 8.7-13.5 11.8-16.5c4.9-4.7 15.8.18 21.1 2.1q19.7 7.1 40.1 21.4c9.5 6.7 19.2 14.3 22.9 25.1 4.8 14.3-.65 33.8-7.4 46.8q-7.7 14.9-21.3 28.9-6.7 6.9-15.2 8.3c-7.0 1.2-13.6 4.0-20.5 6.1z"]],["adductors",["M1070.0 785.1c2.9 1.3 1.8 10.4 1.4 13.0q-3.9 33.2-14.6 64.6a.39.3 0 01-.76-.17c.9-7.0 2.3-14.2 2.1-20.9q-.68-30.1-18.7-54.5-.29-.39.1-.49c7.4-1.5 23.5-4.6 30.3-1.5z","M1127.2 787.6c-15.9 21.4-22.3 48.5-16.0 74.8a.47.4-63.2 01-.88.2q-1.9-4.6-3.6-10.2-8.2-27.7-11.6-56.5c-.65-5.7-1.1-11.7 6.8-11.9q13-.19 25.6 2.8a.31.2 41.2 01.1.5q-.12.0-.27.0-.1.0-.17.1z"]],["hamstring",["M963.2 741.5a.71.7 31.7 011.1-.28q1.5 1.6 2.4 3.9c4.6 11.4 8.9 22.6 11.0 34.7 3.3 19.1 4.8 38.2 3.1 57.7q-1.6 19.0-2.9 38.1c-.51 7.5-.88 15.7.07 23.1q1.0 8.5 1.3 17.5a.52.5 0 01-.98.2q-1.0-2.0-1.8-4.6-5.1-16.9-7.2-34.4-5.0-41.4-6.8-83.1-1.0-24.7-.07-49.5.06-1.5.64-3.5z","M1030.2 791.5q.17-.36.3-.03c5.2 8.1 9.9 16.1 12.4 25.6 3.1 11.7 5.8 24.3 4.3 36.2q-.5 3.8-3.5 14.0c-10.7 35.8-12.8 74.2-18.5 111.1q-.82 5.4-2.5 10.5-.23.6-.59.0c-4.7-8.0-5.1-25.0-5.3-34.8-.7-43.6 1.9-87.8 6.3-131.2 1.4-13.7 1.9-21.1 7.0-31.5z","M998.8 761.9q14.0 14.1 20.1 33.6c.98 3.1-.78 9.6-.93 12.9q-1.3 27.6-2.3 55.2c-.55 15.3-1.5 30.2-5.1 45.2q-8.6 36.1-22.7 68.7-3.6 8.4-10.1 17.1-.45.6-.41-.14c.11-1.9.82-4.1.99-5.7q2.4-22.7 6.0-45.2c2.8-17.6 4.1-35.9 4.3-52.3.33-36.4-.75-73.3 1.4-109.6.33-5.3 1.0-16.1 4.7-20.2q.33-.36.8-.45 1.9-.37 3.1.88z","M1052.5 855.6a.04.0 0 01.0.01q1.0 9.9 2.1 19.8.33 3.0-2.3 14.1c-3.8 15.8-8.1 31.1-8.9 47.4-.99 21.6-3.1 45.6-9.9 66.3q-1.4 4.5-.87-.2 3.3-25.3 3.7-51.9c.05-3.7-.4-10.3.2-15.5 2.1-19.2 7.3-38.2 11.7-57.0 1.7-7.6 2.9-15.2 4.1-23.0z","M1183.2 947.5c2.5 14.8 4.3 31.1 6.2 46.1q.35 2.7-1.1.39c-14.6-23.6-23.3-52.1-30.5-79.3q-5.0-19.1-5.9-39.0-1.3-30.3-2.4-60.7c-.22-6.0-2.5-15.6-.55-21.5q5.8-17.3 18.9-31.0c10.7-11.2 10.1 46.5 10.1 48.9-.13 41.0-.45 74.1 1.9 110.0.57 8.7 1.8 17.5 3.3 26.1z","M1136.4 791.5q.27-.42.4.03c3.1 6.4 4.8 12.2 5.6 19.8 5.0 45.8 8.0 94.6 7.5 140.7-.13 11.8-.46 26.2-5.1 37.0a.44.4 0 01-.83-.06q-2.5-9.1-3.6-18.4-3.5-27.6-7.3-55.2c-2.4-18-5.4-35.6-11.0-52.2q-4.3-12.8-2.0-26.7c1.7-10.7 3.5-21.6 8.4-31.1q3.5-6.9 7.9-13.8z","M1115.0 856.7c2.0 18.7 7.1 37.4 11.4 55.7 2.2 9.4 3.9 19.5 3.9 30.1q.02 31.7 4.0 63.1.16 1.2-.29.0-2.7-7.1-4.1-14.6c-4.4-22.2-5.7-40.5-6.8-61.2-.24-4.2-1.1-9.6-2.2-13.9q-3.9-16.2-7.7-32.5c-2.0-9.0.08-18.6 1.6-27.6q.07-.38.3-.09.1.19.0.4-.19.2-.15.5z","M1202.6 741.0a.44.4 0 01.7.03c.52.8.9 1.8.95 2.9q.73 15.9.37 31.9-1.1 52.9-7.8 105.4-1.8 14.7-5.9 29.0-1 3.5-1.9 4.9-1.5 2.4-1.3-.37c.58-9.4 1.8-19.1 1.7-28.1-.32-24.5-4.9-49.1-3.9-72.7.69-16.5 2.5-33.5 7.5-49.3q2.9-9.4 6.6-18.6.7-1.8 3.1-5.1z"]],["calves",["M982.6 1149.3c-3.0-2.2-3.9-6.2-5.2-11.0-7.1-27.1-7.8-53.1-6.6-82.7q1.0-25.2 9.2-47.4c4.7-12.8 15.3-24.7 23.7-36q.82-1.0.74.2c-1.3 22.8-2.7 45.6-3.1 68.4-.52 30.5-1.5 61.1-.42 91.6.24 6.8-2.7 16.2-10.0 18.3q-4.3 1.2-8.2-1.5z","M983.9 1163.5c7.1-5.5 16.1-.63 17 8.2q4.3 45.0 5.2 90.2c.16 8.2-.8 15.7-2.1 23.6q-.45 2.5-1.4 3.6-.95 1.1-1.2-.33c-5.0-26.7-8.2-53.4-11.8-80.3q-1.6-12.5-3.2-18.7-2.0-8.1-5.5-18.2c-1.0-3 .8-6.2 3.2-8.1z","M1013.6 1150.3c-4.8-2.6-4.6-16.1-4.3-20.7 2.3-36.4 3.4-73.9 1.0-110.4-1.0-15.5.02-31.4.62-47.0q.03-.66.2-.03c2.2 6.4 4.5 12.8 7.3 19.1 5.1 11.1 11.5 22.9 14.8 33.9q2.3 7.7 3.9 16.4 5.3 28.4 5.6 56.0c.2 18.3-7.9 40-22.6 51.7q-3.4 2.7-6.7.92z","M1014.1 1164.3c7-1.8 14.1 2.2 14.1 9.9q.06 29.0-5.6 57.4c-3.8 19.2-6.2 38.2-8.4 57.4a.37.3 0 01-.74-.01q-3.1-43.4-3.5-86.6-.15-14.1.76-28.3c.18-2.8.02-8.9 3.5-9.8z","M1172.9 1149.3c-6.0-4.5-6.9-11.4-6.8-19.4.9-52.6-.49-105.3-3.5-157.9q-.04-.72.4-.16 7.9 10.0 15.4 20.4c9.1 12.6 13.6 28.9 15.7 44.2 4.9 34.7 3.7 72.9-5.9 106.5-1.9 6.8-9.1 10.9-15.3 6.3z","M1144.4 1147.3q-17.1-17.3-20.0-40.8-.89-7.2-.13-19.9 1.1-20.0 4.6-41.3c2.3-14.1 5.8-25.2 12.4-38.6q8.1-16.5 14.3-34.1a.14.1-37.7 01.2.03q1.0 15.7 1.2 31.4c.18 11.6-1.3 24.9-1.5 36.4-.72 34.7 1.2 62.0 2.0 93.1.17 6.3-1.1 26.1-13.2 13.8z","M1173.7 1161.7c6.8-2 14.3 3.2 11.9 10.9-2.2 7.3-4.7 14.4-5.9 21.9-5.0 31.5-8.0 63.1-14.1 94.6a.72.7-61.9 01-1.2.37c-.14-.14-.35-.39-.4-.59q-3.5-13.5-3.1-28.2 1.0-44.6 5.0-87.0c.58-6.1 1.9-10.2 7.8-11.9z","M1154.3 1165a1.5 1.5-84.6 01.9 1.1c.79 4.4 1.4 8.7 1.5 13.4.9 29.1-.47 62.6-2.0 90.2q-.78 13.7-1.3 19.5a.23.2 0 01-.45 0c-2.7-21.2-5.4-41.9-9.6-63.0-3.4-17.0-4.2-34.9-4.6-52.3-.19-8.3 8.9-11.6 15.6-9z"]],["ankles",["M998.2 1320.5c-4.6.24-8.1-1.0-8.7-6.2-1.6-13.8-.75-28.8-2.1-42.4q-.39-3.7.24-7.0a.69.6 0 011.2-.28c2.3 3.1 4.2 5.7 5.1 9.6 1.5 6.5 1.9 22.5 9.9 24.0q13.3 2.5 15.9-10.4c.92-4.5 1-12.3 5.0-17.2q.42-.51.4.15c.11 14.3.4 30.8-3.0 44.5-.79 3.1-3.3 4.2-6.5 4.4q-8.7.45-17.4.88z","M1149.5 1319.5c-6.9-.63-6.8-18.0-7.1-23.7q-.73-12.5-.59-25.0.01-.71.4-.15 2.7 3.4 3.2 7.1c1.6 11.2 3.2 25.3 19.7 19.9 4.8-1.5 7.0-18.5 7.8-23.2.79-4.2 2.7-7 5.2-10.1a.56.5 0 01.9.22c1.1 4.6.0 12.3-.37 17.2-.92 10.7-.32 21.4-1.5 32.3q-.7 6.2-7.0 6.1-12.1-.11-20.9-.91z"]],["feet",["M962.8 1327.3q-.62-.51-.05-1.0l1.9-1.9q.39-.39.9-.41 25.6-.82 51.2 1 1.3.1 4.4 1.4.46.2.6.64 1.8 3.5 2.8 7.2c2.3 8.3-6.6 7.2-12.2 6.6q-15.3-1.5-30.5-4.5c-8.2-1.6-13.3-3.9-19.3-8.9z","M1154.3 1341.3c-12.4 1.3-13.2-3.8-8.6-13.3 1.8-3.7 12.7-3.6 16.3-3.7q19.4-.63 38.9-.44c2.4.02 3.3 1 4.6 2.7q.32.4-.09.7c-5.4 4.6-10.5 7.1-17.9 8.7q-16.4 3.4-33.1 5.2z"]],["hands",["M789.4 726.8c3.9-6.7 9.8-14.6 16.5-20.1a.31.3 0 01.4.35c-4.3 11.0-5.3 21.9-14.0 30.7-5.8 5.9-10.7 9.8-19.0 8.5q-.55-.08-.59-.63c-.24-3.0-.26-7.2 3.1-8.8 4.8-2.2 10.7-5.2 13.5-10.0z","M807.2 745.3c17.6 3.4 2.7 13.5-.73 18.9q-10.0 15.8-21.8 30.3-1.5 1.9-2.5-.58a2.4 2.3-55.4 01-.16-.96q.2-5.2 2.7-9.7c6.9-12.0 13.1-24.5 19.7-36.7q.91-1.7 2.8-1.3z","M819.3 744.8c-7.7-6.0-14.5-12.4-11.8-23.3 3.0-12.8 14.6-20.7 25.1-26.3 9.5-5.1 37.6-.75 37.6 13.6q-.01 16.2-3.6 31.9c-2.3 10.2-4.4 16.4-16.8 16.3-10.7-.13-21.9-5.7-30.3-12.2z","M827.9 758.2a2.0 2.0 26.6 01.9 2.7q-10.4 22.0-19.6 45.0-2.2 5.6-8.2 6.7a1.4 1.4 84.3 01-1.7-1.4q-.1-4.2 1.5-8.3 7.3-18.3 13.8-36.9c.74-2.1 1.5-6.0 2.9-8.9q.26-.5.8-.57 5.0-.64 9.5 1.6z","M841.6 762.3a.76.7-79.1 01.6.8q-4.5 23.1-9.2 45.8c-.73 3.4-2.0 5.7-5.8 5.4q-.52-.04-.61-.56-.74-4.5-.32-7.2 2.8-18.5 5.5-37.1.38-2.6 1.6-8.2.13-.54.6-.44l7.5 1.4z","M854.7 799.5a.78.7 0 01-1.3-.02q-.91-1.7-1.1-4.2-1.6-16.5-1.2-33.2a.84.8 0 01.6-.78l7.0-1.9q.59-.16.5.45-.58 14.7-1.1 29.5c-.14 4.0-1.5 6.8-3.4 10.2z","M1336.3 751.9c-8.7 4.4-29.3 10.2-33.6-3.6q-5.6-18.6-5.8-38.2c-.06-7.5 4.0-11.7 11.0-14.0 8.8-2.9 19.0-5.3 27.5-.35 8.7 5.0 18.3 11.2 22.4 21.0 3.0 7.3 3.3 13.6-1.7 20.0-5.2 6.4-12.4 11.4-19.8 15.2z","M1374.3 737.5c-8.0-8.1-9.6-19.6-13.8-30.7a.22.2 0 01.3-.24q10.3 8.9 17.1 20.7c2.5 4.4 9.0 7.5 13.5 9.7 3.1 1.5 2.9 5.9 2.7 8.7q-.05.5-.57.5c-8.8 1.1-13.4-2.9-19.3-8.8z","M1383.7 795.4c-.59-.21-.96-.17-1.3-.68-8.8-10.3-15.8-21.5-23.4-32.4-2.8-4.0-8.8-7.6-7.4-13.1q.15-.6.7-.84l7.8-3.4q.66-.29 1.1.25 2.3 2.7 4.1 6.4 7.3 15.2 16.8 31.4c2.3 3.9 3.0 7.5 2.3 11.8a.58.5 0 01-.78.4z","M1365.7 812.6c-2.7-.28-6.4-2.6-7.4-5.3q-8.7-21.7-19.8-45.7c-2.1-4.5 6.5-5.1 9.1-5.2 1.8-.03 1.9.71 2.3 2.1q5.7 18.3 15.3 42.1c.74 1.8 4.8 12.4.49 11.9z","M1308.1 759.1l7.4 2.1q.23.0.24.3.75 16.2-.86 32.4-.3 3-1.2 5.4a.79.7 0 01-1.4.12q-3.9-6.5-3.8-13.9.1-13.0-.83-26.1-.05-.57.5-.41z","M1340.0 814.3c-2.7.8-4.9-1.1-5.5-3.7q-5.0-23.4-9.8-47.4a.77.7-10.7 01.6-.9l7.5-1.3q.59-.11.7.47c2.0 8.5 3.2 19.8 4.2 25.7q2.0 12.9 3.1 21.1.34 2.5-.33 5.4a.86.8 88.4 01-.59.6z"]],["head",["M1028.1 166.4c1.0 5.0 1.3 9.6 6.4 11.5 13.0 4.9 16.7 15.5 23.5 27.4 1.3 2.4 3.8 3.6 7.4 3.5a910.0 910.0 0 0136.9-.25c6.2.09 9.2-7.5 11.4-12.3 4.3-9.2 10.3-15.8 20.2-18.9.333-.1.6-.287.8-.56 1.9-2.5 3.0-5.4 3.3-8.5l2.3-1.5a.977.9 0 01.9-.08c11.9 5.4-3.3 35.3-8.2 42.4-.761 1.1-2.4 1.0-3.0-.15l-1.2-2.3c-.133-.253-.32-.297-.56-.13-.34.2-.48.6-.42 1.1.86 7.6.75 16.8-2.9 23.3-.173.3.8.041-3.7 4.7-3.3 3.4-74.1 3.7-75.4-1.3a1.4 1.4 0 00-.55-.82c-4.1-2.9-6.0-7.9-6.1-12.3-.03-1.6.18-14.2-.53-14.6-.207-.1-.33-.037-.37.1-.3 1.5-1.1 2.5-2.6 3.1a.951.9 0 01-1.0-.32c-7.2-9.5-12.3-22.1-12.9-33.5-.34-6.0 1.7-9.2 6.4-9.5zm29.9 61.7c.173 14.1 18.9 14.7 19.1-1.3.03-4.0-.38-6.5-4.6-7.3-4.2-.75-11.8-1.4-13.8 2.9-.413.9-.603 2.8-.57 5.7zm31.7-3.3c.36 19.6 18.5 14.8 18.8 5.9.13-3.9 1.3-9.4-2.8-10.7-4.2-1.3-16.1-2.5-15.9 4.8z"]],["hair",["M1138.3 168.3q-.49 4.6-3.3 8.5-.31.4-.81.5c-9.9 3.1-15.9 9.6-20.2 18.9-2.2 4.7-5.2 12.3-11.4 12.3q-18.4-.25-36.9.25-5.3.14-7.4-3.5c-6.7-11.9-10.4-22.5-23.5-27.4-5.0-1.9-5.3-6.4-6.4-11.5q-6.6-26.1 4.4-48.8c8.1-16.7 34.6-21.4 51.5-21.0 4.8.11 9.6-.11 14.4.85 18.7 3.8 33.1 8.5 39.3 28.6q6.3 20.8.47 42.3z"]]]};
+/* =========================================================================
+   MAPA MUSCULAR: fatiga actual y reparto de series (7 y 30 días), con todas las sesiones guardadas
+   ========================================================================= */
+const MUSCLE_NAMES = { chest: 'Pecho', deltoids: 'Hombros', biceps: 'Bíceps', triceps: 'Tríceps', forearm: 'Antebrazos', abs: 'Abdomen', obliques: 'Oblicuos', trapezius: 'Trapecio', 'upper-back': 'Espalda', 'lower-back': 'Lumbares', gluteal: 'Glúteos', quadriceps: 'Cuádriceps', hamstring: 'Isquios', adductors: 'Aductores', calves: 'Gemelos', tibialis: 'Tibiales' };
+const MUSCLE_NEUTRAL = new Set(['head', 'hair', 'neck', 'hands', 'feet', 'ankles', 'knees']);
+/* Reglas por nombre del ejercicio (sirven para los de serie, las alternativas y los creados por cada usuario).
+   [expresión, principales, secundarios]; los ejercicios con «+» se reparten por partes. */
+const MUSCLE_RULES = [
+  [/encogimiento|shrug/, ['trapezius'], ['forearm']],
+  [/gemelo|pantorrilla/, ['calves'], []],
+  [/remo al ment[oó]n|upright/, ['deltoids', 'trapezius'], ['biceps']],
+  [/landmine|pike/, ['deltoids'], ['triceps', 'chest']],
+  [/^remo|gorilla row/, ['upper-back'], ['biceps', 'forearm', 'deltoids']],
+  [/dead bug/, ['abs'], ['obliques']],
+  [/bird dog|superman/, ['lower-back'], ['gluteal', 'abs']],
+  [/halo/, ['deltoids'], ['abs', 'obliques']],
+  [/jumping jack|comba|skipping/, ['calves'], ['quadriceps', 'deltoids']],
+  [/peso muerto a una pierna/, ['hamstring', 'gluteal'], ['lower-back']],
+  [/paseo/, ['forearm', 'trapezius'], ['abs']],
+  [/abducci[oó]n|paso lateral/, ['gluteal'], []],
+  [/aducci[oó]n/, ['adductors'], []],
+  [/pallof|leñador|russian twist|plancha lateral|antirrotaci/, ['obliques', 'abs'], []],
+  [/elevaci[oó]n de (piernas|rodillas)|escaladores|mountain/, ['abs'], ['obliques']],
+  [/get-up/, ['deltoids', 'abs'], ['obliques', 'gluteal']],
+  [/hiperextensi/, ['lower-back'], ['gluteal', 'hamstring']],
+  [/curl femoral|n[oó]rdico/, ['hamstring'], []],
+  [/peso muerto rumano|buenos d[ií]as/, ['hamstring'], ['gluteal', 'lower-back']],
+  [/peso muerto/, ['gluteal', 'hamstring', 'lower-back'], ['upper-back', 'forearm', 'quadriceps']],
+  [/hip thrust|puente de gl[uú]teo|gl[uú]teo/, ['gluteal'], ['hamstring']],
+  [/b[uú]lgara|zancada|step-up|lunge/, ['quadriceps', 'gluteal'], ['adductors', 'hamstring']],
+  [/sentadilla|prensa|goblet|squat/, ['quadriceps'], ['gluteal', 'adductors']],
+  [/swing|thruster/, ['gluteal', 'hamstring'], ['lower-back', 'deltoids']],
+  [/gemelo|pantorrilla/, ['calves'], []],
+  [/rueda|plancha|crunch|abdominal|core/, ['abs'], ['obliques']],
+  [/granjero|farmer/, ['forearm', 'trapezius'], ['abs']],
+  [/burpee/, ['quadriceps', 'chest'], ['deltoids', 'triceps', 'abs']],
+  [/extensi[oó]n de (cu[aá]driceps|piernas)|leg extension/, ['quadriceps'], []],
+  [/diamante|press cerrado|fondos en banco|extensi[oó]n|press franc[eé]s|tr[ií]ceps|patada/, ['triceps'], ['chest']],
+  [/fondos|paralelas|dips/, ['chest', 'triceps'], ['deltoids']],
+  [/face pull|p[aá]jaros|apertura con banda|apertura trx|hombro posterior|deltoides posterior/, ['deltoids'], ['upper-back', 'trapezius']],
+  [/clean|push press|snatch/, ['deltoids'], ['gluteal', 'hamstring', 'triceps', 'trapezius']],
+  [/press militar|press de hombro|press arnold|press.*kettlebell|hombro/, ['deltoids'], ['triceps']],
+  [/elevaci(o|ó)n(es)? laterales?|laterales/, ['deltoids'], []],
+  [/jal[oó]n|pullover/, ['upper-back'], ['biceps', 'forearm']],
+  [/press|flexiones|aperturas|pecho|banca|cruce de poleas|contractora|pec deck/, ['chest'], ['deltoids', 'triceps']],
+  [/dominadas|jal[oó]n|remo|row|pull/, ['upper-back'], ['biceps', 'forearm', 'deltoids']],
+  [/curl|b[ií]ceps|martillo|zottman/, ['biceps'], ['forearm']],
+  [/elevaci(o|ó)n(es)? frontal|elevaciones/, ['deltoids'], []],
+];
+const RETO_MUSCLES = { pullup: 'Dominadas', pushup: 'Flexiones', dips: 'Fondos', squat: 'Sentadillas', burpee: 'Burpees', plank: 'Plancha', abwheel: 'Rueda abdominal', abwheel2: 'Rueda abdominal' };
+const musclesCache = new Map();
+function musclesOf(name) {
+  const key = String(name || '').toLowerCase();
+  if (musclesCache.has(key)) return musclesCache.get(key);
+  const out = {};
+  const add = (list, w) => { for (const m of list) out[m] = Math.max(out[m] || 0, w); };
+  for (const part of key.split('+')) {
+    const r = MUSCLE_RULES.find(([re]) => re.test(part.trim()));
+    if (r) { add(r[1], 1); add(r[2], 0.5); }
+  }
+  musclesCache.set(key, out);
+  return out;
+}
+/* Lista de «trabajos»: { t (ms), sets, muscles } de sesiones guardadas y RETOS */
+function muscleWork(sinceDays) {
+  const from = addDays(todayISO(), -sinceDays), out = [];
+  for (const s of state.sessions) {
+    if (s.date < from) continue;
+    const t = s.endedAt || Math.min(Date.now(), parseISO(s.date).getTime() + 19 * 3600000); // sin hora guardada: las 19 h, o «ahora» si es de hoy y aún no son las 19
+    for (const x of s.exercises) { const m = musclesOf(x.name); if (Object.keys(m).length) out.push({ t, sets: x.sets.length, m }); }
+  }
+  for (const [id, r] of Object.entries(state.retos || {})) for (const h of r.history || []) {
+    if (h.date < from || !RETO_MUSCLES[id]) continue;
+    out.push({ t: h.at || Math.min(Date.now(), parseISO(h.date).getTime() + 19 * 3600000), sets: (h.got || []).filter(v => v > 0).length || 3, m: musclesOf(RETO_MUSCLES[id]) });
+  }
+  // el test de máximo también cansa: cuenta como 1 serie
+  for (const [id, r] of Object.entries(state.retos || {})) for (const tt of r.tests || []) {
+    if (tt.date < from || !RETO_MUSCLES[id]) continue;
+    out.push({ t: tt.at || Math.min(Date.now(), parseISO(tt.date).getTime() + 19 * 3600000), sets: 1, m: musclesOf(RETO_MUSCLES[id]) });
+  }
+  return out;
+}
+const FULL_LOAD = 8, RECOVERY_H = 72;
+function fatigueAt(work, ms) {
+  const f = {};
+  for (const w of work) { const h = (ms - w.t) / 3600000; if (h < 0 || h >= RECOVERY_H) continue; const k = 1 - h / RECOVERY_H; for (const [m, wt] of Object.entries(w.m)) f[m] = (f[m] || 0) + w.sets * wt * k; }
+  return f;
+}
+function muscleFatigue() {
+  const work = muscleWork(4), now = Date.now(), f = fatigueAt(work, now), res = {};
+  for (const [m, v] of Object.entries(f)) {
+    const frac = Math.min(1, v / FULL_LOAD);
+    let h = 0; while (h < RECOVERY_H && Math.min(1, (fatigueAt(work, now + h * 3600000)[m] || 0) / FULL_LOAD) > 0.15) h += 1;
+    res[m] = { frac, recovered: Math.round((1 - frac) * 100), readyIn: h };
+  }
+  return res;
+}
+function muscleVolume(days) {
+  const v = {};
+  for (const w of muscleWork(days - 1)) for (const [m, wt] of Object.entries(w.m)) v[m] = (v[m] || 0) + w.sets * wt;
+  return v;
+}
+const MM_SCALE = ['#2c3b44', '#164e63', '#0e7490', '#0891b2', '#06b6d4', '#22d3ee', '#67e8f9'];
+const mmColor = v => v <= 0.03 ? MM_SCALE[0] : MM_SCALE[Math.min(6, 1 + Math.floor(v * 6))];
+function bodySVG(vals, width) {
+  const view = (side, vb) => `<svg viewBox="${vb}" width="${width}" class="swipe-ok" aria-hidden="true">${BODY_PATHS[side].map(([slug, paths]) => {
+    const c = MUSCLE_NEUTRAL.has(slug) ? (slug === 'hair' ? '#141b20' : '#1c262c') : mmColor(vals[slug] || 0);
+    return paths.map(d => `<path d="${d}" fill="${c}" stroke="#070b0d" stroke-width="2"/>`).join('');
+  }).join('')}</svg>`;
+  return `<div class="flex justify-center" style="gap:4px">${view('front', '60 90 604 1280')}${view('back', '784 90 604 1280')}</div>`;
+}
+function muscleMapHTML() {
+  const tab = ui.mmTab || 'now';
+  let vals = {}, rows = '', foot = '';
+  if (tab === 'now') {
+    const f = muscleFatigue();
+    for (const [m, x] of Object.entries(f)) vals[m] = x.frac;
+    const list = Object.entries(f).filter(([, x]) => x.frac > 0.03).sort((a, b) => b[1].frac - a[1].frac);
+    rows = list.map(([m, x]) => `<div class="flex items-center justify-between bg-ink rounded-lg px-3 py-1.5 text-[13px]"><span class="font-semibold">${MUSCLE_NAMES[m] || m}</span><span class="text-mute text-[12px]">recuperado <b class="text-white">${x.recovered} %</b>${x.readyIn ? ` · listo en ${x.readyIn} h` : ''}</span></div>`).join('')
+      || '<p class="text-xs text-mute text-center py-2">Todo recuperado: ningún músculo con carga de los últimos 3 días.</p>';
+    foot = 'Fatiga estimada con tus series de los últimos 3 días (músculo principal 100 %, secundarios 50 %).';
+  } else {
+    const days = tab === 'd7' ? 7 : 30, v = muscleVolume(days), max = Math.max(0, ...Object.values(v));
+    for (const [m, x] of Object.entries(v)) vals[m] = max ? x / max : 0;
+    const all = Object.keys(MUSCLE_NAMES).map(m => [m, v[m] || 0]).sort((a, b) => b[1] - a[1]);
+    rows = all.filter(([, x]) => x > 0).map(([m, x]) => `<div class="flex items-center justify-between bg-ink rounded-lg px-3 py-1.5 text-[13px]"><span class="font-semibold">${MUSCLE_NAMES[m]}</span><span class="text-mute text-[12px]"><b class="text-white">${fmtNum(Math.round(x * 2) / 2)}</b> series</span></div>`).join('');
+    const forgotten = all.filter(([, x]) => x === 0).map(([m]) => MUSCLE_NAMES[m]);
+    if (!rows) rows = `<p class="text-xs text-mute text-center py-2">Sin entrenos registrados en los últimos ${days} días.</p>`;
+    else if (forgotten.length) rows += `<div class="rounded-lg px-3 py-2 text-[12px] text-amber-200" style="background:rgba(252,211,77,.08);border:1px solid rgba(252,211,77,.3)">⚠️ Sin trabajar en ${days} días: ${forgotten.join(', ')}</div>`;
+    foot = `Series acumuladas en ${days} días (principal 100 %, secundarios 50 %). El color compara cada músculo con el que más has trabajado.`;
+  }
+  const grad = `linear-gradient(90deg,${MM_SCALE.join(',')})`;
+  const unknown = [...new Set(state.sessions.filter(s => s.date >= addDays(todayISO(), -29)).flatMap(s => s.exercises.filter(x => !Object.keys(musclesOf(x.name)).length).map(x => x.name)))];
+  return `<section class="card p-4 mb-3" id="muscleMap" data-noswipe>
+    <div class="flex items-center justify-between"><h3 class="section-title">🔥 Mapa muscular</h3></div>
+    <div class="seg mt-3" style="grid-template-columns:repeat(3,minmax(0,1fr))">${[['now', 'Ahora'], ['d7', '7 días'], ['d30', '30 días']].map(([k, l]) => `<button class="seg-btn py-1.5 ${tab === k ? 'seg-on' : ''}" data-act="mmTab" data-v="${k}" type="button">${l}</button>`).join('')}</div>
+    <div id="mmBody">
+    <div class="mt-3">${bodySVG(vals, 150)}</div>
+    <div class="flex items-center gap-2 mt-3 text-[10px] text-mute"><span>${tab === 'now' ? 'Descansado' : 'Poco'}</span><span class="flex-1 h-2 rounded-full" style="background:${grad}"></span><span>${tab === 'now' ? 'Muy cargado' : 'Mucho'}</span></div>
+    <div class="mt-3 space-y-1">${rows}</div>
+    <p class="text-[11px] text-mute mt-2">${foot}</p>
+    ${unknown.length ? `<p class="text-[11px] text-mute mt-1">Sin mapa (no reconozco el ejercicio): ${unknown.map(esc).join(', ')}.</p>` : ''}
+    </div>
+  </section>`;
+}
+/* Mini silueta para «Hoy te toca» */
+function todayMuscleHint(day) {
+  const prim = new Set(); for (const e of day.exercises) for (const [m, w] of Object.entries(musclesOf(variantOf(e).variant.name))) if (w === 1) prim.add(m);
+  if (!prim.size) return null;
+  const f = muscleFatigue(), loaded = [...prim].filter(m => (f[m]?.frac || 0) >= 0.5);
+  const vals = {}; for (const [m, x] of Object.entries(f)) vals[m] = x.frac;
+  const names = ms => ms.map(m => MUSCLE_NAMES[m]).slice(0, 3).join(', ').toLowerCase();
+  const txt = loaded.length ? `<span class="text-amber-200">${names(loaded)} aún cargado${loaded.length > 1 ? 's' : ''}</span>` : `<span class="text-emerald-300">${names([...prim])}: recuperado${prim.size > 1 ? 's' : ''} ✓</span>`;
+  return { svg: bodySVG(vals, 26), txt };
+}
+
 function todayCardHTML() {
   const pr = mainStrengthProg(); if (!pr) return '';
   const T = todayISO();
@@ -1448,9 +2000,10 @@ function todayCardHTML() {
   }
   const day = pr.days.find(d => d.id === nextDayId(pr)); if (!day || !day.exercises.length) return '';
   const mins = estimateMinutes(day, state.drafts[day.id] || { sets: {}, counts: {}, done: {} });
+  const mh = todayMuscleHint(day);
   return `<button class="today-card" data-act="goToday" data-prog="${esc(pr.id)}" data-day="${esc(day.id)}" type="button">
-      <span class="text-2xl">🏋️</span>
-      <span class="flex-1 min-w-0 text-left"><span class="block text-[11px] text-mute">HOY TE TOCA</span><span class="block font-extrabold truncate">${esc(day.label)} · ${esc(pr.name)}</span><span class="block text-[11px] text-mute truncate">${day.exercises.length} ejercicios${mins ? ` · ⏱ ~${mins} min` : ''}</span></span>
+      ${mh ? `<span class="shrink-0 pointer-events-none" style="width:58px">${mh.svg}</span>` : '<span class="text-2xl">🏋️</span>'}
+      <span class="flex-1 min-w-0 text-left"><span class="block text-[11px] text-mute">HOY TE TOCA</span><span class="block font-extrabold truncate">${esc(day.label)} · ${esc(pr.name)}</span><span class="block text-[11px] text-mute truncate">${day.exercises.length} ejercicios${mins ? ` · ⏱ ~${mins} min` : ''}</span>${mh ? `<span class="block text-[11px] truncate">${mh.txt}</span>` : ''}</span>
       <span class="text-brand font-black text-lg shrink-0">›</span></button>`;
 }
 function renderRetos() {
@@ -1532,7 +2085,7 @@ function retoStartFrom(id, max) {
   const r = RETOS[id];
   const best = clamp(Math.round(max), 0, r.max * 2);
   const level = clamp(Math.floor(best * 0.7 / r.step) * r.step, r.min, r.max);
-  state.retos[id] = { level, best, startedAt: todayISO(), history: [], tests: [{ date: todayISO(), max: best }], hardStreak: 0, draft: null };
+  state.retos[id] = { level, best, startedAt: todayISO(), history: [], tests: [{ date: todayISO(), at: Date.now(), max: best }], hardStreak: 0, draft: null };
 }
 function retoFinish(id) {
   const r = RETOS[id], st = retoOf(id), d = retoDraft(id);
@@ -1551,7 +2104,7 @@ function retoFinish(id) {
       else { st.hardStreak = 0; st.level = snapLevel(r, st.level + (eff === 'easy' ? 2 : 1) * r.step); }
       st.best = Math.max(st.best, got[0]);
       const T = todayISO();
-      st.history.push({ date: T, level: before, target: d.target, got, feel, completed, kcal: retoKcal(id, got, T) });
+      st.history.push({ date: T, at: Date.now(), level: before, target: d.target, got, feel, completed, kcal: retoKcal(id, got, T) });
       st.draft = null; persist(); setTimeout(silentDriveBackup, 1500);
       const msg = st.level > before ? `Subes a nivel ${st.level}` : st.level < before ? `Bajamos a nivel ${st.level} para consolidar` : `Repites nivel ${st.level}`;
       openModal(`<div class="text-center"><div class="text-4xl">${st.level >= r.max && before < r.max ? '🏆' : RETO_FEEL.find(f => f[0] === feel)[1]}</div>
@@ -1573,7 +2126,7 @@ function retoTestModal(id) {
     save: root => {
       const v = parseInt(mval(root, 'max'), 10);
       if (!(v > 0)) return toast('Pon un número', 'warn');
-      st.tests.push({ date: todayISO(), max: v });
+      st.tests.push({ date: todayISO(), at: Date.now(), max: v });
       const prevBest = st.best; st.best = Math.max(st.best, v);
       const fromTest = clamp(Math.floor(v * 0.7 / r.step) * r.step, r.min, r.max);
       const up = fromTest > st.level; if (up) { st.level = fromTest; st.draft = null; }
@@ -1699,6 +2252,14 @@ function mealGroups() {
   }
   return [...g.values()];
 }
+/* ★ Comidas favoritas: se guardan por descripción y salen las primeras en «Favoritas y habituales» */
+const isFavMeal = key => !!key && (state.settings.favMeals || []).includes(key);
+function toggleFavMeal(key) {
+  if (!key) return;
+  const l = state.settings.favMeals || [], on = !l.includes(key);
+  state.settings.favMeals = on ? [...l, key] : l.filter(k => k !== key);
+  persist(); render(); toast(on ? '★ Guardada en favoritas' : 'Quitada de favoritas');
+}
 function mealPicks() {
   const groups = mealGroups();
   const q = normName(ui.mealSearch || '');
@@ -1708,13 +2269,14 @@ function mealPicks() {
   const t = ui.mealType;
   const byFreq = (a, b, ka, kb) => kb - ka || (a.lastDate < b.lastDate ? 1 : a.lastDate > b.lastDate ? -1 : 0);
   const ofType = groups.filter(e => e.byType[t]).sort((a, b) => byFreq(a, b, a.byType[t], b.byType[t]));
-  return { mode: 'top', list: ofType.slice(0, 10) };
+  const favs = ofType.filter(e => isFavMeal(e.key)), rest = ofType.filter(e => !isFavMeal(e.key));
+  return { mode: 'top', list: [...favs, ...rest.slice(0, 10)], nFav: favs.length };
 }
 function renderPickList() {
   const { mode, list } = mealPicks();
   ui._picks = list;
   if (!list.length) return `<p class="text-xs text-mute">${mode === 'search' ? 'Nada encontrado en tu historial.' : `Aún no has registrado ninguna comida como «${esc(ui.mealType)}». Usa el buscador para encontrar otras.`}</p>`;
-  return list.map((e, i) => `<button class="chip chip-sm text-left" data-act="repeatMeal" data-i="${i}" type="button">${esc((e.last.desc || e.last.type).slice(0, 34))} <span class="text-mute">· <span class="${MAC.kcal.text}">${Math.round(e.last.kcal)}</span>${e.count > 1 ? ` · ×${e.count}` : ''}</span></button>`).join('');
+  return list.map((e, i) => isFavMeal(e.key) ? `<span class="chip chip-sm !p-0 overflow-hidden" style="border-color:rgba(252,211,77,.45)"><button class="pl-2.5 pr-1.5 py-1.5 text-amber-300 text-sm leading-none" data-act="favMeal" data-key="${esc(e.key)}" type="button" aria-label="Quitar de favoritas">★</button><button class="pr-3 py-1.5 text-left" data-act="repeatMeal" data-i="${i}" type="button">${esc((e.last.desc || e.last.type).slice(0, 34))} <span class="text-mute">· <span class="${MAC.kcal.text}">${Math.round(e.last.kcal)}</span>${e.count > 1 ? ` · ×${e.count}` : ''}</span></button></span>` : `<button class="chip chip-sm text-left" data-act="repeatMeal" data-i="${i}" type="button">${esc((e.last.desc || e.last.type).slice(0, 34))} <span class="text-mute">· <span class="${MAC.kcal.text}">${Math.round(e.last.kcal)}</span>${e.count > 1 ? ` · ×${e.count}` : ''}</span></button>`).join('');
 }
 /* ---------- Colores fijos de cada macro (mismos en toda la app) ---------- */
 const MAC = {
@@ -1744,6 +2306,33 @@ function ringsSVG(vals, animate) {
       ${extra > 0.004 ? `<circle cx="${c}" cy="${c}" r="${r.toFixed(1)}" fill="none" stroke="#05080a" stroke-width="${sw + 3}" stroke-linecap="round" style="stroke-dasharray:${(C * extra).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 ${c} ${c})"/>${arc(extra)}` : ''}`;
   }).join('');
   return `<svg viewBox="0 0 ${size} ${size}" class="w-full h-auto swipe-ok" role="img" aria-label="Anillos de calorías, proteína, carbohidratos y grasas">${rings}</svg>`;
+}
+/* ===== Interfaz 2 (en pruebas): iconos de línea y anillos separados. Se activa con la clase «ui2» en <body> ===== */
+const isUI2 = () => document.body.classList.contains('ui2');
+const IC = {
+  plus: '<path d="M12 5v14M5 12h14"/>', star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+  plate: '<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="3.5"/>', check: '<circle cx="12" cy="12" r="9"/><path d="m8 12 2.7 2.7L16 9.5"/>',
+  coffee: '<path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M16 10h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 3.5v2.5M12 3.5v2.5"/>',
+  utensils: '<path d="M6 3v8a2 2 0 0 0 4 0V3M8 11v10"/><path d="M17 21V3c-2 1.5-3 4-3 7v3h3"/>', apple: '<path d="M12 7c-1.5-2-5-2.5-6.5 0-1.8 3 0 9 3 12 1.2 1.1 2.3 1 3.5.3 1.2.7 2.3.8 3.5-.3 3-3 4.8-9 3-12-1.5-2.5-5-2-6.5 0z"/><path d="M12 7c0-2 1-3.5 3-4"/>',
+  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>', dots: '<circle cx="6" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18" cy="12" r="1.3"/>',
+  flame: '<path d="M12 21c4 0 6.5-2.6 6.5-6.3 0-3.7-3-6-4.3-9.2-.9 2.4-2.2 3.7-3.7 4.6-.5-1.3-.6-2.6-.2-4.1C7.7 7.8 5.5 11 5.5 14.7 5.5 18.4 8 21 12 21z"/>',
+  dumbbell: '<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/>', book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/>', save: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 17v2.5h15V17"/>',
+  ruler: '<rect x="3" y="8" width="18" height="8" rx="1.5"/><path d="M7 8v3M11 8v4M15 8v3M19 8v2"/>', phone: '<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 8.5-8.5M16 7l2.5 2.5M14 9l2 2"/>', lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
+  calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>', sparkles: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>',
+  chart: '<path d="M4 19h16"/><path d="M5 15l4-4 3 3 6-7"/><path d="M15 7h3v3"/>',
+  trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a2.5 2.5 0 0 0 3 4M16 6h3a2.5 2.5 0 0 1-3 4M12 13v4M8.5 20h7"/>', target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8"/>'
+};
+const icon = (k, cls = 'w-4 h-4') => `<svg viewBox="0 0 24 24" class="${cls}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[k] || ''}</svg>`;
+const MEAL_IC = { Desayuno: 'coffee', Comida: 'utensils', Puente: 'apple', Cena: 'moon', Otro: 'dots' };
+const TITLE_IC = { '➕': 'plus', '⭐': 'star', '🍽️': 'utensils', '✅': 'check', '🏋️': 'dumbbell', '🔥': 'flame', '📚': 'book', '🏆': 'trophy', '🎯': 'target', '👤': 'user', '💾': 'save', '📏': 'ruler', '📱': 'phone', '🔑': 'key', '🔒': 'lock', '🗓️': 'calendar', '🤖': 'sparkles', '🧠': 'chart', '📈': 'chart', '⚖️': 'ruler' };
+function ui2Titles(root) {
+  if (!isUI2()) return;
+  root.querySelectorAll('.section-title').forEach(h => {
+    const t = h.textContent.trim(), k = Object.keys(TITLE_IC).find(e => t.startsWith(e));
+    if (k) h.innerHTML = `<span class="ti">${icon(TITLE_IC[k], 'w-[15px] h-[15px]')}</span>${esc(t.slice(k.length).trim())}`;
+  });
 }
 function ringsCard(t, st, budget, eatBack) {
   const vals = [
@@ -1794,8 +2383,15 @@ function dietStatus(date) {
   return { c: 'green', label: 'Dentro del objetivo' };
 }
 const DOT = { green: 'bg-emerald-400', amber: 'bg-amber-400', red: 'bg-rose-500' };
+/* Sesiones de retos (no son sesiones de gym: se muestran aparte en historial y calendario) */
+function retoEntries(date) {
+  const out = [];
+  for (const id of RETO_IDS) for (const h of retoOf(id)?.history || []) if (!date || h.date === date) out.push({ id, r: RETOS[id], h });
+  return out.sort((a, b) => (a.h.date === b.h.date ? (a.h.at || 0) - (b.h.at || 0) : a.h.date < b.h.date ? -1 : 1));
+}
+const retoLine = ({ r, h }) => `${h.got.filter(v => v > 0).join('+')}${r.unit === 's' ? ' s' : ''}`;
 function dayActivity(date) {
-  return { sessions: sortedSessions().filter(s => s.date === date && s.exercises.length), cardio: state.cardio.filter(c => c.date === date) };
+  return { sessions: sortedSessions().filter(s => s.date === date && s.exercises.length), cardio: state.cardio.filter(c => c.date === date), retos: retoEntries(date) };
 }
 function renderCalMonth(part = 'all') {
   const m0 = ui.calMonth;
@@ -1817,7 +2413,7 @@ function renderCalMonth(part = 'all') {
     cells.push(`<button class="cal-day ${sel ? 'cal-sel' : ''} ${iso === today ? 'cal-today' : ''} ${future ? 'opacity-25 pointer-events-none' : ''}" data-mact="calDay" data-d="${iso}" type="button">
       <span class="text-xs font-bold">${d}</span>
       <span class="flex items-center gap-0.5 h-3 text-[9px] leading-none">
-        ${ds ? `<span class="w-1.5 h-1.5 rounded-full ${DOT[ds.c]}"></span>` : ''}${act.sessions.length ? '🏋️' : ''}${act.cardio.length ? '🔥' : ''}
+        ${ds ? `<span class="w-1.5 h-1.5 rounded-full ${DOT[ds.c]}"></span>` : ''}${act.sessions.length ? '🏋️' : ''}${act.retos.length ? '🏆' : ''}${act.cardio.length ? '🔥' : ''}
       </span>
     </button>`);
   }
@@ -1839,7 +2435,7 @@ function renderCalMonth(part = 'all') {
       <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>dieta bien</span>
       <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>regular</span>
       <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>pasado</span>
-      <span>🏋️ pesas</span><span>🔥 cardio</span>
+      <span>🏋️ pesas</span><span>🏆 retos</span><span>🔥 cardio</span>
     </div>
 `;
 }
@@ -1852,7 +2448,7 @@ function renderCalendar() {
         <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>dieta bien</span>
         <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>regular</span>
         <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>pasado</span>
-        <span>🏋️ pesas</span><span>🔥 cardio</span>
+        <span>🏋️ pesas</span><span>🏆 retos</span><span>🔥 cardio</span>
       </div>
       <div id="calDetail">${renderCalDetail(ui.calSel)}</div>
     </div>
@@ -1878,8 +2474,10 @@ function renderCalDetail(date) {
       <div class="text-[11px] font-bold uppercase tracking-wider text-brand">🏋️ Entreno</div>
       ${act.sessions.length ? act.sessions.map(s => `<div class="mt-1">
           <div class="text-xs font-semibold">${esc(s.dayTitle || 'Sesión')}${s.durationMin ? ` · ⏱ ${s.durationMin} min` : ''}${gymKcalOf(s) ? ` · <span class="${MAC.kcal.text}">~${gymKcalOf(s)} kcal</span>` : ''}${s.deload ? ' · 🔋 descarga' : ''}</div>
-          ${s.exercises.map(e => `<div class="text-[11px] text-mute leading-snug">· ${esc(e.name)}: <span class="font-mono">${e.sets.map(x => `${wLabel(x.w, isBwEx(e.exId))}×${x.r}`).join(' · ')}</span></div>`).join('')}
-        </div>`).join('') : '<div class="text-xs text-mute mt-0.5">Sin entreno de fuerza.</div>'}
+          ${s.exercises.map(e => `<div class="text-[11px] text-mute leading-snug">· ${esc(e.name)}: <span class="font-mono">${e.sets.map(x => setStr(x, isBwEx(e.exId), isTimedEx(e))).join(' · ')}</span></div>`).join('')}
+        </div>`).join('') : ''}
+      ${act.retos.map(x => `<div class="mt-1"><div class="text-xs font-semibold">🏆 Reto ${esc(x.r.name)} · nivel ${x.h.level}${x.h.kcal ? ` · <span class="${MAC.kcal.text}">~${x.h.kcal} kcal</span>` : ''}</div><div class="text-[11px] text-mute font-mono">${retoLine(x)} ${(RETO_FEEL.find(f => f[0] === x.h.feel) || ['', ''])[1]}</div></div>`).join('')}
+      ${!act.sessions.length && !act.retos.length ? '<div class="text-xs text-mute mt-0.5">Sin entreno de fuerza.</div>' : ''}
     </div>
     <div>
       <div class="text-[11px] font-bold uppercase tracking-wider text-brand">🔥 Cardio</div>
@@ -1960,19 +2558,20 @@ function renderDiet() {
   else if (leftK >= 0) advice = `Llevas ${Math.round(t.kcal)} kcal consumidas.${cardioTxt} Proteína cumplida ✓. Margen: ${leftK} kcal.`;
   else advice = `Llevas ${Math.round(t.kcal)} kcal consumidas.${cardioTxt} Te has pasado ${-leftK} kcal. Sin drama: mañana vuelve a tu objetivo, no compenses de más.`;
 
-  const typeChips = MEAL_TYPES.map(tp => `<button class="chip chip-sm ${ui.mealType === tp ? 'chip-on' : ''}" data-act="mealType" data-type="${tp}" type="button">${tp}</button>`).join('');
+  const typeChips = MEAL_TYPES.map(tp => `<button class="chip chip-sm meal-chip ${ui.mealType === tp ? 'chip-on' : ''}" data-act="mealType" data-type="${tp}" type="button">${tp}</button>`).join('');
   const hasHistory = Object.keys(state.meals).length > 0;
   const grouped = MEAL_TYPES.map(tp => {
     const items = mealsOf(date).filter(m => (m.type || 'Otro') === tp);
     if (!items.length) return '';
     const sub = items.reduce((a, m) => a + m.kcal, 0);
     return `<div class="mt-3 first:mt-0">
-      <div class="flex justify-between text-[11px] uppercase tracking-wider text-mute font-bold mb-1.5"><span>${tp}</span><span><span class="${MAC.kcal.text}">${Math.round(sub)} kcal</span>${PROT_TYPES.includes(tp) ? (() => { const pg = Math.round(items.reduce((a, m) => a + (m.prot || 0), 0)); return `<span class="text-mute"> · </span><span class="${MAC.prot.text}">P ${pg} g</span>${pg >= minProt() ? '<span class="text-emerald-300"> ✓</span>' : '<span class="ml-1 normal-case rounded px-1.5 py-px bg-white/10 text-white">baja</span>'}`; })() : ''}</span></div>
+      <div class="flex justify-between text-[11px] uppercase tracking-wider text-mute font-bold mb-1.5"><span class="${isUI2() ? 'meal-h' : ''}">${isUI2() ? `<span class="meal-ic">${icon(MEAL_IC[tp] || 'dots', 'w-[15px] h-[15px]')}</span>` : ''}${tp}</span><span><span class="${MAC.kcal.text}">${Math.round(sub)} kcal</span>${PROT_TYPES.includes(tp) ? (() => { const pg = Math.round(items.reduce((a, m) => a + (m.prot || 0), 0)); return `<span class="text-mute"> · </span><span class="${MAC.prot.text}">P ${pg} g</span>${pg >= minProt() ? '<span class="text-emerald-300"> ✓</span>' : '<span class="ml-1 normal-case rounded px-1.5 py-px bg-white/10 text-white">baja</span>'}`; })() : ''}</span></div>
       ${items.map(m => `<div class="meal">
         <div class="min-w-0 flex-1">
           <div class="text-sm font-semibold truncate ${ui.editing?.id === m.id ? 'text-brand' : ''}">${ui.editing?.id === m.id ? '✏️ ' : ''}${esc(m.desc || tp)}</div>
           <div class="text-[11px] font-mono mt-0.5">${macroLine(m)}</div>
         </div>
+        ${normName(m.desc) ? `<button class="iconbtn iconbtn-sm" style="${isFavMeal(normName(m.desc)) ? 'color:#fcd34d;border-color:rgba(252,211,77,.5)' : ''}" data-act="favMeal" data-key="${esc(normName(m.desc))}" type="button" aria-label="${isFavMeal(normName(m.desc)) ? 'Quitar de favoritas' : 'Guardar en favoritas'}">${isFavMeal(normName(m.desc)) ? '★' : '☆'}</button>` : ''}
         <button class="iconbtn iconbtn-sm" data-act="editMeal" data-id="${esc(m.id)}" type="button" aria-label="Editar">✎</button>
         <button class="iconbtn iconbtn-sm" data-act="delMeal" data-id="${esc(m.id)}" type="button" aria-label="Borrar">✕</button>
       </div>`).join('')}
@@ -2002,10 +2601,11 @@ function renderDiet() {
     ${(() => { const ps = protSpread(date); return ps.total ? `<p class="text-[11px] mt-3 ${ps.ok === ps.total ? 'text-emerald-300' : 'text-amber-300'}">🥩 Proteína repartida: ${ps.ok}/${ps.total} comidas con ${minProt()} g o más${ps.low.length ? ` · baja en ${esc(ps.low.join(', ').toLowerCase())}` : ' ✓'}</p>` : ''; })()}
     <p class="text-xs text-mute mt-2 leading-relaxed">${esc(advice)}</p>
   </section>
+  ${dailyHabitsHTML(date)}
 
   <section class="card p-4 mt-3 space-y-3 ${ui.editing ? 'border-brand/50' : ''}" id="mealCard">
     ${ui.editing ? `<div class="flex items-center justify-between"><h3 class="section-title">✏️ Editar comida</h3><span class="text-[11px] text-mute">${esc(fmtDate(ui.editing.date))}</span></div>` : '<h3 class="section-title">➕ Añadir comida</h3>'}
-    <div class="flex flex-wrap gap-1.5">${typeChips}</div>
+    <div class="flex gap-1" data-noswipe>${typeChips}</div>
     ${ui.editing ? '' : `<textarea class="field" id="mealDesc" rows="2" placeholder="${ui.img ? 'Opcional: añade lo que sepas para afinar (ej: 150 g de arroz, aceite de oliva)' : 'Ej: 200 g de pechuga a la plancha y 150 g de arroz'}">${esc(ui.mealDesc)}</textarea>
     ${ui.img ? `<div class="relative rounded-xl overflow-hidden border border-line">
         <img src="${ui.img}" alt="Foto del plato" class="w-full max-h-56 object-cover" />
@@ -2025,8 +2625,8 @@ function renderDiet() {
   </section>
 
   ${hasHistory && !ui.editing ? `<section class="card p-4 mt-3">
-    <h3 class="section-title">⭐ Tus comidas habituales</h3>
-    <p class="text-[11px] text-mute mt-1">Las que más repites en «${esc(ui.mealType)}» (hasta 10). Al tocar una podrás ajustar cantidades antes de añadirla.</p>
+    <h3 class="section-title">⭐ Favoritas y habituales</h3>
+    <p class="text-[11px] text-mute mt-1">En «${esc(ui.mealType)}»: primero tus favoritas ★ y luego las que más repites (hasta 10). Márcalas con ☆ en el registro. Al tocar una podrás ajustar cantidades antes de añadirla.</p>
     <input class="field mt-2.5 py-2 text-xs" id="mealSearch" type="search" autocomplete="off" placeholder="🔍 Buscar en todo tu historial…" value="${esc(ui.mealSearch || '')}" />
     <div class="flex flex-wrap gap-1.5 mt-2.5" id="mealPicks">${renderPickList()}</div>
   </section>` : ''}
@@ -2419,7 +3019,9 @@ function renderProgress() {
   let strengthHtml = '<p class="text-sm text-mute">Guarda alguna sesión y aquí verás tu fuerza por ejercicio.</p>';
   if (ui.progEx) {
     const pts = [], rows = [];
+    let isT = false;
     for (const s of sortedSessions()) for (const e of s.exercises) if (e.exKey === ui.progEx) {
+      if (isTimedEx(e)) { isT = true; pts.push({ x: s.date, y: Math.max(...e.sets.map(x => x.r)), kg: false }); rows.push({ date: s.date, sets: e.sets, bw: isBwEx(e.exId), t: true }); continue; }
       const best = Math.max(...e.sets.map(x => oneRM(e, x, s.date)));
       const reps = e.sets.reduce((a, x) => a + x.r, 0);
       pts.push({ x: s.date, y: best > 0 ? Math.round(best * 10) / 10 : reps, kg: best > 0 });
@@ -2429,16 +3031,17 @@ function renderProgress() {
     const pr = pts.length ? Math.max(...pts.map(p => p.y)) : 0;
     strengthHtml = `
       <select class="field" data-act-change="progEx">${opts.map(([k, v]) => `<option value="${esc(k)}" ${k === ui.progEx ? 'selected' : ''}>${esc(v.name)} (${v.count})</option>`).join('')}</select>
-      <div class="flex justify-between text-[11px] text-mute mt-3"><span>${isBW ? 'Reps totales por sesión' : '1RM estimado (Epley) por sesión'}</span><span>Mejor: <strong class="text-white">${fmtNum(pr)}${isBW ? ' reps' : ' kg'}</strong></span></div>
-      <div class="mt-1">${lineChart(pts, { color: '#00d2df', unit: isBW ? '' : ' kg', label: 'fuerza' })}</div>
-      <div class="space-y-1 mt-2">${rows.slice(-5).reverse().map(r => `<div class="text-[11px] flex justify-between gap-3 bg-ink rounded-lg px-2.5 py-1.5"><span class="text-mute shrink-0">${fmtDate(r.date)}</span><span class="font-mono text-right">${r.sets.map(x => `${wLabel(x.w, r.bw)}×${x.r}`).join(' · ')}</span></div>`).join('')}</div>`;
+      <div class="flex justify-between text-[11px] text-mute mt-3"><span>${isT ? '⏱ Mejor serie por sesión' : isBW ? 'Reps totales por sesión' : '1RM estimado (Epley) por sesión'}</span><span>Mejor: <strong class="text-white">${isT ? secTxt(pr) : fmtNum(pr) + (isBW ? ' reps' : ' kg')}</strong></span></div>
+      <div class="mt-1">${lineChart(pts, { color: '#00d2df', unit: isT ? ' s' : isBW ? '' : ' kg', label: 'fuerza' })}</div>
+      <div class="space-y-1 mt-2">${rows.slice(-5).reverse().map(r => `<div class="text-[11px] flex justify-between gap-3 bg-ink rounded-lg px-2.5 py-1.5"><span class="text-mute shrink-0">${fmtDate(r.date)}</span><span class="font-mono text-right">${r.sets.map(x => setStr(x, r.bw, r.t)).join(' · ')}</span></div>`).join('')}</div>`;
   }
 
   const backupAge = st.lastBackup ? daysBetween(st.lastBackup, todayISO()) : null;
   const needBackup = state.sessions.length > 0 && (backupAge === null || backupAge > 7);
-  const hist = sortedSessions().slice(-20).reverse();
+  const hist = [...sortedSessions().map(x => ({ ...x, _t: x.endedAt || 0 })), ...retoEntries().map(x => ({ reto: x, date: x.h.date, _t: x.h.at || 0 }))].sort((a, b) => (a.date === b.date ? a._t - b._t : a.date < b.date ? -1 : 1)).slice(-20).reverse();
 
   return `
+  ${muscleMapHTML()}
   ${needBackup ? `<div class="banner-warn mb-3"><span>${backupAge === null ? 'Aún no has hecho copia de seguridad.' : `Última copia hace ${backupAge} días.`} Si borras datos del navegador, lo pierdes todo.</span>${state.settings.driveConnected ? '<button class="btn-banner btn-banner-warn shrink-0" data-act="driveBackup" type="button">☁️ Drive</button>' : '<button class="btn-banner btn-banner-warn shrink-0" data-act="share" type="button">📤 Copia</button>'}</div>` : ''}
 
   <section class="grid grid-cols-3 gap-2">
@@ -2480,21 +3083,26 @@ function renderProgress() {
 
   ${renderRecords()}
 
-  <section class="card p-4 mt-3">
-    <h3 class="section-title">📚 Historial de sesiones</h3>
+  <details class="card p-4 mt-3" ${openAttr('history')}>
+    <summary class="flex items-center justify-between cursor-pointer select-none"><h3 class="section-title">📚 Historial de sesiones</h3><span class="flex items-center gap-2 text-[11px] text-mute">${hist.length ? `${hist.length === 20 ? 'últimas 20' : hist.length + (hist.length === 1 ? ' sesión' : ' sesiones')} · ${esc(fmtDateShort(hist[0].date))}` : 'sin sesiones'}<span class="tri"></span></span></summary>
     <div class="space-y-2 mt-3">
-      ${hist.length ? hist.map(s => `<details class="bg-ink rounded-xl border border-line">
+      ${hist.length ? hist.map(s => s.reto ? `<div class="bg-ink rounded-xl border border-line px-3 py-2.5 text-sm">
+        <div class="flex justify-between items-center"><span class="font-semibold truncate">🏆 Reto ${esc(s.reto.r.name)} <span class="text-mute font-normal text-xs">· nivel ${s.reto.h.level}</span></span><span class="text-[11px] text-mute shrink-0 ml-2">${fmtDate(s.date)}</span></div>
+        <div class="text-[11px] text-mute mt-0.5"><span class="font-mono">${retoLine(s.reto)}</span> ${(RETO_FEEL.find(f => f[0] === s.reto.h.feel) || ['', ''])[1]}${s.reto.h.kcal ? ` · <span class="${MAC.kcal.text}">~${s.reto.h.kcal} kcal</span>` : ''}</div>
+      </div>` : `<details class="bg-ink rounded-xl border border-line">
         <summary class="px-3 py-2.5 flex justify-between items-center cursor-pointer text-sm"><span class="font-semibold truncate">${esc(s.dayTitle || s.dayId)}${s.durationMin ? ` <span class="text-mute font-normal text-xs">· ${s.durationMin} min</span>` : ''}</span><span class="flex items-center gap-2 text-[11px] text-mute shrink-0 ml-2">${fmtDate(s.date)}<span class="tri"></span></span></summary>
         <div class="px-3 pb-3 space-y-1 text-[11px]">
-          ${s.exercises.map(e => `<div><strong>${esc(e.name)}:</strong> <span class="font-mono text-mute">${e.sets.map(x => `${wLabel(x.w, isBwEx(e.exId))}×${x.r}`).join(', ')}</span></div>`).join('')}
+          ${s.exercises.map(e => `<div><strong>${esc(e.name)}:</strong> <span class="font-mono text-mute">${e.sets.map(x => setStr(x, isBwEx(e.exId), isTimedEx(e))).join(', ')}</span></div>`).join('')}
           ${s.habits?.length ? `<div class="text-emerald-300 mt-1">✓ ${s.habits.map(esc).join(' · ')}</div>` : ''}
+          ${s.skipped?.length ? `<div class="text-mute mt-1">⏭ Hoy no: ${s.skipped.map(esc).join(' · ')}</div>` : ''}
+          ${s.notes?.length ? s.notes.map(n => `<div class="text-amber-200/90 mt-1">💬 ${esc(n.name)}: ${esc(noteTxt(n))}</div>`).join('') : ''}
           ${(() => { const g = gymKcalInfo(s); return `<div class="mt-1.5 flex flex-wrap items-center gap-x-2">${g ? `<span class="${MAC.kcal.text}">🏋️ ~${g.kcal} kcal netas</span><span class="text-mute">${g.manual ? '(corregidas a mano)' : `(MET ${fmtNum(Math.round(g.met * 10) / 10)} · ${g.mins} min · ${fmtNum(g.bw)} kg)`}</span>` : '<span class="text-mute">Sin estimación de kcal (falta duración o peso)</span>'}<button class="underline text-brand" data-act="sessKcal" data-id="${esc(s.id)}" type="button">ajustar</button></div>`; })()}
           <div class="flex gap-4 mt-2"><button class="underline text-brand" data-act="shareSession" data-id="${esc(s.id)}" type="button">📸 Tarjeta</button>
           <button class="text-rose-300 underline" data-act="delSession" data-id="${esc(s.id)}" type="button">Borrar esta sesión</button></div>
         </div>
       </details>`).join('') : '<p class="text-sm text-mute">Sin sesiones todavía.</p>'}
     </div>
-  </section>`;
+  </details>`;
 }
 
 /* =========================================================================
@@ -2539,8 +3147,7 @@ function renderSettings() {
   </details>
 
   ${profileSectionHTML()}
-  <section class="card p-4 mt-3 space-y-3">
-    <h3 class="section-title">🎯 Objetivos diarios</h3>
+  ${foldCard('goals', '🎯 Objetivos diarios', `${st.targetKcal} kcal · ${st.targetProt} g P`, '', `
     <div class="grid grid-cols-4 gap-2">
       <label class="lbl ${MAC.kcal.text}">kcal<input class="field mt-1 text-center" id="tK" inputmode="numeric" value="${st.targetKcal}" /></label>
       <label class="lbl ${MAC.prot.text}">Prot g<input class="field mt-1 text-center" id="tP" inputmode="numeric" value="${st.targetProt}" /></label>
@@ -2551,7 +3158,7 @@ function renderSettings() {
     <p class="text-[11px] ${Math.abs(sumK - st.targetKcal) > st.targetKcal * 0.05 ? 'text-amber-300' : 'text-mute'}">Tus macros suman ${sumK} kcal (objetivo ${st.targetKcal}).</p>
     <label class="habit"><input type="checkbox" id="tEat" ${st.eatBackCardio ? 'checked' : ''} /><span class="text-xs">Sumar las calorías del ejercicio (cardio y gym) a lo que puedo comer <span class="text-mute">(desactivado = déficit más fiable)</span></span></label>
     <button class="btn-primary w-full" data-act="saveGoals" type="button">Guardar objetivos</button>
-  </section>
+`)}
 
   <details class="card p-4 mt-3" id="blocksBox" ${ui.blocksOpen ? 'open' : ''}>
     <summary class="flex items-center justify-between cursor-pointer select-none">
@@ -2573,17 +3180,13 @@ function renderSettings() {
     </div>`).join('')}
     <div class="grid grid-cols-2 gap-2">
       <button class="btn-ghost" data-act="addProg" type="button">＋ Añadir bloque</button>
-      <button class="btn-ghost" data-act="resetPlan" type="button">Restaurar bloques</button>
+      <button class="btn-ghost" data-act="resetPlan" type="button">Vaciar bloques</button>
     </div>
     <p class="text-[11px] text-mute">Los días se añaden desde Entreno con «＋ Día» (en el bloque activo) y los ejercicios con el botón ✎ de cada uno.</p>
     </div>
   </details>
 
-  <section class="card p-4 mt-3 space-y-3">
-    <h3 class="section-title">✅ Hábitos del remate</h3>
-    <textarea class="field" id="habitsTxt" rows="3" placeholder="Uno por línea">${esc(st.habits.join('\n'))}</textarea>
-    <button class="btn-primary w-full" data-act="saveHabits" type="button">Guardar hábitos</button>
-  </section>
+  ${habitsSettingsHTML()}
 
   <section class="card p-4 mt-3 space-y-3">
     <h3 class="section-title">💾 Copias de seguridad</h3>
@@ -2625,14 +3228,9 @@ function renderSettings() {
   ${accessSectionHTML()}
   <section class="card p-4 mt-3 space-y-3">
     <h3 class="section-title">📱 Aplicación</h3>
-    <div>
-      <div class="text-xs font-bold">Deslizar el dedo a izquierda o derecha</div>
-      <div class="seg mt-1.5" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-        ${[['tabs', 'Cambia de pestaña'], ['dietDay', 'Día en Dieta · bloque en Entreno'], ['off', 'Desactivado']].map(([k, l]) => `<button class="seg-btn py-2 px-1 ${swipeMode() === k ? 'seg-on' : ''}" data-act="swipeMode" data-mode="${k}" type="button">${l}</button>`).join('')}
-      </div>
-    </div>
     ${deferredInstall ? `<button class="btn-primary w-full" data-act="install" type="button">Instalar en la pantalla de inicio</button>` : `<p class="text-xs text-mute">${isStandalone() ? 'Instalada como app ✓' : 'Para instalar: menú ⋮ del navegador → «Instalar aplicación» o «Añadir a pantalla de inicio».'}</p>`}
     ${versionStatusHTML()}
+    ${access.usageUrl ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span class="min-w-0">🔑 Este dispositivo: <span class="${/✓/.test(deviceDiag) ? 'text-emerald-300' : 'text-amber-300'}">${esc(deviceDiag || 'sin comprobar')}</span><br><span class="opacity-70">${esc(deviceLabel())} · script …${esc(access.usageUrl.replace(/\/exec.*$/, '').slice(-6))}</span></span><button class="underline text-brand shrink-0" data-act="devCheck" type="button">Comprobar</button></div>` : ''}
     <div class="grid grid-cols-2 gap-2">
       <button class="btn-ghost" data-act="checkUpdate" type="button">Buscar actualización</button>
       <button class="btn-danger" data-act="wipe" type="button">Borrar todo</button>
@@ -2788,6 +3386,12 @@ const DRIVE_KEEP = 45; // copias que se conservan en Drive (las más antiguas se
 const TOKEN_KEY = 'fitnesteban_gtoken'; // fuera del estado: nunca va en las copias
 const DEVICE_KEY = 'fitnesteban_device';  // identifica este móvil/PC (no va en las copias)
 function deviceId() { try { let d = localStorage.getItem(DEVICE_KEY); if (!d) { d = uid('dev_'); localStorage.setItem(DEVICE_KEY, d); } return d; } catch { return 'dev_x'; } }
+function deviceLabel() {
+  const u = navigator.userAgent;
+  const os = /iPad/i.test(u) ? 'iPad' : /iPhone/i.test(u) ? 'iPhone' : /Android/i.test(u) ? 'Android' : /Windows/i.test(u) ? 'Windows' : /Mac OS X|Macintosh/i.test(u) ? 'Mac' : /CrOS/i.test(u) ? 'Chromebook' : /Linux/i.test(u) ? 'Linux' : 'Otro';
+  const br = /EdgA?\//.test(u) ? 'Edge' : /SamsungBrowser/i.test(u) ? 'Samsung Internet' : /OPR\//.test(u) ? 'Opera' : /Firefox|FxiOS/i.test(u) ? 'Firefox' : /CriOS|Chrome\//.test(u) ? 'Chrome' : /Safari/i.test(u) ? 'Safari' : 'Navegador';
+  return `${os} · ${br}${isStandalone() ? ' · app' : ''}`;
+}
 function deviceName() { const u = navigator.userAgent; return /iPhone|iPad/i.test(u) ? '📱 iPhone' : /Android/i.test(u) ? '📱 Android' : '💻 Ordenador'; }
 const fmtWhen = ms => { if (!ms) return '¿?'; const d = new Date(+ms); return `${fmtDate(toISO(d))} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 /* Resumen de la copia más reciente de Drive (de sus etiquetas o, en copias antiguas, leyendo el archivo) */
@@ -3029,28 +3633,90 @@ function startTimer(sec) {
   timer.total = sec; timer.endAt = Date.now() + sec * 1000;
   clearInterval(timer.int); timer.int = setInterval(tickTimer, 250);
   $('#timerPill').classList.remove('timer-ready'); $('#timerPill').classList.add('timer-run');
+  document.body.classList.add('timer-on'); // «?» y ✉️ se apartan y la cuenta atrás ocupa su sitio
   tickTimer(); wakeOn();
 }
 function addTimer(sec) { if (!timer.endAt) return startTimer(sec); timer.endAt += sec * 1000; timer.total += sec; tickTimer(); }
 function stopTimer() {
   clearInterval(timer.int); timer.endAt = 0;
   $('#timerDisplay').textContent = 'Descanso'; $('#timerBar').style.width = '0%';
-  $('#timerPill').classList.remove('timer-run', 'timer-ready'); wakeOff();
+  $('#timerPill').classList.remove('timer-run', 'timer-ready', 'timer-low'); document.body.classList.remove('timer-on'); wakeOff();
 }
 function tickTimer() {
   const leftMs = timer.endAt - Date.now();
   if (leftMs <= 0) {
     clearInterval(timer.int); timer.endAt = 0;
     $('#timerDisplay').textContent = '¡Ya!'; $('#timerBar').style.width = '0%';
-    $('#timerPill').classList.remove('timer-run'); $('#timerPill').classList.add('timer-ready');
+    $('#timerPill').classList.remove('timer-run', 'timer-low'); $('#timerPill').classList.add('timer-ready');
     try { navigator.vibrate?.([250, 120, 250, 120, 400]); } catch { /* nada */ }
     beep(); wakeOff();
-    setTimeout(() => { if (!timer.endAt) { $('#timerDisplay').textContent = 'Descanso'; $('#timerPill').classList.remove('timer-ready'); } }, 5000);
+    setTimeout(() => { if (!timer.endAt) { $('#timerDisplay').textContent = 'Descanso'; $('#timerPill').classList.remove('timer-ready'); document.body.classList.remove('timer-on'); } }, 5000);
     return;
   }
   const left = Math.ceil(leftMs / 1000);
   $('#timerDisplay').textContent = `${pad(Math.floor(left / 60))}:${pad(left % 60)}`;
-  $('#timerBar').style.width = `${Math.max(0, Math.min(100, leftMs / (timer.total * 1000) * 100))}%`;
+  const pct = Math.max(0, Math.min(100, leftMs / (timer.total * 1000) * 100));
+  $('#timerBar').style.width = `${pct}%`;
+  $('#timerPill').style.setProperty('--p', `${pct}%`);
+  $('#timerPill').classList.toggle('timer-low', left <= 5);
+}
+/* ⏱ Cronómetro de una serie por tiempo: cuenta atrás 3-2-1, cuenta hacia arriba, avisa al llegar al objetivo y guarda los segundos */
+function tone(freq = 880, dur = 0.15) {
+  const c = timer.ctx; if (!c) return;
+  try { const o = c.createOscillator(), g = c.createGain(); o.frequency.value = freq; o.type = 'sine';
+    g.gain.setValueAtTime(0.0001, c.currentTime); g.gain.exponentialRampToValueAtTime(0.4, c.currentTime + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
+    o.connect(g).connect(c.destination); o.start(); o.stop(c.currentTime + dur + 0.02); } catch { /* sin audio */ }
+}
+function stopwatchSheet(exId, key, i) {
+  const f = findEx(exId); if (!f) return;
+  const e = f.ex, c = coachFor(e, key), d = draftOf(currentDay().id);
+  const tg = c.targets[i] ?? c.targets[c.targets.length - 1];
+  const target = typeof tg === 'number' ? tg : (parseInt(String(tg), 10) || e.minReps);
+  const name = variantOf(e).variant.name;
+  const sw = { phase: 'ready', t0: 0, int: null, hitT: false, hitM: false };
+  const el = id => document.getElementById(id);
+  const draw = () => {
+    if (!el('swTime')) { clearInterval(sw.int); wakeOff(); return; }
+    if (sw.phase === 'count') {
+      const left = 3 - Math.floor((Date.now() - sw.t0) / 1000);
+      if (left <= 0) { sw.phase = 'run'; sw.t0 = Date.now(); tone(1320, 0.3); try { navigator.vibrate?.(120); } catch { /* nada */ } paint(); return; }
+      if (el('swTime').textContent !== String(left)) { el('swTime').textContent = String(left); tone(660, 0.12); }
+      return;
+    }
+    if (sw.phase !== 'run') return;
+    const sec = Math.floor((Date.now() - sw.t0) / 1000);
+    el('swTime').textContent = secClock(sec);
+    el('swBar').style.width = `${Math.min(100, sec / e.maxReps * 100)}%`;
+    if (!sw.hitT && sec >= target) { sw.hitT = true; beep(); try { navigator.vibrate?.([200, 100, 200]); } catch { /* nada */ } el('swMsg').innerHTML = '<span class="text-emerald-300 font-bold">🎯 ¡Objetivo! Aguanta si puedes</span>'; }
+    if (!sw.hitM && sec >= e.maxReps) { sw.hitM = true; beep(); try { navigator.vibrate?.([300, 120, 300]); } catch { /* nada */ } el('swMsg').innerHTML = '<span class="text-emerald-300 font-bold">🏁 Máximo alcanzado: para cuando quieras</span>'; }
+  };
+  const secClock = sec => `${pad(Math.floor(sec / 60))}:${pad(sec % 60)}`;
+  const html = () => `<div class="text-center">
+      <div class="text-[11px] font-bold uppercase tracking-wider text-brand">⏱ Serie ${i + 1} de ${setCount(e, key, d)}</div>
+      <h3 class="font-extrabold text-lg mt-1">${esc(name)}</h3>
+      <div class="text-xs text-mute mt-1">Objetivo <b class="text-white">${target} s</b> · máx ${e.maxReps} s</div>
+      <div id="swTime" class="font-black tabular-nums mt-4 ${sw.phase === 'count' ? 'text-brand' : ''}" style="font-size:72px;line-height:1">${sw.phase === 'count' ? '3' : '00:00'}</div>
+      <div class="h-2 rounded-full bg-ink border border-line mt-4 overflow-hidden"><div id="swBar" class="h-full" style="width:0%;background:linear-gradient(90deg,#22d3ee,#34d399)"></div></div>
+      <div id="swMsg" class="text-xs text-mute mt-3 min-h-[18px]">${sw.phase === 'ready' ? 'Ponte en posición y pulsa Empezar: tienes 3 s.' : sw.phase === 'count' ? 'Prepárate…' : ''}</div>
+    </div>
+    ${sw.phase === 'ready'
+      ? '<button class="btn-primary w-full text-lg py-4" data-mact="go" type="button">▶ Empezar</button><button class="btn-ghost w-full" data-mact="cancel" type="button">Cancelar</button>'
+      : '<button class="btn-primary w-full text-lg py-4" data-mact="stop" type="button">■ Parar y guardar</button><button class="btn-ghost w-full" data-mact="cancel" type="button">Cancelar sin guardar</button>'}`;
+  const paint = () => { const sh = $('#modalRoot .modal-sheet'); if (sh) sh.innerHTML = html(); draw(); };
+  openModal(html(), {
+    noClose: true,
+    go: () => { unlockAudio(); stopTimer(); sw.phase = 'count'; sw.t0 = Date.now(); paint(); tone(660, 0.12); wakeOn(); clearInterval(sw.int); sw.int = setInterval(draw, 100); },
+    cancel: () => { clearInterval(sw.int); wakeOff(); closeModal(); },
+    stop: () => {
+      if (sw.phase === 'count') { clearInterval(sw.int); wakeOff(); return closeModal(); }
+      const sec = Math.floor((Date.now() - sw.t0) / 1000);
+      clearInterval(sw.int); wakeOff(); closeModal();
+      if (sec < 1) return;
+      setDraftCell(key, i, 'r', String(sec));
+      if (!(d.done[key] || [])[i]) markSetDone(exId, key, i);
+      else { persist(); render(); }
+    }
+  });
 }
 function openTimerSheet() {
   unlockAudio();
@@ -3088,14 +3754,100 @@ document.addEventListener('visibilitychange', () => {
   if (hiddenAt && (Date.now() - hiddenAt > 30 * 60000 || hiddenDay !== todayISO()) && dietBackToToday() && ui.view === 'diet' && !$('#modalRoot').classList.contains('open')) { ui._animRings = true; render(); window.scrollTo({ top: 0 }); }
 });
 
+/* ---------- Hábitos: editor en Ajustes y tarjeta diaria en Dieta ---------- */
+/* Al renombrar, el historial (marcas diarias, sesiones y borradores) pasa al nombre nuevo */
+function renameHabit(old, nu) {
+  for (const k of Object.keys(state.habitLog || {})) state.habitLog[k] = state.habitLog[k].map(n => n === old ? nu : n);
+  for (const c of Object.values(state.habitCount || {})) if (old in c) { c[nu] = c[old]; delete c[old]; }
+  for (const s of state.sessions) if (Array.isArray(s.habits)) s.habits = s.habits.map(n => n === old ? nu : n);
+  for (const d of Object.values(state.drafts || {})) if (d?.habits && old in d.habits) { d.habits[nu] = d.habits[old]; delete d.habits[old]; }
+}
+function saveHabitList() { state.settings.habits = state.settings.habitList.filter(h => h.where === 'train').map(h => h.name); persist(); render(); }
+function habitsSettingsHTML() {
+  const list = state.settings.habitList || [], nd = list.filter(h => h.where === 'daily').length;
+  return foldCard('habits', '✅ Hábitos', list.length ? `${list.length - nd} entreno · ${nd} diario${nd === 1 ? "" : "s"}` : 'Ninguno', '', `
+    <p class="text-[11px] text-mute">🏋️ <b class="text-slate-300">Entreno</b>: se marcan al guardar la sesión. 🍽️ <b class="text-slate-300">Diario</b>: salen en Dieta los días que elijas y se marcan cada día, entrenes o no.</p>
+    <div class="space-y-1.5">${list.map((h, i) => `<div class="bg-ink rounded-lg px-3 py-2 space-y-2">
+      <div class="flex items-center justify-between gap-2"><span class="text-[13px] font-semibold min-w-0 break-words">${esc(h.name)}</span><span class="flex gap-1 shrink-0">
+        <button class="iconbtn iconbtn-sm ${i === 0 ? 'opacity-30 pointer-events-none' : ''}" data-act="habMove" data-i="${i}" data-d="-1" type="button" aria-label="Subir">▲</button>
+        <button class="iconbtn iconbtn-sm ${i === list.length - 1 ? 'opacity-30 pointer-events-none' : ''}" data-act="habMove" data-i="${i}" data-d="1" type="button" aria-label="Bajar">▼</button>
+        <button class="iconbtn iconbtn-sm" data-act="habEdit" data-i="${i}" type="button" aria-label="Editar hábito">✎</button>
+        <button class="iconbtn iconbtn-sm text-rose-300" data-act="habDel" data-i="${i}" type="button" aria-label="Borrar hábito">🗑</button></span></div>
+      <div class="seg" style="grid-template-columns:repeat(2,minmax(0,1fr))"><button class="seg-btn py-1.5 ${h.where === 'train' ? 'seg-on' : ''}" data-act="habWhere" data-i="${i}" data-v="train" type="button">🏋️ Entreno</button><button class="seg-btn py-1.5 ${h.where === 'daily' ? 'seg-on' : ''}" data-act="habWhere" data-i="${i}" data-v="daily" type="button">🍽️ Diario (Dieta)</button></div>
+      ${h.where === 'daily' ? `<button class="text-[12px] text-brand flex items-center gap-1" data-act="habDaysOpen" data-i="${i}" type="button">📅 ${daysLabel(h.days)} <span class="text-mute">${ui.habDaysOpen === i ? '▲' : '▼'}</span></button>
+        ${ui.habDaysOpen === i ? `<div class="grid grid-cols-7 gap-1">${WEEK_ORDER.map(d => `<button class="seg-btn py-1.5 rounded-lg border ${h.days.includes(d) ? 'seg-on' : 'border-line'}" data-act="habDay" data-i="${i}" data-d="${d}" type="button">${DAY_LETTER[d]}</button>`).join('')}</div>` : ''}
+        <div class="lbl">Se cumple con</div>
+        <div class="seg" style="grid-template-columns:repeat(2,minmax(0,1fr))"><button class="seg-btn py-1.5 ${(h.target || 1) === 1 ? 'seg-on' : ''}" data-act="habTarget" data-i="${i}" data-v="1" type="button">1 toque</button><button class="seg-btn py-1.5 ${(h.target || 1) > 1 ? 'seg-on' : ''}" data-act="habTarget" data-i="${i}" data-v="multi" type="button">Varios toques</button></div>
+        ${(h.target || 1) > 1 ? `<div class="grid grid-cols-2 gap-2"><label class="lbl">¿Cuántos?<input class="field mt-1" inputmode="numeric" maxlength="2" data-hab-t="${i}" value="${h.target}" /></label><label class="lbl">¿De qué? (opcional)<input class="field mt-1" maxlength="12" data-hab-u="${i}" value="${esc(h.unit || '')}" placeholder="vasos" /></label></div>
+        <p class="text-[11px] text-mute">Cada toque en Dieta rellena 1/${h.target} del anillo. Ej.: 8 vasos de 250 ml = 2 L.</p>` : ''}` : ''}
+    </div>`).join('') || '<p class="text-xs text-mute">Aún no tienes hábitos.</p>'}</div>
+    ${list.length < 12 ? `<div class="flex gap-2"><input class="field flex-1 min-w-0" id="habNew" maxlength="60" placeholder="Nuevo hábito (ej: 💊 Creatina 5 g)" /><button class="btn-primary px-4" data-act="habAdd" type="button">Añadir</button></div>` : '<p class="text-[11px] text-mute">Máximo 12 hábitos.</p>'}`);
+}
+function dailyHabitsHTML(date) {
+  if (!(state.settings.habitList || []).length) return state.settings.habitsHintOff ? '' : `<div class="flex items-center gap-2 mt-3 rounded-xl border border-line bg-panel px-3 py-2 text-[12px] text-mute">
+    <span class="flex-1">✅ ¿Suplementos, agua, cero alcohol…? <button class="text-brand underline" data-act="goHabits" type="button">Añade tus hábitos en Ajustes</button></span>
+    <button class="iconbtn iconbtn-sm" data-act="habHintOff" type="button" aria-label="No volver a mostrar">✕</button></div>`;
+  const list = dailyHabitsFor(date); if (!list.length) return '';
+  const done = list.filter(h => habitDone(date, h.name)).length, multi = list.some(h => (h.target || 1) > 1);
+  return `<section class="card px-3 py-3 mt-3" data-noswipe>
+    <div class="flex items-center justify-between px-1"><h3 class="section-title">✅ Hábitos ${date === todayISO() ? 'de hoy' : 'del día'}</h3><span class="text-[11px] font-bold ${done === list.length ? 'text-emerald-300' : 'text-mute'}">${done}/${list.length}${done === list.length ? ' ✓' : ''}</span></div>
+    <div class="grid gap-1 mt-2.5" style="grid-template-columns:repeat(5,minmax(0,1fr))">${list.map(h => habitRingHTML(h, date)).join('')}</div>
+    ${multi ? '<p class="text-[10px] text-mute text-center mt-2">Toca para sumar · mantén pulsado para restar</p>' : ''}
+  </section>`;
+}
+/* Icono del hábito: su emoji inicial o, si no lleva, la inicial del nombre */
+function habitIcon(name) {
+  const m = String(name).match(/^(\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic}|\p{Emoji_Modifier})*)\s*(.*)$/u);
+  return m ? { icon: m[1], label: m[2] || name, emoji: true } : { icon: (String(name).trim()[0] || '?').toUpperCase(), label: name, emoji: false };
+}
+const habitCountOf = (date, name) => state.habitCount[date]?.[name] || 0;
+function habitRingHTML(h, date) {
+  const t = h.target || 1, full = t > 1 ? habitCountOf(date, h.name) : 0, n = t > 1 ? Math.min(t, full) : (habitDone(date, h.name) ? 1 : 0), done = habitDone(date, h.name);
+  const { icon, label, emoji } = habitIcon(h.name), R = 20, C = 2 * Math.PI * R, gap = t > 1 ? 3 : 0, seg = C / t - gap;
+  const col = done ? '#34d399' : '#22d3ee';
+  const arcs = Array.from({ length: t }, (_, i) => `<circle cx="24" cy="24" r="${R}" fill="none" stroke="${i < n ? col : '#334155'}" stroke-width="4" stroke-dasharray="${seg.toFixed(2)} ${(C - seg).toFixed(2)}" stroke-dashoffset="${(-i * C / t).toFixed(2)}"/>`).join('');
+  const sub = t > 1 ? `${full}/${t}${h.unit ? ' ' + esc(h.unit) : ''}` : (done ? '✓' : '');
+  return `<button class="flex flex-col items-center gap-1 select-none" style="min-width:0;-webkit-touch-callout:none" data-act="dailyHabit" data-name="${esc(h.name)}" type="button" aria-pressed="${done}" aria-label="${esc(h.name)}${t > 1 ? ` ${full} de ${t}` : ''}">
+    <span class="relative grid place-items-center rounded-full pointer-events-none" style="width:56px;height:56px;background:${done ? 'rgba(52,211,153,.14)' : 'transparent'}">
+      <svg viewBox="0 0 48 48" class="absolute inset-0 -rotate-90 swipe-ok" style="width:56px;height:56px">${arcs}</svg>
+      <span class="relative ${emoji ? 'text-lg' : `text-[17px] font-black ${done ? 'text-emerald-300' : 'text-slate-300'}`}" style="${emoji && !n ? 'filter:grayscale(1);opacity:.6' : ''}">${esc(icon)}</span></span>
+    <span class="text-[10px] leading-tight text-center w-full truncate pointer-events-none ${done ? 'text-emerald-200' : 'text-mute'}">${esc(label)}</span>
+    <span class="text-[10px] font-bold -mt-0.5 pointer-events-none ${done ? 'text-emerald-300' : 'text-brand'}" style="min-height:12px">${sub}</span></button>`;
+}
+function habitStep(name, delta) {
+  const date = ui.dietDate || todayISO(), h = (state.settings.habitList || []).find(x => x.name === name); if (!h) return;
+  const t = h.target || 1, cur = state.habitLog[date] || [];
+  let doneNow;
+  if (t > 1) {
+    const c = (state.habitCount[date] ||= {}), n = clamp((c[name] || 0) + delta, 0, 99); // sigue contando por encima del objetivo
+    if (n) c[name] = n; else delete c[name];
+    if (!Object.keys(c).length) delete state.habitCount[date];
+    doneNow = n >= t;
+  } else doneNow = delta > 0 ? !cur.includes(name) : false;
+  const next = doneNow ? [...new Set([...cur, name])] : cur.filter(x => x !== name);
+  if (next.length) state.habitLog[date] = next; else delete state.habitLog[date];
+  persist(); render();
+}
+let habPress = null; // pulsación larga en hábitos (los listeners van junto a los de #app)
+
 /* ---------- Primeros pasos (solo dispositivos nuevos, no administrador) ---------- */
 const ACTIVITY = { low: ['Sentada', 1.35], mid: ['Algo activa', 1.5], high: ['Muy activa', 1.65] };
 function needsOnboarding(me) {
   const st = state.settings;
   return !me?.admin && !st.onboarded && !st.profile && !state.sessions.length && !Object.keys(state.meals).length && !state.bodyMetrics.length;
 }
+/* 🎂 Edad a partir de la fecha de nacimiento (se recalcula sola cada día) */
+function ageFrom(birth, at = todayISO()) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birth || '')) return null;
+  let a = +at.slice(0, 4) - +birth.slice(0, 4);
+  if (at.slice(5) < birth.slice(5)) a--;
+  return a >= 0 && a < 120 ? a : null;
+}
+const profileAge = p => (p?.birth ? ageFrom(p.birth) : (+p?.age || null));
+const BIRTH_MIN = '1920-01-01', birthMax = () => addDays(todayISO(), -14 * 365 - 3);
+const birthHint = b => { const a = ageFrom(b); return a !== null ? `→ ${a} años` : ''; };
 function calcTargets(d) {
-  const w = +d.weight, h = +d.height, a = +d.age;
+  const w = +d.weight, h = +d.height, a = ageFrom(d.birth) ?? +d.age;
   const bmr = 10 * w + 6.25 * h - 5 * a + (d.sex === 'h' ? 5 : d.sex === 'm' ? -161 : -78);
   const adj = { fat: 0.8, recomp: 0.9, muscle: 1.1, maint: 1 }[d.goal] ?? 0.9;
   const kcal = Math.round(bmr * (ACTIVITY[d.activity] || ACTIVITY.mid)[1] * adj / 10) * 10;
@@ -3104,10 +3856,78 @@ function calcTargets(d) {
   const carbs = Math.max(50, Math.round((kcal - prot * 4 - fat * 9) / 4));
   return { kcal, prot, carbs, fat };
 }
+/* ✉️ Correo de contacto: con aviso claro, va a la hoja de uso de Esteban (columna «correo») */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const CONTACT_MAIL = 'fitnestebanapp@gmail.com';
+const EMAIL_NOTICE = `FITNESTEBAN guardará tu correo para enviarte la guía de la app y, si tú le escribes, resolverte dudas. Nadie más verá tu correo. La app sigue siendo privada. Puedes cambiar el correo en los Ajustes. Si quieres que lo borre, escribe a ${CONTACT_MAIL}.`;
+async function googleEmail() {
+  if (!navigator.onLine) throw new Error('Sin conexión a internet');
+  await loadGis();
+  return new Promise((resolve, reject) => {
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID, scope: 'openid email',
+      callback: async r => {
+        if (r.error) return reject(new Error(r.error_description || r.error));
+        try {
+          const u = await (await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${r.access_token}` } })).json();
+          if (!u.email) throw new Error('Google no ha dado el correo');
+          resolve(String(u.email).toLowerCase());
+        } catch (e) { reject(e); }
+      },
+      error_callback: e => reject(new Error(e?.type === 'popup_closed' ? 'Ventana de Google cerrada' : e?.type === 'popup_failed_to_open' ? 'El móvil bloqueó la ventana de Google' : (e?.message || 'Error de Google')))
+    });
+    client.requestAccessToken({ prompt: 'select_account' });
+  });
+}
+const gBtn = (act = 'google') => `<button class="w-full flex items-center justify-center gap-2.5 rounded-xl py-3 font-bold text-[15px]" style="background:#fff;color:#1f1f1f" data-mact="${act}" type="button"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-3.1-.4-4.6H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.7c-2.1 1.4-4.8 2.3-8.5 2.3-6.2 0-11.5-4.1-13.4-9.8l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>Continuar con Google</button>`;
+const emailFormHTML = (val = '') => `${gBtn()}
+    <div class="flex items-center gap-2 text-[11px] text-mute"><span class="flex-1 h-px bg-line"></span>o escríbelo<span class="flex-1 h-px bg-line"></span></div>
+    <input class="field" name="email" type="email" inputmode="email" autocomplete="email" placeholder="tucorreo@gmail.com" value="${esc(val)}" />
+    <p class="text-[11px] text-mute leading-snug">✉️ ${EMAIL_NOTICE}</p>`;
+/* 📅 Fecha de alta: nuevos = día de los primeros pasos; antiguos = día de su primer dato guardado (aproximada) */
+function installDate() {
+  const st = state.settings;
+  if (st.installedAt) return st.installedAt;
+  const ds = [st.onboarded, ...state.sessions.map(x => x.date), ...Object.keys(state.meals || {}), ...state.bodyMetrics.map(x => x.date), ...(state.cardio || []).map(x => x.date),
+    ...Object.values(state.retos || {}).flatMap(r => [r.startedAt, ...(r.history || []).map(h => h.date), ...(r.tests || []).map(t => t.date)])].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d || '')).sort();
+  st.installedAt = ds[0] || todayISO(); persist();
+  return st.installedAt;
+}
+async function emailSync() {
+  try {
+    const st = state.settings, url = access.usageUrl, code = lsGet(ACCESS_KEY)?.code, m = st.email || '';
+    if (!url || !code || !access.ok || !navigator.onLine || !m || st.emailSent === m) return; // solo se envía un correo nuevo o cambiado; quitarlo de la app no lo borra de la hoja (lo dice el aviso)
+    const h = await codeHash(code);
+    await fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ h, v: APP_VERSION, m, i: installDate() }) });
+    st.emailSent = m; persist();
+  } catch { /* se reintenta al volver a abrir la app */ }
+}
+function setEmail(m) { state.settings.email = m || ''; persist(); emailSync(); }
+/* Usuarios que ya tenían la app: se les pide una vez, con «Ahora no» */
+function emailAskModal() {
+  state.settings.emailAsked = todayISO(); persist();
+  const html = (val = '') => `<div class="text-center"><div class="text-4xl">✉️</div><h3 class="modal-title mt-1">¿Nos dejas tu correo?</h3>
+      <p class="text-sm text-mute mt-1">Así Esteban te puede mandar la guía de la app y ayudarte si tienes dudas.</p></div>
+    ${emailFormHTML(val)}
+    <button class="btn-primary w-full" data-mact="save" type="button">Guardar correo</button>
+    <button class="btn-ghost w-full" data-close type="button">Ahora no</button>`;
+  const save = m => { setEmail(m); closeModal(); render(); toast('Correo guardado ✓ Gracias'); };
+  openModal(html(), {
+    google: async root => { try { save(await googleEmail()); } catch (e) { toast(e.message, 'warn'); } },
+    save: root => { const m = mval(root, 'email').trim().toLowerCase(); if (!EMAIL_RE.test(m)) return toast('Revisa el correo', 'warn'); save(m); }
+  });
+}
+function maybeAskEmail(tries = 0) {
+  const st = state.settings;
+  if (access.me?.admin || st.email || st.emailAsked || !access.usageUrl) return;
+  if ($('#modalRoot').classList.contains('open')) { if (tries < 20) setTimeout(() => maybeAskEmail(tries + 1), 3000); return; }
+  emailAskModal();
+}
+
 function onboarding() {
-  const d = { step: 0, ok: false, name: '', sex: '', age: '', height: '', weight: '', activity: 'mid', goal: 'recomp', key: '', keyOk: false, testing: false };
-  const valid = () => d.sex && +d.age >= 14 && +d.age <= 100 && +d.height >= 120 && +d.height <= 230 && +d.weight >= 35 && +d.weight <= 250;
-  const dots = () => `<div class="flex gap-1.5 justify-center">${[0, 1, 2].map(i => `<span style="height:7px;border-radius:9px;width:${i === d.step ? 22 : 7}px;background:${i === d.step ? '#22d3ee' : '#334155'}"></span>`).join('')}</div><div class="text-[11px] text-mute text-center -mt-1">Paso ${d.step + 1} de 3</div>`;
+  const d = { step: 0, ok: false, email: '', birth: '', name: '', sex: '', age: '', height: '', weight: '', activity: 'mid', goal: 'recomp', key: '', keyOk: false, testing: false };
+  const valid = () => d.sex && ageFrom(d.birth) >= 14 && ageFrom(d.birth) <= 100 && +d.height >= 120 && +d.height <= 230 && +d.weight >= 35 && +d.weight <= 250;
+  const dots = () => `<div class="flex gap-1.5 justify-center">${[0, 1, 2, 3].map(i => `<span style="height:7px;border-radius:9px;width:${i === d.step ? 22 : 7}px;background:${i === d.step ? '#22d3ee' : '#334155'}"></span>`).join('')}</div><div class="text-[11px] text-mute text-center -mt-1">Paso ${d.step + 1} de 4</div>`;
   const seg = (f, opts, cols) => `<div class="seg" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${Object.entries(opts).map(([k, v]) => `<button class="seg-btn py-2 ${d[f] === k ? 'seg-on' : ''}" data-mact="pick" data-f="${f}" data-v="${k}" type="button">${Array.isArray(v) ? v[0] : v}</button>`).join('')}</div>`;
   const s0 = () => `${dots()}<h3 class="modal-title">👋 Te damos la bienvenida</h3>
     <p class="text-sm text-mute">FITNESTEBAN es un proyecto personal de Esteban que comparte con amigos. Antes de empezar:</p>
@@ -3116,17 +3936,25 @@ function onboarding() {
       <p>🤖 <b>La IA funciona con tu propia clave de Gemini.</b> Es gratuita dentro de los límites de Google.</p>
       <p>🩺 <b>No sustituye a un profesional.</b> Las cifras son orientativas: si tienes lesiones, embarazo o algún problema de salud, consulta antes.</p>
       <p>🛠️ <b>Es un proyecto vivo.</b> Irá mejorando, pero puede tener fallos o cambiar.</p>
+      <p>📶 <b>Para mantener la app</b>, envía a Esteban solo el día de último uso, la versión instalada y un identificador del dispositivo (sin datos personales). Nada de tu dieta ni de tus entrenos.</p>
+      <p>🔑 <b>Tu código es solo tuyo:</b> funciona como mucho en 2 dispositivos.</p>
+      <p>✉️ <b>Tu correo</b> lo guarda Esteban para enviarte la guía de la app y, si tú le escribes, resolverte dudas. Para escribirle, toca ✉️ arriba.</p>
+      <p class="text-mute">Todo, con detalle, en la <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.</p>
     </div>
     <label class="flex items-start gap-2 text-[13px]"><input type="checkbox" name="ok" ${d.ok ? 'checked' : ''} style="margin-top:3px;accent-color:#22d3ee;width:18px;height:18px" /> Lo he leído y estoy de acuerdo.</label>
     <button class="btn-primary w-full" data-mact="next" type="button">Empezar</button>`;
+  const sMail = () => `${dots()}<h3 class="modal-title">✉️ Tu correo</h3>
+    <p class="text-xs text-mute">Lo necesitamos para mandarte la guía de la app y poder ayudarte.</p>
+    ${emailFormHTML(d.email)}
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="back" type="button">Atrás</button><button class="btn-primary" data-mact="next" type="button">Siguiente</button></div>`;
   const s1 = () => {
     const t = valid() ? calcTargets(d) : null;
     return `${dots()}<h3 class="modal-title">🎯 Tu perfil y tus objetivos</h3>
     <p class="text-xs text-mute">Con esto calculamos tus objetivos de partida. Los puedes cambiar cuando quieras en Ajustes.</p>
     <label class="lbl">Nombre<input class="field mt-1" name="name" maxlength="24" value="${esc(d.name)}" /></label>
     <div><div class="lbl mb-1">Sexo</div>${seg('sex', SEXES, 3)}</div>
-    <div class="grid grid-cols-3 gap-2">
-      <label class="lbl">Edad<input class="field mt-1" name="age" inputmode="numeric" maxlength="3" value="${esc(d.age)}" /></label>
+    <label class="lbl">Fecha de nacimiento <span class="text-brand font-bold" id="obAge">${birthHint(d.birth)}</span><input class="field mt-1" name="birth" type="date" min="${BIRTH_MIN}" max="${birthMax()}" value="${esc(d.birth)}" /></label>
+    <div class="grid grid-cols-2 gap-2">
       <label class="lbl">Altura (cm)<input class="field mt-1" name="height" inputmode="numeric" maxlength="3" placeholder="170" value="${esc(d.height)}" /></label>
       <label class="lbl">Peso (kg)<input class="field mt-1" name="weight" inputmode="decimal" maxlength="5" value="${esc(d.weight)}" /></label>
     </div>
@@ -3138,7 +3966,7 @@ function onboarding() {
         <div><div class="text-lg font-black">${t.prot} g</div><div class="text-[10px] text-mute">proteína</div></div>
         <div><div class="text-lg font-black">${t.carbs} g</div><div class="text-[10px] text-mute">hidratos</div></div>
         <div><div class="text-lg font-black">${t.fat} g</div><div class="text-[10px] text-mute">grasa</div></div></div>`
-      : '<div class="text-[12px] text-mute text-center">Rellena sexo, edad, altura y peso para calcular tus objetivos.</div>'}</div>
+      : '<div class="text-[12px] text-mute text-center">Rellena sexo, fecha de nacimiento, altura y peso para calcular tus objetivos.</div>'}</div>
     <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="back" type="button">Atrás</button><button class="btn-primary" data-mact="next" type="button">Siguiente</button></div>`;
   };
   const s2 = () => `${dots()}<h3 class="modal-title">🤖 Activa el Coach IA</h3>
@@ -3154,17 +3982,18 @@ function onboarding() {
     <div class="text-[13px] ${d.keyOk ? 'text-emerald-300' : 'text-mute'}" id="obKeyMsg">${d.keyOk ? '✓ Clave correcta: el Coach ya te puede responder.' : d.testing ? '<span class="spinner"></span> Comprobando la clave…' : ''}</div>
     <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="finish" data-skip="1" type="button">Saltar por ahora</button><button class="btn-primary" data-mact="finish" type="button">Terminar</button></div>
     <p class="text-[11px] text-mute text-center">La clave se queda solo en este móvil. Sin ella la app funciona igual, pero sin IA. También puedes ponerla luego en Ajustes.</p>`;
-  const html = () => [s0, s1, s2][d.step]();
+  const html = () => [s0, sMail, s1, s2][d.step]();
   const keep = root => {
     const g = n => root.querySelector(`[name="${n}"]`);
     if (g('ok')) d.ok = g('ok').checked;
-    if (g('name')) { d.name = g('name').value.trim(); d.age = g('age').value.replace(/\D/g, ''); d.height = g('height').value.replace(/\D/g, ''); d.weight = g('weight').value.replace(',', '.').replace(/[^\d.]/g, ''); }
+    if (g('email')) d.email = g('email').value.trim().toLowerCase();
+    if (g('name')) { d.name = g('name').value.trim(); d.birth = g('birth').value; d.height = g('height').value.replace(/\D/g, ''); d.weight = g('weight').value.replace(',', '.').replace(/[^\d.]/g, ''); }
     if (g('key')) d.key = g('key').value.trim();
   };
   const draw = root => { root.querySelector('.modal-sheet').innerHTML = html(); root.querySelector('.modal-sheet').scrollTop = 0; bindLive(root); };
   const bindLive = root => {
-    if (d.step === 1) root.querySelectorAll('[name=age],[name=height],[name=weight]').forEach(i => i.oninput = () => { keep(root); const box = root.querySelector('#obTargets'), tmp = document.createElement('div'); tmp.innerHTML = s1(); box.innerHTML = tmp.querySelector('#obTargets').innerHTML; });
-    if (d.step === 2) { const k = root.querySelector('[name=key]'); if (k) k.oninput = () => { d.keyOk = false; const m = root.querySelector('#obKeyMsg'); if (m) m.textContent = ''; }; }
+    if (d.step === 2) root.querySelectorAll('[name=birth],[name=height],[name=weight]').forEach(i => i.oninput = i.onchange = () => { keep(root); const box = root.querySelector('#obTargets'), tmp = document.createElement('div'); tmp.innerHTML = s1(); box.innerHTML = tmp.querySelector('#obTargets').innerHTML; const ag = root.querySelector('#obAge'); if (ag) ag.textContent = birthHint(d.birth); });
+    if (d.step === 3) { const k = root.querySelector('[name=key]'); if (k) k.oninput = () => { d.keyOk = false; const m = root.querySelector('#obKeyMsg'); if (m) m.textContent = ''; }; }
   };
   const test = async root => {
     keep(root); if (!d.key) { toast('Pega primero la clave', 'warn'); return false; }
@@ -3179,13 +4008,15 @@ function onboarding() {
   openModal(html(), {
     noClose: true,
     pick: (root, b) => { keep(root); d[b.dataset.f] = b.dataset.v; draw(root); },
+    google: async root => { keep(root); try { d.email = await googleEmail(); d.step++; draw(root); toast(`✓ ${d.email}`); } catch (e) { toast(e.message, 'warn'); } },
     back: root => { keep(root); d.step--; draw(root); },
     next: root => {
       keep(root);
       if (d.step === 0 && !d.ok) return toast('Marca la casilla para continuar', 'warn');
-      if (d.step === 1) {
+      if (d.step === 1 && !EMAIL_RE.test(d.email)) return toast('Escribe tu correo o usa «Continuar con Google»', 'warn');
+      if (d.step === 2) {
         if (!d.name) return toast('Escribe tu nombre', 'warn');
-        if (!valid()) return toast('Revisa sexo, edad, altura (cm) y peso (kg)', 'warn');
+        if (!valid()) return toast('Revisa sexo, fecha de nacimiento, altura (cm) y peso (kg)', 'warn');
       }
       d.step++; draw(root);
     },
@@ -3197,11 +4028,11 @@ function onboarding() {
       keep(root);
       if (!b.dataset.skip && !d.keyOk && !(await test(root))) return;
       const t = calcTargets(d), st = state.settings;
-      st.profile = { name: d.name.slice(0, 24), sex: d.sex, age: d.age, height: d.height, goal: d.goal, activity: d.activity };
-      Object.assign(st, { targetKcal: t.kcal, targetProt: t.prot, targetCarbs: t.carbs, targetFat: t.fat, onboarded: todayISO() });
+      st.profile = { name: d.name.slice(0, 24), sex: d.sex, birth: d.birth, height: d.height, goal: d.goal, activity: d.activity };
+      Object.assign(st, { targetKcal: t.kcal, targetProt: t.prot, targetCarbs: t.carbs, targetFat: t.fat, onboarded: todayISO(), installedAt: todayISO(), usageOk: true, email: d.email, emailAsked: todayISO() });
       if (!b.dataset.skip && d.keyOk) st.apiKey = d.key;
       state.bodyMetrics.push({ id: uid('m_'), date: todayISO(), weight: r2(+d.weight), waist: null });
-      persist(); closeModal(); ui._animRings = true; render();
+      persist(); emailSync(); closeModal(); ui._animRings = true; render();
       toast(`¡Listo, ${d.name}! Tus objetivos ya están puestos 💪`);
     }
   });
@@ -3214,33 +4045,41 @@ const SEXES = { h: 'Hombre', m: 'Mujer', x: 'Prefiero no decirlo' };
 function profileOf() { return state.settings.profile || null; }
 function profileText() {
   const p = profileOf() || {};
-  const who = [p.sex === 'h' ? 'hombre' : p.sex === 'm' ? 'mujer' : 'persona', p.age ? `de ${p.age} años` : 'adulta'].join(' ') + (p.height ? `, ${p.height} cm de altura` : '');
+  const who = [p.sex === 'h' ? 'hombre' : p.sex === 'm' ? 'mujer' : 'persona', profileAge(p) ? `de ${profileAge(p)} años` : 'adulta'].join(' ') + (p.height ? `, ${p.height} cm de altura` : '');
   return `${p.name || 'el usuario'} (${who}), objetivo: ${(GOALS[p.goal] || GOALS.recomp)[1]}`;
 }
 function profileModal(after) {
   const p = profileOf() || { name: '', sex: '', age: '', goal: 'recomp' };
   const seg = (name, opts, cur) => `<div class="seg" style="grid-template-columns:repeat(${name === 'goal' ? 2 : Object.keys(opts).length},minmax(0,1fr))">${Object.entries(opts).map(([k, v]) => `<button class="seg-btn py-2 ${cur === k ? 'seg-on' : ''}" data-mact="pick" data-f="${name}" data-v="${k}" type="button">${Array.isArray(v) ? v[0] : v}</button>`).join('')}</div>`;
-  const draft = { ...p };
+  const draft = { ...p, email: state.settings.email || '' };
   const html = () => `<h3 class="modal-title">👤 Mi perfil</h3>
     <p class="text-xs text-mute">El Coach IA y el resumen semanal lo usan para darte consejos a tu medida. Solo se guarda en este móvil y en tus copias.</p>
     <label class="lbl">Nombre<input class="field mt-1" name="name" maxlength="24" value="${esc(draft.name || '')}" /></label>
     <div><div class="lbl mb-1">Sexo</div>${seg('sex', SEXES, draft.sex)}</div>
     <div class="grid grid-cols-2 gap-2">
-      <label class="lbl">Edad (opcional)<input class="field mt-1" name="age" inputmode="numeric" maxlength="3" value="${esc(draft.age || '')}" /></label>
+      <label class="lbl col-span-2">Fecha de nacimiento (opcional) <span class="text-brand font-bold" id="pfAge">${birthHint(draft.birth)}</span><input class="field mt-1" name="birth" type="date" min="${BIRTH_MIN}" max="${birthMax()}" value="${esc(draft.birth || '')}" />${!draft.birth && p.age ? `<span class="block text-[11px] text-amber-300 font-normal mt-1">Ahora pone ${esc(p.age)} años. Pon tu fecha y se actualizará sola en cada cumpleaños.</span>` : ''}</label>
       <label class="lbl">Altura en cm (opcional)<input class="field mt-1" name="height" inputmode="numeric" maxlength="3" placeholder="Ej: 175" value="${esc(draft.height || '')}" /></label>
     </div>
     <div><div class="lbl mb-1">Objetivo</div>${seg('goal', GOALS, draft.goal)}</div>
+    <div class="card p-3 space-y-2"><div class="lbl">✉️ Correo de contacto${access.me?.admin ? '' : ' (opcional)'}</div>
+      <div class="flex gap-2"><input class="field flex-1 min-w-0" name="email" type="email" inputmode="email" autocomplete="email" placeholder="tucorreo@gmail.com" value="${esc(draft.email)}" /></div>
+      ${draft.email ? '' : gBtn()}
+      <p class="text-[10px] text-mute leading-snug">${EMAIL_NOTICE}</p></div>
     <button class="btn-primary w-full" data-mact="save" type="button">Guardar</button>`;
-  const keep = root => { draft.name = mval(root, 'name').trim(); draft.age = mval(root, 'age').replace(/\D/g, ''); draft.height = mval(root, 'height').replace(/\D/g, ''); };
+  const keep = root => { draft.name = mval(root, 'name').trim(); draft.birth = mval(root, 'birth'); draft.height = mval(root, 'height').replace(/\D/g, ''); draft.email = mval(root, 'email').trim().toLowerCase(); };
   const handlers = {
     autofocus: !p.name,
     pick: (root, b) => { keep(root); draft[b.dataset.f] = b.dataset.v; root.querySelector('.modal-sheet').innerHTML = html(); },
+    google: async root => { keep(root); try { draft.email = await googleEmail(); root.querySelector('.modal-sheet').innerHTML = html(); } catch (e) { toast(e.message, 'warn'); } },
     save: root => {
       keep(root);
+      if (draft.email && !EMAIL_RE.test(draft.email)) return toast('Revisa el correo', 'warn');
       if (!draft.name) return toast('Pon tu nombre', 'warn');
       if (!draft.sex) return toast('Elige una opción de sexo', 'warn');
       if (draft.height && (+draft.height < 100 || +draft.height > 230)) return toast('La altura va en centímetros (ej. 175)', 'warn');
-      state.settings.profile = { name: draft.name.slice(0, 24), sex: draft.sex, age: draft.age ? String(Math.min(110, +draft.age)) : '', height: draft.height || '', goal: draft.goal || 'recomp' };
+      if (draft.birth && !(ageFrom(draft.birth) >= 10)) return toast('Revisa la fecha de nacimiento', 'warn');
+      state.settings.profile = { ...(p.activity ? { activity: p.activity } : {}), name: draft.name.slice(0, 24), sex: draft.sex, ...(draft.birth ? { birth: draft.birth } : p.age ? { age: p.age } : {}), height: draft.height || '', goal: draft.goal || 'recomp' };
+      if ((state.settings.email || '') !== draft.email) setEmail(draft.email);
       persist(); closeModal(); render(); toast('Perfil guardado ✓');
       if (after) after();
     }
@@ -3252,7 +4091,7 @@ function profileSectionHTML() {
   return `<section class="card p-4 mt-3">
     <div class="flex items-center justify-between gap-3">
       <div class="min-w-0"><h3 class="section-title">👤 Mi perfil</h3>
-        <p class="text-xs ${p ? 'text-slate-300' : 'text-amber-300'} mt-1 truncate">${p ? `${esc(p.name)} · ${esc(SEXES[p.sex] || '')}${p.age ? ` · ${esc(p.age)} años` : ''}${p.height ? ` · ${esc(p.height)} cm` : ''} · ${esc((GOALS[p.goal] || GOALS.recomp)[0])}` : 'Sin rellenar: el Coach IA no sabe a quién aconseja'}</p></div>
+        <p class="text-xs ${p ? 'text-slate-300' : 'text-amber-300'} mt-1 truncate">${p ? `${esc(p.name)} · ${esc(SEXES[p.sex] || '')}${profileAge(p) ? ` · ${profileAge(p)} años` : ''}${p.height ? ` · ${esc(p.height)} cm` : ''} · ${esc((GOALS[p.goal] || GOALS.recomp)[0])}${state.settings.email ? ` · ✉️ ${esc(state.settings.email)}` : ''}` : 'Sin rellenar: el Coach IA no sabe a quién aconseja'}</p></div>
       <button class="btn-ghost px-3 py-2 shrink-0" data-act="editProfile" type="button">${p ? 'Editar' : 'Rellenar'}</button>
     </div></section>`;
 }
@@ -3263,15 +4102,15 @@ function profileSectionHTML() {
 const CHAT_CHIPS = ['¿Cómo voy esta semana?', '¿Qué ceno hoy para cuadrar macros?', '¿Por qué me estanco y qué cambio?', '¿Qué entreno hoy?'];
 function chatContext() {
   const T = todayISO(), st = state.settings;
-  const setTxt = (exId, x) => (isBwEx(exId) ? (x.w ? `PC+${x.w}` : 'PC') : `${x.w}kg`) + `x${x.r}`;
+  const setTxt = (exId, x, tm) => (isBwEx(exId) ? (x.w ? `PC+${x.w}` : 'PC') : `${x.w}kg`) + (tm ? ` ${x.r}s` : `x${x.r}`);
   const t = totalsOf(T), burn = exerciseBurnOf(T), budget = st.targetKcal + (st.eatBackCardio ? burn : 0);
   const days7 = Array.from({ length: 7 }, (_, i) => addDays(T, -i)).filter(d => mealsOf(d).length).map(d => { const x = totalsOf(d); return { fecha: d, kcal: Math.round(x.kcal), P: Math.round(x.prot), C: Math.round(x.carbs), G: Math.round(x.fat) }; });
   const plan = prog().days.map(day => ({
     dia: day.label, titulo: day.title,
-    ejercicios: day.exercises.map(e => { const { key, variant } = variantOf(e); const c = coachFor(e, key); return { nombre: variant.name, series: e.sets, reps: `${e.minReps}-${e.maxReps}`, peso_corporal: !!e.bw, coach_app: `${c.title}. ${c.text}` }; })
+    ejercicios: day.exercises.map(e => { const { key, variant } = variantOf(e); const c = coachFor(e, key); return { nombre: variant.name, series: e.sets, reps: `${e.minReps}-${e.maxReps}${e.timed ? ' segundos (por tiempo)' : ''}`, peso_corporal: !!e.bw, coach_app: `${c.title}. ${c.text}` }; })
   }));
-  const last = sortedSessions().slice(-8).reverse().map(s => ({ fecha: s.date, dia: s.dayTitle, min: s.durationMin || null, descarga: !!s.deload,
-    ejercicios: s.exercises.map(e => `${e.name}: ${e.sets.map(x => setTxt(e.exId, x)).join(', ')}`) }));
+  const last = sortedSessions().slice(-8).reverse().map(s => ({ fecha: s.date, dia: s.dayTitle, min: s.durationMin || null, descarga: !!s.deload, ejercicios_saltados: s.skipped || [], comentarios: (s.notes || []).map(n => `${n.name}: ${noteTxt(n)}`),
+    ejercicios: s.exercises.map(e => `${e.name}: ${e.sets.map(x => setTxt(e.exId, x, isTimedEx(e))).join(', ')}`) }));
   const w = activeWip();
   return {
     hoy: T, dia_semana: parseISO(T).toLocaleDateString('es-ES', { weekday: 'long' }), hora: new Date().toTimeString().slice(0, 5),
@@ -3284,6 +4123,7 @@ function chatContext() {
     resumen_semana: weekData(),
     programa_activo: prog().name, plan_y_recomendacion_del_coach: plan,
     ultimas_sesiones: last,
+    musculos: (() => { const f = muscleFatigue(), v = muscleVolume(30); return { fatiga_ahora_pct: Object.fromEntries(Object.entries(f).filter(([, x]) => x.frac > 0.1).map(([m, x]) => [MUSCLE_NAMES[m], Math.round(x.frac * 100)])), series_30_dias: Object.fromEntries(Object.keys(MUSCLE_NAMES).map(m => [MUSCLE_NAMES[m], Math.round((v[m] || 0) * 2) / 2])) }; })(),
     entreno_en_curso: w ? { dia: allDays().find(d => d.id === w.dayId)?.label, minutos: sessionMinutes(w.d) } : null,
     cardio_14_dias: state.cardio.filter(c => c.date >= addDays(T, -13)).map(c => ({ fecha: c.date, tipo: CARDIO_TYPES[c.type]?.label || c.type, min: c.minutes, intensidad: c.intensity, kcal: c.kcal })),
     medidas_corporales: [...state.bodyMetrics].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8).map(m => ({ fecha: m.date, peso: m.weight, cintura: m.waist })),
@@ -3299,6 +4139,7 @@ Reglas:
 - El campo "coach_app" es lo que la app le recomienda en cada ejercicio (doble progresión). No lo contradigas sin explicar por qué.
 - "quedan" = lo que le falta hoy para sus objetivos (negativo = se ha pasado). Para comidas, propone platos normales de España con cantidades en gramos y sus macros aproximados.
 - Nada de frases motivacionales vacías. Si menciona dolor, lesión o algo médico, recomienda consultar a un profesional y no diagnostiques.
+- Ten en cuenta sus comentarios por ejercicio ("comentarios" en ultimas_sesiones: molestias, muy duro, fácil, poco tiempo, notas). Si se repiten molestias o "muy duro" en un ejercicio, propón una alternativa (puede cambiarla con ⇄ en la app) o ajustar carga/volumen; si algo le resulta fácil varias veces, anímale a progresar.
 - Comprueba si sus objetivos diarios ("objetivos": kcal y proteína) encajan con su sexo, edad, altura, peso actual y objetivo. Si claramente NO encajan (p. ej. demasiado altos o bajos para esa persona), avísale una sola vez en la conversación, en una o dos frases, con cifras orientativas y diciendo que los cambia en Ajustes → Objetivos diarios. Si faltan edad o altura, puedes sugerir que las añada en Ajustes → Mi perfil.
 - Cuando propongas una o varias comidas CONCRETAS (alimentos con cantidades), añade al final de tu respuesta un bloque oculto EXACTAMENTE con este formato (no lo menciones en el texto):
 \`\`\`comida
@@ -3360,7 +4201,7 @@ function chatBodyHTML() {
     ${chatHistoryHTML()}`;
   return c.msgs.map((m, i) => m.role === 'user'
     ? `<div class="chat-me">${esc(m.text)}</div>`
-    : `<div class="chat-ai${m.error ? ' chat-err' : ''}">${mdLite(m.text)}${m.error && i === c.msgs.length - 1 ? '<button class="text-xs text-brand underline mt-1" data-mact="retry" type="button">Reintentar</button>' : ''}${(m.meals || []).map((ml, j) => `<button class="chat-meal" data-mact="toDiet" data-m="${i}" data-o="${j}" type="button"><span>🍽️ Apuntar en Dieta</span><span class="text-[11px] opacity-80 truncate">${m.meals.length > 1 ? esc(ml.title) + ' · ' : ''}${esc(ml.type || 'comida que toca')} · ~${mealKcal(ml)} kcal</span></button>`).join('')}</div>`).join('')
+    : `<div class="chat-ai${m.error ? ' chat-err' : ''}">${mdLite(m.text)}${m.error && i === c.msgs.length - 1 ? '<button class="text-xs text-brand underline mt-1" data-mact="retry" type="button">Reintentar</button>' : ''}${(m.meals || []).map((ml, j) => `<div class="flex gap-2 items-stretch"><button class="chat-meal flex-1 min-w-0" data-mact="toDiet" data-m="${i}" data-o="${j}" type="button"><span>🍽️ Apuntar en Dieta</span><span class="text-[11px] opacity-80 truncate max-w-full">${m.meals.length > 1 ? esc(ml.title) + ' · ' : ''}${esc(ml.type || 'comida que toca')} · ~${mealKcal(ml)} kcal</span></button><button class="chat-meal !w-auto shrink-0 items-center justify-center" data-mact="recipe" data-m="${i}" data-o="${j}" type="button"><span>👨‍🍳 Receta</span><span class="text-[11px] opacity-80">${ml.recipe ? 'guardada' : 'paso a paso'}</span></button></div>`).join('')}</div>`).join('')
     + (c.busy ? '<div class="chat-ai chat-typing"><span></span><span></span><span></span></div>' : '');
 }
 /* Historial: conversaciones de los últimos 7 días (máx. 20). Solo la conversación abierta se envía a Gemini. */
@@ -3416,9 +4257,9 @@ async function chatSend(text) {
     c.msgs.push({ role: 'model', text: 'No he podido responder: ' + e.message, error: true });
   } finally { c.busy = false; refreshChat(); }
 }
-function openChat() {
+function openChat(keep) {
   if (!profileOf()) return profileModal(openChat);
-  ui.chat = { msgs: [], busy: false }; ui.histOpen = false; ui.histAll = false;
+  if (!(keep === true && ui.chat)) { ui.chat = { msgs: [], busy: false }; ui.histOpen = false; ui.histAll = false; }
   openModal(`
     <div class="cal-head flex items-center gap-2 pb-3">
       <span class="text-xl">💬</span><div class="min-w-0"><h3 class="modal-title leading-tight">Coach IA</h3><p class="text-[11px] text-mute">Responde con tus datos · Gemini</p></div>
@@ -3433,6 +4274,7 @@ function openChat() {
     sheetClass: 'sheet-fixed',
     chip: (r, b) => chatSend(CHAT_CHIPS[+b.dataset.i]),
     toDiet: (r, b) => { const ml = ui.chat.msgs[+b.dataset.m]?.meals?.[+b.dataset.o]; if (ml) mealFromChat(ml); },
+    recipe: (r, b) => recipeSheet(+b.dataset.m, +b.dataset.o),
     histToggle: () => { ui.histOpen = !ui.histOpen; refreshChat(); },
     histMore: () => { ui.histAll = true; refreshChat(); },
     openConv: (r, b) => { const cv = state.chats.find(x => x.id === b.dataset.id); if (!cv) return; ui.chat = { id: cv.id, msgs: cv.msgs.map(m => ({ ...m })), busy: false }; refreshChat(); },
@@ -3447,7 +4289,81 @@ function openChat() {
   inp.addEventListener('input', grow);
   $('#chatForm').addEventListener('submit', e => { e.preventDefault(); const v = inp.value; inp.value = ''; grow(); chatSend(v); });
 }
-$('#chatBtn')?.addEventListener('click', openChat);
+$('#chatBtn')?.addEventListener('click', () => openChat());
+
+/* 👨‍🍳 Receta paso a paso de un plato propuesto por el Coach. Los ingredientes y gramos son SIEMPRE los del plato
+   (lo que se apunta en Dieta); Gemini solo añade condimentos sin calorías relevantes, utensilios y pasos. */
+async function fetchRecipe(ml, wish = '', chatMsgs = []) {
+  const ing = ml.items.map(it => `${it.name}: ${it.grams} g`).join('; ');
+  const said = chatMsgs.filter(m => m.role === 'user').slice(-6).map(m => m.text.slice(0, 200)).join(' | ');
+  const prompt = `Eres cocinero y nutricionista en España. Escribe la receta para 1 persona de «${ml.title}» usando EXACTAMENTE estos ingredientes y cantidades (ya pesados, no cambies ni añadas gramos): ${ing}.
+Reglas:
+- No añadas ningún ingrediente con calorías (ni aceite, ni mantequilla, ni salsas, ni azúcar, ni pan) que no esté en la lista. Si el plato necesita grasa para cocinar y no hay aceite en la lista, usa sartén antiadherente, horno, airfryer, plancha o un toque de spray.
+- Sí puedes usar sal, pimienta, especias, hierbas, ajo, limón, vinagre, mostaza y agua (cantidades orientativas: "1 pizca", "1 diente"…).
+- Pasos cortos, claros y en orden (máximo 8), en español de España, tuteando. Indica temperaturas y tiempos concretos.
+${said ? `- Lo que el usuario ha dicho en la conversación (respeta sus preferencias de cocinado, utensilios y gustos): ${said}\n` : ''}${wish ? `- PETICIÓN PARA ESTA RECETA (manda sobre todo lo demás, salvo las cantidades): ${wish.slice(0, 200)}\n` : ''}
+Devuelve SOLO este JSON: {"titulo":"…","tiempo_min":n,"dificultad":"Fácil|Media","utensilios":["…"],"condimentos":["…"],"pasos":[{"texto":"…","min":n o null}],"consejo":"una frase"}`;
+  const r = parseJSONLoose(await callGemini([{ text: prompt }], { timeout: 45000, temperature: 0.4 }));
+  const steps = (Array.isArray(r.pasos) ? r.pasos : []).map(p => ({ t: String(p?.texto ?? p ?? '').slice(0, 400), min: Math.round(num(p?.min) || 0) || null })).filter(p => p.t).slice(0, 10);
+  if (!steps.length) throw new Error('La IA no devolvió los pasos. Prueba otra vez.');
+  const list = v => (Array.isArray(v) ? v : []).map(x => String(x).slice(0, 60)).filter(Boolean).slice(0, 10);
+  return { title: String(r.titulo || ml.title).slice(0, 70), mins: Math.round(num(r.tiempo_min) || 0) || null, level: String(r.dificultad || '').slice(0, 12), tools: list(r.utensilios), extras: list(r.condimentos), steps, tip: String(r.consejo || '').slice(0, 240), at: Date.now() };
+}
+function recipeSheet(mi, oi) {
+  const ml = ui.chat?.msgs[mi]?.meals?.[oi]; if (!ml) return;
+  const st = { busy: !ml.recipe, err: '', wish: '' };
+  const tot = k => Math.round(ml.items.reduce((a, it) => a + it.per100[k] * it.grams / 100, 0));
+  const body = () => {
+    const rc = ml.recipe;
+    const head = `<div class="flex flex-wrap gap-1.5 text-[11px] font-bold">
+        <span class="rounded-full px-2.5 py-1 ${MAC.kcal.text}" style="background:rgba(250,204,21,.1)">${tot('kcal')} kcal</span>
+        <span class="rounded-full px-2.5 py-1 ${MAC.prot.text}" style="background:rgba(34,211,238,.1)">P ${tot('prot')} g</span>
+        <span class="rounded-full px-2.5 py-1 ${MAC.carbs.text}" style="background:rgba(52,211,153,.1)">C ${tot('carbs')} g</span>
+        <span class="rounded-full px-2.5 py-1 ${MAC.fat.text}" style="background:rgba(251,113,133,.1)">G ${tot('fat')} g</span>
+        ${rc?.mins ? `<span class="rounded-full px-2.5 py-1 text-slate-300 bg-panel border border-line">⏱ ${rc.mins} min</span>` : ''}${rc?.level ? `<span class="rounded-full px-2.5 py-1 text-slate-300 bg-panel border border-line">${esc(rc.level)}</span>` : ''}
+      </div>`;
+    const ingr = `<div class="card p-3"><div class="text-[11px] font-bold uppercase tracking-wider text-brand mb-1.5">🥘 Ingredientes · 1 ración</div>
+        ${ml.items.map(it => `<div class="flex justify-between gap-3 py-1 text-sm border-b border-line/60 last:border-0"><span>${esc(it.name)}</span><span class="font-mono text-slate-300 shrink-0">${it.grams} g</span></div>`).join('')}
+        ${rc?.extras?.length ? `<div class="text-[12px] text-mute mt-2">🧂 Al gusto: ${rc.extras.map(esc).join(' · ')}</div>` : ''}
+        <p class="text-[10px] text-mute mt-1.5">Son las cantidades del plato del Coach: si las cambias, cambian los macros.</p></div>`;
+    if (st.busy) return head + ingr + '<div class="card p-4 text-center text-sm text-mute"><div class="chat-typing inline-flex"><span></span><span></span><span></span></div><div class="mt-2">Preparando la receta…</div></div>';
+    if (!rc) return head + ingr + `<div class="card p-4 text-center text-sm text-rose-300">${esc(st.err || 'No se pudo preparar la receta.')}<br><button class="btn-ghost mt-3" data-mact="again" type="button">Reintentar</button></div>`;
+    return head + ingr + `
+      ${rc.tools.length ? `<div class="text-[12px] text-mute">🍳 Necesitas: ${rc.tools.map(esc).join(' · ')}</div>` : ''}
+      <div class="card p-3"><div class="text-[11px] font-bold uppercase tracking-wider text-brand mb-2">👨‍🍳 Paso a paso</div>
+        <ol class="space-y-2.5">${rc.steps.map((p, k) => `<li class="flex gap-3"><span class="w-7 h-7 shrink-0 rounded-full grid place-items-center text-[13px] font-black text-ink" style="background:linear-gradient(135deg,#22d3ee,#34d399)">${k + 1}</span><span class="text-sm leading-relaxed pt-0.5">${esc(p.t)}${p.min ? ` <span class="text-[11px] text-brand font-bold whitespace-nowrap">⏱ ${p.min} min</span>` : ''}</span></li>`).join('')}</ol></div>
+      ${rc.tip ? `<div class="rounded-xl px-3 py-2 text-[12px] text-amber-200" style="background:rgba(252,211,77,.08);border:1px solid rgba(252,211,77,.3)">💡 ${esc(rc.tip)}</div>` : ''}
+      ${rc.wish ? `<p class="text-[11px] text-mute text-center">Rehecha con: «${esc(rc.wish)}»</p>` : ''}
+      <div class="card p-3 space-y-2"><div class="text-[11px] font-bold uppercase tracking-wider text-brand">🔄 ¿Cambiar algo?</div>
+        <div class="flex gap-2"><input class="field flex-1 min-w-0 !py-2 text-sm" id="recipeWish" placeholder="Ej.: a la plancha, sin horno, en airfryer…" autocomplete="off" />
+        <button class="btn-primary shrink-0 !px-3 !py-2 text-sm" data-mact="redo" type="button">Rehacer</button></div>
+        <p class="text-[10px] text-mute">Cambia la forma de cocinarlo; los ingredientes y gramos se mantienen.</p></div>`;
+  };
+  const paint = () => { const b = $('#recipeBody'); if (b) b.innerHTML = body(); };
+  const load = async () => {
+    st.busy = true; st.err = ''; paint();
+    try { ml.recipe = await fetchRecipe(ml, st.wish, ui.chat.msgs); if (st.wish) ml.recipe.wish = st.wish; saveChatConv(ui.chat); }
+    catch (e) { st.err = 'No he podido preparar la receta: ' + e.message; }
+    st.busy = false; paint();
+  };
+  openModal(`
+    <div class="cal-head flex items-center gap-2 pb-3">
+      <button class="w-8 h-8 rounded-full border border-line text-mute shrink-0" data-mact="back" type="button" aria-label="Volver al chat">‹</button>
+      <div class="min-w-0 flex-1"><div class="text-[11px] font-bold uppercase tracking-wider text-brand">👨‍🍳 Receta${ml.type ? ' · ' + esc(ml.type) : ''}</div><h3 class="modal-title leading-tight truncate">${esc(ml.recipe?.title || ml.title)}</h3></div>
+    </div>
+    <div id="recipeBody" class="cal-body space-y-3">${body()}</div>
+    <div class="cal-foot grid grid-cols-2 gap-2">
+      <button class="btn-ghost" data-mact="back" type="button">‹ Chat</button>
+      <button class="btn-primary" data-mact="toDiet" type="button">🍽️ Apuntar en Dieta</button>
+    </div>`, {
+    sheetClass: 'sheet-fixed',
+    back: () => openChat(true),
+    toDiet: () => mealFromChat(ml),
+    again: () => load(),
+    redo: () => { st.wish = ($('#recipeWish')?.value || '').trim(); load(); }
+  });
+  if (!ml.recipe) load();
+}
 
 /* =========================================================================
    GUÍA Y NOVEDADES
@@ -3455,6 +4371,54 @@ $('#chatBtn')?.addEventListener('click', openChat);
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.42.1', ['⚡ Scroll más fluido con el aspecto nuevo.'], 'quiet'],
+  ['4.42.0', ['🎨 Nuevo aspecto: tarjetas con un brillo suave, iconos de línea en cada sección, un icono para cada tipo de comida en Dieta y la pestaña activa iluminada abajo. Todo sigue en su sitio.']],
+  ['4.41.9', ['🔒 Nueva página de política de privacidad, enlazada desde la guía «?» y los primeros pasos.'], 'quiet'],
+  ['4.41.8', ['📊 Acceso: botón «Abrir hoja de uso». Pega una vez el enlace de la hoja (se guarda solo en ese dispositivo).'], 'admin'],
+  ['4.41.7', ['🔧 Script v8: la comprobación del dispositivo usaba un parámetro que Google reserva («c») y fallaba siempre. Hay que pegar el script nuevo (Reconfigurar) y publicar una «Nueva versión».'], 'admin'],
+  ['4.41.6', ['🔧 Script v7: si falla, la app muestra el error en «Este dispositivo», y tiene una función «probar» para autorizar permisos. Reconfigurar reutiliza la clave actual, así el código siempre cuadra.'], 'admin'],
+  ['4.41.5', ['🔧 Ajustes → Aplicación: «Este dispositivo» muestra si está registrado en el límite de dispositivos o qué responde el script, con un botón «Comprobar».'], 'quiet'],
+  ['4.41.4', ['🔑 El registro del dispositivo espera más al script de Google y, si no contesta, lo vuelve a intentar al volver a la app. En Acceso, tu fila pone «sin límite (administrador)». «Enviármelo» manda el script como archivo, sin cortes.'], 'admin'],
+  ['4.41.3', ['🔑 Pantalla de acceso: «Cada código es personal. Válido solo en 2 dispositivos.» Invitación por WhatsApp: «Es personal. Válido solo en 2 dispositivos.»'], 'quiet'],
+  ['4.41.1', ['🔑 Acceso: cada dispositivo sale por separado (Android · Chrome, Windows · Chrome…) con su último uso y un botón «Quitar» que libera solo ese; el quitado ya no puede volver a entrar con ese código. Requiere el script v6 (Reconfigurar → nueva versión).'], 'admin'],
+  ['4.41.0', ['🔑 Tu código es solo tuyo: funciona como mucho en 2 dispositivos (por ejemplo, tu móvil y tu tablet). Para ello la app envía a Esteban un identificador del dispositivo, sin datos personales. Si cambias de móvil y no puedes entrar, escribe a fitnestebanapp@gmail.com.']],
+  ['4.40.1', ['📅 Hoja de uso: nueva columna «alta» con la fecha en que cada persona empezó a usar la app (la de sus primeros pasos o, si ya la usaba antes, la de su primer dato guardado). Requiere actualizar el script una vez (Reconfigurar → nueva versión).'], 'admin'],
+  ['4.40.0', ['🎂 Mi perfil: ahora pones tu fecha de nacimiento en lugar de la edad, y la app y el Coach calculan tu edad solos (en tu cumpleaños sube sola). Si ya tenías la edad puesta, se mantiene hasta que añadas la fecha en Ajustes → Mi perfil.']],
+  ['4.39.3', ['⏱ Descanso: con la cuenta atrás en marcha, «?» y ✉️ se apartan y el temporizador se hace grande y se va vaciando; en los últimos 5 segundos se pone ámbar y late.'], 'quiet'],
+  ['4.39.2', ['🔧 Cabecera: con la cuenta atrás en marcha, los botones ya no tapan el logotipo.'], 'quiet'],
+  ['4.39.1', ['✉️ Nuevo botón con un sobre arriba (junto a «?»): abre tu correo para escribir a fitnestebanapp@gmail.com si tienes dudas, encuentras un fallo o tienes ideas.']],
+  ['4.39.0', ['✉️ Correo de contacto: FITNESTEBAN guardará tu correo para enviarte la guía de la app y, si tú le escribes, resolverte dudas. Puedes ponerlo con «Continuar con Google» o escribirlo, y cambiarlo en Ajustes → Mi perfil.']],
+  ['4.38.0', ['★ Comidas favoritas: en el registro de Dieta toca ☆ en cualquier comida para guardarla. Sale la primera en «Favoritas y habituales» (según el tipo: Desayuno, Comida…) y la repites en un toque. Toca la ★ para quitarla.']],
+  ['4.37.4', ['⭕ Hábitos de varios toques (agua…): al llegar al objetivo siguen contando (10/8 vasos).'], 'quiet'],
+  ['4.37.3', ['🍽️ Dieta: Desayuno, Comida, Puente, Cena y Otro caben en una sola fila.'], 'quiet'],
+  ['4.37.2', ['📚 Progreso: el historial de sesiones va plegado, como los récords; a la derecha ves cuántas hay y la fecha de la última.'], 'quiet'],
+  ['4.37.1', ['🕘 Novedades: al final del historial, «Ver novedades anteriores» va mostrando todas las versiones hasta el principio.'], 'admin'],
+  ['4.37.0', ['👨‍🍳 Recetas del Coach: cuando el Coach IA te propone un plato, pulsa «Receta» y verás cómo prepararlo paso a paso, con los mismos ingredientes y gramos que se apuntan en Dieta. Se guarda en la conversación y con «¿Cambiar algo?» la rehaces (a la plancha, en airfryer…).']],
+  ['4.36.0', ['🏆 Tus retos ya salen en Progreso → Historial, junto a tus sesiones, y en el calendario de Dieta (con su 🏆 en cada día).']],
+  ['4.35.0', ['👆 Desliza el dedo sobre el mapa muscular de Progreso para pasar de Ahora a 7 días y 30 días.', '👆 El gesto de deslizar queda fijo: en Dieta cambia de día y en Entreno, de bloque. Ya no hay que elegirlo en Ajustes.']],
+  ['4.34.1', ['🧍 Mapa muscular: lo que entrenas (gimnasio o retos) se refleja al momento en «Ahora». Antes no aparecía hasta las 7 de la tarde. Los retos cuentan todas las series que haces y el test de máximo también suma.']],
+  ['4.34.0', ['＋ Añadir ejercicio: ahora hay 141 ejercicios preparados, con máquinas, poleas, core y un grupo nuevo de 🎗️ bandas elásticas para entrenar en casa.', '⏱ Ejercicios por tiempo (plancha, plancha lateral, paseo del granjero): cada serie lleva su cronómetro. Pulsa ⏱, cuenta atrás de 3 s, te avisa al llegar al objetivo y guarda los segundos solo. En tus propios ejercicios puedes activarlo desde ✎ → «Por tiempo».']],
+  ['4.33.1', ['＋ Añadir bloque: cada bloque sale una sola vez y, si ya lo tienes, pone «✓ Ya lo tienes» en vez de ofrecer otra copia.'], 'quiet'],
+  ['4.33.0', ['📤 Compartir con todos: en el ✎ de cualquier bloque o ejercicio tuyo verás «Compartir con todos». Les aparecerá al pulsar ＋ (con la etiqueta NUEVO). Puedes actualizarlo o dejar de compartirlo desde el mismo sitio.'], 'admin'],
+  ['4.32.0', ['＋ Añadir ejercicio: además de crear el tuyo, eliges entre más de 60 ejercicios preparados (por grupos y con buscador), ya configurados con series, reps, descanso, técnica y 2 alternativas.']],
+  ['4.31.0', ['＋ Añadir bloque: el botón ＋ junto a ✎ en Entreno te deja crear un bloque vacío o elegir uno preparado por Esteban. Estreno: 🔔 KETTLEBELL, para entrenar en casa. Irán llegando más.', '🧹 Si nunca usaste ni cambiaste PPT o FULL BODY, se han quitado para dejarte la app limpia: si los quieres, están en ＋. Los bloques que usas o editaste siguen igual.']],
+  ['4.30.0', ['🔥 Mapa muscular en Progreso: «Ahora» te muestra qué músculos siguen cargados y cuándo estarán listos; «7 días» y «30 días», cuánto has trabajado cada uno y cuáles tienes olvidados. Usa todas tus sesiones y retos ya guardados. En «Hoy te toca» verás si lo que toca está recuperado.']],
+  ['4.29.0', ['💬 «Comenta al Coach» en cada ejercicio: marca 😣 molestia, 🥵 muy duro, 😌 fácil o ⏱ poco tiempo y escribe lo que notes. Se guarda con la sesión, te lo recuerdo la próxima vez, el Coach IA y el resumen semanal lo tienen en cuenta, y con 😣 o 🥵 no te subo peso.']],
+  ['4.28.0', ['⭕ Hábitos diarios en Dieta más compactos: un anillo por hábito. Y ahora pueden ser «de varios toques» (por ejemplo 8 vasos de agua): cada toque rellena un tramo del anillo; mantén pulsado para restar. Se configura en Ajustes → Hábitos.']],
+  ['4.27.5', ['✎ Hábitos: ahora puedes cambiarles el nombre (sin perder lo ya marcado) y ordenarlos con ▲▼ en Ajustes.']],
+  ['4.27.4', ['📲 Aviso para instalar la app (solo si no está instalada): botón directo en Android, instrucciones en iPhone y aviso si se abre dentro de WhatsApp. También en la pantalla de acceso.'], 'quiet'],
+  ['4.27.3', ['📶 Los nombres pasan solos a tu hoja de uso (columna «nombre»): al abrir Acceso y cada vez que creas, renombras, renuevas o quitas un acceso. Requiere actualizar el script una vez (Reconfigurar → nueva versión).'], 'admin'],
+  ['4.27.2', ['📋 Acceso: botón «Copiar huellas y nombres» para pegar en tu hoja de uso y ver quién es cada huella. La app pide a los buscadores que no la muestren (noindex).'], 'admin'],
+  ['4.27.1', ['🏆 Récord en el momento: al marcar ✓ una serie que supera tu mejor marca, la app te avisa al instante (con vibración). El resumen al guardar y la tarjeta para compartir siguen mostrando tus récords.']],
+  ['4.27.0', ['⏭ «Hoy no»: en cada ejercicio puedes saltártelo solo por hoy. No cuenta en tu progreso, no suma al tiempo estimado y queda anotado en el historial.', '⇄ Alternativas en todos los ejercicios: los de serie traen al menos 2 nuevas, y en cualquiera (también en los tuyos) puedes pedir 2 a la IA o añadirlas a mano.']],
+  ['4.26.4', ['📶 Registro de uso: al actualizar, el móvil vuelve a avisar en el momento con su versión nueva (antes la hoja mantenía la versión vieja hasta el día siguiente).'], 'quiet'],
+  ['4.26.3', ['📶 Registro de uso: la clave del script ya no cambia al cerrar y reabrir la ventana de configuración, y hay un botón «Reconfigurar» por si algo falla.'], 'admin'],
+  ['4.26.2', ['📶 La app envía a Esteban solo el día de último uso y la versión instalada, para saber quién tiene que actualizar. Nada de tu dieta ni de tus entrenos.']],
+  ['4.26.1', ['📶 Registro de uso: solo envían su día de último uso y versión los móviles que lo han aceptado en las condiciones de los primeros pasos (usuarios nuevos) y el tuyo. Sin avisos para el resto.'], 'admin'],
+  ['4.26.0', ['📶 Registro de uso en Ajustes → Acceso: ves cuándo usó cada persona la app por última vez y con qué versión. Se configura una vez con una hoja de Google y un Apps Script.'], 'admin'],
+  ['4.25.2', ['📂 Ajustes más recogido: «Objetivos diarios» y «Hábitos» van plegados, como la IA. Se abren con un toque y a la derecha ves el resumen.', '🩹 Si al actualizar a la 4.25.1 tu lista de hábitos se quedó vacía, vuelve a aparecer.']],
+  ['4.25.1', ['🧹 Quien instala la app desde cero empieza con la lista de hábitos en blanco (con un aviso en Dieta para añadirlos).'], 'quiet'],
+  ['4.25.0', ['✅ Hábitos de Entreno o Diarios: en Ajustes eliges dónde va cada uno. Los diarios (suplementos, agua, cero alcohol…) salen en Dieta y se marcan cada día, entrenes o no, solo los días de la semana que elijas. El Coach y el resumen semanal ven cuántos días los cumples.']],
   ['4.24.1', ['📣 Novedades por perfil: los cambios de administración (Acceso, primeros pasos…) solo te los anuncia a ti. El resto solo recibe aviso cuando una versión les afecta; en su historial, lo demás sale como «Mejoras en la aplicación».'], 'admin'],
   ['4.24.0', ['🔑 Acceso: los códigos nuevos quedan guardados (cifrados con tu PIN) para verlos o copiarlos cuando quieras. Nuevo botón 🔄 para dar un código nuevo a quien lo pierda, y envío directo por WhatsApp. Al cambiar el PIN se vuelven a cifrar los códigos y la llave de GitHub.'], 'admin'],
   ['4.23.1', ['🔑 Los códigos de acceso recién creados funcionan a la primera, sin esperar a que GitHub publique la lista.'], 'quiet'],
@@ -3519,7 +4483,7 @@ const GUIDE = [
   ['🏋️ Entreno: bloques y días', [
     'Arriba eliges el <b>bloque</b> ({{BLOQUES}}) y debajo el <b>día</b>. El punto ● marca el día que te toca según tu rotación; ✓ el que ya hiciste hoy.',
     'Cada bloque lleva su propia rotación: {{ROTACION}}',
-    '«＋ Bloque» y «＋ Día» crean nuevos. El ✎ del bloque o del día permite renombrar, reordenar (◀ ▶) o eliminar. El historial nunca se borra al eliminar.'
+    'El ＋ junto al ✎ de arriba añade un bloque (vacío o uno preparado por Esteban) y «＋ Día» crea días. «＋ Añadir ejercicio» deja crear uno o elegir entre los preparados. El ✎ del bloque o del día permite renombrar, reordenar (◀ ▶) o eliminar. El historial nunca se borra al eliminar.'
   ]],
   ['🧭 Cómo decide el coach el peso', [
     '<b>Doble progresión</b>: cada ejercicio tiene un rango de reps (p. ej. 8–10). Mantienes el peso y sumas reps; cuando llegas al máximo en <b>todas</b> las series, te dice que subas el incremento (p. ej. +2 kg).',
@@ -3559,9 +4523,9 @@ const GUIDE = [
     'Consumidas · Cardio · Neto: el cardio se muestra pero <b>no amplía</b> lo que te queda por comer, salvo que lo actives en Ajustes.',
     '🏋️ <b>Gym</b>: la app estima las kcal netas de cada sesión con la duración real, las series, los kilos y tu peso (MET 3,5 a 6). Salen en Dieta junto al cardio (Comidas · Cardio · Gym · Neto) y puedes corregirlas en Progreso → Historial → ajustar.',
     '🎯 La app se abre en la <b>dieta de hoy</b>: anillo exterior = kcal (ámbar); dentro, proteína (cian), carbohidratos (verde) y grasas (rosa). Si te pasas, el exceso da una segunda vuelta y sale una etiqueta «+…». Con un entreno a medias (últimas 3 h) se abre en Entreno. El <b>logo</b> siempre te trae aquí.',
-    '👆 Si en Ajustes → Aplicación eliges «Día en Dieta · bloque en Entreno», deslizar el dedo en Dieta pasa al día siguiente o anterior (como las flechas ‹ ›) y en Entreno, al bloque siguiente o anterior de tu fila de bloques. Con un entreno en curso, en Entreno no hace nada para no sacarte de la serie. Las pestañas se cambian con la barra de abajo.',
+    '👆 Deslizar el dedo: en Dieta pasa al día siguiente o anterior (como las flechas ‹ ›); en Entreno, al bloque siguiente o anterior (con un entreno en curso no hace nada, para no sacarte de la serie); en Progreso, sobre el mapa muscular, cambia entre Ahora, 7 días y 30 días. Las pestañas se cambian con la barra de abajo.',
     '📅 Toca la <b>fecha</b> de Dieta para abrir el calendario del mes: punto verde/ámbar/rojo según la dieta, 🏋️ si hubo pesas y 🔥 si hubo cardio. Al tocar un día ves el detalle y puedes ir a sus comidas.',
-    '✎ en una comida la edita; ⭐ «Comidas habituales» repite tus platos más frecuentes de ese tipo, y el buscador encuentra cualquiera del historial.'
+    '✎ en una comida la edita y ☆ la guarda en favoritas; ⭐ «Favoritas y habituales» te enseña primero tus favoritas y luego tus platos más frecuentes de ese tipo, y el buscador encuentra cualquiera del historial.'
   ]],
   ['⚡ Coach IA', [
     'El botón ⚡ de arriba (junto al «?») abre un chat con Gemini que <b>lee tus datos</b>: plan y recomendación del coach en cada ejercicio, últimas 8 sesiones, comidas de hoy y lo que te queda, dieta de la semana, cardio y medidas.',
@@ -3583,13 +4547,15 @@ const GUIDE = [
   ]],
   ['🔄 Actualizar la app', [
     'Cuando subes una versión nueva a GitHub aparece «Hay una versión nueva» → Actualizar. Comprueba el número en Ajustes → Aplicación.',
-    'Tras actualizar verás una vez las novedades. Puedes volver a verlas desde esta guía.'
+    'Tras actualizar verás una vez las novedades. Puedes volver a verlas desde esta guía.',
+    '✉️ El sobre de arriba abre tu correo para escribir a fitnestebanapp@gmail.com: dudas, fallos o ideas.',
+    '🔒 Qué datos usa la app y dónde se guardan: <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.'
   ]]
 ];
 
 const isAdminUser = () => !!access.me?.admin;
 const newsForMe = ([, , tag]) => isAdminUser() || !tag;
-function renderNews(fromVer) {
+function newsRows(fromVer) {
   let list = CHANGELOG.filter(([v]) => !fromVer || cmpVer(v, fromVer) > 0);
   if (fromVer && !isAdminUser()) list = list.filter(newsForMe);
   // historial para usuarios: las versiones internas seguidas se agrupan en una sola línea
@@ -3599,17 +4565,30 @@ function renderNews(fromVer) {
     else if (rows.length && rows[rows.length - 1].internal) rows[rows.length - 1].v2 = e[0];
     else rows.push({ v: e[0], items: ['🔧 Mejoras en la aplicación.'], internal: true });
   }
-  return rows.slice(0, 4).map(r => `<div class="mt-3 first:mt-0">
+  return rows;
+}
+const newsRowHTML = r => `<div class="mt-3 first:mt-0">
       <div class="text-xs font-extrabold ${r.internal ? 'text-mute' : 'text-brand'}">Versión ${r.v2 ? r.v2 + '–' + r.v : r.v}</div>
       <ul class="mt-1 space-y-1 text-sm ${r.internal ? 'text-mute' : 'text-slate-300'} list-disc pl-5">${r.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
-    </div>`).join('');
-}
+    </div>`;
+/* Novedades: primero las nuevas (o las 4 últimas) y «Ver novedades anteriores» va ampliando de 8 en 8 hasta el principio */
 function openNews(fromVer) {
-  openModal(`
+  const fresh = newsRows(fromVer), all = newsRows(null);
+  let shown = fromVer ? fresh.length : Math.min(4, all.length);
+  const list = () => fromVer && shown <= fresh.length ? fresh.slice(0, shown) : all.slice(0, shown);
+  const total = () => (fromVer && shown <= fresh.length ? Math.max(fresh.length, all.length) : all.length);
+  const html = () => `
     <div class="flex items-center gap-2"><span class="text-2xl">🎉</span><h3 class="modal-title">Novedades</h3><span class="text-xs text-mute ml-auto">v${APP_VERSION}</span></div>
-    <div>${renderNews(fromVer)}</div>
-    <button class="btn-primary w-full mt-4" data-close type="button">Entendido</button>
-  `);
+    <div>${list().map(newsRowHTML).join('')}</div>
+    ${shown < total() ? `<button class="w-full text-center text-sm text-brand font-bold py-2.5 rounded-xl border border-line bg-ink" data-mact="more" type="button">🕘 Ver novedades anteriores <span class="text-mute font-normal">(${total() - shown})</span></button>` : `<p class="text-[11px] text-mute text-center">Has llegado al principio del historial.</p>`}
+    <button class="btn-primary w-full mt-1" data-close type="button">Entendido</button>`;
+  openModal(html(), {
+    more: root => {
+      if (fromVer && shown <= fresh.length) { const seenV = new Set(fresh.map(r => r.v)); shown = all.findIndex(r => !seenV.has(r.v)); if (shown < 0) shown = all.length; }
+      shown = Math.min(all.length, shown + 8);
+      const sh = root.querySelector('.modal-sheet'), y = sh.scrollTop; sh.innerHTML = html(); sh.scrollTop = y;
+    }
+  });
 }
 /* La guía usa los bloques y días de ESTE móvil */
 function guideData() {
@@ -3639,6 +4618,7 @@ function openGuide() {
 }
 $('#helpBtn').addEventListener('click', openGuide);
 
+const USAGE_NOTICE_VER = '4.26.2';
 function maybeShowNews() {
   const seen = state.settings.lastSeenVersion;
   if (seen === APP_VERSION) return;
@@ -3649,7 +4629,11 @@ function maybeShowNews() {
   // sin novedades para este usuario (solo cambios de administración o arreglos internos): se marca como vista sin avisar
   if (!CHANGELOG.some(e => cmpVer(e[0], from) > 0 && cmpVer(e[0], APP_VERSION) <= 0 && newsForMe(e))) return markSeen();
   // se marca como vista solo cuando de verdad se muestra (por si la app se recarga justo al arrancar)
-  setTimeout(() => { if ($('#modalRoot').classList.contains('open')) return; markSeen(); openNews(from); }, 600);
+  setTimeout(() => {
+    if ($('#modalRoot').classList.contains('open')) return;
+    if (cmpVer(USAGE_NOTICE_VER, from) > 0) state.settings.usageOk = true; // ha visto la línea del registro de uso
+    markSeen(); openNews(from); setTimeout(usagePing, 1500);
+  }, 600);
 }
 
 /* =========================================================================
@@ -3674,10 +4658,11 @@ function render() {
 }
 function renderInner() {
   const app = $('#app');
-  if (ui.view === 'train') app.innerHTML = renderTrain();
-  else if (ui.view === 'diet') app.innerHTML = renderDiet();
-  else if (ui.view === 'progress') app.innerHTML = renderProgress();
+  if (ui.view === 'train') app.innerHTML = installBannerHTML() + renderTrain();
+  else if (ui.view === 'diet') app.innerHTML = installBannerHTML() + renderDiet();
+  else if (ui.view === 'progress') app.innerHTML = installBannerHTML() + renderProgress();
   else app.innerHTML = renderSettings();
+  ui2Titles(app);
   document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('navbtn-on', b.dataset.view === ui.view));
   const sub = { train: 'Entreno · coach', diet: 'Nutrición', progress: 'Tu progreso', settings: 'Ajustes' };
   $('#headerSub').textContent = sub[ui.view];
@@ -3802,7 +4787,7 @@ function makePeek(view) {
 }
 function dropPeek() { swipe.peek?.remove(); swipe.peek = null; }
 /* Modo del gesto: 'tabs' (pestañas), 'dietDay' (solo días en Dieta) u 'off' */
-function swipeMode() { const m = state.settings.swipeMode; return m || (state.settings.swipeNav === false ? 'off' : 'tabs'); }
+function swipeMode() { return 'dietDay'; } // fijo: días en Dieta y bloques en Entreno (el mapa muscular de Progreso tiene su propio gesto)
 function swipeTarget(dir) {
   if (swipeMode() === 'dietDay') {
     if (ui.view === 'train') {
@@ -3952,10 +4937,47 @@ function swipeEnd() {
 document.addEventListener('touchend', swipeEnd, { passive: true });
 document.addEventListener('touchcancel', swipeEnd, { passive: true });
 
+/* Mapa muscular: deslizar el dedo cambia entre Ahora · 7 días · 30 días */
+const MM_TABS = ['now', 'd7', 'd30'];
+const mms = { on: false, axis: null, x0: 0, y0: 0, dx: 0, busy: false };
+document.addEventListener('touchstart', e => {
+  mms.on = false; mms.axis = null;
+  if (mms.busy || ui.view !== 'progress' || e.touches.length !== 1 || !e.target.closest('#muscleMap') || e.target.closest('button')) return;
+  const t = e.touches[0]; Object.assign(mms, { on: true, x0: t.clientX, y0: t.clientY, dx: 0 });
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  if (!mms.on) return;
+  const t = e.touches[0], dx = t.clientX - mms.x0, dy = t.clientY - mms.y0;
+  if (!mms.axis) { if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return; mms.axis = Math.abs(dx) > Math.abs(dy) * 1.4 ? 'x' : 'y'; if (mms.axis === 'y') { mms.on = false; return; } }
+  const i = MM_TABS.indexOf(ui.mmTab || 'now'), has = MM_TABS[i + (dx < 0 ? 1 : -1)];
+  mms.dx = dx; const b = $('#mmBody'); if (b) { b.style.transition = ''; b.style.transform = `translate3d(${has ? dx : dx * 0.15}px,0,0)`; b.style.opacity = has ? String(1 - Math.min(0.6, Math.abs(dx) / W())) : ''; }
+}, { passive: true });
+function mmSwipeEnd() {
+  if (!mms.on) return; mms.on = false;
+  if (mms.axis !== 'x') return;
+  const b = $('#mmBody'); if (!b) return;
+  const dir = mms.dx < 0 ? 1 : -1, i = MM_TABS.indexOf(ui.mmTab || 'now'), next = MM_TABS[i + dir];
+  if (!next || Math.abs(mms.dx) < 50) { b.style.transition = 'transform 200ms ease, opacity 200ms ease'; b.style.transform = ''; b.style.opacity = ''; return; }
+  mms.busy = true;
+  b.style.transition = 'transform 160ms ease, opacity 160ms ease'; b.style.transform = `translate3d(${-dir * W()}px,0,0)`; b.style.opacity = '0';
+  setTimeout(() => {
+    ui.mmTab = next;
+    const sec = $('#muscleMap'); if (sec) sec.outerHTML = muscleMapHTML();
+    const nb = $('#mmBody');
+    if (nb) { nb.style.transform = `translate3d(${dir * W() * 0.4}px,0,0)`; nb.style.opacity = '0';
+      requestAnimationFrame(() => requestAnimationFrame(() => { nb.style.transition = 'transform 220ms cubic-bezier(.2,.7,.3,1), opacity 220ms ease'; nb.style.transform = ''; nb.style.opacity = ''; })); }
+    setTimeout(() => { mms.busy = false; }, 240);
+  }, 160);
+}
+document.addEventListener('touchend', mmSwipeEnd, { passive: true });
+document.addEventListener('touchcancel', mmSwipeEnd, { passive: true });
+
 const actions = {
   pickDay: b => { ui.dayId = b.dataset.day; render(); window.scrollTo({ top: 0 }); },
   pickProg: b => { state.plan.active = b.dataset.prog; ui.dayId = nextDayId(); persist(); render(); window.scrollTo({ top: 0 }); },
-  addProg: () => editProgModal(null),
+  addProg: () => libraryModal(),
+  library: () => libraryModal(),
+  publishProg: b => publishBlockModal(b.dataset.prog),
   editProg: () => editProgModal(prog().id),
   editProgId: b => editProgModal(b.dataset.prog),
   cdType: b => { keepCardioInputs(); ui.cardio.type = b.dataset.type; ui.cardio.est = null; render(); },
@@ -3976,12 +4998,21 @@ const actions = {
   editDay: () => editDayModal(currentDay().id),
   editDayId: b => editDayModal(b.dataset.day),
   addEx: () => editExModal(null),
+  exLibrary: () => exLibraryModal(),
   editEx: b => editExModal(b.dataset.ex),
-  variant: b => {
-    const f = findEx(b.dataset.ex); if (!f) return;
-    state.selectedVariants[f.ex.id] = ((state.selectedVariants[f.ex.id] || 0) + 1) % f.ex.variants.length;
+  variant: b => variantPicker(b.dataset.ex),
+  mmTab: b => { ui.mmTab = b.dataset.v; render(); },
+  noteOpen: b => { (ui.noteOpen ||= {})[b.dataset.ex] = !ui.noteOpen[b.dataset.ex]; render(); },
+  noteTag: b => {
+    const d = draftOf(currentDay().id), id = b.dataset.ex, nt = ((d.notes ||= {})[id] ||= { tags: [], text: '' });
+    nt.tags = nt.tags.includes(b.dataset.t) ? nt.tags.filter(x => x !== b.dataset.t) : [...nt.tags, b.dataset.t];
     persist(); render();
-    document.getElementById(`ex-${f.ex.id}`)?.scrollIntoView({ block: 'nearest' });
+  },
+  skipEx: b => {
+    const f = findEx(b.dataset.ex); if (!f) return;
+    const d = draftOf(currentDay().id), ids = skippedToday(d);
+    d.skip = { date: todayISO(), ids: ids.includes(f.ex.id) ? ids.filter(x => x !== f.ex.id) : [...ids, f.ex.id] };
+    persist(); render();
   },
   setCount: b => {
     const f = findEx(b.dataset.ex); if (!f) return;
@@ -4021,6 +5052,7 @@ const actions = {
     persist(); render();
   },
   doneSet: b => markSetDone(b.dataset.ex, b.dataset.key, parseInt(b.dataset.i, 10)),
+  swSet: b => stopwatchSheet(b.dataset.ex, b.dataset.key, parseInt(b.dataset.i, 10)),
   abandon: () => {
     const day = currentDay(), d = state.drafts[day.id]; if (!d) return;
     const n = Object.values(d.sets || {}).reduce((a, arr) => a + (arr || []).filter(c => c && c.r !== undefined && c.r !== '').length, 0);
@@ -4069,6 +5101,7 @@ const actions = {
     ui.aiResult = null; ui.img = null; ui.mealDesc = '';
     render(); toast('Comida registrada ✓');
   },
+  favMeal: b => toggleFavMeal(b.dataset.key),
   repeatMeal: b => {
     const e = (ui._picks || [])[parseInt(b.dataset.i, 10)]; if (!e) return;
     ui.editing = null; ui.img = null;
@@ -4163,9 +5196,59 @@ const actions = {
     const pm = parseInt($('#tPM').value, 10); if (pm > 0 && pm <= 100) g.minProtMeal = pm;
     Object.assign(state.settings, g); persist(); render(); toast('Objetivos guardados ✓');
   },
-  saveHabits: () => { state.settings.habits = $('#habitsTxt').value.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 8); persist(); render(); toast('Hábitos guardados ✓'); },
+  goHabits: () => { openKeys.set_habits = true; go('settings'); setTimeout(() => { const n = $('#habNew'); if (n) { n.scrollIntoView({ block: 'center' }); n.focus(); } }, 80); },
+  habHintOff: () => { state.settings.habitsHintOff = true; persist(); render(); },
+  habAdd: () => {
+    const v = ($('#habNew')?.value || '').trim().replace(/\s+/g, ' ');
+    if (!v) return toast('Escribe el hábito', 'warn');
+    const L = state.settings.habitList;
+    if (L.some(h => h.name.toLowerCase() === v.toLowerCase())) return toast('Ese hábito ya existe', 'warn');
+    if (L.length >= 12) return toast('Máximo 12 hábitos', 'warn');
+    L.push({ name: v.slice(0, 60), where: 'daily', days: [...ALL_DAYS] }); saveHabitList(); toast('Hábito añadido: elige si es de Entreno o Diario');
+  },
+  habDel: b => { const h = state.settings.habitList[+b.dataset.i]; if (!h || !confirm(`¿Borrar el hábito «${h.name}»? Lo ya registrado se conserva.`)) return; state.settings.habitList.splice(+b.dataset.i, 1); ui.habDaysOpen = null; saveHabitList(); },
+  habTarget: b => {
+    const h = state.settings.habitList[+b.dataset.i]; if (!h) return;
+    h.target = b.dataset.v === 'multi' ? Math.max(2, h.target > 1 ? h.target : 8) : 1;
+    if (h.target > 1 && !h.unit && /agua|vaso/i.test(h.name)) h.unit = 'vasos';
+    saveHabitList();
+  },
+  habMove: b => {
+    const L = state.settings.habitList, i = +b.dataset.i, j = i + +b.dataset.d;
+    if (j < 0 || j >= L.length) return;
+    [L[i], L[j]] = [L[j], L[i]];
+    if (ui.habDaysOpen === i) ui.habDaysOpen = j; else if (ui.habDaysOpen === j) ui.habDaysOpen = i;
+    saveHabitList();
+  },
+  habEdit: b => {
+    const L = state.settings.habitList, h = L[+b.dataset.i]; if (!h) return;
+    openModal(`<h3 class="modal-title">✎ Editar hábito</h3>
+      <label class="lbl">Nombre<input class="field mt-1" name="hn" maxlength="60" value="${esc(h.name)}" /></label>
+      <p class="text-[11px] text-mute">Lo que ya tenías marcado con el nombre anterior se mantiene con el nuevo.</p>
+      <button class="btn-primary w-full" data-mact="save" type="button">Guardar</button>`, {
+      autofocus: true,
+      save: root => {
+        const v = mval(root, 'hn').trim().replace(/\s+/g, ' ').slice(0, 60), old = h.name;
+        if (!v) return toast('Escribe el nombre', 'warn');
+        if (v !== old && L.some(x => x !== h && x.name.toLowerCase() === v.toLowerCase())) return toast('Ya tienes un hábito con ese nombre', 'warn');
+        if (v !== old) renameHabit(old, v);
+        h.name = v; closeModal(); saveHabitList(); toast('Hábito actualizado');
+      }
+    });
+  },
+  habWhere: b => { const h = state.settings.habitList[+b.dataset.i]; if (!h) return; h.where = b.dataset.v; if (h.where !== 'daily' && ui.habDaysOpen === +b.dataset.i) ui.habDaysOpen = null; saveHabitList(); },
+  habDaysOpen: b => { const i = +b.dataset.i; ui.habDaysOpen = ui.habDaysOpen === i ? null : i; render(); },
+  habDay: b => {
+    const h = state.settings.habitList[+b.dataset.i], d = +b.dataset.d; if (!h) return;
+    if (h.days.includes(d)) { if (h.days.length === 1) return toast('Deja al menos un día', 'warn'); h.days = h.days.filter(x => x !== d); } else h.days = [...h.days, d].sort();
+    saveHabitList();
+  },
+  dailyHabit: b => {
+    if (habPress?.fired) { habPress = null; return; } // fue una pulsación larga: ya restó
+    habPress = null; habitStep(b.dataset.name, 1);
+  },
   resetPlan: () => {
-    if (!confirm('¿Restaurar los bloques originales (PPT y FULL BODY)? Perderás los bloques, días y ejercicios que hayas creado o editado (el historial se conserva).')) return;
+    if (!confirm('¿Empezar de cero con los bloques? Se quitan tus bloques, días y ejercicios (quedan RETOS, CARDIO y FREE). El historial se conserva. Después puedes elegir bloques en «📚 Bloques recomendados».')) return;
     state.plan = normalizePlan(clone(DEFAULT_PLAN)); state.selectedVariants = {}; state.drafts = {}; ui.dayId = nextDayId();
     persist(); render(); toast('Plan restaurado');
   },
@@ -4173,7 +5256,7 @@ const actions = {
   editProfile: () => profileModal(),
   newAccess: () => newAccessModal(),
   openAccess: () => {
-    if (state.settings.pinHash) return askPinOnly('🔑 Acceso', 'Escribe tu PIN para abrir esta sección.', pin => { ui.accessOpen = true; ui.accessPin = pin; ui.accessReveal = {}; render(); });
+    if (state.settings.pinHash) return askPinOnly('🔑 Acceso', 'Escribe tu PIN para abrir esta sección.', pin => { ui.accessOpen = true; ui.accessPin = pin; ui.accessReveal = {}; ui.usage = null; ui.usageErr = ''; render(); loadUsage(); });
     let fails = 0;
     openModal(`<h3 class="modal-title">🔑 Acceso</h3><p class="text-sm text-mute">Este dispositivo no tiene PIN: escribe tu código personal de acceso (o crea un PIN en Ajustes → Seguridad para usarlo aquí).</p>
       <input class="field mt-1 text-center text-2xl font-black tracking-[.2em] uppercase" name="code" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" />
@@ -4187,6 +5270,28 @@ const actions = {
     });
   },
   closeAccess: () => { ui.accessOpen = false; render(); },
+  usageSetup: () => usageSetupModal(),
+  copyHashes: () => {
+    const rows = (access.list || []).map(x => `${x.hash}\t${(x.hash === access.me?.hash ? (state.accessNames[x.hash] || 'Yo (admin)') : (state.accessNames[x.hash] || 'Sin nombre')).replace(/\s+/g, ' ')}`);
+    const txt = ['huella\tnombre', ...rows].join('\n');
+    navigator.clipboard.writeText(txt).then(() => toast(`Copiadas ${rows.length} huellas: pégalas en A1 de una hoja «nombres»`)).catch(() => toast('No se pudo copiar', 'error'));
+  },
+  sheetEdit: () => { ui.sheetEdit = true; render(); },
+  sheetSave: () => {
+    const v = ($('#sheetUrl')?.value || '').trim();
+    if (v && !/^https:\/\/docs\.google\.com\/spreadsheets\//.test(v)) return toast('Pega el enlace de la hoja (empieza por https://docs.google.com/spreadsheets/)', 'warn');
+    if (v) lsSet(SHEET_KEY, v.split('#')[0]); else { try { localStorage.removeItem(SHEET_KEY); } catch { /* nada */ } }
+    ui.sheetEdit = false; render(); toast(v ? 'Enlace guardado ✓' : 'Enlace quitado');
+  },
+  devCheck: async () => { deviceDiag = 'comprobando…'; render(); deviceChecked = false; await deviceGuard(); render(); },
+  relDev: async b => {
+    const h = b.dataset.hash, enc = lsGet(USE_KEY);
+    if (!enc || !ui.accessPin || !access.usageUrl) return toast('Abre Acceso con tu PIN', 'warn');
+    if (!confirm('¿Quitar este dispositivo? Dejará de poder entrar con su código y su plaza queda libre para otro dispositivo.')) return;
+    try { const k = await secretDec(enc, ui.accessPin); await fetch(access.usageUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ k, release: h, dev: b.dataset.dev }) }); toast('Dispositivo quitado ✓'); setTimeout(() => { ui.usage = null; loadUsage(); render(); }, 1200); }
+    catch (e) { toast('No se pudo liberar: ' + e.message, 'error'); }
+  },
+  usageRefresh: () => { ui.usage = null; ui.usageErr = ''; loadUsage(); render(); },
   showCode: async b => {
     const h = b.dataset.hash;
     if (ui.accessReveal?.[h]) { delete ui.accessReveal[h]; return render(); }
@@ -4203,7 +5308,7 @@ const actions = {
     openModal(`<h3 class="modal-title">¿Quién es? <span class="text-mute font-mono text-sm">…${esc(h.slice(-4))}</span></h3><p class="text-xs text-mute">Solo se guarda en tu app y en tus copias.</p>
       <label class="lbl">Nombre<input class="field mt-1" name="who" maxlength="24" value="${esc(state.accessNames[h] || '')}" /></label>
       <button class="btn-primary w-full" data-mact="save" type="button">Guardar</button>`, {
-      autofocus: true, save: root => { const v = mval(root, 'who').trim(); if (v) state.accessNames[h] = v; else delete state.accessNames[h]; persist(); closeModal(); render(); }
+      autofocus: true, save: root => { const v = mval(root, 'who').trim(); if (v) state.accessNames[h] = v; else delete state.accessNames[h]; persist(); closeModal(); render(); syncUsageNames(); }
     });
   },
   reloadApp: () => location.reload(),
@@ -4232,7 +5337,10 @@ const actions = {
     if (!state.settings.pinHash) return $('#importInput').click();
     guardModal({ title: 'Importar copia', text: 'Importar sustituye todos tus datos actuales por los de la copia.', word: 'IMPORTAR', onOk: () => $('#importInput').click() });
   },
-  install: async () => { if (!deferredInstall) return; deferredInstall.prompt(); await deferredInstall.userChoice.catch(() => null); deferredInstall = null; render(); },
+  install: async () => { if (!deferredInstall) return; deferredInstall.prompt(); await deferredInstall.userChoice.catch(() => null); deferredInstall = null; render(); refreshLockInstall(); },
+  installHelp: () => installHelpModal(),
+  installHide: () => { lsSet(INSTALL_HIDE, Date.now() + 7 * 86400000); render(); },
+  copyAppLink: () => navigator.clipboard.writeText('https://egarluq292.github.io/fitnesteban/').then(() => toast('Enlace copiado: pégalo en Chrome o Safari')).catch(() => toast('Enlace: egarluq292.github.io/fitnesteban', 'warn')),
   checkUpdate: async () => {
     checkRemoteVersion(true);
     if (!swReg) return toast('El modo app solo funciona desde una web https', 'warn');
@@ -4257,15 +5365,27 @@ const actions = {
 };
 
 const app = $('#app');
+/* Mantener pulsado un hábito = restar uno (o desmarcar) */
+app.addEventListener('pointerdown', e => {
+  const b = e.target.closest('[data-act=dailyHabit]'); if (!b) return;
+  habPress = { name: b.dataset.name, fired: false, t: setTimeout(() => { habPress.fired = true; try { navigator.vibrate?.(30); } catch { /* nada */ } habitStep(habPress.name, -1); }, 550) };
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => app.addEventListener(ev, () => { if (habPress) clearTimeout(habPress.t); }));
+app.addEventListener('contextmenu', e => { if (e.target.closest('[data-act=dailyHabit]')) e.preventDefault(); });
 app.addEventListener('click', e => {
   const b = e.target.closest('[data-act]');
   if (!b || !app.contains(b)) return;
   const fn = actions[b.dataset.act];
   if (fn) { e.preventDefault(); fn(b); }
 });
+document.addEventListener('click', e => {
+  const b = e.target.closest('#lockScreen [data-act]'); if (!b) return;
+  const fn = actions[b.dataset.act]; if (fn) { e.preventDefault(); fn(b); }
+});
 app.addEventListener('input', e => {
   const t = e.target;
   if (t.dataset.in) setDraftCell(t.dataset.key, parseInt(t.dataset.i, 10), t.dataset.in, t.value);
+  if (t.dataset.noteEx) { const d = draftOf(currentDay().id); ((d.notes ||= {})[t.dataset.noteEx] ||= { tags: [], text: '' }).text = t.value.slice(0, 140); persistSoon(); }
   else if (t.dataset.retoGot !== undefined) { const d = retoDraft(t.dataset.reto); d.got[+t.dataset.retoGot] = t.value.replace(/[^0-9]/g, ''); persistSoon(); }
   else if (t.id === 'mealDesc') ui.mealDesc = t.value;
   else if (t.id === 'addIng') ui.addIng = t.value;
@@ -4278,6 +5398,11 @@ app.addEventListener('input', e => {
 });
 app.addEventListener('change', e => {
   const t = e.target;
+  if (t.dataset.habT !== undefined || t.dataset.habU !== undefined) {
+    const h = state.settings.habitList[+(t.dataset.habT ?? t.dataset.habU)]; if (!h) return;
+    if (t.dataset.habT !== undefined) h.target = clamp(parseInt(t.value, 10) || 2, 2, 20); else h.unit = t.value.trim().slice(0, 12);
+    return saveHabitList();
+  }
   if (t.dataset.habit !== undefined) {
     const h = state.settings.habits[parseInt(t.dataset.habit, 10)];
     draftOf(currentDay().id).habits[h] = t.checked; persist();
@@ -4323,8 +5448,44 @@ function versionStatusHTML() {
    PWA: service worker, instalación, actualizaciones
    ========================================================================= */
 let deferredInstall = null;
+/* ---------- Aviso «Instalar la app» (solo si no está instalada) ---------- */
+const INSTALL_HIDE = 'fitnesteban_install_hide';
+const UA = navigator.userAgent || '';
+const isIOS = () => /iphone|ipad|ipod/i.test(UA) || (/macintosh/i.test(UA) && navigator.maxTouchPoints > 1);
+const isInAppBrowser = () => /WhatsApp|FBAN|FBAV|FB_IAB|Instagram|Line\/|; wv\)/i.test(UA);
+function installMode() {
+  if (isStandalone()) return '';
+  if (isInAppBrowser()) return 'inapp';
+  if (isIOS()) return 'ios';
+  if (deferredInstall) return 'prompt';
+  return /android/i.test(UA) ? 'menu' : '';
+}
+function installBannerHTML(force = false) {
+  const m = installMode();
+  if (!m || (!force && (lsGet(INSTALL_HIDE) || 0) > Date.now())) return '';
+  const txt = { prompt: 'Instálala: se abre más rápido, a pantalla completa y sin conexión.', ios: 'Instálala en tu iPhone: se abre a pantalla completa, como una app.', menu: 'Instálala: menú ⋮ de Chrome → «Instalar aplicación».', inapp: 'Estás dentro de WhatsApp: abre el enlace en Chrome (o Safari) para poder instalarla.' }[m];
+  const btn = m === 'prompt' ? '<button class="btn-banner shrink-0" data-act="install" type="button">Instalar</button>'
+    : m === 'ios' ? '<button class="btn-banner shrink-0" data-act="installHelp" type="button">Cómo</button>'
+    : m === 'inapp' ? '<button class="btn-banner shrink-0" data-act="copyAppLink" type="button">Copiar enlace</button>' : '';
+  return `<div class="banner-info mb-3" id="installBanner"><span>📲 ${txt}</span>${btn}${force ? '' : '<button class="iconbtn iconbtn-sm shrink-0" data-act="installHide" type="button" aria-label="Ocultar una semana">✕</button>'}</div>`;
+}
+function installHelpModal() {
+  const share = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-4px"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
+  openModal(`<h3 class="modal-title">📲 Instalar en iPhone</h3>
+    <ol class="card p-3 space-y-2.5 text-[14px] leading-snug">
+      <li><b class="text-brand">1.</b> Abre la app en <b>Safari</b> (no dentro de WhatsApp ni de otra app).</li>
+      <li><b class="text-brand">2.</b> Pulsa <b>Compartir</b> <span class="text-brand">${share}</span> en la barra de abajo.</li>
+      <li><b class="text-brand">3.</b> Baja y elige <b>«Añadir a pantalla de inicio»</b>.</li>
+      <li><b class="text-brand">4.</b> Pulsa <b>Añadir</b>. Ya tienes el icono de FITNESTEBAN.</li>
+    </ol>
+    <p class="text-[11px] text-mute">Al abrirla desde el icono te pedirá el código una vez más: es normal, el iPhone la trata como una app nueva.</p>
+    <button class="btn-primary w-full" data-close type="button">Entendido</button>`);
+}
 let swReg = null;
-window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; if (ui.view === 'settings') render(); });
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; render(); refreshLockInstall(); });
+window.addEventListener('appinstalled', () => { deferredInstall = null; render(); refreshLockInstall(); });
+/* En la pantalla de «Acceso privado» (sus botones van con el mismo sistema data-act) */
+function refreshLockInstall() { const slot = $('#lockInstall'); if (slot) slot.innerHTML = installBannerHTML(true); }
 window.addEventListener('appinstalled', () => { deferredInstall = null; toast('App instalada ✓'); });
 
 function showUpdate(worker) {
@@ -4380,7 +5541,7 @@ function parseAcl(text) {
     return { hash: p[0].toLowerCase(), admin };
   }).filter(x => /^[0-9a-f]{32}$/.test(x.hash));
 }
-const access = { list: null, me: null, ok: false };
+const access = { list: null, me: null, ok: false, usageUrl: '' };
 function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* nada */ } }
 async function accessCheck(list) {
@@ -4388,6 +5549,35 @@ async function accessCheck(list) {
   if (!saved?.code || !list) return null;
   const h = await codeHash(saved.code);
   return list.find(x => x.hash === h) || null;
+}
+/* 📱 Cada código vale como mucho en 2 dispositivos (el administrador, sin límite). Lo decide el script de la hoja de uso.
+   Si el script no responde o aún no está actualizado, se deja entrar: nadie se queda fuera por un fallo ajeno. */
+const DEVICE_LIMIT = 2;
+const blockedMsg = () => `Este código ya se usa en ${DEVICE_LIMIT} dispositivos. Si has cambiado de móvil, escribe a <a class="text-brand underline" href="mailto:${CONTACT_MAIL}?subject=${encodeURIComponent('FITNESTEBAN · cambio de móvil')}">${CONTACT_MAIL}</a> y te lo libero.`;
+let deviceSure = false; // ¿el script ha contestado de verdad? (si no, se vuelve a preguntar al volver a la app)
+let deviceDiag = ''; // qué contestó el script la última vez (se ve en Ajustes → Aplicación)
+async function deviceAllowed(code, me) {
+  const url = access.usageUrl; deviceSure = false;
+  if (!url) { deviceDiag = 'sin dirección del script en acceso.txt'; return true; }
+  if (!navigator.onLine) { deviceDiag = 'sin conexión'; return true; }
+  try {
+    const h = await codeHash(code), ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000); // el script de Google puede tardar en «despertar»
+    const r = await fetch(`${url}?op=check&h=${h}&d=${encodeURIComponent(deviceId())}&l=${encodeURIComponent(deviceLabel())}&t=${Date.now()}`, { cache: 'no-store', signal: ctl.signal });
+    clearTimeout(t);
+    const txt = await r.text(); let d = {};
+    try { d = JSON.parse(txt); } catch { deviceDiag = `respuesta no válida (HTTP ${r.status}): ${txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90)}`; return true; }
+    deviceSure = typeof d.allowed === 'boolean';
+    deviceDiag = d.allowed === true ? `registrado ✓ (${d.n} dispositivo${d.n === 1 ? '' : 's'})` : d.allowed === false ? 'bloqueado (límite de dispositivos)' : (d.error && d.error !== 'clave' ? `error del script: ${String(d.error).slice(0, 140)}` : `el script contestó ${txt.slice(0, 60)}${d.error === 'clave' ? ' → script antiguo' : !d.ok ? ' → no reconoce el código' : ''}`);
+    return d.allowed !== false || !!me?.admin;
+  } catch (e) { deviceDiag = e.name === 'AbortError' ? 'el script no contestó en 20 s' : `no se pudo conectar (${e.message})`; return true; }
+}
+let deviceChecked = false;
+async function deviceGuard() {
+  if (deviceChecked || !access.ok) return; deviceChecked = true;
+  const code = lsGet(ACCESS_KEY)?.code; if (!code) return;
+  if (await deviceAllowed(code, access.me)) { if (!deviceSure) deviceChecked = false; return; }
+  access.ok = false; try { localStorage.removeItem(ACCESS_KEY); } catch { /* nada */ }
+  closeModal(); lockScreen('code', blockedMsg());
 }
 function lockScreen(mode, msg = '') {
   let el = $('#lockScreen');
@@ -4400,7 +5590,8 @@ function lockScreen(mode, msg = '') {
     <p class="text-sm text-mute mt-1">${msg || 'Esta app es personal. Escribe el código que te ha dado Esteban.'}</p></div>
     <input class="field mt-5 text-center text-2xl font-black tracking-[.2em] uppercase" id="lockCode" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" />
     <button class="btn-primary w-full mt-3" id="lockGo" type="button">Entrar</button>
-    <p class="text-[11px] text-mute text-center mt-4">Cada código es personal. Si lo compartes, dejará de funcionar para ti también.</p></div>`;
+    <p class="text-[11px] text-mute text-center mt-4">Cada código es personal. Válido solo en 2 dispositivos.</p>
+    <div id="lockInstall" class="mt-5">${installBannerHTML(true)}</div></div>`;
   const go = async () => {
     const v = $('#lockCode').value; if (normCode(v).length < 8) return toast('El código tiene 8 caracteres', 'warn');
     $('#lockGo').disabled = true;
@@ -4410,6 +5601,8 @@ function lockScreen(mode, msg = '') {
       // Código recién creado: GitHub Pages tarda unos minutos en publicarlo → mirar la lista al día directamente en GitHub
       if (!me) { const live = await fetchAclLive(); if (live) { list = live; me = live.find(x => x.hash === h); } }
       if (!me) { toast(list ? 'Código no válido' : 'Sin conexión para comprobar el código', 'error'); $('#lockGo').disabled = false; return; }
+      if (!(await deviceAllowed(v, me))) { lockScreen('code', blockedMsg()); return; }
+      deviceChecked = deviceSure;
       lsSet(ACCESS_KEY, { code: normCode(v), at: Date.now() });
       unlock(me); toast('Acceso concedido 👋');
     } catch { $('#lockGo').disabled = false; }
@@ -4424,16 +5617,23 @@ function unlock(me) {
   $('#lockScreen')?.remove(); document.body.classList.remove('overflow-hidden');
   if (ui.view === 'settings') render();
   if (needsOnboarding(me)) setTimeout(onboarding, 300);
-  else if (!newsChecked) { newsChecked = true; maybeShowNews(); }
+  else if (!newsChecked) { newsChecked = true; maybeShowNews(); setTimeout(maybeAskEmail, 2500); }
+  setTimeout(emailSync, 4000);
 }
 let newsChecked = false;
+/* acceso.txt: huellas + (opcional) una línea «#uso https://script.google.com/…» con la dirección del registro de uso */
+const USAGE_RE = /^#\s*uso\s+(https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec)\s*$/m;
+function aclLoad(text) {
+  const list = parseAcl(text), m = String(text).match(USAGE_RE);
+  access.list = list; access.usageUrl = m ? m[1] : '';
+  lsSet(ACL_KEY, { list, usageUrl: access.usageUrl, at: Date.now() });
+  return list;
+}
 async function fetchAcl() {
   try {
     const r = await fetch('acceso.txt?v=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    const list = parseAcl(await r.text());
-    access.list = list; lsSet(ACL_KEY, { list, at: Date.now() });
-    return list;
+    return aclLoad(await r.text());
   } catch { return null; }
 }
 /* Lista al día leída de la API de GitHub (sin la caché de Pages). Sin token: 60 consultas/hora por conexión, solo se usa si el código no aparece. */
@@ -4441,24 +5641,22 @@ async function fetchAclLive() {
   try {
     const r = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}?t=${Date.now()}`, { headers: { Accept: 'application/vnd.github.raw+json' }, cache: 'no-store' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    const list = parseAcl(await r.text());
-    access.list = list; lsSet(ACL_KEY, { list, at: Date.now() });
-    return list;
+    return aclLoad(await r.text());
   } catch { return null; }
 }
 async function accessBoot() {
   const cached = lsGet(ACL_KEY);
-  if (cached?.list) access.list = cached.list;
+  if (cached?.list) { access.list = cached.list; access.usageUrl = cached.usageUrl || ''; }
   const meCached = await accessCheck(access.list);
   if (meCached) unlock(meCached); else lockScreen(access.list ? 'code' : 'wait');
   const fresh = await fetchAcl();
   if (!fresh) { if (!access.ok && !access.list) lockScreen('code', 'No hay conexión para comprobar el acceso. Conéctate y vuelve a abrir la app.'); return; }
   let me = await accessCheck(fresh);
   if (!me && lsGet(ACCESS_KEY)?.code) { const live = await fetchAclLive(); if (live) me = await accessCheck(live); }
-  if (me) { if (!access.ok) unlock(me); else access.me = me; }
-  else lockScreen('code', lsGet(ACCESS_KEY)?.code ? 'Tu código ya no es válido. Pide uno nuevo a Esteban.' : '');
+  if (me) { if (!access.ok) unlock(me); else access.me = me; usagePing(); deviceGuard(); }
+  else lockScreen('code', lsGet(ACCESS_KEY)?.code ? `Tu código ya no es válido. Pide uno nuevo a <a class="text-brand underline" href="mailto:${CONTACT_MAIL}?subject=${encodeURIComponent('FITNESTEBAN · código de acceso')}">${CONTACT_MAIL}</a>` : '');
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { if (l && !(await accessCheck(l))) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', 'Tu código ya no es válido. Pide uno nuevo a Esteban.'); } }); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { usagePing(); deviceGuard(); if (l && !(await accessCheck(l))) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', `Tu código ya no es válido. Pide uno nuevo a <a class="text-brand underline" href="mailto:${CONTACT_MAIL}?subject=${encodeURIComponent('FITNESTEBAN · código de acceso')}">${CONTACT_MAIL}</a>`); } }); });
 
 /* Gestión (solo administrador): crear el código de una persona y la línea para acceso.txt */
 function newCode() { const a = crypto.getRandomValues(new Uint8Array(8)); const s = [...a].map(x => CODE_ABC[x % CODE_ABC.length]).join(''); return s.slice(0, 4) + '-' + s.slice(4); }
@@ -4483,12 +5681,13 @@ async function ghToken(pin) {
   try { return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(g.iv) }, await pinKey(pin, b64d(g.salt)), b64d(g.ct))); }
   catch { throw new Error('No se pudo abrir la llave de GitHub (¿cambiaste el PIN?). Vuelve a conectar GitHub.'); }
 }
-async function ghApi(token, method = 'GET', body = null) {
-  const r = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`, {
+async function ghApi(token, method = 'GET', body = null, file = GH_FILE) {
+  const r = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${file}`, {
     method, headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(body ? { 'Content-Type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined, cache: 'no-store'
   });
   const d = await r.json().catch(() => ({}));
+  if (r.status === 404 && method === 'GET' && file !== GH_FILE) return { content: '', sha: undefined }; // archivo aún no creado
   if (!r.ok) throw new Error(r.status === 401 ? 'El token no es válido o ha caducado' : r.status === 403 || r.status === 404 ? 'El token no tiene permiso sobre el repositorio (Contents: lectura y escritura)' : (d.message || 'GitHub respondió ' + r.status));
   return d;
 }
@@ -4499,7 +5698,7 @@ async function ghEditAcl(pin, fn, message) {
   const text = b64utf8(cur.content || '');
   const next = fn(text.replace(/\r/g, '').split('\n')).join('\n').replace(/\n*$/, '\n');
   await ghApi(token, 'PUT', { message, content: utf8b64(next), sha: cur.sha });
-  access.list = parseAcl(next); lsSet(ACL_KEY, { list: access.list, at: Date.now() });
+  aclLoad(next);
 }
 function accessWho(x) { return state.accessNames?.[x.hash] || ''; }
 /* Códigos guardados en la lista del administrador, cifrados con su PIN (nunca en GitHub) */
@@ -4520,9 +5719,224 @@ async function accessCodeOf(hash) {
 async function reencryptSecrets(oldPin, newPin) {
   for (const [h, e] of Object.entries(state.accessCodes || {})) { try { state.accessCodes[h] = await codeEnc(await codeDec(e, oldPin), newPin); } catch { /* guardado con otro PIN: se queda como estaba */ } }
   try { if (lsGet(GH_KEY)) await ghSaveToken(await ghToken(oldPin), newPin); } catch { /* nada */ }
+  try { const u = lsGet(USE_KEY); if (u) lsSet(USE_KEY, await secretEnc(await secretDec(u, oldPin), newPin)); } catch { /* nada */ }
 }
+/* ---------- Registro de uso: día de último uso y versión (una vez al día por móvil) ----------
+   Va a una hoja de Google del administrador mediante un Apps Script. Solo se envía la huella del código y la versión. */
+const USE_KEY = 'fitnesteban_usekey', PING_KEY = 'fitnesteban_ping', SHEET_KEY = 'fitnesteban_sheet'; // enlace a la hoja: solo en este dispositivo, nunca en GitHub
+async function secretEnc(text, pin) {
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await pinKey(pin, salt), new TextEncoder().encode(text));
+  return { s: b64e(salt), iv: b64e(iv), ct: b64e(ct) };
+}
+const secretDec = (e, pin) => codeDec(e, pin);
+async function usagePing() {
+  try {
+    const url = access.usageUrl, code = lsGet(ACCESS_KEY)?.code;
+    // una vez al día… y otra vez si cambia la versión (si no, la hoja se queda con la versión vieja hasta mañana)
+    const mark = todayISO() + '|' + APP_VERSION;
+    if (!url || !code || !access.ok || !navigator.onLine || lsGet(PING_KEY) === mark) return;
+    // solo móviles que han visto la frase de las condiciones (instalados desde la 4.26) y el administrador
+    if (!access.me?.admin && !state.settings.usageOk) return;
+    const h = await codeHash(code);
+    await fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ h, v: APP_VERSION, i: installDate() }) });
+    lsSet(PING_KEY, mark);
+  } catch { /* sin conexión: mañana se vuelve a intentar */ }
+}
+async function loadUsage() {
+  const enc = lsGet(USE_KEY);
+  if (!access.usageUrl || !enc || !ui.accessPin || ui.usageLoading) return;
+  ui.usageLoading = true;
+  try {
+    const key = await secretDec(enc, ui.accessPin);
+    const r = await fetch(`${access.usageUrl}?key=${encodeURIComponent(key)}&t=${Date.now()}`, { cache: 'no-store' });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error === 'clave' ? 'La clave del registro no coincide con la del script' : 'El registro no respondió bien');
+    ui.usage = {}; for (const x of d.rows || []) ui.usage[String(x.h).toLowerCase()] = x;
+    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8);
+    if (!ui.usageOld) syncUsageNames();
+  } catch (e) { ui.usageErr = e.message || 'No se pudo leer el registro de uso'; ui.usage = null; }
+  ui.usageLoading = false; ui.usageAt = Date.now();
+  if (ui.accessOpen && ui.view === 'settings') render();
+}
+function usageLine(hash) {
+  if (!access.usageUrl || !lsGet(USE_KEY)) return '';
+  if (!ui.usage) return ui.usageLoading ? '<div class="text-[11px] text-mute"><span class="spinner"></span> Consultando uso…</div>' : '';
+  const u = ui.usage[hash];
+  if (!u) return '<div class="text-[11px] text-mute">⚪ Aún no la ha abierto (o sin conexión desde que tiene el código)</div>';
+  const ago = daysBetween(u.last, todayISO()), old = u.v && cmpVer(APP_VERSION, String(u.v)) > 0;
+  const when = ago <= 0 ? 'Hoy' : ago === 1 ? 'Ayer' : `Hace ${ago} días`;
+  return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} de ${DEVICE_LIMIT} dispositivos`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="truncate text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 truncate">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
+}
+function usageScript(key) {
+  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código, máx. 2) · v8
+const READ_KEY = '${key}';
+const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
+const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre', 'correo', 'alta', 'dispositivos', 'bloqueos'];
+const LIMITE = 2;
+function hoja_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName('uso');
+  if (!sh) { sh = ss.insertSheet('uso'); sh.getRange('A:E').setNumberFormat('@'); sh.appendRow(COLS); }
+  if (String(sh.getRange(1, 6).getValue()) !== 'nombre') sh.getRange(1, 6).setValue('nombre');
+  if (String(sh.getRange(1, 7).getValue()) !== 'correo') sh.getRange(1, 7).setValue('correo');
+  if (String(sh.getRange(1, 8).getValue()) !== 'alta') { sh.getRange(1, 8).setValue('alta'); sh.getRange('H:H').setNumberFormat('@'); }
+  if (String(sh.getRange(1, 9).getValue()) !== 'dispositivos') sh.getRange(1, 9).setValue('dispositivos');
+  if (String(sh.getRange(1, 10).getValue()) !== 'bloqueos') sh.getRange(1, 10).setValue('bloqueos');
+  return sh;
+}
+function fecha_(x) { return x instanceof Date ? Utilities.formatDate(x, 'Europe/Madrid', 'yyyy-MM-dd') : String(x); }
+function acl_() {
+  const c = CacheService.getScriptCache(); let t = c.get('acl');
+  if (!t) { t = UrlFetchApp.fetch(ACL_URL + '?t=' + Date.now(), { muteHttpExceptions: true }).getContentText(); c.put('acl', t, 600); }
+  return t.split('\\n').map(l => l.trim()).filter(l => l && l[0] !== '#').map(l => l.split(/\\s+/)).filter(p => /^[0-9a-f]{32}$/.test(p[0].toLowerCase()));
+}
+function huellas_() { return acl_().map(p => p[0].toLowerCase()); }
+function admins_() { return acl_().filter(p => p.slice(1).some(x => x.toLowerCase() === 'admin')).map(p => p[0].toLowerCase()); }
+// dispositivos de cada código: { huella: { d: [{ id, n: 'Android · Chrome', last: 'aaaa-mm-dd' }], b: bloqueos } }
+function disp_() {
+  let x = {}; try { x = JSON.parse(PropertiesService.getScriptProperties().getProperty('disp') || '{}'); } catch (e) { x = {}; }
+  for (const h in x) x[h].d = (x[h].d || []).map(v => typeof v === 'string' ? { id: v, n: '', last: '' } : v);
+  return x;
+}
+function guardaDisp_(x) { PropertiesService.getScriptProperties().setProperty('disp', JSON.stringify(x)); }
+function escribeDisp_(h, x) {
+  const sh = hoja_(), datos = sh.getDataRange().getValues();
+  for (let i = 1; i < datos.length; i++) if (String(datos[i][0]) === h) { sh.getRange(i + 1, 9, 1, 2).setValues([[String((x.d || []).length), String(x.b || 0)]]); return; }
+}
+function nombres_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('nombres') || '{}'); } catch (e) { return {}; } }
+function salida_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+function doPost(e) {
+  try {
+    const b = JSON.parse(e.postData.contents);
+    // el administrador manda la lista huella → nombre (con la clave de lectura): se guarda y se escribe en la columna F
+    // el administrador libera los dispositivos de un código (cambio de móvil)
+    if (b.k === READ_KEY && typeof b.release === 'string' && /^[0-9a-f]{32}$/.test(b.release)) {
+      const lock = LockService.getScriptLock(); lock.waitLock(10000);
+      try {
+        const x = disp_(), y = x[b.release] || { d: [], b: 0 };
+        // quitar un dispositivo: deja su plaza libre y ya no puede volver a entrar con ese código (lista «q»)
+        if (b.dev) { y.d = y.d.filter(v => v.id !== String(b.dev)); y.q = [...(y.q || []).filter(v => v !== String(b.dev)), String(b.dev)].slice(-20); }
+        else { y.d = []; y.b = 0; y.q = []; }
+        x[b.release] = y; guardaDisp_(x); escribeDisp_(b.release, y);
+      } finally { lock.releaseLock(); }
+      return salida_({ ok: true });
+    }
+    if (b.k === READ_KEY && b.names && typeof b.names === 'object') {
+      const n = {}; for (const h in b.names) if (/^[0-9a-f]{32}$/.test(h)) n[h] = String(b.names[h]).slice(0, 40);
+      PropertiesService.getScriptProperties().setProperty('nombres', JSON.stringify(n));
+      const lock = LockService.getScriptLock(); lock.waitLock(10000);
+      try {
+        const sh = hoja_(), filas = sh.getLastRow() - 1;
+        if (filas > 0) { const hs = sh.getRange(2, 1, filas, 1).getValues(); sh.getRange(2, 6, filas, 1).setValues(hs.map(r => [n[String(r[0])] || ''])); }
+      } finally { lock.releaseLock(); }
+      return salida_({ ok: true });
+    }
+    const h = String(b.h || '').toLowerCase(), v = String(b.v || '').slice(0, 12);
+    if (!/^[0-9a-f]{32}$/.test(h) || huellas_().indexOf(h) < 0) return salida_({ ok: false });
+    const lock = LockService.getScriptLock(); lock.waitLock(10000);
+    try {
+      const sh = hoja_(), hoy = fecha_(new Date()), datos = sh.getDataRange().getValues(), nom = nombres_()[h] || '';
+      let fila = -1; for (let i = 1; i < datos.length; i++) if (String(datos[i][0]) === h) { fila = i + 1; break; }
+      // correo: solo si lo manda el propio usuario; un correo nuevo sustituye al anterior (vacío no borra)
+      const m = typeof b.m === 'string' ? b.m.trim().toLowerCase().slice(0, 100) : null, mOk = m !== null && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(m);
+      // alta: la fecha más antigua que haya mandado cualquiera de sus móviles
+      const i = /^\\d{4}-\\d{2}-\\d{2}$/.test(String(b.i || '')) && String(b.i) <= hoy ? String(b.i) : '';
+      if (fila < 0) sh.appendRow([h, hoy, v, hoy, '1', nom, mOk ? m : '', i]);
+      else { const antes = fecha_(datos[fila - 1][1]); sh.getRange(fila, 2, 1, 2).setValues([[hoy, v]]); if (antes !== hoy) sh.getRange(fila, 5).setValue(String((+datos[fila - 1][4] || 0) + 1)); sh.getRange(fila, 6).setValue(nom); if (mOk) sh.getRange(fila, 7).setValue(m); const ia = fecha_(datos[fila - 1][7] || ''); if (i && (!ia || i < ia)) sh.getRange(fila, 8).setValue(i); }
+    } finally { lock.releaseLock(); }
+    return salida_({ ok: true });
+  } catch (err) { return salida_({ ok: false }); }
+}
+// ▶ Para comprobar permisos: elige «probar» arriba y pulsa Ejecutar. Debe decir cuántos códigos y filas hay.
+function probar() {
+  const n = huellas_().length, f = hoja_().getLastRow() - 1;
+  Logger.log('OK · códigos en acceso.txt: ' + n + ' · filas en la hoja: ' + f);
+}
+function doGet(e) {
+  try { return doGet_(e); } catch (err) { return salida_({ ok: false, error: 'script: ' + String((err && err.message) || err).slice(0, 200) }); }
+}
+function doGet_(e) {
+  const q = (e && e.parameter) || {};
+  // ¿puede este dispositivo usar este código? (máx. LIMITE dispositivos; el administrador, sin límite)
+  if (q.op === 'check') { // ojo: «c» y «sid» son parámetros reservados de Google, no se pueden usar
+    const h = String(q.h || '').toLowerCase(), d = String(q.d || '').slice(0, 40), n = String(q.l || '').slice(0, 40), hoy = fecha_(new Date());
+    if (!/^[0-9a-f]{32}$/.test(h) || !d || huellas_().indexOf(h) < 0) return salida_({ ok: false });
+    const lock = LockService.getScriptLock(); lock.waitLock(10000);
+    try {
+      const all = disp_(), x = all[h] || { d: [], b: 0 }, adm = admins_().indexOf(h) >= 0;
+      let ok = true;
+      const ya = x.d.find(v => v.id === d);
+      if ((x.q || []).indexOf(d) >= 0 && !adm) { ok = false; x.b = (x.b || 0) + 1; }
+      else if (ya) { ya.last = hoy; if (n) ya.n = n; }
+      else if (adm || x.d.length < LIMITE) x.d.push({ id: d, n, last: hoy });
+      else { ok = false; x.b = (x.b || 0) + 1; }
+      all[h] = x; guardaDisp_(all); escribeDisp_(h, x);
+      return salida_({ ok: true, allowed: ok, n: x.d.length });
+    } finally { lock.releaseLock(); }
+  }
+  if (q.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
+  const datos = hoja_().getDataRange().getValues().slice(1);
+  const dd = disp_();
+  return salida_({ ok: true, ver: 8, rows: datos.map(r => ({ h: String(r[0]), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []) })) });
+}`;
+}
+/* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
+let namesSyncTimer = null;
+function syncUsageNames() {
+  clearTimeout(namesSyncTimer);
+  namesSyncTimer = setTimeout(async () => {
+    try {
+      const enc = lsGet(USE_KEY);
+      if (!access.usageUrl || !enc || !ui.accessPin || !navigator.onLine) return;
+      const k = await secretDec(enc, ui.accessPin), names = {};
+      for (const x of access.list || []) names[x.hash] = state.accessNames[x.hash] || (x.hash === access.me?.hash ? 'Yo (admin)' : 'Sin nombre');
+      await fetch(access.usageUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ k, names }) });
+    } catch { /* se reintenta la próxima vez que abras Acceso */ }
+  }, 600);
+}
+async function usageSetupModal() {
+  // la misma clave hasta que se active: así da igual cerrar y reabrir esta ventana
+  let key = lsGet('fitnesteban_usekey_pending');
+  // si ya hay una clave activa (y Acceso está abierto con el PIN), se reutiliza: así el código nuevo siempre cuadra con la app
+  if (!/^[0-9a-f]{36}$/.test(key || '') && lsGet(USE_KEY) && ui.accessPin) { try { const k = await secretDec(lsGet(USE_KEY), ui.accessPin); if (/^[0-9a-f]{36}$/.test(k)) { key = k; lsSet('fitnesteban_usekey_pending', key); } } catch { /* nada */ } }
+  if (!/^[0-9a-f]{36}$/.test(key || '')) { key = [...crypto.getRandomValues(new Uint8Array(18))].map(b => b.toString(16).padStart(2, '0')).join(''); lsSet('fitnesteban_usekey_pending', key); }
+  const code = usageScript(key);
+  openModal(`<h3 class="modal-title">📶 Ver quién usa la app</h3>
+    <p class="text-xs text-mute">Se hace una sola vez (unos 5 minutos). Todo queda en <b class="text-slate-300">tu</b> Google: una hoja de cálculo y un pequeño script. Es más cómodo en el ordenador: envíate el código con 📤 y deja esta ventana abierta para pegar la URL al final.</p>
+    <ol class="card p-3 space-y-2 text-[13px] leading-snug">
+      <li><b class="text-brand">1.</b> Abre <a class="text-brand underline" href="https://sheets.new" target="_blank" rel="noopener">sheets.new</a> y ponle de nombre «FITNESTEBAN uso».</li>
+      <li><b class="text-brand">2.</b> Menú <b>Extensiones → Apps Script</b>. Borra lo que haya y pega el código (botón de abajo). Guarda 💾.</li>
+      <li><b class="text-brand">3.</b> <b>Implementar → Nueva implementación</b> → tipo <b>Aplicación web</b>. «Ejecutar como»: <b>Yo</b>. «Quién tiene acceso»: <b>Cualquier usuario</b>. Pulsa Implementar y autoriza con tu cuenta (si avisa de «app no verificada»: Configuración avanzada → Ir al proyecto).</li>
+      <li><b class="text-brand">4.</b> Copia la <b>URL de la aplicación web</b> (acaba en /exec) y pégala aquí.</li>
+      <li class="text-amber-300"><b>Si ya lo habías implementado antes:</b> pega el código nuevo, guarda y en <b>Implementar → Gestionar implementaciones → ✏️ → Versión: Nueva versión → Implementar</b>. Si no, Google sigue usando el código viejo. La URL no cambia.</li>
+    </ol>
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="copy" type="button">📋 Copiar código</button><button class="btn-ghost" data-mact="share" type="button">📤 Enviármelo (archivo)</button></div>
+    <label class="lbl">URL de la aplicación web<input class="field mt-1 font-mono text-xs" name="url" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec" /></label>
+    <button class="btn-primary w-full" data-mact="save" type="button">Guardar y activar</button>
+    <p class="text-[11px] text-mute">El código lleva una clave de lectura única: solo tu app (con tu PIN) puede consultar la hoja. Los móviles de los demás solo pueden apuntar su visita.</p>`, {
+    copy: () => navigator.clipboard.writeText(code).then(() => toast('Código copiado: pégalo en Apps Script')).catch(() => toast('No se pudo copiar', 'error')),
+    // como archivo: compartido como texto, algunas apps lo cortan a los 4.096 caracteres
+    share: async () => {
+      const file = new File([code], 'fitnesteban-script.txt', { type: 'text/plain' });
+      if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: 'FITNESTEBAN · script de uso' }); } catch { /* cancelado */ } return; }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; document.body.appendChild(a); a.click(); a.remove(); toast('Descargado: fitnesteban-script.txt');
+    },
+    save: root => {
+      const url = mval(root, 'url').trim();
+      if (!USAGE_RE.test('#uso ' + url)) return toast('Pega la URL que acaba en /exec', 'warn');
+      askPin({ title: '📶 Activar el registro de uso', text: 'Tu PIN guarda la clave de lectura cifrada y añade la dirección a la lista de acceso.', onPin: async pin => {
+        await ghEditAcl(pin, lines => [...lines.filter(l => l.trim() && !/^#\s*uso\b/i.test(l.trim())), '#uso ' + url], 'Acceso: registro de uso');
+        lsSet(USE_KEY, await secretEnc(key, pin)); lsSet(PING_KEY, ''); try { localStorage.removeItem('fitnesteban_usekey_pending'); } catch { /* nada */ }
+        ui.accessPin = pin; closeModal(); render(); toast('Registro de uso activado ✓');
+        usagePing(); setTimeout(loadUsage, 2500);
+      } });
+    }
+  });
+}
+
 function codeShareModal(title, who, code, warn = '') {
-  const msg = `Hola${who ? ' ' + who : ''}, tu código de FITNESTEBAN es ${fmtCode(code)}\nhttps://egarluq292.github.io/fitnesteban/`;
+  const msg = `Hola${who ? ' ' + who : ''}, tu código de FITNESTEBAN es ${fmtCode(code)}\nEs personal. Válido solo en 2 dispositivos.\nhttps://egarluq292.github.io/fitnesteban/`;
   openModal(`<h3 class="modal-title">${title}</h3>${warn}
     <div class="text-center py-1"><div class="text-[11px] text-mute mb-1">${warn ? 'Nuevo código' : 'Código'}</div><div class="font-mono text-3xl font-black tracking-[.2em] text-brand">${fmtCode(code)}</div></div>
     <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="copy" type="button">📋 Copiar</button><a class="btn-ghost block text-center" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">💬 WhatsApp</a></div>
@@ -4540,7 +5954,7 @@ function regenAccess(hash) {
     delete state.accessCodes[hash]; await saveAccessCode(nh, code, pin);
     if (self) { lsSet(ACCESS_KEY, { code: normCode(code), at: Date.now() }); access.me = { ...access.me, hash: nh }; }
     if (ui.accessReveal) delete ui.accessReveal[hash];
-    persist(); render();
+    ui.accessPin = pin; persist(); render(); syncUsageNames();
     codeShareModal(`🔄 Nuevo código para ${esc(self ? 'ti' : who)}`, self ? '' : who, code, `<div class="card p-3 text-[13px] leading-snug"><b class="text-amber-300">El código anterior ya no funciona.</b> ${self ? 'Escribe este en tus otros dispositivos.' : `Mándale este a ${esc(who)}.`}</div>`);
   } });
 }
@@ -4587,9 +6001,16 @@ function accessSectionHTML() {
       return `<div class="bg-ink rounded-lg px-3 py-2 text-xs space-y-1.5">
       <div class="flex items-center justify-between gap-2"><span class="min-w-0 truncate font-semibold text-[13px]">${accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`}${me ? ' <span class="text-brand font-normal">(tú · admin)</span>' : x.admin ? ' <span class="text-mute font-normal">(admin)</span>' : ''}</span>
       <span class="flex items-center gap-1.5 shrink-0"><button class="iconbtn iconbtn-sm" data-act="nameAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Poner nombre">✎</button>${gh ? `<button class="iconbtn iconbtn-sm" data-act="regenAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Nuevo código">🔄</button>` : ''}${me || !gh ? '' : `<button class="iconbtn iconbtn-sm text-rose-300" data-act="delAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Quitar acceso">🗑</button>`}</span></div>
-      <div class="flex items-center justify-between gap-2 min-h-[28px]">${codeLine}</div></div>`;
+      <div class="flex items-center justify-between gap-2 min-h-[28px]">${codeLine}</div>${usageLine(x.hash)}</div>`;
     }).join('')}</div>
     ${gh ? '<p class="text-[11px] text-mute">✎ nombre · 🔄 nuevo código (el anterior deja de funcionar) · 🗑 quitar acceso</p>' : ''}
+    ${list.length ? '<button class="btn-ghost w-full" data-act="copyHashes" type="button">📋 Copiar huellas y nombres (para tu hoja)</button>' : ''}
+    ${access.usageUrl && lsGet(USE_KEY)
+      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : 'actualizado ahora · nombres, correos, altas y dispositivos') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
+      : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
+    ${access.usageUrl && lsGet(USE_KEY) ? (lsGet(SHEET_KEY) && !ui.sheetEdit
+      ? `<div class="flex items-center gap-2"><a class="btn-ghost flex-1 text-center block" href="${esc(lsGet(SHEET_KEY))}" target="_blank" rel="noopener">📊 Abrir hoja de uso</a><button class="text-[11px] text-mute underline shrink-0" data-act="sheetEdit" type="button">Cambiar</button></div>`
+      : `<div class="flex gap-2"><input class="field flex-1 min-w-0 text-xs" id="sheetUrl" placeholder="Pega el enlace de tu hoja de uso" autocomplete="off" value="${esc(lsGet(SHEET_KEY) || '')}" /><button class="btn-ghost px-3 shrink-0" data-act="sheetSave" type="button">Guardar</button></div><p class="text-[10px] text-mute -mt-1">Ábrela en el navegador y copia la dirección (docs.google.com/spreadsheets/…). Solo se guarda en este dispositivo.</p>`) : ''}
     ${gh ? `<button class="btn-primary w-full" data-act="newAccess" type="button">＋ Crear código para alguien</button>
       <p class="text-[11px] text-mute flex justify-between">GitHub conectado ✓ (token cifrado con tu PIN)<button class="underline" data-act="ghDisconnect" type="button">Desconectar</button></p>`
     : `<p class="text-[11px] text-mute">Conecta GitHub para crear y quitar códigos con un botón, sin editar archivos.</p>
@@ -4629,7 +6050,7 @@ function newAccessModal() {
       askPin({ title: `Crear código para ${esc(who)}`, text: 'Tu PIN abre la llave de GitHub para añadir el código a la lista.', onPin: async pin => {
         const code = newCode(), hash = await codeHash(code);
         await ghEditAcl(pin, lines => [...lines.filter(l => l.trim()), hash], 'Acceso: nuevo código');
-        state.accessNames[hash] = who; await saveAccessCode(hash, code, pin); ui.accessPin = pin; persist(); render();
+        state.accessNames[hash] = who; await saveAccessCode(hash, code, pin); ui.accessPin = pin; persist(); render(); syncUsageNames();
         codeShareModal(`Código para ${esc(who)}`, who, code);
       } });
     }
@@ -4639,7 +6060,7 @@ function delAccess(hash) {
   const who = state.accessNames[hash] || 'Sin nombre …' + hash.slice(-4);
   askPin({ title: `Quitar el acceso de ${esc(who)}`, text: 'Su código dejará de funcionar la próxima vez que abra la app con conexión (en 1–2 minutos, cuando GitHub publique el cambio). Sus datos se quedan en su móvil.', onPin: async pin => {
     await ghEditAcl(pin, lines => lines.filter(l => !l.trim().toLowerCase().startsWith(hash)), 'Acceso: código retirado');
-    delete state.accessNames[hash]; delete state.accessCodes[hash]; persist(); closeModal(); render(); toast('Acceso retirado ✓');
+    delete state.accessNames[hash]; delete state.accessCodes[hash]; ui.accessPin = pin; persist(); closeModal(); render(); toast('Acceso retirado ✓'); syncUsageNames();
   } });
 }
 
