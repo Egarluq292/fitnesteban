@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.45.3';
+const APP_VERSION = '4.46.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2447,6 +2447,7 @@ const IC = {
   key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 8.5-8.5M16 7l2.5 2.5M14 9l2 2"/>', lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
   calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>', sparkles: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>',
   chart: '<path d="M4 19h16"/><path d="M5 15l4-4 3 3 6-7"/><path d="M15 7h3v3"/>',
+  share: '<path d="M12 3v12M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-7"/>',
   send: '<path d="M21.5 2.5 2.5 10l7 3 3 8.5z"/><path d="M21.5 2.5 9.5 13"/>',
   trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a2.5 2.5 0 0 0 3 4M16 6h3a2.5 2.5 0 0 1-3 4M12 13v4M8.5 20h7"/>', target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8"/>'
 };
@@ -3239,7 +3240,8 @@ function renderSettings() {
   const sumK = Math.round(st.targetProt * 4 + st.targetCarbs * 4 + st.targetFat * 9);
   const backupAge = st.lastBackup ? daysBetween(st.lastBackup, todayISO()) : null;
   return `
-  <details class="card p-4 group" id="aiBox" ${ui.aiOpen ? 'open' : ''}>
+  <button class="share-app" data-act="shareApp" type="button">${icon('share', 'w-5 h-5')}<span>Compartir la app</span></button>
+  <details class="card p-4 group mt-3" id="aiBox" ${ui.aiOpen ? 'open' : ''}>
     <summary class="flex items-center justify-between cursor-pointer select-none">
       <h3 class="section-title">🤖 IA de nutrición (Gemini)</h3>
       <span class="flex items-center gap-2 text-[11px] ${st.apiKey ? 'text-emerald-300' : 'text-amber-300'}">${st.apiKey ? 'Configurada ✓' : 'Sin configurar'}<span class="tri"></span></span>
@@ -3987,6 +3989,8 @@ function calcTargets(d) {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const CONTACT_MAIL = 'fitnestebanapp@gmail.com';
 const CONTACT_URL = 'https://t.me/fitnesteban?direct'; // Telegram de Esteban
+const CHANNEL_URL = 'https://t.me/fitnesteban'; // canal público: presentación de la app
+const TG_PLAY_URL = 'https://play.google.com/store/apps/details?id=org.telegram.messenger', TG_IOS_URL = 'https://apps.apple.com/app/telegram-messenger/id686449807';
 const contactBtn = (txt = 'Contacto', cls = '') => `<a class="contact-btn ${cls}" href="${CONTACT_URL}" target="_blank" rel="noopener">${icon('send', 'w-4 h-4')}<span>${txt}</span></a>`;
 const EMAIL_NOTICE = `FITNESTEBAN guardará tu correo para enviarte la guía de la app y, si tú le escribes, resolverte dudas. Nadie más verá tu correo. La app sigue siendo privada. Puedes cambiar el correo en los Ajustes. Si quieres que lo borre, pídeselo a Esteban en «Contacto».`;
 async function googleEmail() {
@@ -4500,6 +4504,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.46.0', ['📤 Nuevo botón «Compartir la app» en Ajustes y en la guía (?): envía a quien quieras el canal de Telegram de FITNESTEBAN, donde podrá conocerla y pedir su código.', '✈️ El botón de arriba (avión de papel) abre ahora Telegram para escribir a Esteban.']],
   ['4.45.3', ['✈️ Contacto por Telegram en lugar del correo.'], 'quiet'],
   ['4.45.0', ['⌚ Cardio: nuevo desplegable «Datos del reloj» (opcional). Apunta distancia, desnivel, frecuencia cardiaca y las kcal de tu reloj; la app calcula la velocidad media (o el ritmo en natación) y, con la FC, la intensidad.']],
   ['4.44.6', ['Barras de arriba y abajo con degradado oscuro translúcido.'], 'quiet'],
@@ -4747,12 +4752,13 @@ function openGuide() {
         <ul class="mt-2 space-y-1.5 text-[13px] text-slate-300 leading-relaxed list-disc pl-5">${items.map(i => `<li>${i}</li>`).join('')}</ul>
       </details>`).join('')}
     </div>
-    <div class="grid grid-cols-2 gap-2 mt-3">
+    <button class="share-app mt-3" data-mact="shareApp" type="button">${icon('share', 'w-5 h-5')}<span>Compartir la app</span></button>
+    <div class="grid grid-cols-2 gap-2">
       <button class="btn-ghost" data-mact="news" type="button">🎉 Novedades</button>
       <button class="btn-primary" data-close type="button">Cerrar</button>
     </div>
     <p class="text-[11px] text-mute text-center">Versión ${APP_VERSION}</p>
-  `, { news: () => openNews(null) });
+  `, { news: () => openNews(null), shareApp: () => actions.shareApp() });
 }
 $('#helpBtn').addEventListener('click', openGuide);
 
@@ -5540,6 +5546,11 @@ const actions = {
   install: async () => { if (!deferredInstall) return; deferredInstall.prompt(); await deferredInstall.userChoice.catch(() => null); deferredInstall = null; render(); refreshLockInstall(); },
   installHelp: () => installHelpModal(),
   installHide: () => { lsSet(INSTALL_HIDE, Date.now() + 7 * 86400000); render(); },
+  shareApp: async () => {
+    const text = `Te recomiendo FITNESTEBAN, una app para entrenar y llevar la dieta. Entra en el canal, échale un vistazo y pide tu código: ${CHANNEL_URL}\n\n¿No tienes Telegram? Descárgalo:\nAndroid: ${TG_PLAY_URL}\niPhone: ${TG_IOS_URL}`;
+    try { if (navigator.share) { await navigator.share({ title: 'FITNESTEBAN', text }); return; } } catch (e) { if (e?.name === 'AbortError') return; }
+    try { await navigator.clipboard.writeText(text); toast('Mensaje copiado: pégalo donde quieras'); } catch { toast(CHANNEL_URL); }
+  },
   copyAppLink: () => navigator.clipboard.writeText('https://egarluq292.github.io/fitnesteban/').then(() => toast('Enlace copiado: pégalo en Chrome o Safari')).catch(() => toast('Enlace: egarluq292.github.io/fitnesteban', 'warn')),
   checkUpdate: async () => {
     checkRemoteVersion(true);
