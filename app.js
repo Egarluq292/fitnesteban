@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.45.0';
+const APP_VERSION = '4.45.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2447,6 +2447,7 @@ const IC = {
   key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 8.5-8.5M16 7l2.5 2.5M14 9l2 2"/>', lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
   calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>', sparkles: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>',
   chart: '<path d="M4 19h16"/><path d="M5 15l4-4 3 3 6-7"/><path d="M15 7h3v3"/>',
+  send: '<path d="M21.5 2.5 2.5 10l7 3 3 8.5z"/><path d="M21.5 2.5 9.5 13"/>',
   trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a2.5 2.5 0 0 0 3 4M16 6h3a2.5 2.5 0 0 1-3 4M12 13v4M8.5 20h7"/>', target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8"/>'
 };
 const icon = (k, cls = 'w-4 h-4') => `<svg viewBox="0 0 24 24" class="${cls}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[k] || ''}</svg>`;
@@ -3985,7 +3986,9 @@ function calcTargets(d) {
 /* ✉️ Correo de contacto: con aviso claro, va a la hoja de uso de Esteban (columna «correo») */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const CONTACT_MAIL = 'fitnestebanapp@gmail.com';
-const EMAIL_NOTICE = `FITNESTEBAN guardará tu correo para enviarte la guía de la app y, si tú le escribes, resolverte dudas. Nadie más verá tu correo. La app sigue siendo privada. Puedes cambiar el correo en los Ajustes. Si quieres que lo borre, escribe a ${CONTACT_MAIL}.`;
+const CONTACT_URL = 'https://t.me/fitnesteban?direct'; // Telegram de Esteban
+const contactBtn = (txt = 'Contacto', cls = '') => `<a class="contact-btn ${cls}" href="${CONTACT_URL}" target="_blank" rel="noopener">${icon('send', 'w-4 h-4')}<span>${txt}</span></a>`;
+const EMAIL_NOTICE = `FITNESTEBAN guardará tu correo para enviarte la guía de la app y, si tú le escribes, resolverte dudas. Nadie más verá tu correo. La app sigue siendo privada. Puedes cambiar el correo en los Ajustes. Si quieres que lo borre, pídeselo a Esteban en «Contacto».`;
 async function googleEmail() {
   if (!navigator.onLine) throw new Error('Sin conexión a internet');
   await loadGis();
@@ -4009,7 +4012,7 @@ const gBtn = (act = 'google') => `<button class="w-full flex items-center justif
 const emailFormHTML = (val = '') => `${gBtn()}
     <div class="flex items-center gap-2 text-[11px] text-mute"><span class="flex-1 h-px bg-line"></span>o escríbelo<span class="flex-1 h-px bg-line"></span></div>
     <input class="field" name="email" type="email" inputmode="email" autocomplete="email" placeholder="tucorreo@gmail.com" value="${esc(val)}" />
-    <p class="text-[11px] text-mute leading-snug">✉️ ${EMAIL_NOTICE}</p>`;
+    <p class="text-[11px] text-mute leading-snug">✉️ ${EMAIL_NOTICE}</p>${contactBtn('Contacto', 'contact-sm')}`;
 /* 📅 Fecha de alta: nuevos = día de los primeros pasos; antiguos = día de su primer dato guardado (aproximada) */
 function installDate() {
   const st = state.settings;
@@ -4064,7 +4067,7 @@ function onboarding() {
       <p>🛠️ <b>Es un proyecto vivo.</b> Irá mejorando, pero puede tener fallos o cambiar.</p>
       <p>📶 <b>Para mantener la app</b>, envía a Esteban solo el día de último uso, la versión instalada y un identificador del dispositivo (sin datos personales). Nada de tu dieta ni de tus entrenos.</p>
       <p>🔑 <b>Tu código es solo tuyo:</b> funciona como mucho en 2 dispositivos.</p>
-      <p>✉️ <b>Tu correo</b> lo guarda Esteban para enviarte la guía de la app y, si tú le escribes, resolverte dudas. Para escribirle, toca ✉️ arriba.</p>
+      <p>✉️ <b>Tu correo</b> lo guarda Esteban para enviarte la guía de la app y, si tú le escribes, resolverte dudas.</p>
       <p class="text-mute">Todo, con detalle, en la <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.</p>
     </div>
     <label class="flex items-start gap-2 text-[13px]"><input type="checkbox" name="ok" ${d.ok ? 'checked' : ''} style="margin-top:3px;accent-color:#22d3ee;width:18px;height:18px" /> Lo he leído y estoy de acuerdo.</label>
@@ -4190,7 +4193,7 @@ function profileModal(after) {
     <div class="card p-3 space-y-2"><div class="lbl">✉️ Correo de contacto${access.me?.admin ? '' : ' (opcional)'}</div>
       <div class="flex gap-2"><input class="field flex-1 min-w-0" name="email" type="email" inputmode="email" autocomplete="email" placeholder="tucorreo@gmail.com" value="${esc(draft.email)}" /></div>
       ${draft.email ? '' : gBtn()}
-      <p class="text-[10px] text-mute leading-snug">${EMAIL_NOTICE}</p></div>
+      <p class="text-[10px] text-mute leading-snug">${EMAIL_NOTICE}</p>${contactBtn('Contacto', 'contact-sm mt-2')}</div>
     <button class="btn-primary w-full" data-mact="save" type="button">Guardar</button>`;
   const keep = root => { draft.name = mval(root, 'name').trim(); draft.birth = mval(root, 'birth'); draft.height = mval(root, 'height').replace(/\D/g, ''); draft.email = mval(root, 'email').trim().toLowerCase(); };
   const handlers = {
@@ -4497,6 +4500,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.45.3', ['✈️ Contacto por Telegram en lugar del correo.'], 'quiet'],
   ['4.45.0', ['⌚ Cardio: nuevo desplegable «Datos del reloj» (opcional). Apunta distancia, desnivel, frecuencia cardiaca y las kcal de tu reloj; la app calcula la velocidad media (o el ritmo en natación) y, con la FC, la intensidad.']],
   ['4.44.6', ['Barras de arriba y abajo con degradado oscuro translúcido.'], 'quiet'],
   ['4.44.4', ['Barra inferior más transparente, sin línea.'], 'quiet'],
@@ -4682,7 +4686,7 @@ const GUIDE = [
   ['🔄 Actualizar la app', [
     'Cuando subes una versión nueva a GitHub aparece «Hay una versión nueva» → Actualizar. Comprueba el número en Ajustes → Aplicación.',
     'Tras actualizar verás una vez las novedades. Puedes volver a verlas desde esta guía.',
-    '✉️ El sobre de arriba abre tu correo para escribir a fitnestebanapp@gmail.com: dudas, fallos o ideas.',
+    '✈️ El avión de papel de arriba abre Telegram para escribir a Esteban: dudas, fallos o ideas.',
     '🔒 Qué datos usa la app y dónde se guardan: <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.'
   ]]
 ];
@@ -5749,7 +5753,7 @@ async function accessCheck(list) {
 /* 📱 Cada código vale como mucho en 2 dispositivos (el administrador, sin límite). Lo decide el script de la hoja de uso.
    Si el script no responde o aún no está actualizado, se deja entrar: nadie se queda fuera por un fallo ajeno. */
 const DEVICE_LIMIT = 2;
-const blockedMsg = () => `Este código ya se usa en ${DEVICE_LIMIT} dispositivos. Si has cambiado de móvil, escribe a <a class="text-brand underline" href="mailto:${CONTACT_MAIL}?subject=${encodeURIComponent('FITNESTEBAN · cambio de móvil')}">${CONTACT_MAIL}</a> y te lo libero.`;
+const blockedMsg = () => `Este código ya se usa en ${DEVICE_LIMIT} dispositivos. Si has cambiado de móvil, escribe a Esteban y te lo libera.${contactBtn('Contacto', 'mx-auto mt-3')}`;
 let deviceSure = false; // ¿el script ha contestado de verdad? (si no, se vuelve a preguntar al volver a la app)
 let deviceDiag = ''; // qué contestó el script la última vez (se ve en Ajustes → Aplicación)
 async function deviceAllowed(code, me) {
@@ -5783,10 +5787,11 @@ function lockScreen(mode, msg = '') {
   if (mode === 'wait') { el.innerHTML = `<div class="lock-box text-center">${logo}<p class="text-sm text-mute mt-6"><span class="spinner"></span> Comprobando acceso…</p></div>`; return; }
   el.innerHTML = `<div class="lock-box">
     <div class="text-center">${logo}<h1 class="font-extrabold text-lg mt-5">Acceso privado</h1>
-    <p class="text-sm text-mute mt-1">${msg || 'Esta app es personal. Escribe el código que te ha dado Esteban.'}</p></div>
+    <div class="text-sm text-mute mt-1">${msg || 'Esta app es personal. Escribe el código que te ha dado Esteban.'}</div></div>
     <input class="field mt-5 text-center text-2xl font-black tracking-[.2em] uppercase" id="lockCode" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" />
     <button class="btn-primary w-full mt-3" id="lockGo" type="button">Entrar</button>
     <p class="text-[11px] text-mute text-center mt-4">Cada código es personal. Válido solo en 2 dispositivos.</p>
+    ${msg ? '' : `<p class="text-[12px] text-mute text-center mt-4">¿No tienes código?</p>${contactBtn('Contacto', 'mx-auto mt-2')}`}
     <div id="lockInstall" class="mt-5">${installBannerHTML(true)}</div></div>`;
   const go = async () => {
     const v = $('#lockCode').value; if (normCode(v).length < 8) return toast('El código tiene 8 caracteres', 'warn');
@@ -5850,9 +5855,9 @@ async function accessBoot() {
   let me = await accessCheck(fresh);
   if (!me && lsGet(ACCESS_KEY)?.code) { const live = await fetchAclLive(); if (live) me = await accessCheck(live); }
   if (me) { if (!access.ok) unlock(me); else access.me = me; usagePing(); deviceGuard(); }
-  else lockScreen('code', lsGet(ACCESS_KEY)?.code ? `Tu código ya no es válido. Pide uno nuevo a <a class="text-brand underline" href="mailto:${CONTACT_MAIL}?subject=${encodeURIComponent('FITNESTEBAN · código de acceso')}">${CONTACT_MAIL}</a>` : '');
+  else lockScreen('code', lsGet(ACCESS_KEY)?.code ? `Tu código ya no es válido. Pide uno nuevo a Esteban.${contactBtn('Contacto', 'mx-auto mt-3')}` : '');
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { usagePing(); deviceGuard(); if (l && !(await accessCheck(l))) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', `Tu código ya no es válido. Pide uno nuevo a <a class="text-brand underline" href="mailto:${CONTACT_MAIL}?subject=${encodeURIComponent('FITNESTEBAN · código de acceso')}">${CONTACT_MAIL}</a>`); } }); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { usagePing(); deviceGuard(); if (l && !(await accessCheck(l))) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', `Tu código ya no es válido. Pide uno nuevo a Esteban.${contactBtn('Contacto', 'mx-auto mt-3')}`); } }); });
 
 /* Gestión (solo administrador): crear el código de una persona y la línea para acceso.txt */
 function newCode() { const a = crypto.getRandomValues(new Uint8Array(8)); const s = [...a].map(x => CODE_ABC[x % CODE_ABC.length]).join(''); return s.slice(0, 4) + '-' + s.slice(4); }
