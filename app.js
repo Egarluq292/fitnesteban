@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.48.0';
+const APP_VERSION = '4.49.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4505,6 +4505,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.49.0', ['🔎 Acceso: buscador por nombre o correo, filtros (caducan pronto, caducados, sin usar, Free) y lista compacta con ficha desplegable.'], 'admin'],
   ['4.48.0', ['🔄 La app se actualiza sola: ya no hace falta pulsar «Actualizar».'], 'quiet'],
   ['4.47.0', ['⏳ Acceso: planes con caducidad (Prueba 10 días, 1, 3 o 12 meses, o Free). Se elige al crear el código y se cambia con ⏳. La fecha es la de la red, no la del móvil.'], 'admin'],
   ['4.46.0', ['📤 Nuevo botón «Compartir la app» en Ajustes y en la guía (?): envía a quien quieras el canal de Telegram de FITNESTEBAN, donde podrá conocerla y pedir su código.', '✈️ El botón de arriba (avión de papel) abre ahora Telegram para escribir a Esteban.']],
@@ -5510,6 +5511,8 @@ const actions = {
   copyCode: async b => { const c = await accessCodeOf(b.dataset.hash); if (c) navigator.clipboard.writeText(fmtCode(c)).then(() => toast('Código copiado')).catch(() => toast('Cópialo a mano: ' + fmtCode(c), 'warn')); },
   regenAccess: b => regenAccess(b.dataset.hash),
   planAccess: b => planModal(b.dataset.hash),
+  accRow: b => { ui.accOpenH = ui.accOpenH === b.dataset.hash ? null : b.dataset.hash; render(); accFilterDom(); },
+  accF: b => { ui.accF = b.dataset.k; render(); accFilterDom(); },
   delAccess: b => delAccess(b.dataset.hash),
   ghConnect: () => ghConnectModal(),
   ghDisconnect: () => { if (!confirm('¿Desconectar GitHub? Se borra la llave guardada en este móvil.')) return; try { localStorage.removeItem(GH_KEY); } catch { /* nada */ } render(); toast('GitHub desconectado'); },
@@ -6240,6 +6243,37 @@ function askPin({ title, text, onPin }) {
     }
   });
 }
+/* 🔎 Buscador y filtros de Acceso */
+function accStatus(x) {
+  if (x.admin) return 'admin';
+  if (!x.hasta) return 'free';
+  const t = netToday(), left = t ? daysBetween(t, x.hasta) : 99;
+  return left < 0 ? 'exp' : left <= 7 ? 'soon' : 'ok';
+}
+function accSorted(list) {
+  const w = x => { const st = accStatus(x); return st === 'admin' ? -2 : st === 'exp' ? -1 : st === 'free' ? 1e6 : daysBetween(todayISO(), x.hasta); };
+  return [...list].sort((a, b) => w(a) - w(b) || accessWho(a).localeCompare(accessWho(b), 'es'));
+}
+function planPill(x) {
+  const st = accStatus(x), t = netToday(), left = x.hasta && t ? daysBetween(t, x.hasta) : null;
+  if (st === 'free') return '<span class="text-emerald-300">Free</span>';
+  if (st === 'exp') return '<span class="text-rose-300">Caducado</span>';
+  return `<span class="${st === 'soon' ? 'text-amber-300' : 'text-slate-300'}">${esc(PLANS[x.plan]?.[0] || 'Plan')} · ${left === 0 ? 'hoy' : left + ' d'}</span>`;
+}
+function accFilterHTML(list) {
+  const n = k => list.filter(x => accStatus(x) === k).length;
+  const idle = list.filter(x => !x.admin && (() => { const u = ui.usage?.[x.hash]; return !u || daysBetween(u.last, todayISO()) > 7; })()).length;
+  const F = [['all', 'Todos', list.length], ['soon', 'Caducan pronto', n('soon')], ['exp', 'Caducados', n('exp')], ['idle', 'Sin usar +7 d', ui.usage ? idle : null], ['free', 'Free', n('free')]];
+  return `<input class="field" id="accSearch" placeholder="🔎 Buscar por nombre o correo" autocomplete="off" value="${esc(ui.accQ || '')}" />
+    <div class="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" data-noswipe>${F.filter(f => f[2] !== null).map(([k, l, c]) => `<button class="chip chip-sm shrink-0 ${(ui.accF || 'all') === k ? 'chip-on' : ''}" data-act="accF" data-k="${k}" type="button">${l} <span class="opacity-70">${c}</span></button>`).join('')}</div>`;
+}
+function accFilterDom() {
+  const q = normTxt(($('#accSearch')?.value || '').trim()); ui.accQ = $('#accSearch')?.value || '';
+  let n = 0;
+  document.querySelectorAll('#accRows .acc-row').forEach(r => { const okF = !r.dataset.f; const hit = !q || r.dataset.s.includes(q); r.style.display = hit ? '' : 'none'; if (hit && !r.hidden) n++; });
+  $('#accNone')?.classList.toggle('hidden', n > 0);
+}
+document.addEventListener('input', e => { if (e.target.id === 'accSearch') accFilterDom(); });
 function accessSectionHTML() {
   if (!access.me?.admin) return '';
   if (!ui.accessOpen) { ui.accessPin = null; ui.accessReveal = {}; }
@@ -6248,19 +6282,32 @@ function accessSectionHTML() {
   const list = access.list || [], gh = !!lsGet(GH_KEY);
   return `<section class="card p-4 mt-3 space-y-3">
     <button class="w-full flex items-center justify-between" data-act="closeAccess" type="button"><h3 class="section-title">🔑 Acceso</h3><span class="flex items-center gap-2 text-[11px] text-emerald-300">🔓 Abierto<span class="tri rotate-180"></span></span></button>
-    <p class="text-[11px] text-mute">${list.length} ${list.length === 1 ? 'persona' : 'personas'} con acceso. Los nombres y códigos solo los ves tú: van cifrados con tu PIN en este móvil y en tus copias. En GitHub solo hay huellas.</p>
-    <div class="space-y-1.5">${list.map(x => {
+    <p class="text-[12px] text-slate-300">${list.length} ${list.length === 1 ? 'persona' : 'personas'}${(() => { const so = list.filter(x => accStatus(x) === 'soon').length, ex = list.filter(x => accStatus(x) === 'exp').length; return (so ? ` · <span class="text-amber-300">${so} caduca${so > 1 ? 'n' : ''} pronto</span>` : '') + (ex ? ` · <span class="text-rose-300">${ex} caducado${ex > 1 ? 's' : ''}</span>` : ''); })()}</p>
+    ${accFilterHTML(list)}
+    <div class="space-y-1.5" id="accRows">${accSorted(list).map(x => {
       const me = x.hash === access.me.hash, has = me ? !!lsGet(ACCESS_KEY)?.code : !!state.accessCodes?.[x.hash], shown = ui.accessReveal?.[x.hash];
       const codeLine = has
         ? `<span class="font-mono text-[15px] font-black tracking-[.15em] ${shown ? 'text-brand' : 'text-mute'}">${shown ? fmtCode(shown) : '••••-••••'}</span>
            <span class="flex gap-1.5"><button class="iconbtn iconbtn-sm" data-act="showCode" data-hash="${esc(x.hash)}" type="button" aria-label="Ver código">${shown ? '🙈' : '👁'}</button><button class="iconbtn iconbtn-sm" data-act="copyCode" data-hash="${esc(x.hash)}" type="button" aria-label="Copiar código">📋</button></span>`
         : `<span class="text-amber-300 text-[11px]">Código no guardado (creado antes de la 4.24). Si lo necesita, dale uno nuevo con 🔄.</span>`;
-      return `<div class="bg-ink rounded-lg px-3 py-2 text-xs space-y-1.5">
-      <div class="flex items-center justify-between gap-2"><span class="min-w-0 truncate font-semibold text-[13px]">${accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`}${me ? ' <span class="text-brand font-normal">(tú · admin)</span>' : x.admin ? ' <span class="text-mute font-normal">(admin)</span>' : ''}</span>
+      const detail = `<div class="px-3 pb-2.5 pt-1 text-xs space-y-1.5">
+      <div class="flex items-center justify-between gap-2"><span class="min-w-0 text-[11px]">${x.admin ? '<span class="text-brand">Administrador · sin límite</span>' : `⏳ ${planLabel(x)}`}</span>
       <span class="flex items-center gap-1.5 shrink-0"><button class="iconbtn iconbtn-sm" data-act="nameAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Poner nombre">✎</button>${gh && !x.admin ? `<button class="iconbtn iconbtn-sm" data-act="planAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Plan">⏳</button>` : ''}${gh ? `<button class="iconbtn iconbtn-sm" data-act="regenAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Nuevo código">🔄</button>` : ''}${me || !gh ? '' : `<button class="iconbtn iconbtn-sm text-rose-300" data-act="delAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Quitar acceso">🗑</button>`}</span></div>
-      <div class="flex items-center justify-between gap-2 min-h-[28px]">${codeLine}</div>${x.admin ? '' : `<div class="text-[11px]">⏳ ${planLabel(x)}</div>`}${usageLine(x.hash)}</div>`;
+      <div class="flex items-center justify-between gap-2 min-h-[28px]">${codeLine}</div>${usageLine(x.hash)}</div>`;
+      const open = ui.accOpenH === x.hash, st = accStatus(x), u = ui.usage?.[x.hash];
+      const ago = u ? daysBetween(u.last, todayISO()) : null;
+      const dot = !u ? '⚪' : ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴';
+      const pill = x.admin ? '<span class="text-brand">admin</span>' : planPill(x);
+      const visF = (!ui.accF || ui.accF === 'all' || ui.accF === st || (ui.accF === 'idle' && !x.admin && (ago === null || ago > 7))) || (me && (!ui.accF || ui.accF === 'all'));
+      return `<div class="acc-row ${open ? 'acc-open' : ''}" data-s="${esc(normTxt([accessWho(x), u?.m || '', x.hash.slice(-4)].join(' ')))}" ${visF ? '' : 'hidden'}>
+        <button class="w-full flex items-center gap-2 px-3 py-2.5 text-left" data-act="accRow" data-hash="${esc(x.hash)}" type="button">
+          <span class="text-[11px]">${dot}</span>
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-[13px] truncate">${accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`}${me ? ' <span class="text-mute">(tú)</span>' : ''}</span>${u?.m ? `<span class="block text-[11px] text-mute truncate">${esc(u.m)}</span>` : ''}</span>
+          <span class="text-[11px] shrink-0">${pill}</span><span class="tri shrink-0 ${open ? 'rotate-180' : ''}"></span></button>
+        ${open ? detail : ''}</div>`;
     }).join('')}</div>
-    ${gh ? '<p class="text-[11px] text-mute">✎ nombre · ⏳ plan · 🔄 nuevo código (el anterior deja de funcionar) · 🗑 quitar acceso</p>' : ''}
+    <p class="text-[12px] text-mute text-center hidden" id="accNone">Nadie coincide con la búsqueda.</p>
+    ${gh ? '<p class="text-[11px] text-mute">Toca a una persona para ver su ficha: ✎ nombre · ⏳ plan · 🔄 nuevo código · 🗑 quitar acceso. Nombres y códigos solo los ves tú (cifrados con tu PIN); en GitHub solo hay huellas.</p>' : ''}
     ${list.length ? '<button class="btn-ghost w-full" data-act="copyHashes" type="button">📋 Copiar huellas y nombres (para tu hoja)</button>' : ''}
     ${access.usageUrl && lsGet(USE_KEY)
       ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : 'actualizado ahora · nombres, correos, altas y dispositivos') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
