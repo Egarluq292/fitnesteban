@@ -1,5 +1,431 @@
 [
  {
+  "lib": "pub_mvwdhuvedm",
+  "name": "FULL BODY",
+  "icon": "",
+  "desc": "Bloque cerrado y usado por Esteban.",
+  "author": "Esteban",
+  "at": "2026-10-31",
+  "days": [
+   {
+    "label": "FB A",
+    "rotation": true,
+    "title": "Full Body A",
+    "subtitle": "Sentadilla, banca y remo pesados + accesorios",
+    "exercises": [
+     {
+      "id": "fa_squat",
+      "block": "🏋️ Pierna principal",
+      "sets": 4,
+      "minReps": 6,
+      "maxReps": 8,
+      "increment": 2.5,
+      "rest": 150,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Sentadilla trasera",
+        "note": "Profundidad paralela o más, core apretado."
+       },
+       {
+        "name": "Sentadilla frontal",
+        "note": "Codos altos."
+       },
+       {
+        "name": "Prensa de piernas",
+        "note": "Sin bloquear rodillas."
+       }
+      ]
+     },
+     {
+      "id": "fa_bench",
+      "block": "💪 Empuje principal",
+      "sets": 4,
+      "minReps": 6,
+      "maxReps": 8,
+      "increment": 2.5,
+      "rest": 150,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Press de banca",
+        "note": "Escápulas retraídas, pies firmes."
+       },
+       {
+        "name": "Press de banca con mancuernas",
+        "note": "Bajada en 2 s."
+       },
+       {
+        "name": "Press de pecho en máquina",
+        "note": "Recorrido completo."
+       }
+      ]
+     },
+     {
+      "id": "fa_row",
+      "block": "🦅 Tirón principal",
+      "sets": 4,
+      "minReps": 8,
+      "maxReps": 10,
+      "increment": 2.5,
+      "rest": 120,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Remo con barra",
+        "note": "Torso a ~45º, barra al ombligo."
+       },
+       {
+        "name": "Remo con mancuerna a una mano",
+        "note": "Codo hacia la cadera."
+       },
+       {
+        "name": "Remo en polea baja",
+        "note": "Espalda neutra."
+       }
+      ]
+     },
+     {
+      "id": "fa_legcurl",
+      "block": "🔥 Isquios",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 10,
+      "increment": 2.5,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl femoral acostado",
+        "note": "Bajada lenta en 3 s."
+       },
+       {
+        "name": "Curl femoral sentado",
+        "note": "Bajada lenta."
+       },
+       {
+        "name": "Peso muerto rumano con mancuernas",
+        "note": "Cadera atrás, espalda neutra."
+       }
+      ]
+     },
+     {
+      "id": "fa_ohp",
+      "block": "🎯 Hombro",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 10,
+      "increment": 2.5,
+      "rest": 120,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Press militar de pie",
+        "note": "Glúteos y abdomen apretados."
+       },
+       {
+        "name": "Press militar sentado con mancuernas",
+        "note": "Rango completo."
+       },
+       {
+        "name": "Press Arnold",
+        "note": "Gira las muñecas al subir."
+       }
+      ]
+     },
+     {
+      "id": "fa_lat",
+      "block": "⚡ Accesorio hombro",
+      "sets": 3,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 1,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Elevaciones laterales",
+        "note": "Sin impulso, codos ligeramente flexionados."
+       },
+       {
+        "name": "Elevaciones laterales en polea",
+        "note": "Tensión constante."
+       },
+       {
+        "name": "Elevaciones laterales con banda",
+        "note": "Controla la bajada."
+       }
+      ]
+     },
+     {
+      "id": "fa_curl",
+      "block": "💪 Brazos",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl de bíceps con barra",
+        "note": "Codos pegados, sin balanceo."
+       },
+       {
+        "name": "Curl con mancuernas alterno",
+        "note": "Supina al subir."
+       },
+       {
+        "name": "Curl en polea",
+        "note": "Tensión constante."
+       }
+      ]
+     },
+     {
+      "id": "fa_hammer",
+      "block": "💪 Brazos",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 1,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl martillo",
+        "note": "Agarre neutro."
+       },
+       {
+        "name": "Curl martillo en polea con cuerda",
+        "note": "Codos fijos."
+       },
+       {
+        "name": "Curl Zottman",
+        "note": "Sube supino, baja prono."
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "label": "FB B",
+    "rotation": true,
+    "title": "Full Body B",
+    "subtitle": "Peso muerto, dominadas e inclinado + accesorios",
+    "exercises": [
+     {
+      "id": "fb_deadlift",
+      "block": "🏋️ Bisagra principal",
+      "sets": 4,
+      "minReps": 6,
+      "maxReps": 10,
+      "increment": 2.5,
+      "rest": 180,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Peso muerto",
+        "note": "Espalda neutra, empuja el suelo."
+       },
+       {
+        "name": "Peso muerto con barra hexagonal",
+        "note": "Empuja el suelo."
+       },
+       {
+        "name": "Peso muerto rumano",
+        "note": "Cadera atrás, espalda neutra."
+       }
+      ]
+     },
+     {
+      "id": "fb_pullup",
+      "block": "🦅 Tirón vertical",
+      "sets": 3,
+      "minReps": 6,
+      "maxReps": 10,
+      "increment": 2,
+      "rest": 120,
+      "bw": true,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Dominadas pronas",
+        "note": "0 kg = peso corporal."
+       },
+       {
+        "name": "Dominadas asistidas con banda",
+        "note": "Banda bajo las rodillas. 0 kg = peso corporal."
+       },
+       {
+        "name": "Dominadas negativas",
+        "note": "Baja en 4–5 s. 0 kg = peso corporal."
+       }
+      ]
+     },
+     {
+      "id": "fb_incline",
+      "block": "💪 Empuje superior",
+      "sets": 4,
+      "minReps": 8,
+      "maxReps": 10,
+      "increment": 2,
+      "rest": 120,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Press inclinado con mancuernas",
+        "note": "Banco a 30º."
+       },
+       {
+        "name": "Press inclinado con barra",
+        "note": "Banco a 30º."
+       },
+       {
+        "name": "Press inclinado en máquina",
+        "note": "Recorrido completo."
+       }
+      ]
+     },
+     {
+      "id": "fb_squat",
+      "block": "🔥 Pierna",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Sentadilla con peso",
+        "note": "Goblet, mancuernas o barra."
+       },
+       {
+        "name": "Sentadilla búlgara",
+        "note": "Reps por pierna."
+       },
+       {
+        "name": "Prensa de piernas",
+        "note": "Sin bloquear rodillas."
+       }
+      ]
+     },
+     {
+      "id": "fb_hipthrust",
+      "block": "🍑 Glúteo",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 12,
+      "increment": 5,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Hip thrust",
+        "note": "Pausa de 1 s arriba."
+       },
+       {
+        "name": "Puente de glúteo con barra",
+        "note": "Pausa arriba."
+       },
+       {
+        "name": "Hip thrust a una pierna",
+        "note": "Reps por pierna."
+       }
+      ]
+     },
+     {
+      "id": "fb_face",
+      "block": "🎯 Hombro posterior",
+      "sets": 3,
+      "minReps": 15,
+      "maxReps": 20,
+      "increment": 1,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Face pull / TRX",
+        "note": "Codos altos, abre al final."
+       },
+       {
+        "name": "Pájaros con mancuernas",
+        "note": "Torso inclinado."
+       },
+       {
+        "name": "Apertura con banda",
+        "note": "Brazos rectos."
+       }
+      ]
+     },
+     {
+      "id": "fb_triceps",
+      "block": "💪 Brazos",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Extensión de tríceps en polea",
+        "note": "Codos fijos."
+       },
+       {
+        "name": "Press francés con mancuernas",
+        "note": "Codos fijos."
+       },
+       {
+        "name": "Fondos en banco con lastre",
+        "note": "Hombros abajo."
+       }
+      ]
+     },
+     {
+      "id": "fb_calf",
+      "block": "🦵 Gemelos",
+      "sets": 4,
+      "minReps": 10,
+      "maxReps": 15,
+      "increment": 2,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Elevación de gemelos de pie",
+        "note": "Pausa abajo y arriba."
+       },
+       {
+        "name": "Elevación de gemelos sentado",
+        "note": "Pausa arriba."
+       },
+       {
+        "name": "Elevación de gemelos a una pierna",
+        "note": "Apoyado en un escalón."
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
   "lib": "pub_mvwdgkfqev",
   "name": "PPT",
   "icon": "",
