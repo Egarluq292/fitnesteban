@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.46.0';
+const APP_VERSION = '4.48.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3358,6 +3358,7 @@ function renderSettings() {
     <h3 class="section-title">📱 Aplicación</h3>
     ${deferredInstall ? `<button class="btn-primary w-full" data-act="install" type="button">Instalar en la pantalla de inicio</button>` : `<p class="text-xs text-mute">${isStandalone() ? 'Instalada como app ✓' : 'Para instalar: menú ⋮ del navegador → «Instalar aplicación» o «Añadir a pantalla de inicio».'}</p>`}
     ${versionStatusHTML()}
+    ${planOf(access.me) ? `<div class="text-[11px] text-mute">⏳ Tu acceso: ${planLabel(access.me)}</div>` : ''}
     ${access.usageUrl ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span class="min-w-0">🔑 Este dispositivo: <span class="${/✓/.test(deviceDiag) ? 'text-emerald-300' : 'text-amber-300'}">${esc(deviceDiag || 'sin comprobar')}</span><br><span class="opacity-70">${esc(deviceLabel())} · script …${esc(access.usageUrl.replace(/\/exec.*$/, '').slice(-6))}</span></span><button class="underline text-brand shrink-0" data-act="devCheck" type="button">Comprobar</button></div>` : ''}
     <div class="grid grid-cols-2 gap-2">
       <button class="btn-ghost" data-act="checkUpdate" type="button">Buscar actualización</button>
@@ -4504,6 +4505,8 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.48.0', ['🔄 La app se actualiza sola: ya no hace falta pulsar «Actualizar».'], 'quiet'],
+  ['4.47.0', ['⏳ Acceso: planes con caducidad (Prueba 10 días, 1, 3 o 12 meses, o Free). Se elige al crear el código y se cambia con ⏳. La fecha es la de la red, no la del móvil.'], 'admin'],
   ['4.46.0', ['📤 Nuevo botón «Compartir la app» en Ajustes y en la guía (?): envía a quien quieras el canal de Telegram de FITNESTEBAN, donde podrá conocerla y pedir su código.', '✈️ El botón de arriba (avión de papel) abre ahora Telegram para escribir a Esteban.']],
   ['4.45.3', ['✈️ Contacto por Telegram en lugar del correo.'], 'quiet'],
   ['4.45.0', ['⌚ Cardio: nuevo desplegable «Datos del reloj» (opcional). Apunta distancia, desnivel, frecuencia cardiaca y las kcal de tu reloj; la app calcula la velocidad media (o el ritmo en natación) y, con la FC, la intensidad.']],
@@ -5506,6 +5509,7 @@ const actions = {
   },
   copyCode: async b => { const c = await accessCodeOf(b.dataset.hash); if (c) navigator.clipboard.writeText(fmtCode(c)).then(() => toast('Código copiado')).catch(() => toast('Cópialo a mano: ' + fmtCode(c), 'warn')); },
   regenAccess: b => regenAccess(b.dataset.hash),
+  planAccess: b => planModal(b.dataset.hash),
   delAccess: b => delAccess(b.dataset.hash),
   ghConnect: () => ghConnectModal(),
   ghDisconnect: () => { if (!confirm('¿Desconectar GitHub? Se borra la llave guardada en este móvil.')) return; try { localStorage.removeItem(GH_KEY); } catch { /* nada */ } render(); toast('GitHub desconectado'); },
@@ -5715,7 +5719,20 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   }).catch(err => console.warn('SW', err));
   let refreshing = false;
   const hadController = !!navigator.serviceWorker.controller; // en la primera instalación no hace falta recargar
-  navigator.serviceWorker.addEventListener('controllerchange', () => { if (refreshing || !hadController) return; refreshing = true; location.reload(); });
+  /* Actualización automática: la versión nueva toma el control sola; se recarga en un momento seguro
+     (nunca escribiendo, con una ventana abierta o con el cronómetro en marcha: entonces espera a que salgas de la app) */
+  const busy = () => !!timer.endAt || $('#modalRoot')?.classList.contains('open') || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
+  const reloadNow = () => { if (refreshing) return; refreshing = true; try { persist(); savePrevCopy(localStorage.getItem(STORE_KEY), APP_VERSION); } catch { /* nada */ } location.reload(); };
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing || !hadController) return;
+    if (document.visibilityState === 'hidden' || !busy()) return reloadNow();
+    $('#topBanner').innerHTML = '';
+    const tryLater = () => { if (document.visibilityState === 'hidden' || !busy()) reloadNow(); else setTimeout(tryLater, 5000); };
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') reloadNow(); });
+    setTimeout(tryLater, 5000);
+  });
+  // comprobar si hay versión nueva cada vez que vuelves a la app
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') swReg?.update().catch(() => null); });
   navigator.storage?.persist?.().catch(() => null);
 } else if (location.protocol === 'file:') {
   $('#topBanner').innerHTML = `<div class="banner-warn mt-3"><span>Estás abriendo el archivo directamente: sin modo app ni funcionamiento sin conexión. Publícala en una web https (ver LEEME).</span></div>`;
@@ -5749,10 +5766,34 @@ async function codeHash(c) {
 function parseAcl(text) {
   return String(text).split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')).map(l => {
     const p = l.split(/\s+/), admin = p.slice(1).some(t => t.toLowerCase() === 'admin');
-    return { hash: p[0].toLowerCase(), admin };
+    const hasta = (p.find(t => /^hasta=\d{4}-\d{2}-\d{2}$/i.test(t)) || '').slice(6), plan = (p.find(t => /^plan=\w+$/i.test(t)) || '').slice(5).toLowerCase();
+    return { hash: p[0].toLowerCase(), admin, ...(hasta ? { hasta } : {}), ...(plan ? { plan } : {}) };
   }).filter(x => /^[0-9a-f]{32}$/.test(x.hash));
 }
 const access = { list: null, me: null, ok: false, usageUrl: '' };
+/* ⏳ Planes con caducidad. La fecha que manda es la de la red (cabecera Date del servidor), nunca el reloj del móvil:
+   se guarda la última hora de la red y, sin conexión, solo se suma el tiempo que avance el reloj (si lo atrasan, el tiempo se congela).
+   Además, un código con caducidad necesita comprobarse con conexión al menos cada OFFLINE_MAX aperturas. */
+const PLANS = { prueba: ['Prueba', 10], '1m': ['1 mes', 30], '3m': ['3 meses', 90], '12m': ['12 meses', 365], free: ['Free', 0] };
+const NET_KEY = 'fitnesteban_net', OFFLINE_MAX = 15;
+function netMark(r) { const d = Date.parse(r?.headers?.get('date') || ''); if (d > 0) { lsSet(NET_KEY, { s: d, d: Date.now(), off: 0 }); return true; } return false; }
+function netNow() { const n = lsGet(NET_KEY); if (!n?.s) return null; return n.s + Math.max(0, Date.now() - n.d); }
+function netToday() { const t = netNow(); return t ? new Date(t).toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' }) : null; }
+function planOf(me) { return me?.admin ? null : me?.hasta ? { k: me.plan || '', hasta: me.hasta } : null; }
+/* ¿Caducado? true / false / 'offline' (lleva demasiadas aperturas sin poder comprobarlo) */
+function planExpired(me) {
+  const pl = planOf(me); if (!pl) return false;
+  const today = netToday(); if (!today) return 'offline';
+  if (today > pl.hasta) return true;
+  return (lsGet(NET_KEY)?.off || 0) > OFFLINE_MAX ? 'offline' : false;
+}
+function planDaysLeft(me) { const pl = planOf(me), t = netToday(); return pl && t ? daysBetween(t, pl.hasta) : null; }
+function planWarn(me) {
+  const left = planDaysLeft(me); if (left === null || left > 3 || left < 0) return;
+  const k = 'planWarn_' + netToday(); if (lsGet(k)) return; lsSet(k, 1);
+  setTimeout(() => toast(left === 0 ? 'Tu acceso caduca hoy. Pide a Esteban que lo renueve.' : `Tu acceso caduca en ${left} día${left > 1 ? 's' : ''}. Pide a Esteban que lo renueve.`, 'warn'), 3000);
+}
+const expiredMsg = x => x === 'offline' ? `Conéctate a internet para comprobar tu acceso.` : `Tu acceso a FITNESTEBAN ha caducado. Pide a Esteban que lo renueve.${contactBtn('Contacto', 'mx-auto mt-3')}`;
 function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* nada */ } }
 async function accessCheck(list) {
@@ -5813,6 +5854,7 @@ function lockScreen(mode, msg = '') {
       // Código recién creado: GitHub Pages tarda unos minutos en publicarlo → mirar la lista al día directamente en GitHub
       if (!me) { const live = await fetchAclLive(); if (live) { list = live; me = live.find(x => x.hash === h); } }
       if (!me) { toast(list ? 'Código no válido' : 'Sin conexión para comprobar el código', 'error'); $('#lockGo').disabled = false; return; }
+      if (planExpired(me)) { lsSet(ACCESS_KEY, { code: normCode(v), at: Date.now() }); access.me = me; lockScreen('code', expiredMsg(planExpired(me))); return; }
       if (!(await deviceAllowed(v, me))) { lockScreen('code', blockedMsg()); return; }
       deviceChecked = deviceSure;
       lsSet(ACCESS_KEY, { code: normCode(v), at: Date.now() });
@@ -5845,6 +5887,7 @@ async function fetchAcl() {
   try {
     const r = await fetch('acceso.txt?v=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
+    netMark(r);
     return aclLoad(await r.text());
   } catch { return null; }
 }
@@ -5857,18 +5900,20 @@ async function fetchAclLive() {
   } catch { return null; }
 }
 async function accessBoot() {
+  { const n = lsGet(NET_KEY); if (n) lsSet(NET_KEY, { ...n, off: (n.off || 0) + 1 }); } // una apertura más sin comprobar (se pone a 0 al hablar con la red)
   const cached = lsGet(ACL_KEY);
   if (cached?.list) { access.list = cached.list; access.usageUrl = cached.usageUrl || ''; }
   const meCached = await accessCheck(access.list);
-  if (meCached) unlock(meCached); else lockScreen(access.list ? 'code' : 'wait');
+  if (meCached && !planExpired(meCached)) unlock(meCached); else lockScreen(access.list ? 'code' : 'wait', meCached ? expiredMsg(planExpired(meCached)) : '');
   const fresh = await fetchAcl();
   if (!fresh) { if (!access.ok && !access.list) lockScreen('code', 'No hay conexión para comprobar el acceso. Conéctate y vuelve a abrir la app.'); return; }
   let me = await accessCheck(fresh);
   if (!me && lsGet(ACCESS_KEY)?.code) { const live = await fetchAclLive(); if (live) me = await accessCheck(live); }
-  if (me) { if (!access.ok) unlock(me); else access.me = me; usagePing(); deviceGuard(); }
+  if (me && planExpired(me)) { access.ok = false; access.me = me; closeModal(); lockScreen('code', expiredMsg(planExpired(me))); return; }
+  if (me) { if (!access.ok) unlock(me); else access.me = me; usagePing(); deviceGuard(); planWarn(me); }
   else lockScreen('code', lsGet(ACCESS_KEY)?.code ? `Tu código ya no es válido. Pide uno nuevo a Esteban.${contactBtn('Contacto', 'mx-auto mt-3')}` : '');
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { usagePing(); deviceGuard(); if (l && !(await accessCheck(l))) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', `Tu código ya no es válido. Pide uno nuevo a Esteban.${contactBtn('Contacto', 'mx-auto mt-3')}`); } }); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { const me = l && await accessCheck(l); if (me && planExpired(me)) { access.ok = false; closeModal(); lockScreen('code', expiredMsg(planExpired(me))); return; } if (me) access.me = me; usagePing(); deviceGuard(); if (l && !me) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', `Tu código ya no es válido. Pide uno nuevo a Esteban.${contactBtn('Contacto', 'mx-auto mt-3')}`); } }); });
 
 /* Gestión (solo administrador): crear el código de una persona y la línea para acceso.txt */
 function newCode() { const a = crypto.getRandomValues(new Uint8Array(8)); const s = [...a].map(x => CODE_ABC[x % CODE_ABC.length]).join(''); return s.slice(0, 4) + '-' + s.slice(4); }
@@ -6212,10 +6257,10 @@ function accessSectionHTML() {
         : `<span class="text-amber-300 text-[11px]">Código no guardado (creado antes de la 4.24). Si lo necesita, dale uno nuevo con 🔄.</span>`;
       return `<div class="bg-ink rounded-lg px-3 py-2 text-xs space-y-1.5">
       <div class="flex items-center justify-between gap-2"><span class="min-w-0 truncate font-semibold text-[13px]">${accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`}${me ? ' <span class="text-brand font-normal">(tú · admin)</span>' : x.admin ? ' <span class="text-mute font-normal">(admin)</span>' : ''}</span>
-      <span class="flex items-center gap-1.5 shrink-0"><button class="iconbtn iconbtn-sm" data-act="nameAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Poner nombre">✎</button>${gh ? `<button class="iconbtn iconbtn-sm" data-act="regenAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Nuevo código">🔄</button>` : ''}${me || !gh ? '' : `<button class="iconbtn iconbtn-sm text-rose-300" data-act="delAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Quitar acceso">🗑</button>`}</span></div>
-      <div class="flex items-center justify-between gap-2 min-h-[28px]">${codeLine}</div>${usageLine(x.hash)}</div>`;
+      <span class="flex items-center gap-1.5 shrink-0"><button class="iconbtn iconbtn-sm" data-act="nameAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Poner nombre">✎</button>${gh && !x.admin ? `<button class="iconbtn iconbtn-sm" data-act="planAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Plan">⏳</button>` : ''}${gh ? `<button class="iconbtn iconbtn-sm" data-act="regenAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Nuevo código">🔄</button>` : ''}${me || !gh ? '' : `<button class="iconbtn iconbtn-sm text-rose-300" data-act="delAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Quitar acceso">🗑</button>`}</span></div>
+      <div class="flex items-center justify-between gap-2 min-h-[28px]">${codeLine}</div>${x.admin ? '' : `<div class="text-[11px]">⏳ ${planLabel(x)}</div>`}${usageLine(x.hash)}</div>`;
     }).join('')}</div>
-    ${gh ? '<p class="text-[11px] text-mute">✎ nombre · 🔄 nuevo código (el anterior deja de funcionar) · 🗑 quitar acceso</p>' : ''}
+    ${gh ? '<p class="text-[11px] text-mute">✎ nombre · ⏳ plan · 🔄 nuevo código (el anterior deja de funcionar) · 🗑 quitar acceso</p>' : ''}
     ${list.length ? '<button class="btn-ghost w-full" data-act="copyHashes" type="button">📋 Copiar huellas y nombres (para tu hoja)</button>' : ''}
     ${access.usageUrl && lsGet(USE_KEY)
       ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : 'actualizado ahora · nombres, correos, altas y dispositivos') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
@@ -6252,16 +6297,52 @@ function ghConnectModal() {
     }
   });
 }
+/* Línea de acceso.txt con el plan: la fecha se calcula con la hora de la red */
+function planTokens(k) {
+  const days = PLANS[k]?.[1]; if (!days) return [];
+  const base = netNow() || Date.now();
+  return ['plan=' + k, 'hasta=' + new Date(base + days * 86400000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' })];
+}
+const planChips = (cur, act = 'plan') => `<div class="flex flex-wrap justify-center gap-1.5">${Object.entries(PLANS).map(([k, [l, d]]) => `<button class="chip flex-col justify-center leading-tight py-2 ${cur === k ? 'chip-on' : ''}" style="width:calc(33.333% - 4px)" data-mact="${act}" data-k="${k}" type="button"><span class="whitespace-nowrap">${l}</span><span class="text-[10px] opacity-70 font-semibold">${d ? d + ' días' : 'sin límite'}</span></button>`).join('')}</div>`;
+function planLabel(x) {
+  if (x.admin) return '';
+  if (!x.hasta) return '<span class="text-emerald-300">Free · sin caducidad</span>';
+  const t = netToday(), left = t ? daysBetween(t, x.hasta) : null, name = PLANS[x.plan]?.[0] || 'Plan';
+  return left !== null && left < 0 ? `<span class="text-rose-300">${esc(name)} · caducó el ${esc(fmtDateShort(x.hasta))}</span>`
+    : `<span class="${left !== null && left <= 3 ? 'text-amber-300' : 'text-slate-300'}">${esc(name)} · hasta el ${esc(fmtDateShort(x.hasta))}${left !== null ? ` (${left === 0 ? 'hoy' : left + ' d'})` : ''}</span>`;
+}
+function planModal(hash) {
+  const x = (access.list || []).find(y => y.hash === hash); if (!x) return;
+  const who = state.accessNames[hash] || 'Sin nombre';
+  let k = x.hasta ? (x.plan || '1m') : 'free';
+  const html = () => `<h3 class="modal-title">⏳ Plan de ${esc(who)}</h3>
+    <p class="text-xs">Ahora: ${planLabel(x)}</p>
+    ${planChips(k)}
+    <p class="text-[11px] text-mute">El nuevo plan cuenta desde hoy (fecha de la red). «Free» no caduca. Si estaba caducado, vuelve a entrar solo al abrir la app.</p>
+    <button class="btn-primary w-full" data-mact="go" type="button">Guardar plan</button>`;
+  openModal(html(), {
+    plan: (root, b) => { k = b.dataset.k; root.querySelector('.modal-sheet').innerHTML = html(); },
+    go: () => askPin({ title: `Plan de ${esc(who)}: ${PLANS[k][0]}`, text: 'Tu PIN abre la llave de GitHub para guardar el plan.', onPin: async pin => {
+      await ghEditAcl(pin, lines => lines.map(l => l.trim().toLowerCase().startsWith(hash) ? [l.trim().split(/\s+/)[0], ...l.trim().split(/\s+/).slice(1).filter(t => !/^(plan|hasta)=/i.test(t)), ...planTokens(k)].join(' ') : l), 'Acceso: plan ' + k);
+      ui.accessPin = pin; closeModal(); render(); toast(`Plan guardado: ${PLANS[k][0]} ✓`);
+    } })
+  });
+}
 function newAccessModal() {
-  openModal(`<h3 class="modal-title">Nuevo código de acceso</h3>
-    <label class="lbl">¿Para quién es? (solo lo verás tú)<input class="field mt-1" name="who" maxlength="24" placeholder="Ej: Ana" /></label>
-    <button class="btn-primary w-full" data-mact="next" type="button">Continuar</button>`, {
+  let k = 'prueba', who0 = '';
+  const html = () => `<h3 class="modal-title">Nuevo código de acceso</h3>
+    <label class="lbl">¿Para quién es? (solo lo verás tú)<input class="field mt-1" name="who" maxlength="24" placeholder="Ej: Ana" value="${esc(who0)}" /></label>
+    <div><div class="lbl mb-1.5">Plan</div>${planChips(k)}</div>
+    <p class="text-[11px] text-mute">${PLANS[k][1] ? `Caducará el ${esc(fmtDateShort(planTokens(k)[1].slice(6)))}. Podrás cambiarlo con ⏳.` : 'Sin caducidad.'}</p>
+    <button class="btn-primary w-full" data-mact="next" type="button">Continuar</button>`;
+  openModal(html(), {
     autofocus: true,
+    plan: (root, b) => { who0 = mval(root, 'who'); k = b.dataset.k; root.querySelector('.modal-sheet').innerHTML = html(); },
     next: root => {
       const who = mval(root, 'who').trim().replace(/\s+/g, ' '); if (!who) return toast('Pon un nombre', 'warn');
       askPin({ title: `Crear código para ${esc(who)}`, text: 'Tu PIN abre la llave de GitHub para añadir el código a la lista.', onPin: async pin => {
         const code = newCode(), hash = await codeHash(code);
-        await ghEditAcl(pin, lines => [...lines.filter(l => l.trim()), hash], 'Acceso: nuevo código');
+        await ghEditAcl(pin, lines => [...lines.filter(l => l.trim()), [hash, ...planTokens(k)].join(' ')], 'Acceso: nuevo código (' + k + ')');
         state.accessNames[hash] = who; await saveAccessCode(hash, code, pin); ui.accessPin = pin; persist(); render(); syncUsageNames();
         codeShareModal(`Código para ${esc(who)}`, who, code);
       } });

@@ -1,6 +1,6 @@
 /* FITNESTEBAN service worker: funciona sin conexión.
    Al cambiar cualquier archivo de la app, sube el número de CACHE para que el móvil descargue la versión nueva. */
-const CACHE = 'fitnesteban-4.46.0';
+const CACHE = 'fitnesteban-4.48.0';
 const ASSETS = [
   './',
   './index.html',
@@ -23,7 +23,8 @@ const ASSETS = [
 
 self.addEventListener('install', event => {
   // cache: 'reload' obliga a descargar los archivos nuevos del servidor, sin usar copias viejas del navegador
-  event.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' })))));
+  // Actualización automática: en cuanto la versión nueva está descargada entera, toma el control (la app se recarga en un momento seguro)
+  event.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', event => {
