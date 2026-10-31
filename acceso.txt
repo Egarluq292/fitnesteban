@@ -8,6 +8,6 @@ a2d909577dbb467b236923bffb0559ff
 ed750262b753b5249e684ff2c98faa57
 94812483065340eb250d4b32a4bec072
 f78077c7e31b1d307ed5626080c8c4af
-#uso https://script.google.com/macros/s/AKfycbxveTKR-Jn1ep7VjKuKeHyV03Ga4I2m1OKbjN3HhiVvSAeD8VHSLlY-mLjwbO3dOg8u_w/exec
 b6fb3dd1954985728351cd7a295e9540
 f4b0b37a93186e3f8321840a32331c5d
+#uso https://script.google.com/macros/s/AKfycbxbwKzXbu5HgWqO0_hEYhVYoWCAOBg5ryV6yDbZWsRCDAQ5NGU1esmvGpodWS8cDfTi9A/exec
