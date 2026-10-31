@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.49.0';
+const APP_VERSION = '4.50.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4505,6 +4505,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.50.0', ['🟢 Acceso: «X activos hoy» junto al título (también con Acceso cerrado), activos hoy en verde en la lista y versión de cada persona.', '🔒 Script v9: Google comprueba la caducidad de los planes (actualiza el script: Acceso → Reconfigurar → nueva versión).'], 'admin'],
   ['4.49.0', ['🔎 Acceso: buscador por nombre o correo, filtros (caducan pronto, caducados, sin usar, Free) y lista compacta con ficha desplegable.'], 'admin'],
   ['4.48.0', ['🔄 La app se actualiza sola: ya no hace falta pulsar «Actualizar».'], 'quiet'],
   ['4.47.0', ['⏳ Acceso: planes con caducidad (Prueba 10 días, 1, 3 o 12 meses, o Free). Se elige al crear el código y se cambia con ⏳. La fecha es la de la red, no la del móvil.'], 'admin'],
@@ -5811,6 +5812,7 @@ const DEVICE_LIMIT = 2;
 const blockedMsg = () => `Este código ya se usa en ${DEVICE_LIMIT} dispositivos. Si has cambiado de móvil, escribe a Esteban y te lo libera.${contactBtn('Contacto', 'mx-auto mt-3')}`;
 let deviceSure = false; // ¿el script ha contestado de verdad? (si no, se vuelve a preguntar al volver a la app)
 let deviceDiag = ''; // qué contestó el script la última vez (se ve en Ajustes → Aplicación)
+let deviceReason = ''; // 'exp' si el script dice que el plan ha caducado
 async function deviceAllowed(code, me) {
   const url = access.usageUrl; deviceSure = false;
   if (!url) { deviceDiag = 'sin dirección del script en acceso.txt'; return true; }
@@ -5821,8 +5823,9 @@ async function deviceAllowed(code, me) {
     clearTimeout(t);
     const txt = await r.text(); let d = {};
     try { d = JSON.parse(txt); } catch { deviceDiag = `respuesta no válida (HTTP ${r.status}): ${txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90)}`; return true; }
-    deviceSure = typeof d.allowed === 'boolean';
-    deviceDiag = d.allowed === true ? `registrado ✓ (${d.n} dispositivo${d.n === 1 ? '' : 's'})` : d.allowed === false ? 'bloqueado (límite de dispositivos)' : (d.error && d.error !== 'clave' ? `error del script: ${String(d.error).slice(0, 140)}` : `el script contestó ${txt.slice(0, 60)}${d.error === 'clave' ? ' → script antiguo' : !d.ok ? ' → no reconoce el código' : ''}`);
+    deviceSure = typeof d.allowed === 'boolean'; deviceReason = d.reason || '';
+    if (d.reason === 'exp') deviceDiag = 'plan caducado (según Google)';
+    else deviceDiag = d.allowed === true ? `registrado ✓ (${d.n} dispositivo${d.n === 1 ? '' : 's'})` : d.allowed === false ? 'bloqueado (límite de dispositivos)' : (d.error && d.error !== 'clave' ? `error del script: ${String(d.error).slice(0, 140)}` : `el script contestó ${txt.slice(0, 60)}${d.error === 'clave' ? ' → script antiguo' : !d.ok ? ' → no reconoce el código' : ''}`);
     return d.allowed !== false || !!me?.admin;
   } catch (e) { deviceDiag = e.name === 'AbortError' ? 'el script no contestó en 20 s' : `no se pudo conectar (${e.message})`; return true; }
 }
@@ -5831,8 +5834,8 @@ async function deviceGuard() {
   if (deviceChecked || !access.ok) return; deviceChecked = true;
   const code = lsGet(ACCESS_KEY)?.code; if (!code) return;
   if (await deviceAllowed(code, access.me)) { if (!deviceSure) deviceChecked = false; return; }
-  access.ok = false; try { localStorage.removeItem(ACCESS_KEY); } catch { /* nada */ }
-  closeModal(); lockScreen('code', blockedMsg());
+  access.ok = false; if (deviceReason !== 'exp') try { localStorage.removeItem(ACCESS_KEY); } catch { /* nada */ }
+  closeModal(); lockScreen('code', deviceReason === 'exp' ? expiredMsg(true) : blockedMsg());
 }
 function lockScreen(mode, msg = '') {
   let el = $('#lockScreen');
@@ -5858,7 +5861,7 @@ function lockScreen(mode, msg = '') {
       if (!me) { const live = await fetchAclLive(); if (live) { list = live; me = live.find(x => x.hash === h); } }
       if (!me) { toast(list ? 'Código no válido' : 'Sin conexión para comprobar el código', 'error'); $('#lockGo').disabled = false; return; }
       if (planExpired(me)) { lsSet(ACCESS_KEY, { code: normCode(v), at: Date.now() }); access.me = me; lockScreen('code', expiredMsg(planExpired(me))); return; }
-      if (!(await deviceAllowed(v, me))) { lockScreen('code', blockedMsg()); return; }
+      if (!(await deviceAllowed(v, me))) { if (deviceReason === 'exp') lsSet(ACCESS_KEY, { code: normCode(v), at: Date.now() }); lockScreen('code', deviceReason === 'exp' ? expiredMsg(true) : blockedMsg()); return; }
       deviceChecked = deviceSure;
       lsSet(ACCESS_KEY, { code: normCode(v), at: Date.now() });
       unlock(me); toast('Acceso concedido 👋');
@@ -6013,7 +6016,7 @@ async function loadUsage() {
     const d = await r.json();
     if (!d.ok) throw new Error(d.error === 'clave' ? 'La clave del registro no coincide con la del script' : 'El registro no respondió bien');
     ui.usage = {}; for (const x of d.rows || []) ui.usage[String(x.h).toLowerCase()] = x;
-    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8);
+    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9);
     if (!ui.usageOld) syncUsageNames();
   } catch (e) { ui.usageErr = e.message || 'No se pudo leer el registro de uso'; ui.usage = null; }
   ui.usageLoading = false; ui.usageAt = Date.now();
@@ -6029,7 +6032,7 @@ function usageLine(hash) {
   return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} de ${DEVICE_LIMIT} dispositivos`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="truncate text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 truncate">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
 }
 function usageScript(key) {
-  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código, máx. 2) · v8
+  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código, máx. 2; caducidad de planes) · v9
 const READ_KEY = '${key}';
 const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
 const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre', 'correo', 'alta', 'dispositivos', 'bloqueos'];
@@ -6053,6 +6056,8 @@ function acl_() {
 }
 function huellas_() { return acl_().map(p => p[0].toLowerCase()); }
 function admins_() { return acl_().filter(p => p.slice(1).some(x => x.toLowerCase() === 'admin')).map(p => p[0].toLowerCase()); }
+// fecha de caducidad del plan (hasta=aaaa-mm-dd en acceso.txt), o '' si no caduca
+function hasta_(h) { const p = acl_().find(p => p[0].toLowerCase() === h); const t = p && p.slice(1).find(x => /^hasta=\\d{4}-\\d{2}-\\d{2}$/i.test(x)); return t ? t.slice(6) : ''; }
 // dispositivos de cada código: { huella: { d: [{ id, n: 'Android · Chrome', last: 'aaaa-mm-dd' }], b: bloqueos } }
 function disp_() {
   let x = {}; try { x = JSON.parse(PropertiesService.getScriptProperties().getProperty('disp') || '{}'); } catch (e) { x = {}; }
@@ -6125,6 +6130,9 @@ function doGet_(e) {
     const lock = LockService.getScriptLock(); lock.waitLock(10000);
     try {
       const all = disp_(), x = all[h] || { d: [], b: 0 }, adm = admins_().indexOf(h) >= 0;
+      // plan caducado: lo decide la fecha de Google, no la del móvil
+      const ha = adm ? '' : hasta_(h);
+      if (ha && hoy > ha) return salida_({ ok: true, allowed: false, reason: 'exp' });
       let ok = true;
       const ya = x.d.find(v => v.id === d);
       if ((x.q || []).indexOf(d) >= 0 && !adm) { ok = false; x.b = (x.b || 0) + 1; }
@@ -6135,10 +6143,16 @@ function doGet_(e) {
       return salida_({ ok: true, allowed: ok, n: x.d.length });
     } finally { lock.releaseLock(); }
   }
+  // cuántas personas han abierto la app hoy (solo el número: sin nombres ni correos)
+  if (q.op === 'hoy') {
+    const c = CacheService.getScriptCache(); let n = c.get('hoy');
+    if (n === null) { const hoy = fecha_(new Date()), adm = admins_(); n = String(hoja_().getDataRange().getValues().slice(1).filter(r => fecha_(r[1]) === hoy && adm.indexOf(String(r[0])) < 0).length); c.put('hoy', n, 60); }
+    return salida_({ ok: true, ver: 9, hoy: +n });
+  }
   if (q.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
   const datos = hoja_().getDataRange().getValues().slice(1);
   const dd = disp_();
-  return salida_({ ok: true, ver: 8, rows: datos.map(r => ({ h: String(r[0]), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []) })) });
+  return salida_({ ok: true, ver: 9, rows: datos.map(r => ({ h: String(r[0]), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []) })) });
 }`;
 }
 /* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
@@ -6274,14 +6288,28 @@ function accFilterDom() {
   $('#accNone')?.classList.toggle('hidden', n > 0);
 }
 document.addEventListener('input', e => { if (e.target.id === 'accSearch') accFilterDom(); });
+/* 🟢 Activos hoy: el script da solo el número (sin PIN). Se pide al ver Ajustes, como mucho una vez por minuto */
+function activeChip() {
+  const n = ui.usage ? Object.entries(ui.usage).filter(([h, u]) => u.last === todayISO() && !(access.list || []).find(x => x.hash === h)?.admin).length : ui.hoyN;
+  return typeof n === 'number' ? `<span class="active-chip"><span class="active-dot"></span>${n} activo${n === 1 ? '' : 's'} hoy</span>` : '';
+}
+async function loadActiveCount() {
+  if (!access.me?.admin || !access.usageUrl || !navigator.onLine || Date.now() - (ui.hoyAt || 0) < 60000) return;
+  ui.hoyAt = Date.now();
+  try {
+    const d = await (await fetch(`${access.usageUrl}?op=hoy&t=${Date.now()}`, { cache: 'no-store' })).json();
+    if (typeof d.hoy === 'number') { ui.hoyN = d.hoy; if (ui.view === 'settings') render(); }
+  } catch { /* sin dato: no se muestra */ }
+}
 function accessSectionHTML() {
   if (!access.me?.admin) return '';
+  setTimeout(loadActiveCount, 0);
   if (!ui.accessOpen) { ui.accessPin = null; ui.accessReveal = {}; }
   if (!ui.accessOpen) return `<section class="card p-0 mt-3"><button class="w-full flex items-center justify-between px-4 py-3.5" data-act="openAccess" type="button">
-      <h3 class="section-title">🔑 Acceso</h3><span class="flex items-center gap-2 text-[11px] text-mute">🔒 Protegido<span class="tri"></span></span></button></section>`;
+      <span class="flex items-center gap-2.5"><h3 class="section-title">🔑 Acceso</h3>${activeChip()}</span><span class="flex items-center gap-2 text-[11px] text-mute">🔒 Protegido<span class="tri"></span></span></button></section>`;
   const list = access.list || [], gh = !!lsGet(GH_KEY);
   return `<section class="card p-4 mt-3 space-y-3">
-    <button class="w-full flex items-center justify-between" data-act="closeAccess" type="button"><h3 class="section-title">🔑 Acceso</h3><span class="flex items-center gap-2 text-[11px] text-emerald-300">🔓 Abierto<span class="tri rotate-180"></span></span></button>
+    <button class="w-full flex items-center justify-between" data-act="closeAccess" type="button"><span class="flex items-center gap-2.5"><h3 class="section-title">🔑 Acceso</h3>${activeChip()}</span><span class="flex items-center gap-2 text-[11px] text-emerald-300">🔓 Abierto<span class="tri rotate-180"></span></span></button>
     <p class="text-[12px] text-slate-300">${list.length} ${list.length === 1 ? 'persona' : 'personas'}${(() => { const so = list.filter(x => accStatus(x) === 'soon').length, ex = list.filter(x => accStatus(x) === 'exp').length; return (so ? ` · <span class="text-amber-300">${so} caduca${so > 1 ? 'n' : ''} pronto</span>` : '') + (ex ? ` · <span class="text-rose-300">${ex} caducado${ex > 1 ? 's' : ''}</span>` : ''); })()}</p>
     ${accFilterHTML(list)}
     <div class="space-y-1.5" id="accRows">${accSorted(list).map(x => {
@@ -6296,13 +6324,14 @@ function accessSectionHTML() {
       <div class="flex items-center justify-between gap-2 min-h-[28px]">${codeLine}</div>${usageLine(x.hash)}</div>`;
       const open = ui.accOpenH === x.hash, st = accStatus(x), u = ui.usage?.[x.hash];
       const ago = u ? daysBetween(u.last, todayISO()) : null;
-      const dot = !u ? '⚪' : ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴';
+      const today = ago === 0, dotCls = !u ? 'u-none' : today ? 'u-today' : ago <= 7 ? 'u-week' : 'u-old';
+      const vOld = u?.v && cmpVer(APP_VERSION, String(u.v)) > 0;
       const pill = x.admin ? '<span class="text-brand">admin</span>' : planPill(x);
       const visF = (!ui.accF || ui.accF === 'all' || ui.accF === st || (ui.accF === 'idle' && !x.admin && (ago === null || ago > 7))) || (me && (!ui.accF || ui.accF === 'all'));
       return `<div class="acc-row ${open ? 'acc-open' : ''}" data-s="${esc(normTxt([accessWho(x), u?.m || '', x.hash.slice(-4)].join(' ')))}" ${visF ? '' : 'hidden'}>
         <button class="w-full flex items-center gap-2 px-3 py-2.5 text-left" data-act="accRow" data-hash="${esc(x.hash)}" type="button">
-          <span class="text-[11px]">${dot}</span>
-          <span class="flex-1 min-w-0"><span class="block font-semibold text-[13px] truncate">${accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`}${me ? ' <span class="text-mute">(tú)</span>' : ''}</span>${u?.m ? `<span class="block text-[11px] text-mute truncate">${esc(u.m)}</span>` : ''}</span>
+          <span class="u-dot ${dotCls}"></span>
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-[13px] truncate ${today ? 'text-emerald-300' : ''}">${accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`}${me ? ' <span class="text-mute">(tú)</span>' : ''}</span>${u?.m ? `<span class="block text-[11px] text-mute truncate">${esc(u.m)}</span>` : ''}${u?.v ? `<span class="block text-[10px] ${vOld ? 'text-amber-300' : 'text-mute'}">v${esc(u.v)}${vOld ? ' · antigua' : ''}${today ? '' : ` · ${ago === 1 ? 'ayer' : `hace ${ago} d`}`}</span>` : u ? '' : '<span class="block text-[10px] text-mute">sin abrir aún</span>'}</span>
           <span class="text-[11px] shrink-0">${pill}</span><span class="tri shrink-0 ${open ? 'rotate-180' : ''}"></span></button>
         ${open ? detail : ''}</div>`;
     }).join('')}</div>
@@ -6310,7 +6339,7 @@ function accessSectionHTML() {
     ${gh ? '<p class="text-[11px] text-mute">Toca a una persona para ver su ficha: ✎ nombre · ⏳ plan · 🔄 nuevo código · 🗑 quitar acceso. Nombres y códigos solo los ves tú (cifrados con tu PIN); en GitHub solo hay huellas.</p>' : ''}
     ${list.length ? '<button class="btn-ghost w-full" data-act="copyHashes" type="button">📋 Copiar huellas y nombres (para tu hoja)</button>' : ''}
     ${access.usageUrl && lsGet(USE_KEY)
-      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : 'actualizado ahora · nombres, correos, altas y dispositivos') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
+      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : 'actualizado ahora · nombres, correos, altas y dispositivos') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
       : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
     ${access.usageUrl && lsGet(USE_KEY) ? (lsGet(SHEET_KEY) && !ui.sheetEdit
       ? `<div class="flex items-center gap-2"><a class="btn-ghost flex-1 text-center block" href="${esc(lsGet(SHEET_KEY))}" target="_blank" rel="noopener">📊 Abrir hoja de uso</a><button class="text-[11px] text-mute underline shrink-0" data-act="sheetEdit" type="button">Cambiar</button></div>`
