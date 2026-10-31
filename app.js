@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.50.0';
+const APP_VERSION = '4.51.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3316,8 +3316,7 @@ function renderSettings() {
 
   ${habitsSettingsHTML()}
 
-  <section class="card p-4 mt-3 space-y-3">
-    <h3 class="section-title">💾 Copias de seguridad</h3>
+  ${foldCard('backup', '💾 Copias de seguridad', backupAge === null ? 'Nunca' : backupAge === 0 ? 'Hoy ✓' : `Hace ${backupAge} día${backupAge === 1 ? '' : 's'}`, backupAge === null || backupAge > 7 ? 'text-amber-300' : 'text-emerald-300', `
     <p class="text-xs text-mute">${backupAge === null ? 'Nunca has hecho una copia.' : backupAge === 0 ? 'Última copia: hoy ✓' : `Última copia: hace ${backupAge} día${backupAge === 1 ? '' : 's'}.`} Tus datos viven solo en este móvil.</p>
     <div class="rounded-xl border ${st.driveConnected ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-line bg-ink'} p-3 space-y-2.5">
       <div class="flex items-center justify-between gap-2">
@@ -3342,30 +3341,25 @@ function renderSettings() {
       ${(() => { const pc = prevCopy(); return pc ? `<button class="btn-ghost col-span-2 text-xs" data-act="restorePrev" type="button">↩️ Volver a los datos de antes de actualizar (v${esc(pc.ver)} · ${esc(new Date(pc.at).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))})</button>` : ''; })()}
     </div>
     <p class="text-[11px] text-mute">«Compartir» abre el menú del móvil para enviártela. Importar admite archivos .json y .txt de copias de FITNESTEBAN.</p>
-  </section>
+`)}
 
-  <section class="card p-4 mt-3 space-y-3">
-    <h3 class="section-title">🔒 PIN de seguridad</h3>
+  ${foldCard('pin', '🔒 PIN de seguridad', st.pinHash ? 'Activo ✓' : 'Sin PIN', st.pinHash ? 'text-emerald-300' : 'text-mute', `
     <p class="text-xs text-mute">${st.pinHash ? 'PIN activo ✓. Se pide para «Borrar todo» e «Importar» (que sustituye tus datos).' : 'Sin PIN. Si lo activas, se pedirá para «Borrar todo» e «Importar».'}</p>
     <div class="grid grid-cols-2 gap-2">
       <button class="btn-ghost" data-act="pinSet" type="button">${st.pinHash ? 'Cambiar PIN' : 'Crear PIN'}</button>
       ${st.pinHash ? '<button class="btn-ghost" data-act="pinRemove" type="button">Quitar PIN</button>' : ''}
     </div>
-  </section>
+`)}
 
   ${accessSectionHTML()}
-  <section class="card p-4 mt-3 space-y-3">
-    <h3 class="section-title">📱 Aplicación</h3>
+  ${foldCard('app', '📱 Aplicación', ui.remoteVer && ui.remoteVer !== 'offline' && ui.remoteVer !== 'error' && cmpVer(ui.remoteVer, APP_VERSION) > 0 ? 'Actualizando…' : `v${APP_VERSION}`, 'text-mute', `
     ${deferredInstall ? `<button class="btn-primary w-full" data-act="install" type="button">Instalar en la pantalla de inicio</button>` : `<p class="text-xs text-mute">${isStandalone() ? 'Instalada como app ✓' : 'Para instalar: menú ⋮ del navegador → «Instalar aplicación» o «Añadir a pantalla de inicio».'}</p>`}
     ${versionStatusHTML()}
     ${planOf(access.me) ? `<div class="text-[11px] text-mute">⏳ Tu acceso: ${planLabel(access.me)}</div>` : ''}
     ${access.usageUrl ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span class="min-w-0">🔑 Este dispositivo: <span class="${/✓/.test(deviceDiag) ? 'text-emerald-300' : 'text-amber-300'}">${esc(deviceDiag || 'sin comprobar')}</span><br><span class="opacity-70">${esc(deviceLabel())} · script …${esc(access.usageUrl.replace(/\/exec.*$/, '').slice(-6))}</span></span><button class="underline text-brand shrink-0" data-act="devCheck" type="button">Comprobar</button></div>` : ''}
-    <div class="grid grid-cols-2 gap-2">
-      <button class="btn-ghost" data-act="checkUpdate" type="button">Buscar actualización</button>
-      <button class="btn-danger" data-act="wipe" type="button">Borrar todo</button>
-    </div>
+    <button class="btn-danger w-full" data-act="wipe" type="button">Borrar todo</button>
     <p class="text-[11px] text-mute">Versión ${APP_VERSION} · ${state.sessions.length} sesiones · ${Object.keys(state.meals).length} días de dieta</p>
-  </section>`;
+`)}`;
 }
 
 /* ---------- PIN ---------- */
@@ -4505,6 +4499,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.51.0', ['Ajustes: todas las tarjetas se pliegan y muestran su estado.'], 'quiet'],
   ['4.50.0', ['🟢 Acceso: «X activos hoy» junto al título (también con Acceso cerrado), activos hoy en verde en la lista y versión de cada persona.', '🔒 Script v9: Google comprueba la caducidad de los planes (actualiza el script: Acceso → Reconfigurar → nueva versión).'], 'admin'],
   ['4.49.0', ['🔎 Acceso: buscador por nombre o correo, filtros (caducan pronto, caducados, sin usar, Free) y lista compacta con ficha desplegable.'], 'admin'],
   ['4.48.0', ['🔄 La app se actualiza sola: ya no hace falta pulsar «Actualizar».'], 'quiet'],
@@ -5658,7 +5653,7 @@ function versionStatusHTML() {
   if (!v) return '<p class="text-[11px] text-mute">Comprobando la versión publicada…</p>';
   if (v === 'offline' || v === 'error') return `<p class="text-[11px] text-mute">Instalada: <strong class="text-white">${APP_VERSION}</strong> · ${v === 'offline' ? 'sin conexión para comprobar la publicada' : 'no se pudo leer la versión publicada'}</p>`;
   const c = cmpVer(v, APP_VERSION);
-  if (c > 0) return `<div class="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2.5 py-2">Instalada: <strong>${APP_VERSION}</strong> · Publicada: <strong>${esc(v)}</strong>. Hay una versión nueva: pulsa «Buscar actualización» (o cierra y abre la app).</div>`;
+  if (c > 0) return `<div class="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2.5 py-2">Instalada: <strong>${APP_VERSION}</strong> · Publicada: <strong>${esc(v)}</strong>. Hay una versión nueva: se instala sola al volver a la app. <button class="underline font-bold" data-act="checkUpdate" type="button">Instalar ahora</button></div>`;
   if (c < 0) return `<p class="text-[11px] text-amber-300">Instalada: <strong>${APP_VERSION}</strong> · Publicada: <strong>${esc(v)}</strong>. GitHub aún no ha publicado esta versión (mira el ✓ en Actions).</p>`;
   return `<p class="text-[11px] text-emerald-300">Instalada: <strong>${APP_VERSION}</strong> · Publicada: <strong>${esc(v)}</strong> ✓ Estás al día</p>`;
 }
