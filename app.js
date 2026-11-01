@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.52.1';
+const APP_VERSION = '4.52.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -182,7 +182,7 @@ async function fetchRemoteLib() {
     const r = await fetch(LIB_FILE + '?t=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) throw new Error(r.status);
     const list = await r.json();
-    if (Array.isArray(list)) { remoteLib = list.filter(x => x && x.lib && x.name && Array.isArray(x.days)); try { localStorage.setItem(LIB_CACHE, JSON.stringify(remoteLib)); } catch { /* nada */ } }
+    if (Array.isArray(list)) { remoteLib = list.filter(x => x && x.lib && x.name && Array.isArray(x.days)); try { localStorage.setItem(LIB_CACHE, JSON.stringify(remoteLib)); } catch { /* nada */ } libIcons(); }
   } catch { /* sin conexión o aún no hay bloques publicados: se usa lo guardado */ }
   return remoteLib;
 }
@@ -192,6 +192,16 @@ const libAll = () => [
   ...remoteLib.map(x => ({ ...x, pub: true, base: LIB_BLOCKS.find(b => libKey(b.name) === libKey(x.name))?.lib, days: () => x.days })),
   ...LIB_BLOCKS.filter(b => !remoteLib.some(x => libKey(x.name) === libKey(b.name)))
 ];
+/* Tus bloques sacados de la biblioteca toman su icono si no tienen uno (p. ej. los añadidos antes de que hubiera iconos) */
+function libIcons() {
+  let ch = false;
+  for (const p of state.plan.programs) {
+    if (p.icon || p.type !== 'strength') continue;
+    const L = remoteLib.find(x => x.icon && (x.lib === p.lib || x.lib === p.pubId || libKey(x.name) === libKey(p.name)));
+    if (L) { p.icon = L.icon; ch = true; }
+  }
+  if (ch) { persist(); render(); }
+}
 const libHave = L => state.plan.programs.some(p => p.lib === L.lib || p.pubId === L.lib || (L.base && p.lib === L.base) || (p.type === 'strength' && libKey(p.name) === libKey(L.name)));
 const libIsNew = L => L.pub && (!L.at || L.at >= addDays(todayISO(), -30));
 /* Publicar (solo administrador, con GitHub conectado): copia limpia del bloque, sin ids */
@@ -4511,7 +4521,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
-  ['4.52.1', ['📚 Aviso de bloques nuevos en Inicio y Entreno; «Cómo usarlo» en la biblioteca.'], 'quiet'],
+  ['4.52.2', ['📚 Aviso de bloques nuevos en Inicio y Entreno; «Cómo usarlo» en la biblioteca.'], 'quiet'],
   ['4.51.0', ['Ajustes: todas las tarjetas se pliegan y muestran su estado.'], 'quiet'],
   ['4.50.0', ['🟢 Acceso: «X activos hoy» junto al título (también con Acceso cerrado), activos hoy en verde en la lista y versión de cada persona.', '🔒 Script v9: Google comprueba la caducidad de los planes (actualiza el script: Acceso → Reconfigurar → nueva versión).'], 'admin'],
   ['4.49.0', ['🔎 Acceso: buscador por nombre o correo, filtros (caducan pronto, caducados, sin usar, Free) y lista compacta con ficha desplegable.'], 'admin'],
@@ -5889,6 +5899,8 @@ function unlock(me) {
   if (needsOnboarding(me)) setTimeout(onboarding, 300);
   else if (!newsChecked) { newsChecked = true; maybeShowNews(); setTimeout(maybeAskEmail, 2500); }
   setTimeout(emailSync, 4000);
+  // biblioteca al día al entrar: avisos de bloques nuevos e iconos
+  setTimeout(() => { const before = JSON.stringify(remoteLib.map(x => x.lib)); fetchRemoteLib().then(() => { if (JSON.stringify(remoteLib.map(x => x.lib)) !== before && (ui.view === 'home' || ui.view === 'train') && !$('#modalRoot').classList.contains('open')) render(); }); }, 1500);
 }
 let newsChecked = false;
 /* acceso.txt: huellas + (opcional) una línea «#uso https://script.google.com/…» con la dirección del registro de uso */
