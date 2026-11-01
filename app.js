@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.51.0';
+const APP_VERSION = '4.52.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -193,7 +193,7 @@ const libAll = () => [
   ...LIB_BLOCKS.filter(b => !remoteLib.some(x => libKey(x.name) === libKey(b.name)))
 ];
 const libHave = L => state.plan.programs.some(p => p.lib === L.lib || p.pubId === L.lib || (L.base && p.lib === L.base));
-const libIsNew = L => L.pub && !access.me?.admin && (!L.at || L.at >= addDays(todayISO(), -30));
+const libIsNew = L => L.pub && (!L.at || L.at >= addDays(todayISO(), -30));
 /* Publicar (solo administrador, con GitHub conectado): copia limpia del bloque, sin ids */
 function blockForLib(p) {
   return p.days.map(d => ({ label: d.label, rotation: d.rotation, title: d.title, subtitle: d.subtitle,
@@ -287,12 +287,12 @@ function libraryModal() {
   const html = () => `<h3 class="modal-title">＋ Añadir bloque</h3>
     <button class="btn-ghost w-full" data-mact="empty" type="button">✏️ Crear un bloque vacío</button>
     <div class="text-[11px] font-bold uppercase tracking-wider text-mute pt-1">O elige uno preparado por Esteban</div>
-    <div class="space-y-2">${libAll().sort((a, b) => libHave(a) - libHave(b)).map(L => {
+    <div class="space-y-2">${libAll().sort((a, b) => libHave(a) - libHave(b) || libIsNew(b) - libIsNew(a)).map(L => {
       const days = L.days(), nEx = days.reduce((a, d) => a + d.exercises.length, 0), have = libHave(L), open = ui.libOpen === L.lib;
       return `<div class="card p-3 space-y-2">
         <div class="flex items-start justify-between gap-2"><div class="min-w-0"><div class="font-extrabold">${L.icon ? L.icon + ' ' : ''}${esc(L.name)}${libIsNew(L) && !have ? ' <span class="text-[10px] font-bold text-brand align-middle">NUEVO</span>' : ''}</div><div class="text-[11px] text-mute">${days.length} ${days.length === 1 ? 'día' : 'días'} · ${nEx} ejercicios${L.pub && access.me?.admin ? ' · <span class="text-brand">compartido por ti</span>' : ''}</div></div>
           <button class="btn-mini text-brand shrink-0" data-mact="see" data-lib="${L.lib}" type="button">${open ? 'Ocultar' : 'Ver'}</button></div>
-        <p class="text-[12px] text-slate-300 leading-snug">${esc(L.desc)}</p>
+        <p class="text-[12px] text-slate-300 leading-snug whitespace-pre-line">${esc(L.desc).replace(/\nCómo usarlo:/, '\n<b class="text-brand">Cómo usarlo:</b>')}</p>
         ${open ? days.map(d => `<div class="text-[12px]"><div class="text-brand font-bold">${esc(d.label)} · ${esc(d.title)}</div><ul class="text-mute list-disc pl-5">${d.exercises.map(e => `<li>${esc(e.variants[0].name)} <span class="opacity-70">${e.sets}×${e.minReps}–${e.maxReps}</span></li>`).join('')}</ul></div>`).join('') : ''}
         ${have ? '<div class="w-full text-center text-[13px] font-bold text-emerald-300 py-2 rounded-xl" style="background:rgba(16,185,129,.08)">✓ Ya lo tienes</div>' : `<button class="btn-primary w-full" data-mact="add" data-lib="${L.lib}" type="button">＋ Añadir</button>`}</div>`;
     }).join('')}</div>
@@ -905,15 +905,27 @@ function renderProgHeader() {
     <div class="chips-row flex-1 relative" id="progRow">${progRow}</div>
     <button class="iconbtn iconbtn-sm shrink-0 text-brand font-black" data-act="addProg" type="button" aria-label="Añadir bloque" title="Añadir bloque">＋</button>
     <button class="iconbtn iconbtn-sm shrink-0" data-act="editProg" type="button" aria-label="Editar bloque">✎</button>
-  </div>${libCtaHTML()}`;
+  </div>${libCtaHTML() || libNewHTML()}`;
 }
 /* Sin bloques de fuerza propios: invitación grande a la biblioteca */
+/* 📚 Aviso de bloques nuevos en la biblioteca (para quien ya tiene sus bloques). Desaparece al verlos o con ✕ */
+function libNewList() { const seen = state.settings.libSeen || []; return libAll().filter(L => libIsNew(L) && !libHave(L) && !seen.includes(L.lib)); }
+function libNewHTML() {
+  const L = libNewList(); if (!L.length) return '';
+  return `<div class="lib-new mb-3">
+    <button class="flex-1 min-w-0 flex items-center gap-3 text-left" data-act="libNewSee" type="button">
+      <span class="text-2xl">📚</span>
+      <span class="min-w-0"><span class="block font-extrabold text-[14px]">${L.length === 1 ? 'Bloque nuevo disponible' : `${L.length} bloques nuevos disponibles`}</span><span class="block text-[12px] text-mute truncate">${L.map(x => `${x.icon ? x.icon + ' ' : ''}${esc(x.name)}`).join(' · ')}</span></span>
+      <span class="ml-auto text-brand font-black text-[13px] shrink-0">Ver ›</span></button>
+    <button class="iconbtn iconbtn-sm shrink-0" data-act="libNewHide" type="button" aria-label="Cerrar">✕</button></div>`;
+}
+const libMarkSeen = () => { state.settings.libSeen = [...new Set([...(state.settings.libSeen || []), ...libNewList().map(x => x.lib)])]; persist(); };
 function libCtaHTML() {
   const hasOwn = state.plan.programs.some(p => p.type === 'strength' && p.id !== 'free' && p.days.some(d => d.exercises.length));
   if (hasOwn) return '';
   return `<button class="w-full card p-4 mb-3 text-left flex items-center gap-3" style="border-color:rgba(34,211,238,.45);background:linear-gradient(135deg,rgba(34,211,238,.10),rgba(34,211,238,.02))" data-act="addProg" type="button">
     <span class="text-3xl">🏋️</span>
-    <span class="flex-1 min-w-0"><span class="block font-extrabold">Elige tu primer bloque de entreno</span><span class="block text-[12px] text-mute mt-0.5">Preparados por Esteban: Kettlebell, PPT, Full Body… O crea el tuyo.</span></span>
+    <span class="flex-1 min-w-0"><span class="block font-extrabold">Elige tu primer bloque de entreno</span><span class="block text-[12px] text-mute mt-0.5">Preparados por Esteban: PPT, Full Body, Brazos, Pierna… O crea el tuyo.</span></span>
     <span class="text-brand font-black text-lg">›</span></button>`;
 }
 
@@ -4499,6 +4511,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.52.0', ['📚 Aviso de bloques nuevos en Inicio y Entreno; «Cómo usarlo» en la biblioteca.'], 'quiet'],
   ['4.51.0', ['Ajustes: todas las tarjetas se pliegan y muestran su estado.'], 'quiet'],
   ['4.50.0', ['🟢 Acceso: «X activos hoy» junto al título (también con Acceso cerrado), activos hoy en verde en la lista y versión de cada persona.', '🔒 Script v9: Google comprueba la caducidad de los planes (actualiza el script: Acceso → Reconfigurar → nueva versión).'], 'admin'],
   ['4.49.0', ['🔎 Acceso: buscador por nombre o correo, filtros (caducan pronto, caducados, sin usar, Free) y lista compacta con ficha desplegable.'], 'admin'],
@@ -4859,7 +4872,7 @@ function renderHome() {
   return `<div class="pb-3"><div class="text-mute text-sm">${esc(f.charAt(0).toUpperCase() + f.slice(1))}</div><h1 class="text-2xl font-black mt-0.5">Hola${name ? ', ' + esc(name.split(' ')[0]) : ''}</h1></div>
   <div id="homeCards" class="home-cards">${HOME_CARDS.map(c => `<button class="home-card" style="--c:${c.c};background-image:url(${c.img}.webp);background-position:${c.pos}" data-act="homeGo" data-v="${c.view}" type="button">
     <span class="home-shade"></span>
-    <span class="home-txt"><span class="block font-black text-[19px] leading-tight">${c.t}</span>${homeSub(c.view).filter(Boolean).map((l, i) => `<span class="block text-[13px] ${i ? 'mt-0.5' : 'mt-1'} text-slate-300 truncate">${l}</span>`).join('')}</span>
+    <span class="home-txt">${c.view === 'train' && libNewList().length ? `<span class="home-pill">📚 ${libNewList().length === 1 ? '1 bloque nuevo' : libNewList().length + ' bloques nuevos'}</span>` : ''}<span class="block font-black text-[19px] leading-tight">${c.t}</span>${homeSub(c.view).filter(Boolean).slice(0, c.view === 'train' && libNewList().length ? 1 : 2).map((l, i) => `<span class="block text-[13px] ${i ? 'mt-0.5' : 'mt-1'} text-slate-300 truncate">${l}</span>`).join('')}</span>
     <span class="home-go">›</span></button>`).join('')}</div>`;
 }
 function fitHome() {
@@ -5507,6 +5520,8 @@ const actions = {
   copyCode: async b => { const c = await accessCodeOf(b.dataset.hash); if (c) navigator.clipboard.writeText(fmtCode(c)).then(() => toast('Código copiado')).catch(() => toast('Cópialo a mano: ' + fmtCode(c), 'warn')); },
   regenAccess: b => regenAccess(b.dataset.hash),
   planAccess: b => planModal(b.dataset.hash),
+  libNewSee: () => { libMarkSeen(); render(); libraryModal(); },
+  libNewHide: () => { libMarkSeen(); render(); },
   accRow: b => { ui.accOpenH = ui.accOpenH === b.dataset.hash ? null : b.dataset.hash; render(); accFilterDom(); },
   accF: b => { ui.accF = b.dataset.k; render(); accFilterDom(); },
   delAccess: b => delAccess(b.dataset.hash),

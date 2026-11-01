@@ -2,10 +2,10 @@
  {
   "lib": "pub_mvwdhuvedm",
   "name": "FULL BODY",
-  "icon": "",
-  "desc": "Bloque cerrado y usado por Esteban.",
+  "icon": "🏋️",
+  "desc": "Todo el cuerpo en cada sesión, alternando dos días: el A con sentadilla, press de banca y remo pesados; el B con peso muerto, dominadas y press inclinado. Cada músculo se entrena 2–3 veces por semana yendo solo 3 días al gimnasio. ~60 min.\nCómo usarlo: 3 días por semana alternando A y B (por ejemplo lunes, miércoles y viernes: A-B-A, y la semana siguiente B-A-B), con al menos un día de descanso entre sesiones. Ideal si empiezas o si solo puedes entrenar 2–3 días. Sube el peso cuando completes todas las repeticiones.",
   "author": "Esteban",
-  "at": "2026-10-31",
+  "at": "2026-10-01",
   "days": [
    {
     "label": "FB A",
@@ -426,12 +426,12 @@
   ]
  },
  {
-  "lib": "pub_mvwdgkfqev",
+  "lib": "pub_mvpvpdaxt9",
   "name": "PPT",
-  "icon": "",
-  "desc": "Bloque cerrado y usado por Esteban.",
+  "icon": "🔁",
+  "desc": "Push · Pull · Torso: tres días que reparten el tren superior por patrones de movimiento. Push (empuje): pecho, hombro y tríceps. Pull (tirón): espalda y bíceps. Torso: superseries de todo el tren superior. Cada día empieza con un «peaje» de pierna o cadena posterior para no olvidarla. ~60 min.\nCómo usarlo: 3 días por semana en orden Push → Pull → Torso, con un día de descanso entre ellos o 3 seguidos y 1 de descanso. Si quieres más pierna, añade el bloque PIERNA un cuarto día. Sube el peso cuando completes todas las repeticiones.",
   "author": "Esteban",
-  "at": "2026-10-31",
+  "at": "2026-10-01",
   "days": [
    {
     "label": "PUSH",
@@ -939,332 +939,62 @@
   ]
  },
  {
-  "lib": "pub_mvpvpdaxt9",
-  "name": "PPT",
-  "icon": "",
-  "desc": "PPT (Push Pull Torso) es una rutina de entrenamiento que trabaja el torso mediante dos patrones de movimiento: push (empuje), que implica pecho, hombros y tríceps, y pull (tirón), que trabaja espalda",
+  "lib": "pub_brazos1",
+  "name": "BRAZOS",
+  "icon": "💪",
   "author": "Esteban",
-  "at": "2026-10-27",
+  "at": "2026-11-01",
+  "desc": "Un día completo de brazos: primero lo pesado (press cerrado y curl con barra Z) y después aislamientos que trabajan cada cabeza del bíceps y del tríceps, alternando para que uno descanse mientras trabaja el otro. Unas 10 series de tríceps y 12 de bíceps, ~55 min.\nCómo usarlo: añádelo como día extra a tu rutina, mejor separado al menos 48 h de tus días de empuje y tirón. Para más volumen, repítelo 2 veces por semana. Bíceps y tríceps grandes se ven de verdad con poca grasa: cuida también la dieta.",
   "days": [
    {
-    "label": "PUSH",
+    "label": "BRAZOS",
     "rotation": true,
-    "title": "Día 1 · Push + peaje de cuádriceps",
-    "subtitle": "Pierna pesada al inicio + pecho, hombro y tríceps",
+    "title": "Brazos de acero",
+    "subtitle": "Press cerrado y curl Z pesados + cada cabeza del brazo",
     "exercises": [
      {
-      "id": "d1_goblet",
-      "block": "🔥 Peaje quema-grasa (pierna)",
+      "id": "br_cgbench",
+      "block": "🔱 Tríceps pesado",
       "sets": 4,
-      "minReps": 10,
-      "maxReps": 12,
-      "increment": 2,
-      "rest": 90,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Sentadilla goblet al pecho",
-        "note": "Pega la mancuerna al esternón."
-       },
-       {
-        "name": "Sentadilla búlgara",
-        "note": "Reps por pierna."
-       },
-       {
-        "name": "Prensa de piernas",
-        "note": "Pies a media altura, sin bloquear rodillas."
-       },
-       {
-        "name": "Sentadilla frontal con barra",
-        "note": "Codos altos, torso erguido."
-       }
-      ]
-     },
-     {
-      "id": "d1_bench",
-      "block": "💪 Push principal",
-      "sets": 4,
-      "minReps": 8,
-      "maxReps": 10,
-      "increment": 2,
-      "rest": 120,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Press de banca con barra",
-        "note": "Bajada controlada en 2 s."
-       },
-       {
-        "name": "Press de banca con barra",
-        "note": "Retrae escápulas."
-       },
-       {
-        "name": "Press en suelo con mancuernas",
-        "note": "Codos a 45º, pausa abajo."
-       },
-       {
-        "name": "Press de pecho en máquina",
-        "note": "Recorrido completo."
-       }
-      ]
-     },
-     {
-      "id": "d1_incline",
-      "block": "💪 Push superior",
-      "sets": 3,
-      "minReps": 10,
-      "maxReps": 12,
-      "increment": 2,
-      "rest": 90,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Press inclinado con mancuernas",
-        "note": "Banco a 30º."
-       },
-       {
-        "name": "Fondos en paralelas",
-        "note": "Torso inclinado."
-       },
-       {
-        "name": "Press inclinado con barra",
-        "note": "Banco a 30º."
-       }
-      ]
-     },
-     {
-      "id": "d1_shoulder",
-      "block": "🎯 Hombro fuerza",
-      "sets": 3,
-      "minReps": 8,
-      "maxReps": 12,
-      "increment": 2,
-      "rest": 90,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Press militar sentado",
-        "note": "Rango completo."
-       },
-       {
-        "name": "Press militar de pie",
-        "note": "Core firme."
-       },
-       {
-        "name": "Press Arnold",
-        "note": "Gira las muñecas al subir."
-       },
-       {
-        "name": "Press de hombro con kettlebell",
-        "note": "A una mano, core firme."
-       }
-      ]
-     },
-     {
-      "id": "d1_lat",
-      "block": "⚡ Superserie estética",
-      "sets": 3,
-      "minReps": 12,
-      "maxReps": 15,
-      "increment": 1,
-      "rest": 60,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Elevaciones laterales con mancuernas",
-        "note": "Amplitud en V."
-       },
-       {
-        "name": "Elevaciones laterales en polea",
-        "note": "Tensión constante."
-       },
-       {
-        "name": "Elevaciones laterales con banda",
-        "note": "Controla la bajada."
-       }
-      ]
-     },
-     {
-      "id": "d1_triceps",
-      "block": "⚡ Superserie tríceps & core",
-      "sets": 3,
-      "minReps": 10,
-      "maxReps": 15,
-      "increment": 1,
-      "rest": 60,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Extensión de tríceps TRX + rueda",
-        "note": "Anota repeticiones de tríceps."
-       },
-       {
-        "name": "Press francés con mancuernas + rueda",
-        "note": "Anota repeticiones de tríceps."
-       },
-       {
-        "name": "Extensión de tríceps en polea + rueda",
-        "note": "Anota repeticiones de tríceps."
-       }
-      ]
-     }
-    ]
-   },
-   {
-    "label": "PULL",
-    "rotation": true,
-    "title": "Día 2 · Pull + peaje cadena posterior",
-    "subtitle": "Isquios y kettlebell al inicio + espalda en V y bíceps",
-    "exercises": [
-     {
-      "id": "d2_rdl",
-      "block": "🔥 Peaje isquios / glúteo",
-      "sets": 4,
-      "minReps": 8,
-      "maxReps": 12,
+      "minReps": 6,
+      "maxReps": 8,
       "increment": 2.5,
       "rest": 120,
       "bw": false,
       "alts27": true,
       "variants": [
        {
-        "name": "Peso muerto rumano  con mancuernas",
-        "note": "Cadera atrás, espalda neutra."
+        "name": "Press cerrado con barra",
+        "note": "Manos al ancho de hombros, codos pegados al cuerpo."
        },
        {
-        "name": "Peso muerto rumano con mancuernas",
-        "note": "Mancuernas pegadas a las piernas."
+        "name": "Fondos en paralelas",
+        "note": "Torso vertical para cargar el tríceps."
        },
        {
-        "name": "Buenos días con barra",
-        "note": "Cadera atrás, rodillas suaves."
+        "name": "Press cerrado con mancuernas",
+        "note": "Mancuernas juntas, bajada controlada."
        }
       ]
      },
      {
-      "id": "d2_swings",
-      "block": "🔥 Pareja metabólica",
-      "sets": 4,
-      "minReps": 15,
-      "maxReps": 20,
-      "increment": 2,
-      "rest": 60,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Kettlebell swings",
-        "note": "Golpe explosivo de cadera."
-       },
-       {
-        "name": "Swing a una mano",
-        "note": "Cambia de mano a mitad de serie."
-       },
-       {
-        "name": "Thruster con kettlebell",
-        "note": "Sentadilla + press en un solo gesto."
-       }
-      ]
-     },
-     {
-      "id": "d2_pullup",
-      "block": "🦅 Espalda amplitud",
+      "id": "br_ezcurl",
+      "block": "💪 Bíceps pesado",
       "sets": 4,
       "minReps": 6,
       "maxReps": 10,
-      "increment": 2,
-      "rest": 120,
-      "bw": true,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Dominadas en barra",
-        "note": "Pecho a la barra. 0 kg = peso corporal."
-       },
-       {
-        "name": "Dominadas asistidas con banda",
-        "note": "Banda bajo las rodillas. 0 kg = peso corporal."
-       },
-       {
-        "name": "Dominadas negativas",
-        "note": "Baja en 4–5 s. 0 kg = peso corporal."
-       }
-      ]
-     },
-     {
-      "id": "d2_row",
-      "block": "🦅 Espalda densidad",
-      "sets": 3,
-      "minReps": 10,
-      "maxReps": 12,
-      "increment": 2,
+      "increment": 2.5,
       "rest": 90,
       "bw": false,
       "alts27": true,
       "variants": [
        {
-        "name": "Remo a una mano con mancuerna",
-        "note": "Codo hacia la cadera."
+        "name": "Curl con barra Z",
+        "note": "Codos quietos, sin balanceo."
        },
        {
-        "name": "Remo en polea baja",
-        "note": "Espalda neutra, codos atrás."
-       },
-       {
-        "name": "Remo con barra",
-        "note": "Torso a ~45º."
-       }
-      ]
-     },
-     {
-      "id": "d2_rear",
-      "block": "🎯 Hombro posterior",
-      "sets": 3,
-      "minReps": 12,
-      "maxReps": 15,
-      "increment": 1,
-      "rest": 60,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Face pull / apertura TRX",
-        "note": "Deltoides posterior."
-       },
-       {
-        "name": "Pájaros con mancuernas",
-        "note": "Torso inclinado, codos suaves."
-       },
-       {
-        "name": "Apertura con banda",
-        "note": "Brazos rectos a la altura del pecho."
-       }
-      ]
-     },
-     {
-      "id": "d2_biceps",
-      "block": "💪 Bombeo bíceps",
-      "sets": 3,
-      "minReps": 10,
-      "maxReps": 12,
-      "increment": 1,
-      "rest": 60,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Curl con barra EZ",
-        "note": ""
-       },
-       {
-        "name": "Curl con mancuernas alterno",
-        "note": "Supina al subir."
+        "name": "Curl con barra",
+        "note": "Agarre al ancho de hombros."
        },
        {
         "name": "Curl en polea",
@@ -1273,177 +1003,463 @@
       ]
      },
      {
-      "id": "c_mvhwk97d7ugzd",
-      "block": "💪 Bombeo bíceps",
-      "sets": 3,
-      "minReps": 8,
-      "maxReps": 12,
-      "increment": 2,
-      "rest": 90,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Curl martillo",
-        "note": ""
-       }
-      ]
-     }
-    ]
-   },
-   {
-    "label": "TORSO",
-    "rotation": true,
-    "title": "Día 3 · Torso completo + circuito espartano",
-    "subtitle": "Superseries pecho/espalda + pierna y core camuflados",
-    "exercises": [
-     {
-      "id": "d3_ss1_push",
-      "block": "⚡ Superserie A1",
-      "sets": 4,
-      "minReps": 8,
-      "maxReps": 12,
-      "increment": 2,
-      "rest": 45,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Press inclinado con mancuernas",
-        "note": "Alterna con A2."
-       },
-       {
-        "name": "Press de banca con barra",
-        "note": "Alterna con A2."
-       },
-       {
-        "name": "Press en suelo con mancuernas",
-        "note": "Alterna con A2."
-       }
-      ]
-     },
-     {
-      "id": "d3_ss1_pull",
-      "block": "⚡ Superserie A2",
-      "sets": 4,
-      "minReps": 8,
-      "maxReps": 10,
-      "increment": 2,
-      "rest": 90,
-      "bw": true,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Dominadas supinas",
-        "note": "Agarre cerrado. 0 kg = peso corporal."
-       },
-       {
-        "name": "Remo invertido en TRX",
-        "note": "Cuerpo recto. 0 kg = peso corporal."
-       },
-       {
-        "name": "Dominadas con agarre neutro",
-        "note": "0 kg = peso corporal."
-       }
-      ]
-     },
-     {
-      "id": "d3_ss2_push",
-      "block": "⚡ Superserie B1",
+      "id": "br_ohext",
+      "block": "🔱 Tríceps cabeza larga",
       "sets": 3,
       "minReps": 10,
       "maxReps": 12,
       "increment": 2,
-      "rest": 45,
-      "bw": true,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Fondos en paralelas",
-        "note": "Baja profundo."
-       },
-       {
-        "name": "Flexiones diamante",
-        "note": "Codos pegados. 0 kg = peso corporal."
-       },
-       {
-        "name": "Fondos en banco",
-        "note": "Hombros abajo. 0 kg = peso corporal."
-       }
-      ]
-     },
-     {
-      "id": "d3_ss2_pull",
-      "block": "⚡ Superserie B2",
-      "sets": 3,
-      "minReps": 10,
-      "maxReps": 12,
-      "increment": 2,
-      "rest": 90,
+      "rest": 75,
       "bw": false,
       "alts27": true,
       "variants": [
        {
-        "name": "Remo con 2 mancuernas",
-        "note": "Aprieta escápulas."
+        "name": "Extensión sobre la cabeza con mancuerna",
+        "note": "Baja detrás de la cabeza hasta notar el estiramiento."
        },
        {
-        "name": "Remo en polea baja",
-        "note": "Aprieta escápulas."
+        "name": "Extensión sobre la cabeza en polea",
+        "note": "De espaldas a la polea, codos al frente."
        },
        {
-        "name": "Remo con barra",
-        "note": "Aprieta escápulas."
+        "name": "Press francés con barra Z",
+        "note": "Barra hacia la frente, codos fijos."
        }
       ]
      },
      {
-      "id": "d3_arms",
-      "block": "💥 Superserie brazos",
+      "id": "br_inclcurl",
+      "block": "💪 Bíceps cabeza larga",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 1,
+      "rest": 75,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl en banco inclinado",
+        "note": "Brazos colgando por detrás del torso."
+       },
+       {
+        "name": "Curl spider",
+        "note": "Pecho apoyado en banco inclinado."
+       },
+       {
+        "name": "Curl con mancuernas alterno",
+        "note": "Gira la muñeca al subir."
+       }
+      ]
+     },
+     {
+      "id": "br_rope",
+      "block": "🔱 Tríceps cabeza lateral",
       "sets": 3,
       "minReps": 12,
       "maxReps": 15,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Extensión en polea con cuerda",
+        "note": "Abre la cuerda abajo y aprieta 1 s."
+       },
+       {
+        "name": "Patada de tríceps",
+        "note": "Codo alto y quieto."
+       },
+       {
+        "name": "Extensión de tríceps en polea",
+        "note": "Codos pegados a los costados."
+       }
+      ]
+     },
+     {
+      "id": "br_hammer",
+      "block": "🦾 Braquial y antebrazo",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
       "increment": 1,
       "rest": 60,
       "bw": false,
       "alts27": true,
       "variants": [
        {
-        "name": "Elevaciones + martillo + bíceps",
-        "note": "Giant set sin descanso."
+        "name": "Curl martillo",
+        "note": "Agarre neutro, sin girar."
        },
        {
-        "name": "Curl martillo + press francés",
-        "note": "Superserie sin descanso."
+        "name": "Curl martillo en polea con cuerda",
+        "note": "Codos pegados."
        },
        {
-        "name": "Curl en polea + extensión en polea",
-        "note": "Superserie sin descanso."
+        "name": "Curl inverso",
+        "note": "Agarre prono, trabaja el antebrazo."
        }
       ]
      },
      {
-      "id": "d3_spartan",
-      "block": "🛡️ Circuito espartano",
+      "id": "br_conc",
+      "block": "💪 Remate de bíceps",
+      "sets": 2,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 1,
+      "rest": 45,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl concentrado",
+        "note": "Sube despacio y aprieta arriba 1 s."
+       },
+       {
+        "name": "Curl predicador",
+        "note": "Sin rebotar abajo."
+       },
+       {
+        "name": "Curl en polea",
+        "note": "Última serie al fallo."
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "lib": "pub_piernas1",
+  "name": "PIERNA",
+  "icon": "🦵",
+  "author": "Esteban",
+  "at": "2026-11-01",
+  "desc": "Un día completo de tren inferior: sentadilla y peso muerto rumano pesados para cuádriceps, femoral y glúteo, después trabajo a una pierna para corregir desequilibrios y aislamientos para cerrar. ~60 min.\nCómo usarlo: 1 vez por semana como día de pierna, o 2 si tu rutina no tiene pierna. Calienta 10 min y haz 2 series de aproximación antes de la sentadilla. Deja 48–72 h antes de volver a entrenar pierna o hacer cardio intenso. Si te duelen rodillas o espalda, usa las alternativas ⇄.",
+  "days": [
+   {
+    "label": "PIERNA",
+    "rotation": true,
+    "title": "Tren inferior",
+    "subtitle": "Sentadilla y rumano pesados + unilateral + aislamientos",
+    "exercises": [
+     {
+      "id": "lg_squat",
+      "block": "🏋️ Cuádriceps pesado",
+      "sets": 4,
+      "minReps": 6,
+      "maxReps": 8,
+      "increment": 2.5,
+      "rest": 150,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Sentadilla trasera con barra",
+        "note": "Profundidad paralela o más, rodillas siguiendo la punta del pie."
+       },
+       {
+        "name": "Sentadilla en multipower",
+        "note": "Pies un poco adelantados."
+       },
+       {
+        "name": "Prensa de piernas",
+        "note": "Sin bloquear rodillas arriba."
+       }
+      ]
+     },
+     {
+      "id": "lg_rdl",
+      "block": "🍑 Femoral y glúteo pesado",
+      "sets": 4,
+      "minReps": 8,
+      "maxReps": 10,
+      "increment": 2.5,
+      "rest": 120,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Peso muerto rumano",
+        "note": "Cadera atrás, barra pegada a las piernas, espalda neutra."
+       },
+       {
+        "name": "Peso muerto rumano con mancuernas",
+        "note": "Rodillas algo flexionadas y fijas."
+       },
+       {
+        "name": "Buenos días con barra",
+        "note": "Peso ligero, recorrido controlado."
+       }
+      ]
+     },
+     {
+      "id": "lg_bulg",
+      "block": "🦵 A una pierna",
       "sets": 3,
-      "minReps": 10,
-      "maxReps": 12,
+      "minReps": 8,
+      "maxReps": 10,
       "increment": 2,
       "rest": 90,
       "bw": false,
       "alts27": true,
       "variants": [
        {
-        "name": "Zancadas con kettlebells + granjero + rueda",
-        "note": "A tope de intensidad."
+        "name": "Sentadilla búlgara",
+        "note": "Pie trasero en banco, torso algo inclinado para más glúteo."
        },
        {
-        "name": "Sentadilla goblet + swings + plancha",
-        "note": "A tope de intensidad."
+        "name": "Zancadas caminando",
+        "note": "Paso largo, rodilla trasera casi al suelo."
        },
        {
-        "name": "Zancadas con mancuernas + remo + rueda",
-        "note": "A tope de intensidad."
+        "name": "Step-up con mancuernas",
+        "note": "Sube empujando con el talón."
+       }
+      ]
+     },
+     {
+      "id": "lg_hip",
+      "block": "🍑 Glúteo",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 5,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Hip thrust con barra",
+        "note": "Aprieta arriba 1 s, mentón al pecho."
+       },
+       {
+        "name": "Hip thrust en máquina",
+        "note": "Pausa arriba."
+       },
+       {
+        "name": "Puente de glúteo",
+        "note": "Con lastre sobre la cadera."
+       }
+      ]
+     },
+     {
+      "id": "lg_curl",
+      "block": "🔥 Femoral aislado",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl femoral tumbado",
+        "note": "Bajada lenta, 3 s."
+       },
+       {
+        "name": "Curl femoral sentado",
+        "note": "Cadera pegada al asiento."
+       },
+       {
+        "name": "Peso muerto a una pierna",
+        "note": "Peso ligero, equilibrio."
+       }
+      ]
+     },
+     {
+      "id": "lg_ext",
+      "block": "⚡ Cuádriceps aislado",
+      "sets": 3,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Extensión de cuádriceps",
+        "note": "Aprieta arriba 1 s."
+       },
+       {
+        "name": "Sentadilla goblet",
+        "note": "Codos entre las rodillas."
+       },
+       {
+        "name": "Hack squat",
+        "note": "Recorrido completo."
+       }
+      ]
+     },
+     {
+      "id": "lg_calf",
+      "block": "🦶 Gemelos",
+      "sets": 4,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 2.5,
+      "rest": 45,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Elevación de gemelos de pie",
+        "note": "Pausa abajo estirando 1 s, sin rebotar."
+       },
+       {
+        "name": "Gemelo en prensa",
+        "note": "Recorrido completo."
+       },
+       {
+        "name": "Elevación de gemelos sentado",
+        "note": "Para el sóleo."
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "lib": "pub_kettlebell1",
+  "name": "KETTLEBELL",
+  "icon": "🔔",
+  "author": "Esteban",
+  "at": "2026-10-01",
+  "desc": "Potencia y quema-grasa con una o dos kettlebells: swing, goblet, clean & press, zancadas y remo. El único bloque que puedes hacer en casa sin banco ni barra. ~40 min.\nCómo usarlo: necesitas al menos una kettlebell (12–16 kg para empezar, 20–24 kg si ya entrenas). 2–3 días por semana, solo o como complemento de otro bloque los días que no vas al gimnasio. Prioriza la técnica del swing: la fuerza sale de la cadera, no de los brazos.",
+  "days": [
+   {
+    "label": "KB",
+    "rotation": false,
+    "title": "Kettlebell · potencia y quema-grasa",
+    "subtitle": "Kettlebell ajustable (hasta 18 kg) y fija (24 kg)",
+    "exercises": [
+     {
+      "id": "kb_swing",
+      "block": "💥 Potencia y cadena posterior",
+      "sets": 4,
+      "minReps": 15,
+      "maxReps": 20,
+      "increment": 2,
+      "rest": 60,
+      "bw": null,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Kettlebell swing explosivo",
+        "note": "Bisagra de cadera pura: la potencia sale de los glúteos."
+       },
+       {
+        "name": "Swing a una mano",
+        "note": "Cambia de mano a mitad de serie."
+       },
+       {
+        "name": "Peso muerto con kettlebell",
+        "note": "Cadera atrás, espalda neutra."
+       }
+      ]
+     },
+     {
+      "id": "kb_goblet",
+      "block": "🦵 Cuádriceps y core",
+      "sets": 4,
+      "minReps": 10,
+      "maxReps": 15,
+      "increment": 2,
+      "rest": 90,
+      "bw": null,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Goblet squat profundo",
+        "note": "Codos por dentro de las rodillas, espalda recta."
+       },
+       {
+        "name": "Sentadilla con kettlebell en rack",
+        "note": "Kettlebell apoyada en el antebrazo."
+       },
+       {
+        "name": "Sentadilla búlgara con kettlebell",
+        "note": "Reps por pierna."
+       }
+      ]
+     },
+     {
+      "id": "kb_clean",
+      "block": "💪 Hombro y estabilidad unilateral",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 90,
+      "bw": null,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Clean & press unilateral",
+        "note": "Carga limpia al pecho y press estricto arriba. Reps por brazo."
+       },
+       {
+        "name": "Press de hombro con kettlebell",
+        "note": "Sin impulso de piernas."
+       },
+       {
+        "name": "Push press con kettlebell",
+        "note": "Pequeño impulso de piernas."
+       }
+      ]
+     },
+     {
+      "id": "kb_lunge",
+      "block": "🎯 Pierna unilateral y glúteo",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 90,
+      "bw": null,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Zancadas con kettlebell en rack",
+        "note": "Rodilla trasera rozando el suelo."
+       },
+       {
+        "name": "Zancadas inversas con kettlebell",
+        "note": "Paso atrás controlado."
+       },
+       {
+        "name": "Step-up con kettlebell",
+        "note": "Sube empujando con el talón."
+       }
+      ]
+     },
+     {
+      "id": "kb_row",
+      "block": "🦅 Espalda y grosor",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 90,
+      "bw": null,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Gorilla row (remo alterno)",
+        "note": "Apoyo firme, tira de los codos sin rotar el tronco."
+       },
+       {
+        "name": "Remo a una mano con kettlebell",
+        "note": "Codo hacia la cadera."
+       },
+       {
+        "name": "Remo renegado",
+        "note": "En plancha, sin girar la cadera."
        }
       ]
      }
