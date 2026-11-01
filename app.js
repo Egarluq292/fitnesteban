@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.53.0';
+const APP_VERSION = '4.53.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -303,7 +303,7 @@ function libraryModal() {
         <div class="flex items-start justify-between gap-2"><div class="min-w-0"><div class="font-extrabold">${L.icon ? L.icon + ' ' : ''}${esc(L.name)}${libIsNew(L) && !have ? ' <span class="text-[10px] font-bold text-brand align-middle">NUEVO</span>' : ''}</div><div class="text-[11px] text-mute">${days.length} ${days.length === 1 ? 'día' : 'días'} · ${nEx} ejercicios${L.pub && access.me?.admin ? ' · <span class="text-brand">compartido por ti</span>' : ''}</div></div>
           <button class="btn-mini text-brand shrink-0" data-mact="see" data-lib="${L.lib}" type="button">${open ? 'Ocultar' : 'Ver'}</button></div>
         <p class="text-[12px] text-slate-300 leading-snug whitespace-pre-line">${esc(L.desc).replace(/\nCómo usarlo:/, '\n<b class="text-brand">Cómo usarlo:</b>')}</p>
-        ${open ? days.map(d => `<div class="text-[12px]"><div class="text-brand font-bold">${esc(d.label)} · ${esc(d.title)}</div><ul class="text-mute list-disc pl-5">${d.exercises.map(e => `<li>${esc(e.variants[0].name)} <span class="opacity-70">${e.sets}×${e.minReps}–${e.maxReps}</span></li>`).join('')}</ul></div>`).join('') : ''}
+        ${open ? days.map(d => `<div class="text-[12px]"><div class="text-brand font-bold">${esc(d.label)} · ${esc(d.title)}</div><ul class="text-mute list-disc pl-5">${d.exercises.map(e => `<li>${esc(e.variants[0].name)} <span class="opacity-70">${e.sets}×${e.minReps}–${e.maxReps}${e.timed ? ' s' : ''}</span></li>`).join('')}</ul></div>`).join('') : ''}
         ${have ? '<div class="w-full text-center text-[13px] font-bold text-emerald-300 py-2 rounded-xl" style="background:rgba(16,185,129,.08)">✓ Ya lo tienes</div>' : `<button class="btn-primary w-full" data-mact="add" data-lib="${L.lib}" type="button">＋ Añadir</button>`}</div>`;
     }).join('')}</div>
     <p class="text-[11px] text-mute">Al añadir uno se copia a tus bloques y lo puedes cambiar como quieras.</p>`;
@@ -1969,7 +1969,8 @@ const MUSCLE_RULES = [
   [/encogimiento|shrug/, ['trapezius'], ['forearm']],
   [/gemelo|pantorrilla/, ['calves'], []],
   [/remo al ment[oó]n|upright/, ['deltoids', 'trapezius'], ['biceps']],
-  [/landmine|pike/, ['deltoids'], ['triceps', 'chest']],
+  [/landmine|pike|\bpica\b/, ['deltoids'], ['triceps', 'chest']],
+  [/hollow|cuerpo hueco/, ['abs'], ['obliques']],
   [/^remo|gorilla row/, ['upper-back'], ['biceps', 'forearm', 'deltoids']],
   [/dead bug/, ['abs'], ['obliques']],
   [/bird dog|superman/, ['lower-back'], ['gluteal', 'abs']],
@@ -4578,6 +4579,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.53.1', ['🤸 Bloque CALISTENIA EN CASA en la biblioteca.'], 'quiet'],
   ['4.53.0', ['📸 Tarjetas de retos para compartir: al terminar un reto o un test de máximo, y desde Progreso → Historial.', '🎯 Los tests de máximo aparecen en el historial y el calendario.']],
   ['4.52.3', ['🎯 Los tests de máximo de los retos salen en el historial y el calendario y cuentan más en el mapa muscular.'], 'quiet'],
   ['4.52.2', ['📚 Aviso de bloques nuevos en Inicio y Entreno; «Cómo usarlo» en la biblioteca.'], 'quiet'],

@@ -1466,5 +1466,358 @@
     ]
    }
   ]
+ },
+ {
+  "lib": "pub_calistenia1",
+  "name": "CALISTENIA EN CASA",
+  "icon": "🤸",
+  "author": "Esteban",
+  "at": "2026-11-01",
+  "desc": "Entrena todo el cuerpo en casa, solo con tu peso, una silla, una mesa resistente y una toalla. Dos días que se alternan: A (empuje y pierna) y B (hombro, tirón y potencia). ~40 min.\nCómo usarlo: 3 días por semana alternando A y B, con un día de descanso entre sesiones. Progresa sumando repeticiones; cuando superes el máximo en todas las series, pasa a la versión más difícil con ⇄ (por ejemplo, pies elevados). Comprueba que la mesa aguanta tu peso antes del remo.",
+  "days": [
+   {
+    "label": "CASA A",
+    "rotation": true,
+    "title": "Empuje y pierna",
+    "subtitle": "Flexiones, búlgara, remo bajo mesa y core",
+    "exercises": [
+     {
+      "id": "ca_push",
+      "block": "💪 Empuje",
+      "sets": 4,
+      "minReps": 8,
+      "maxReps": 15,
+      "increment": 2,
+      "rest": 75,
+      "bw": true,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Flexiones",
+        "note": "Cuerpo en bloque, pecho casi al suelo."
+       },
+       {
+        "name": "Flexiones con pies elevados",
+        "note": "Más difícil: pies en una silla."
+       },
+       {
+        "name": "Flexiones con rodillas",
+        "note": "Más fácil: mismo recorrido completo."
+       }
+      ]
+     },
+     {
+      "id": "ca_bulg",
+      "block": "🦵 Pierna",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 75,
+      "bw": true,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Sentadilla búlgara",
+        "note": "Pie trasero en una silla. Reps por pierna."
+       },
+       {
+        "name": "Zancadas inversas",
+        "note": "Paso atrás, rodilla casi al suelo."
+       },
+       {
+        "name": "Sentadilla",
+        "note": "Bajada lenta en 3 s."
+       }
+      ]
+     },
+     {
+      "id": "ca_row",
+      "block": "🦅 Tirón",
+      "sets": 4,
+      "minReps": 6,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 75,
+      "bw": true,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Remo invertido bajo mesa",
+        "note": "Mesa resistente: túmbate debajo y lleva el pecho al borde."
+       },
+       {
+        "name": "Remo con toalla en puerta",
+        "note": "Toalla alrededor del pomo, puerta bien cerrada, cuerpo inclinado atrás."
+       },
+       {
+        "name": "Dominadas",
+        "note": "Si tienes barra."
+       }
+      ]
+     },
+     {
+      "id": "ca_dips",
+      "block": "🔱 Tríceps",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 15,
+      "increment": 2,
+      "rest": 60,
+      "bw": true,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Fondos en silla",
+        "note": "Silla contra la pared, codos hacia atrás."
+       },
+       {
+        "name": "Flexiones diamante",
+        "note": "Manos juntas bajo el pecho."
+       },
+       {
+        "name": "Fondos en paralelas",
+        "note": "Si tienes paralelas."
+       }
+      ]
+     },
+     {
+      "id": "ca_bridge",
+      "block": "🍑 Glúteo",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 15,
+      "increment": 2,
+      "rest": 60,
+      "bw": true,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Puente de glúteo a una pierna",
+        "note": "Aprieta arriba 1 s. Reps por pierna."
+       },
+       {
+        "name": "Puente de glúteo",
+        "note": "Con las dos piernas."
+       },
+       {
+        "name": "Hip thrust en sofá",
+        "note": "Espalda apoyada en el sofá."
+       }
+      ]
+     },
+     {
+      "id": "ca_plank",
+      "block": "🧱 Core",
+      "sets": 3,
+      "minReps": 30,
+      "maxReps": 60,
+      "increment": 2,
+      "rest": 45,
+      "bw": true,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Plancha",
+        "note": "Glúteos y abdomen apretados, sin hundir la cadera."
+       },
+       {
+        "name": "Plancha lateral",
+        "note": "Cambia de lado a mitad."
+       },
+       {
+        "name": "Hollow hold",
+        "note": "Lumbares pegadas al suelo."
+       }
+      ],
+      "timed": true
+     }
+    ]
+   },
+   {
+    "label": "CASA B",
+    "rotation": true,
+    "title": "Hombro, tirón y potencia",
+    "subtitle": "Pica, una pierna, remo con toalla y burpees",
+    "exercises": [
+     {
+      "id": "cb_pike",
+      "block": "🎯 Hombro",
+      "sets": 4,
+      "minReps": 6,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 75,
+      "bw": true,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Flexiones en pica",
+        "note": "Cadera alta, cabeza entre las manos al bajar."
+       },
+       {
+        "name": "Pica con pies elevados",
+        "note": "Más difícil: pies en una silla."
+       },
+       {
+        "name": "Flexiones",
+        "note": "Más fácil."
+       }
+      ]
+     },
+     {
+      "id": "cb_pistol",
+      "block": "🦵 Pierna a una pierna",
+      "sets": 3,
+      "minReps": 6,
+      "maxReps": 10,
+      "increment": 2,
+      "rest": 75,
+      "bw": true,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Sentadilla a una pierna en cajón",
+        "note": "Siéntate despacio en una silla con una pierna. Reps por pierna."
+       },
+       {
+        "name": "Sentadilla búlgara",
+        "note": "Pie trasero en una silla."
+       },
+       {
+        "name": "Sentadilla con salto",
+        "note": "Aterriza suave."
+       }
+      ]
+     },
+     {
+      "id": "cb_towel",
+      "block": "🦅 Tirón",
+      "sets": 4,
+      "minReps": 8,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 75,
+      "bw": true,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Remo con toalla en puerta",
+        "note": "Puerta bien cerrada; cuanto más inclinado, más difícil."
+       },
+       {
+        "name": "Remo invertido bajo mesa",
+        "note": "Mesa resistente."
+       },
+       {
+        "name": "Dominadas",
+        "note": "Si tienes barra."
+       }
+      ]
+     },
+     {
+      "id": "cb_diamond",
+      "block": "🔱 Tríceps",
+      "sets": 3,
+      "minReps": 6,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 60,
+      "bw": true,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Flexiones diamante",
+        "note": "Codos pegados al cuerpo."
+       },
+       {
+        "name": "Flexiones cerradas",
+        "note": "Manos al ancho de hombros."
+       },
+       {
+        "name": "Fondos en silla",
+        "note": "Silla contra la pared."
+       }
+      ]
+     },
+     {
+      "id": "cb_sldl",
+      "block": "🍑 Femoral y glúteo",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 60,
+      "bw": true,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Peso muerto a una pierna",
+        "note": "Sin peso: cadera atrás, espalda recta. Reps por pierna."
+       },
+       {
+        "name": "Buenos días sin peso",
+        "note": "Manos en la nuca."
+       },
+       {
+        "name": "Puente de glúteo",
+        "note": "Pausa arriba."
+       }
+      ]
+     },
+     {
+      "id": "cb_burpee",
+      "block": "⚡ Potencia",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 60,
+      "bw": true,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Burpees",
+        "note": "Ritmo constante, aterriza suave."
+       },
+       {
+        "name": "Mountain climbers",
+        "note": "Cuenta cada rodilla."
+       },
+       {
+        "name": "Jumping jacks",
+        "note": "Para calentar o si cuesta."
+       }
+      ]
+     },
+     {
+      "id": "cb_hollow",
+      "block": "🧱 Core",
+      "sets": 3,
+      "minReps": 20,
+      "maxReps": 40,
+      "increment": 2,
+      "rest": 45,
+      "bw": true,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Hollow hold",
+        "note": "Lumbares pegadas al suelo, brazos estirados."
+       },
+       {
+        "name": "Plancha",
+        "note": "Sin hundir la cadera."
+       },
+       {
+        "name": "Crunch",
+        "note": "Despacio, sin tirar del cuello."
+       }
+      ],
+      "timed": true
+     }
+    ]
+   }
+  ]
  }
 ]
