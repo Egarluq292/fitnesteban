@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.52.2';
+const APP_VERSION = '4.52.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1974,6 +1974,7 @@ function musclesOf(name) {
   musclesCache.set(key, out);
   return out;
 }
+const testSets = (id, max) => ((RETOS[id]?.unit === 's' ? max >= 60 : max >= 20) ? 3 : 2);
 /* Lista de «trabajos»: { t (ms), sets, muscles } de sesiones guardadas y RETOS */
 function muscleWork(sinceDays) {
   const from = addDays(todayISO(), -sinceDays), out = [];
@@ -1986,10 +1987,10 @@ function muscleWork(sinceDays) {
     if (h.date < from || !RETO_MUSCLES[id]) continue;
     out.push({ t: h.at || Math.min(Date.now(), parseISO(h.date).getTime() + 19 * 3600000), sets: (h.got || []).filter(v => v > 0).length || 3, m: musclesOf(RETO_MUSCLES[id]) });
   }
-  // el test de máximo también cansa: cuenta como 1 serie
+  // el test de máximo también cansa: 2 series, o 3 si es un máximo largo (20+ reps o 60+ s)
   for (const [id, r] of Object.entries(state.retos || {})) for (const tt of r.tests || []) {
     if (tt.date < from || !RETO_MUSCLES[id]) continue;
-    out.push({ t: tt.at || Math.min(Date.now(), parseISO(tt.date).getTime() + 19 * 3600000), sets: 1, m: musclesOf(RETO_MUSCLES[id]) });
+    out.push({ t: tt.at || Math.min(Date.now(), parseISO(tt.date).getTime() + 19 * 3600000), sets: testSets(id, tt.max), m: musclesOf(RETO_MUSCLES[id]) });
   }
   return out;
 }
@@ -2535,7 +2536,10 @@ const DOT = { green: 'bg-emerald-400', amber: 'bg-amber-400', red: 'bg-rose-500'
 /* Sesiones de retos (no son sesiones de gym: se muestran aparte en historial y calendario) */
 function retoEntries(date) {
   const out = [];
-  for (const id of RETO_IDS) for (const h of retoOf(id)?.history || []) if (!date || h.date === date) out.push({ id, r: RETOS[id], h });
+  for (const id of RETO_IDS) {
+    for (const h of retoOf(id)?.history || []) if (!date || h.date === date) out.push({ id, r: RETOS[id], h });
+    for (const t of retoOf(id)?.tests || []) if (!date || t.date === date) out.push({ id, r: RETOS[id], h: { date: t.date, at: t.at || 0, got: [t.max], test: true } });
+  }
   return out.sort((a, b) => (a.h.date === b.h.date ? (a.h.at || 0) - (b.h.at || 0) : a.h.date < b.h.date ? -1 : 1));
 }
 const retoLine = ({ r, h }) => `${h.got.filter(v => v > 0).join('+')}${r.unit === 's' ? ' s' : ''}`;
@@ -2625,7 +2629,7 @@ function renderCalDetail(date) {
           <div class="text-xs font-semibold">${esc(s.dayTitle || 'Sesión')}${s.durationMin ? ` · ⏱ ${s.durationMin} min` : ''}${gymKcalOf(s) ? ` · <span class="${MAC.kcal.text}">~${gymKcalOf(s)} kcal</span>` : ''}${s.deload ? ' · 🔋 descarga' : ''}</div>
           ${s.exercises.map(e => `<div class="text-[11px] text-mute leading-snug">· ${esc(e.name)}: <span class="font-mono">${e.sets.map(x => setStr(x, isBwEx(e.exId), isTimedEx(e))).join(' · ')}</span></div>`).join('')}
         </div>`).join('') : ''}
-      ${act.retos.map(x => `<div class="mt-1"><div class="text-xs font-semibold">🏆 Reto ${esc(x.r.name)} · nivel ${x.h.level}${x.h.kcal ? ` · <span class="${MAC.kcal.text}">~${x.h.kcal} kcal</span>` : ''}</div><div class="text-[11px] text-mute font-mono">${retoLine(x)} ${(RETO_FEEL.find(f => f[0] === x.h.feel) || ['', ''])[1]}</div></div>`).join('')}
+      ${act.retos.map(x => x.h.test ? `<div class="mt-1"><div class="text-xs font-semibold">🎯 Test de máximo · ${esc(x.r.name)}</div><div class="text-[11px] text-mute font-mono">${retoLine(x)} seguid${x.r.unit === 's' ? 'os' : 'as'}</div></div>` : `<div class="mt-1"><div class="text-xs font-semibold">🏆 Reto ${esc(x.r.name)} · nivel ${x.h.level}${x.h.kcal ? ` · <span class="${MAC.kcal.text}">~${x.h.kcal} kcal</span>` : ''}</div><div class="text-[11px] text-mute font-mono">${retoLine(x)} ${(RETO_FEEL.find(f => f[0] === x.h.feel) || ['', ''])[1]}</div></div>`).join('')}
       ${!act.sessions.length && !act.retos.length ? '<div class="text-xs text-mute mt-0.5">Sin entreno de fuerza.</div>' : ''}
     </div>
     <div>
@@ -3235,7 +3239,10 @@ function renderProgress() {
   <details class="card p-4 mt-3" ${openAttr('history')}>
     <summary class="flex items-center justify-between cursor-pointer select-none"><h3 class="section-title">📚 Historial de sesiones</h3><span class="flex items-center gap-2 text-[11px] text-mute">${hist.length ? `${hist.length === 20 ? 'últimas 20' : hist.length + (hist.length === 1 ? ' sesión' : ' sesiones')} · ${esc(fmtDateShort(hist[0].date))}` : 'sin sesiones'}<span class="tri"></span></span></summary>
     <div class="space-y-2 mt-3">
-      ${hist.length ? hist.map(s => s.reto ? `<div class="bg-ink rounded-xl border border-line px-3 py-2.5 text-sm">
+      ${hist.length ? hist.map(s => s.reto?.h.test ? `<div class="bg-ink rounded-xl border border-line px-3 py-2.5 text-sm">
+        <div class="flex justify-between items-center"><span class="font-semibold truncate">🎯 Test de máximo <span class="text-mute font-normal text-xs">· ${esc(s.reto.r.name)}</span></span><span class="text-[11px] text-mute shrink-0 ml-2">${fmtDate(s.date)}</span></div>
+        <div class="text-[11px] text-mute mt-0.5"><span class="font-mono">${retoLine(s.reto)}</span> seguid${s.reto.r.unit === 's' ? 'os' : 'as'}</div>
+      </div>` : s.reto ? `<div class="bg-ink rounded-xl border border-line px-3 py-2.5 text-sm">
         <div class="flex justify-between items-center"><span class="font-semibold truncate">🏆 Reto ${esc(s.reto.r.name)} <span class="text-mute font-normal text-xs">· nivel ${s.reto.h.level}</span></span><span class="text-[11px] text-mute shrink-0 ml-2">${fmtDate(s.date)}</span></div>
         <div class="text-[11px] text-mute mt-0.5"><span class="font-mono">${retoLine(s.reto)}</span> ${(RETO_FEEL.find(f => f[0] === s.reto.h.feel) || ['', ''])[1]}${s.reto.h.kcal ? ` · <span class="${MAC.kcal.text}">~${s.reto.h.kcal} kcal</span>` : ''}</div>
       </div>` : `<details class="bg-ink rounded-xl border border-line">
@@ -4521,6 +4528,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.52.3', ['🎯 Los tests de máximo de los retos salen en el historial y el calendario y cuentan más en el mapa muscular.'], 'quiet'],
   ['4.52.2', ['📚 Aviso de bloques nuevos en Inicio y Entreno; «Cómo usarlo» en la biblioteca.'], 'quiet'],
   ['4.51.0', ['Ajustes: todas las tarjetas se pliegan y muestran su estado.'], 'quiet'],
   ['4.50.0', ['🟢 Acceso: «X activos hoy» junto al título (también con Acceso cerrado), activos hoy en verde en la lista y versión de cada persona.', '🔒 Script v9: Google comprueba la caducidad de los planes (actualiza el script: Acceso → Reconfigurar → nueva versión).'], 'admin'],
