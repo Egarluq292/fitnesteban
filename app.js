@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.52.3';
+const APP_VERSION = '4.53.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1370,14 +1370,61 @@ async function buildShareCard(s) {
 }
 async function openShareCard(sessionId) {
   const s = state.sessions.find(x => x.id === sessionId); if (!s) return;
+  return showCard(() => buildShareCard(s), `fitnesteban_${s.date}.png`);
+}
+/* Tarjeta de un reto (sesión o test de máximo): misma estética que la de las sesiones */
+async function buildRetoCard(id, h) {
+  const r = RETOS[id], st = retoOf(id), W = 1080, H = 1350, F = 'system-ui, Roboto, "Segoe UI", sans-serif';
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#05080a'; ctx.fillRect(0, 0, W, H);
+  const glow = ctx.createRadialGradient(W * 0.85, H * 0.08, 20, W * 0.85, H * 0.08, W * 0.9);
+  glow.addColorStop(0, 'rgba(251,191,36,0.20)'); glow.addColorStop(1, 'rgba(251,191,36,0)');
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+  try { const logo = await loadImg('icons/logo-512.png'); ctx.save(); ctx.beginPath(); ctx.arc(140, 150, 70, 0, Math.PI * 2); ctx.clip(); ctx.drawImage(logo, 70, 80, 140, 140); ctx.restore(); } catch { /* sin logo */ }
+  try { const img = await loadImg('icons/marca.svg'); const mh = Math.round(600 * img.naturalHeight / img.naturalWidth); ctx.drawImage(img, 240, 154 - mh / 2, 600, mh); } catch { ctx.fillStyle = '#fff'; ctx.font = `italic 900 60px ${F}`; ctx.fillText('FITNESTEBAN', 240, 175); }
+  const u = r.unit === 's' ? ' s' : '', got = (h.got || []).filter(v => v > 0), total = got.reduce((a, b) => a + b, 0);
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#fbbf24'; ctx.font = `800 34px ${F}`; ctx.fillText(h.test ? '🎯 TEST DE MÁXIMO' : '🏆 RETO COMPLETADO', 70, 340);
+  const title = r.name.toUpperCase(); let fs = 150; ctx.font = `italic 900 ${fs}px ${F}`;
+  while (ctx.measureText(title).width > W - 140 && fs > 70) { fs -= 6; ctx.font = `italic 900 ${fs}px ${F}`; }
+  ctx.fillStyle = '#ffffff'; ctx.fillText(title, 64, 490);
+  ctx.fillStyle = '#8a9ba5'; ctx.font = `500 36px ${F}`;
+  ctx.fillText(h.test ? `${got[0]}${u} seguid${r.unit === 's' ? 'os' : 'as'}` : `Nivel ${h.level} · ${got.join(' + ')}${u}`, 70, 550);
+  ctx.fillText(parseISO(h.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }), 70, 600);
+  const tiles = h.test
+    ? [[`${got[0]}${u}`, r.unit === 's' ? 'segundos' : 'seguidas'], [`${st?.best || got[0]}${u}`, 'mejor marca'], [`${st?.level || '—'}`, 'nivel actual'], [`${(st?.tests || []).length}`, (st?.tests || []).length === 1 ? 'test' : 'tests']]
+    : [[`${total}${u}`, r.unit === 's' ? 'segundos' : 'repeticiones'], [`${got.length}`, 'series'], [`${Math.max(...got)}${u}`, 'mejor serie'], [h.kcal ? `~${h.kcal}` : `${h.level}`, h.kcal ? 'kcal netas' : 'nivel']];
+  tiles.forEach(([v, l], i) => {
+    const x = 70 + (i % 2) * 480, y = 660 + Math.floor(i / 2) * 230;
+    roundRect(ctx, x, y, 460, 205, 36); ctx.fillStyle = '#0c1317'; ctx.fill(); ctx.strokeStyle = '#1c2a31'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = i === 0 ? '#fbbf24' : '#ffffff'; ctx.font = `900 88px ${F}`; ctx.fillText(v, x + 40, y + 120);
+    ctx.fillStyle = '#8a9ba5'; ctx.font = `600 32px ${F}`; ctx.fillText(l, x + 40, y + 170);
+  });
+  // barra de progreso del reto
+  const lv = h.test ? (st?.level || r.min) : h.level, pct = clamp((lv - r.min) / (r.max - r.min), 0, 1);
+  roundRect(ctx, 70, 1150, W - 140, 22, 11); ctx.fillStyle = '#1c2a31'; ctx.fill();
+  roundRect(ctx, 70, 1150, Math.max(22, (W - 140) * pct), 22, 11); ctx.fillStyle = '#fbbf24'; ctx.fill();
+  ctx.fillStyle = '#8a9ba5'; ctx.font = `600 28px ${F}`; ctx.fillText(`Nivel ${lv} de ${r.max}`, 70, 1215);
+  ctx.fillStyle = '#00d2df'; ctx.font = `italic 700 40px ${F}`;
+  ctx.fillText(MOTTOS[(total + (h.at || 0)) % MOTTOS.length], 70, 1275);
+  ctx.fillStyle = '#4b5b63'; ctx.font = `700 28px ${F}`; ctx.textAlign = 'right'; ctx.fillText('#FITNESTEBAN', W - 70, H - 40); ctx.textAlign = 'left';
+  return new Promise(res => c.toBlob(res, 'image/png'));
+}
+function openRetoCard(id, at) {
+  const st = retoOf(id); if (!st) return;
+  const h = st.history.find(x => String(x.at) === String(at)) || (() => { const t = st.tests.find(x => String(x.at) === String(at)); return t && { date: t.date, at: t.at, got: [t.max], test: true }; })();
+  if (!h) return;
+  return showCard(() => buildRetoCard(id, h), `fitnesteban_reto_${id}_${h.date}.png`);
+}
+async function showCard(build, name) {
   openModal('<div class="text-center text-sm text-mute py-10"><span class="spinner"></span> Creando tarjeta…</div>');
   let blob;
-  try { blob = await buildShareCard(s); } catch (e) { closeModal(); return toast('No se pudo crear la tarjeta', 'error'); }
+  try { blob = await build(); } catch (e) { closeModal(); return toast('No se pudo crear la tarjeta', 'error'); }
   const url = URL.createObjectURL(blob);
-  const name = `fitnesteban_${s.date}.png`;
   openModal(`
     <h3 class="modal-title">📸 Tu tarjeta</h3>
-    <img src="${url}" alt="Tarjeta de la sesión" class="w-full rounded-2xl border border-line" />
+    <img src="${url}" alt="Tarjeta" class="w-full rounded-2xl border border-line" />
     <div class="grid grid-cols-2 gap-2">
       <button class="btn-ghost" data-mact="dl" type="button">⬇️ Guardar</button>
       <button class="btn-primary" data-mact="share" type="button">📤 Compartir</button>
@@ -2189,7 +2236,7 @@ function retoFinish(id) {
         <h3 class="modal-title mt-1">${completed && before >= r.max && Object.values(RETOS).some(x => x.needs === id) ? '¡Fase superada! Se desbloquea la siguiente' : st.level >= r.max && before < r.max ? '¡Nivel máximo alcanzado!' : esc(msg)}</h3>
         <p class="text-sm text-mute mt-1">${!completed && feel !== 'hard' ? 'Como no completaste todas las series, cuenta como «me ha costado». ' : ''}Próxima sesión (en 48 h): <strong class="text-white">${retoSets(id, st.level).join(' + ')}${r.unit === 's' ? ' s' : ''}</strong></p>
         <p class="text-[11px] text-mute mt-1">~${retoKcal(id, got, T)} kcal netas, sumadas al gym de hoy en Dieta.</p></div>
-        <button class="btn-primary w-full mt-3" data-close type="button">Hecho</button>`);
+        <div class="grid grid-cols-2 gap-2 mt-3"><button class="btn-ghost" data-mact="card" type="button">📸 Tarjeta</button><button class="btn-primary" data-close type="button">Hecho</button></div>`, { card: () => openRetoCard(id, st.history[st.history.length - 1].at) });
       render();
     }
   });
@@ -2208,8 +2255,11 @@ function retoTestModal(id) {
       const prevBest = st.best; st.best = Math.max(st.best, v);
       const fromTest = clamp(Math.floor(v * 0.7 / r.step) * r.step, r.min, r.max);
       const up = fromTest > st.level; if (up) { st.level = fromTest; st.draft = null; }
-      persist(); closeModal(); render();
-      toast(`${v > prevBest ? '🔥 Nueva mejor marca. ' : ''}${up ? `Subes a nivel ${st.level}` : `Sigues en nivel ${st.level}`}`);
+      persist(); render();
+      const at = st.tests[st.tests.length - 1].at;
+      openModal(`<div class="text-center"><div class="text-4xl">${v > prevBest ? '🔥' : '🎯'}</div><h3 class="modal-title mt-1">${v > prevBest ? 'Nueva mejor marca' : 'Test guardado'}: ${v}${r.unit === 's' ? ' s' : ''}</h3>
+        <p class="text-sm text-mute mt-1">${up ? `Subes a nivel ${st.level}` : `Sigues en nivel ${st.level}`}</p></div>
+        <div class="grid grid-cols-2 gap-2 mt-3"><button class="btn-ghost" data-mact="card" type="button">📸 Tarjeta</button><button class="btn-primary" data-close type="button">Hecho</button></div>`, { card: () => openRetoCard(id, at) });
     }
   });
 }
@@ -3241,10 +3291,10 @@ function renderProgress() {
     <div class="space-y-2 mt-3">
       ${hist.length ? hist.map(s => s.reto?.h.test ? `<div class="bg-ink rounded-xl border border-line px-3 py-2.5 text-sm">
         <div class="flex justify-between items-center"><span class="font-semibold truncate">🎯 Test de máximo <span class="text-mute font-normal text-xs">· ${esc(s.reto.r.name)}</span></span><span class="text-[11px] text-mute shrink-0 ml-2">${fmtDate(s.date)}</span></div>
-        <div class="text-[11px] text-mute mt-0.5"><span class="font-mono">${retoLine(s.reto)}</span> seguid${s.reto.r.unit === 's' ? 'os' : 'as'}</div>
+        <div class="text-[11px] text-mute mt-0.5 flex justify-between gap-2"><span><span class="font-mono">${retoLine(s.reto)}</span> seguid${s.reto.r.unit === 's' ? 'os' : 'as'}</span><button class="underline text-brand shrink-0" data-act="retoCard" data-reto="${s.reto.id}" data-at="${s.reto.h.at}" type="button">📸 Tarjeta</button></div>
       </div>` : s.reto ? `<div class="bg-ink rounded-xl border border-line px-3 py-2.5 text-sm">
         <div class="flex justify-between items-center"><span class="font-semibold truncate">🏆 Reto ${esc(s.reto.r.name)} <span class="text-mute font-normal text-xs">· nivel ${s.reto.h.level}</span></span><span class="text-[11px] text-mute shrink-0 ml-2">${fmtDate(s.date)}</span></div>
-        <div class="text-[11px] text-mute mt-0.5"><span class="font-mono">${retoLine(s.reto)}</span> ${(RETO_FEEL.find(f => f[0] === s.reto.h.feel) || ['', ''])[1]}${s.reto.h.kcal ? ` · <span class="${MAC.kcal.text}">~${s.reto.h.kcal} kcal</span>` : ''}</div>
+        <div class="text-[11px] text-mute mt-0.5"><span class="font-mono">${retoLine(s.reto)}</span> ${(RETO_FEEL.find(f => f[0] === s.reto.h.feel) || ['', ''])[1]}${s.reto.h.kcal ? ` · <span class="${MAC.kcal.text}">~${s.reto.h.kcal} kcal</span>` : ''}<button class="underline text-brand float-right" data-act="retoCard" data-reto="${s.reto.id}" data-at="${s.reto.h.at}" type="button">📸 Tarjeta</button></div>
       </div>` : `<details class="bg-ink rounded-xl border border-line">
         <summary class="px-3 py-2.5 flex justify-between items-center cursor-pointer text-sm"><span class="font-semibold truncate">${esc(s.dayTitle || s.dayId)}${s.durationMin ? ` <span class="text-mute font-normal text-xs">· ${s.durationMin} min</span>` : ''}</span><span class="flex items-center gap-2 text-[11px] text-mute shrink-0 ml-2">${fmtDate(s.date)}<span class="tri"></span></span></summary>
         <div class="px-3 pb-3 space-y-1 text-[11px]">
@@ -4528,6 +4578,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.53.0', ['📸 Tarjetas de retos para compartir: al terminar un reto o un test de máximo, y desde Progreso → Historial.', '🎯 Los tests de máximo aparecen en el historial y el calendario.']],
   ['4.52.3', ['🎯 Los tests de máximo de los retos salen en el historial y el calendario y cuentan más en el mapa muscular.'], 'quiet'],
   ['4.52.2', ['📚 Aviso de bloques nuevos en Inicio y Entreno; «Cómo usarlo» en la biblioteca.'], 'quiet'],
   ['4.51.0', ['Ajustes: todas las tarjetas se pliegan y muestran su estado.'], 'quiet'],
@@ -5538,6 +5589,7 @@ const actions = {
   copyCode: async b => { const c = await accessCodeOf(b.dataset.hash); if (c) navigator.clipboard.writeText(fmtCode(c)).then(() => toast('Código copiado')).catch(() => toast('Cópialo a mano: ' + fmtCode(c), 'warn')); },
   regenAccess: b => regenAccess(b.dataset.hash),
   planAccess: b => planModal(b.dataset.hash),
+  retoCard: b => openRetoCard(b.dataset.reto, b.dataset.at),
   libNewSee: () => { libMarkSeen(); render(); libraryModal(); },
   libNewHide: () => { libMarkSeen(); render(); },
   accRow: b => { ui.accOpenH = ui.accOpenH === b.dataset.hash ? null : b.dataset.hash; render(); accFilterDom(); },
