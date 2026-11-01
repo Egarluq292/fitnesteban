@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.52.0';
+const APP_VERSION = '4.52.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -192,7 +192,7 @@ const libAll = () => [
   ...remoteLib.map(x => ({ ...x, pub: true, base: LIB_BLOCKS.find(b => libKey(b.name) === libKey(x.name))?.lib, days: () => x.days })),
   ...LIB_BLOCKS.filter(b => !remoteLib.some(x => libKey(x.name) === libKey(b.name)))
 ];
-const libHave = L => state.plan.programs.some(p => p.lib === L.lib || p.pubId === L.lib || (L.base && p.lib === L.base));
+const libHave = L => state.plan.programs.some(p => p.lib === L.lib || p.pubId === L.lib || (L.base && p.lib === L.base) || (p.type === 'strength' && libKey(p.name) === libKey(L.name)));
 const libIsNew = L => L.pub && (!L.at || L.at >= addDays(todayISO(), -30));
 /* Publicar (solo administrador, con GitHub conectado): copia limpia del bloque, sin ids */
 function blockForLib(p) {
@@ -251,22 +251,22 @@ function publishExModal(exId) {
 function publishBlockModal(progId) {
   const p = state.plan.programs.find(x => x.id === progId); if (!p) return;
   const pubId = p.pubId || ('pub_' + uid('').slice(0, 10));
-  const existing = remoteLib.find(x => x.lib === pubId);
+  const existing = remoteLib.find(x => x.lib === pubId) || remoteLib.find(x => libKey(x.name) === libKey(p.name)); // mismo nombre = mismo bloque
   openModal(`<h3 class="modal-title">📤 Compartir «${esc(p.name)}» con todos</h3>
     <p class="text-xs text-mute">Aparecerá en «＋ Añadir bloque» de todos los usuarios. Se comparte una copia: si después cambias tu bloque, vuelve aquí para actualizarla.</p>
-    <label class="lbl">Descripción (una o dos frases)<textarea class="field mt-1" name="desc" rows="3" maxlength="200" placeholder="Ej: Circuito de 30 min con mancuernas para días con poco tiempo.">${esc(existing?.desc || '')}</textarea></label>
+    <label class="lbl">Descripción (una o dos frases)<textarea class="field mt-1" name="desc" rows="6" maxlength="700" placeholder="Ej: Circuito de 30 min con mancuernas para días con poco tiempo.">${esc(existing?.desc || '')}</textarea></label>
     <button class="btn-primary w-full" data-mact="go" type="button">${existing ? 'Actualizar' : 'Compartir'}</button>
     ${existing ? '<button class="btn-danger w-full" data-mact="remove" type="button">Dejar de compartir</button>' : ''}`, {
     go: root => {
       const desc = mval(root, 'desc').trim(); if (!desc) return toast('Escribe una descripción', 'warn');
       askPin({ title: '📤 Compartir bloque', text: 'Tu PIN abre la llave de GitHub para compartirlo.', onPin: async pin => {
-        const item = { lib: pubId, name: p.name, icon: p.icon || '', desc, author: 'Esteban', at: todayISO(), days: blockForLib(p) };
-        await ghEditLib(pin, list => [item, ...list.filter(x => x.lib !== pubId)], `Biblioteca: ${existing ? 'actualiza' : 'publica'} ${p.name}`);
-        p.pubId = pubId; p.lib = pubId; persist(); closeModal(); render(); toast(`«${p.name}» compartido con todos ✓`);
+        const item = { lib: existing?.lib || pubId, name: p.name, icon: p.icon || existing?.icon || '', desc, author: 'Esteban', at: existing?.at || todayISO(), days: blockForLib(p) };
+        await ghEditLib(pin, list => [item, ...list.filter(x => x.lib !== pubId && x.lib !== item.lib)], `Biblioteca: ${existing ? 'actualiza' : 'publica'} ${p.name}`);
+        p.pubId = item.lib; p.lib = item.lib; persist(); closeModal(); render(); toast(`«${p.name}» compartido con todos ✓`);
       } });
     },
     remove: () => askPin({ title: 'Dejar de compartir', text: `«${esc(p.name)}» dejará de aparecer para los demás. Quien ya lo añadió lo conserva.`, onPin: async pin => {
-      await ghEditLib(pin, list => list.filter(x => x.lib !== pubId), `Biblioteca: retira ${p.name}`);
+      await ghEditLib(pin, list => list.filter(x => x.lib !== pubId && x.lib !== existing?.lib), `Biblioteca: retira ${p.name}`);
       delete p.pubId; persist(); closeModal(); render(); toast('Ya no se comparte');
     } })
   });
@@ -4511,7 +4511,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
-  ['4.52.0', ['📚 Aviso de bloques nuevos en Inicio y Entreno; «Cómo usarlo» en la biblioteca.'], 'quiet'],
+  ['4.52.1', ['📚 Aviso de bloques nuevos en Inicio y Entreno; «Cómo usarlo» en la biblioteca.'], 'quiet'],
   ['4.51.0', ['Ajustes: todas las tarjetas se pliegan y muestran su estado.'], 'quiet'],
   ['4.50.0', ['🟢 Acceso: «X activos hoy» junto al título (también con Acceso cerrado), activos hoy en verde en la lista y versión de cada persona.', '🔒 Script v9: Google comprueba la caducidad de los planes (actualiza el script: Acceso → Reconfigurar → nueva versión).'], 'admin'],
   ['4.49.0', ['🔎 Acceso: buscador por nombre o correo, filtros (caducan pronto, caducados, sin usar, Free) y lista compacta con ficha desplegable.'], 'admin'],
