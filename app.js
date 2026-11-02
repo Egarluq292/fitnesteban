@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.58.0';
+const APP_VERSION = '4.58.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2784,16 +2784,15 @@ function renderDiet() {
   const ai = ui.aiResult;
   const addOpen = !!(ui.addOpen || ai || ui.editing || ui.aiBusy);
   const yday = mealsOf(addDays(date, -1));
-  /* Comidas pendientes de hoy: las vacías que van después de la última registrada (si te saltaste el desayuno, ya no cuenta).
-     Lo que te queda del día se reparte entre ellas para que cada comida vacía diga cuánto le toca. */
-  const filledIdx = PROT_TYPES.map((tp, i) => mealsOf(date).some(m => (m.type || 'Otro') === tp) ? i : -1);
-  const lastFilled = Math.max(...filledIdx);
-  const pending = isToday ? PROT_TYPES.filter((tp, i) => i > lastFilled) : [];
-  const shareK = pending.length ? Math.round(leftK / pending.length / 10) * 10 : 0;
-  const shareP = pending.length ? Math.round(leftP / pending.length) : 0;
-  const pendingTag = tp => !pending.includes(tp) ? '<span class="d2-gs text-mute">—</span>'
-    : shareK <= 0 ? '<span class="d2-gs text-rose-300">Sin margen</span>'
-    : `<span class="d2-gs"><span class="text-mute">Quedan </span><span class="${MAC.kcal.text}">${shareK}</span> kcal${shareP > 0 ? ` · <span class="${MAC.prot.text}">P ${shareP}</span>` : ''}</span>`;
+  /* Lo que te queda, repartido entre las comidas pendientes de hoy (ver mealPlanLeft). */
+  const plan = isToday ? mealPlanLeft(date, leftK, leftP) : {};
+  const pendingTag = tp => !plan[tp] ? '<span class="d2-gs text-mute">—</span>'
+    : plan[tp].k <= 0 ? '<span class="d2-gs text-rose-300">Sin margen</span>'
+    : `<span class="d2-gs"><span class="text-mute">Quedan </span><span class="${MAC.kcal.text}">${plan[tp].k}</span> kcal${plan[tp].p > 0 ? ` · <span class="${MAC.prot.text}">P ${plan[tp].p}</span>` : ''}</span>`;
+  const ydNote = (tp, yd) => {
+    const k = Math.round(yd.reduce((a, m) => a + m.kcal, 0)), over = plan[tp] ? k - Math.max(0, plan[tp].k) : 0;
+    return over > 50 ? `<span class="block text-[11px] text-amber-300 font-semibold mt-0.5">${k} kcal · te pasas ${Math.round(over / 10) * 10}</span>` : `<span class="block text-[11px] text-mute font-normal mt-0.5">${k} kcal</span>`;
+  };
   const grouped = MEAL_TYPES.map(tp => {
     const items = mealsOf(date).filter(m => (m.type || 'Otro') === tp);
     const sub = items.reduce((a, m) => a + m.kcal, 0), subP = items.reduce((a, m) => a + (m.prot || 0), 0);
@@ -2810,7 +2809,7 @@ function renderDiet() {
       ${items.map(m => `<button class="d2-meal ${ui.editing?.id === m.id ? 'd2-meal-on' : ''}" data-act="mealMenu" data-id="${esc(m.id)}" type="button">
         <span class="min-w-0 flex-1 text-left"><span class="block text-sm font-semibold truncate">${isFavMeal(normName(m.desc)) ? '<span class="text-amber-300">★ </span>' : ''}${esc(m.desc || tp)}</span>
         <span class="block text-[11px] font-mono mt-0.5">${macroLine(m)}</span></span><span class="text-mute text-lg leading-none">⋯</span></button>`).join('')}
-      ${!items.length && yd.length ? `<button class="d2-add-empty" data-act="repeatYday" data-type="${tp}" type="button">↻ Repetir el de ayer <span class="text-mute font-normal">· ${esc(yd.map(m => m.desc).join(' + ').slice(0, 38))}</span></button>` : ''}
+      ${!items.length && yd.length ? `<button class="d2-add-empty" data-act="repeatYday" data-type="${tp}" type="button">↻ Repetir el de ayer <span class="text-mute font-normal">· ${esc(yd.map(m => m.desc).join(' + ').slice(0, 38))}</span>${ydNote(tp, yd)}</button>` : ''}
     </div>`;
   }).join('');
 
@@ -2929,6 +2928,42 @@ function mealMenu(id) {
 /* ---------- Proteína por comida ---------- */
 const PROT_TYPES = ['Desayuno', 'Comida', 'Puente', 'Cena']; // «Otro» (picoteos) no cuenta
 const minProt = () => state.settings.minProtMeal || 25;
+/* 🍽️ Reparto de lo que queda del día entre las comidas pendientes.
+   - Pendientes: las comidas principales vacías que van después de la última registrada (las saltadas no cuentan).
+   - Peso de cada comida: la parte del día que suele llevarse en tus últimos 28 días (con 7+ días registrados); si no, unos pesos fijos.
+   - Una comida que registras menos de la mitad de los días (p. ej. el puente) no se lleva parte del reparto.
+   - Proteína: cada pendiente recibe al menos el mínimo por comida; si no llega para todas, se asegura primero la última (la cena).
+   Devuelve { tipo: { k, p } } solo para las pendientes. */
+const MEAL_W_DEF = { Desayuno: 0.25, Comida: 0.4, Puente: 0.1, Cena: 0.25 };
+function mealWeights(date) {
+  const share = {}, freq = {}; let days = 0;
+  for (const tp of PROT_TYPES) { share[tp] = 0; freq[tp] = 0; }
+  for (let i = 1; i <= 28; i++) {
+    const ms = mealsOf(addDays(date, -i)).filter(m => PROT_TYPES.includes(m.type));
+    const tot = ms.reduce((a, m) => a + (m.kcal || 0), 0); if (tot < 600) continue; // día sin registrar entero
+    days++;
+    for (const tp of PROT_TYPES) { const k = ms.filter(m => m.type === tp).reduce((a, m) => a + (m.kcal || 0), 0); if (k > 0) { freq[tp]++; share[tp] += k / tot; } }
+  }
+  if (days < 7) return { w: { ...MEAL_W_DEF }, usual: Object.fromEntries(PROT_TYPES.map(tp => [tp, true])) };
+  return { w: Object.fromEntries(PROT_TYPES.map(tp => [tp, share[tp] / days])), usual: Object.fromEntries(PROT_TYPES.map(tp => [tp, freq[tp] / days >= 0.5])) };
+}
+function mealPlanLeft(date, leftK, leftP) {
+  const has = tp => mealsOf(date).some(m => (m.type || 'Otro') === tp);
+  const last = Math.max(...PROT_TYPES.map((tp, i) => has(tp) ? i : -1));
+  const { w, usual } = mealWeights(date);
+  let pend = PROT_TYPES.filter((tp, i) => i > last && usual[tp] && w[tp] > 0);
+  if (!pend.length) pend = PROT_TYPES.filter((tp, i) => i > last).slice(-1); // nunca dejar el día sin ninguna pendiente si quedan huecos
+  if (!pend.length) return {};
+  const sumW = pend.reduce((a, tp) => a + (w[tp] || 0), 0) || 1;
+  const out = {};
+  for (const tp of pend) out[tp] = { k: leftK <= 0 ? 0 : Math.round(leftK * (w[tp] || 0) / sumW / 10) * 10, p: 0 };
+  if (leftP > 0) {
+    const mp = minProt(), n = pend.length;
+    if (leftP >= mp * n) for (const tp of pend) out[tp].p = Math.round(mp + (leftP - mp * n) * (w[tp] || 0) / sumW);
+    else { let rem = leftP; for (const tp of [...pend].reverse()) { const g = Math.min(mp, rem); out[tp].p = Math.round(g); rem -= g; } }
+  }
+  return out;
+}
 function protByType(date, excludeId = null) {
   const out = {};
   for (const m of mealsOf(date)) { if (m.id === excludeId || !PROT_TYPES.includes(m.type)) continue; out[m.type] = (out[m.type] || 0) + (m.prot || 0); }
@@ -4880,6 +4915,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.58.1', ['🍽️ «Quedan» ahora reparte según cómo sueles comer tú (últimos 28 días) y asegura tu mínimo de proteína en cada comida. El puente solo cuenta si lo sueles hacer.', '↻ «Repetir el de ayer» enseña sus kcal y te avisa si te pasarías.'], 'quiet'],
   ['4.58.0', ['🍽️ En Dieta, las comidas que aún te faltan hoy te dicen lo que te queda para ellas: kcal y proteína, repartiendo lo que te falta del día.']],
   ['4.57.1', ['Guía actualizada.'], 'quiet'],
   ['4.57.0', ['🥗 Dieta renovada: lo que has comido sale arriba, con un ＋ en cada comida para añadir. «Te quedan» te dice las kcal y la proteína que faltan, y una franja con los últimos 7 días te enseña cómo vas.', '🏷️ Escanea el código de barras de los envases y se añaden con los valores de su etiqueta. Si un producto no aparece, haz una foto de la tabla nutricional.', '↻ «Repetir el de ayer» en una comida vacía y menú al tocar cada comida: editar, favorita, duplicar o borrar.']],
@@ -5066,7 +5102,8 @@ const GUIDE = [
   ]],
   ['🥗 Dieta y raciones', [
     'En «Hoy has comido» toca el <b>＋</b> de la comida que toque (Desayuno, Comida, Puente, Cena) para abrir el panel de añadir. Si esa comida está vacía y ayer la registraste, «↻ Repetir el de ayer» la copia con un toque.',
-    'En las comidas que aún te faltan hoy, la cabecera te dice lo que <b>te queda</b> para ellas (kcal y proteína), repartiendo lo que te falta del día. Si ya no hay margen, pone «Sin margen».',
+    'En las comidas que aún te faltan hoy, la cabecera te dice lo que <b>te queda</b> para ellas (kcal y proteína). Lo que te falta del día se reparte según cómo sueles comer tú (últimos 28 días), cada comida con al menos tu mínimo de proteína. Una comida que casi nunca haces, como el puente, no se lleva parte. Si ya no hay margen, pone «Sin margen».',
+    'En «↻ Repetir el de ayer» ves sus kcal; si no cabe en lo que te queda, te avisa en ámbar de cuánto te pasarías.',
     'Foto (cámara o galería) y/o descripción. Lo que escribas <b>manda</b>: «200 g de pollo» fija esa cantidad. Con 🎤 puedes dictarla en vez de escribirla.',
     '🏷️ <b>Código</b>: escanea el código de barras de un envase y se añade con los valores de su etiqueta (Open Food Facts). Si no aparece, haz una foto de la tabla nutricional y la IA la lee; la próxima vez saldrá directo.',
     'Tras «Estimar macros con IA», ajusta cada alimento con <b>P / M / G</b> (pequeña, mediana, grande) u «Otra» con los gramos exactos. ✕ quita un alimento que la IA vio por error.',
