@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.57.0';
+const APP_VERSION = '4.57.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4870,6 +4870,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.57.1', ['Guía actualizada.'], 'quiet'],
   ['4.57.0', ['🥗 Dieta renovada: lo que has comido sale arriba, con un ＋ en cada comida para añadir. «Te quedan» te dice las kcal y la proteína que faltan, y una franja con los últimos 7 días te enseña cómo vas.', '🏷️ Escanea el código de barras de los envases y se añaden con los valores de su etiqueta. Si un producto no aparece, haz una foto de la tabla nutricional.', '↻ «Repetir el de ayer» en una comida vacía y menú al tocar cada comida: editar, favorita, duplicar o borrar.']],
   ['4.56.0', ['🎤 Ahora puedes dictar por voz también en Dieta (describir la comida y añadir ingredientes), al pedir cambios en una receta y en «Comenta al Coach» durante el entreno. Toca el micro, habla y el texto aparece solo.']],
   ['4.55.2', ['Ajustes internos.'], 'quiet'],
@@ -5034,6 +5035,7 @@ const GUIDE = [
     '⏱ Con un entreno en curso, una franja ámbar bajo la cabecera muestra el tiempo y la serie que toca, en cualquier pestaña. Tócala y te lleva a esa serie.',
     '↺ <b>Igual que la serie anterior</b>: desde la S2, copia peso y reps de la anterior con un toque.',
     '⇄ cambia de variante, ✎ edita series, rango, descanso, incremento y vídeo. «▶ Técnica» abre YouTube.',
+    '💬 <b>Comenta al Coach</b> (bajo las series): marca 😣 Molestia, 🥵 Muy duro, 😌 Fácil o ⏱ Poco tiempo y escribe o dicta con 🎤 lo que notes. Lo verá el Coach IA y te lo recordaré la próxima vez; con 😣 o 🥵 no te subo peso.',
     '⏱ Bajo el título del día ves la <b>duración estimada</b>; la <b>real</b> se mide desde tu primera serie ✓ hasta «Guardar sesión» (las pausas de más de 20 min no cuentan).',
     'Al final, «Guardar sesión»: resumen, volumen, récords personales y 📸 <b>Tarjeta</b> para compartir (también desde Progreso → Historial). 🗑️ «Abandonar» borra lo apuntado hoy, con confirmación.'
   ]],
@@ -5069,7 +5071,9 @@ const GUIDE = [
   ]],
   ['⚡ Coach IA', [
     'El botón ⚡ de arriba abre un chat con Gemini que <b>lee tus datos</b>: plan y progresión, últimas sesiones, comidas de hoy y lo que te queda, dieta de la semana, cardio, retos y medidas.',
-    '👨‍🍳 Cuando te propone un plato, pulsa «Receta» para verlo paso a paso con los mismos ingredientes y gramos. «¿Cambiar algo?» la adapta.',
+    '🎤 Puedes <b>dictarle</b> en vez de escribir: toca el micro, habla y el texto aparece solo.',
+    '👨‍🍳 Cuando te propone un plato, pulsa «Receta» para verlo paso a paso con los mismos ingredientes y gramos. «¿Cambiar algo?» la adapta (también por voz).',
+    '🏋️ Pídele un <b>bloque de entreno</b> con el material que tienes (o sin nada): pulsa «＋ Añadir a mis bloques» y aparece en Entreno. Se guarda en la conversación, como las recetas.',
     'Cada vez que lo abres empieza de cero; «Ver la última conversación» recupera la anterior. Usa tu clave de Gemini (Ajustes → IA). Nunca se envían la clave ni el PIN.'
   ]],
   ['📈 Progreso', [
