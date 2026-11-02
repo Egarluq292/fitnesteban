@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.54.1';
+const APP_VERSION = '4.54.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -703,7 +703,8 @@ let modalHandlers = {};
 function openModal(html, handlers = {}) {
   modalHandlers = handlers;
   const root = $('#modalRoot');
-  root.innerHTML = `<div class="modal-back" ${handlers.noClose ? '' : 'data-close'}></div><div class="modal-sheet ${handlers.sheetClass || ''}" role="dialog" aria-modal="true">${html}</div>`;
+  const swap = root.classList.contains('open'); // de una ventana a otra (p. ej. chat → receta): sin animación de entrada, para que no asome lo de detrás
+  root.innerHTML = `<div class="modal-back" ${handlers.noClose ? '' : 'data-close'}></div><div class="modal-sheet ${swap ? 'no-anim ' : ''}${handlers.sheetClass || ''}" role="dialog" aria-modal="true">${html}</div>`;
   root.classList.add('open');
   document.body.classList.add('overflow-hidden');
   const first = root.querySelector('input,textarea');
@@ -4597,6 +4598,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.54.2', ['Sin destello al pasar de una ventana a otra.'], 'quiet'],
   ['4.54.1', ['☀️ Nuevo modo claro: al abrir la app eliges el tema (Oscuro, Claro o como tu móvil). Puedes cambiarlo en Ajustes → Aplicación → Tema.']],
   ['4.53.3', ['📸 Más frases en las tarjetas, según tu sesión.'], 'quiet'],
   ['4.53.2', ['📖 Guía actualizada.'], 'quiet'],
