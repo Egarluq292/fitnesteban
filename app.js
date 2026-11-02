@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.53.1';
+const APP_VERSION = '4.53.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4579,6 +4579,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.53.2', ['📖 Guía actualizada.'], 'quiet'],
   ['4.53.1', ['🤸 Bloque CALISTENIA EN CASA en la biblioteca.'], 'quiet'],
   ['4.53.0', ['📸 Tarjetas de retos para compartir: al terminar un reto o un test de máximo, y desde Progreso → Historial.', '🎯 Los tests de máximo aparecen en el historial y el calendario.']],
   ['4.52.3', ['🎯 Los tests de máximo de los retos salen en el historial y el calendario y cuentan más en el mapa muscular.'], 'quiet'],
@@ -4707,10 +4708,16 @@ const CHANGELOG = [
 const cmpVer = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0); } return 0; };
 
 const GUIDE = [
+  ['🏠 Inicio', [
+    'Al abrir la app ves 4 tarjetas: <b>Entrenamientos</b> (lo que te toca hoy y si tienes músculos aún cargados), <b>Nutrición</b> (lo comido y lo que te queda), <b>Progreso</b> (tu peso y cuánto has bajado o subido) y <b>Asistente IA</b> (el Coach). Toca una para ir allí.',
+    'Vuelve a salir al abrir la app de cero o tras 1 hora sin usarla. Con un entreno a medias, la app se abre directamente en él. El <b>logo</b> de arriba siempre te trae a Inicio.',
+    '📚 Si hay bloques nuevos en la biblioteca, lo verás en la tarjeta de Entrenamientos.'
+  ]],
   ['🏋️ Entreno: bloques y días', [
     'Arriba eliges el <b>bloque</b> ({{BLOQUES}}) y debajo el <b>día</b>. El punto ● marca el día que te toca según tu rotación; ✓ el que ya hiciste hoy.',
     'Cada bloque lleva su propia rotación: {{ROTACION}}',
-    'El ＋ junto al ✎ de arriba añade un bloque (vacío o uno preparado por Esteban) y «＋ Día» crea días. «＋ Añadir ejercicio» deja crear uno o elegir entre los preparados. El ✎ del bloque o del día permite renombrar, reordenar (◀ ▶) o eliminar. El historial nunca se borra al eliminar.'
+    '＋ (junto al ✎ de arriba) abre la <b>biblioteca</b>: bloques preparados por Esteban (Full Body, PPT, Brazos, Pierna, Calistenia en casa, Kettlebell…), cada uno con su descripción y «Cómo usarlo». También puedes crear uno vacío.',
+    'Para cambiar ejercicios, usa «＋ Añadir ejercicio» (crear uno o elegir entre los preparados) y el ✎ de cada ejercicio. «＋ Día» añade días. El ✎ del bloque o del día permite renombrar, reordenar (◀ ▶) o eliminar. El historial nunca se borra al eliminar.'
   ]],
   ['🧭 Cómo decide el coach el peso', [
     '<b>Doble progresión</b>: cada ejercicio tiene un rango de reps (p. ej. 8–10). Mantienes el peso y sumas reps; cuando llegas al máximo en <b>todas</b> las series, te dice que subas el incremento (p. ej. +2 kg).',
@@ -4722,60 +4729,61 @@ const GUIDE = [
   ['📝 Registrar una sesión', [
     'Abre «Registrar series» en cada ejercicio. El peso sugerido ya viene puesto; apunta las reps y pulsa ✓: arranca el descanso de ese ejercicio (vibra y pita al acabar).',
     'Todo se guarda solo mientras escribes: puedes cerrar la app a mitad de sesión.',
-    '🤸 <b>Peso corporal</b>: activa «Con peso corporal» en el ✎ del ejercicio (dominadas, fondos…). El campo de peso pasa a ser el <b>lastre</b>: vacío = solo tu peso (PC). El 1RM y los récords suman tu último peso registrado.',
-    '⏱ Con un entreno en curso, una franja ámbar fija bajo la cabecera muestra el tiempo y la serie que toca, en cualquier pestaña. Tócala y te lleva directa a esa serie.',
-    '🗑️ «Abandonar» (junto a «Guardar sesión») borra lo apuntado en el entreno de hoy, siempre con confirmación.',
-    '📸 Al guardar la sesión, «Tarjeta» crea una imagen para compartir en redes (también desde Progreso → Historial).',
-    '↺ <b>Igual que la serie anterior</b>: bajo cada serie (desde la S2) puedes copiar el peso y las reps de la anterior con un toque; después pulsa ✓.',
+    '🤸 <b>Peso corporal</b>: en dominadas, flexiones, fondos… el campo de peso es el <b>lastre</b>: vacío = solo tu peso (PC). Actívalo en el ✎ del ejercicio con «Con peso corporal».',
+    '⏱ <b>Ejercicios por tiempo</b> (plancha, hollow hold…): ▶ cronometra la serie y apunta los segundos solos.',
+    '⏱ Con un entreno en curso, una franja ámbar bajo la cabecera muestra el tiempo y la serie que toca, en cualquier pestaña. Tócala y te lleva a esa serie.',
+    '↺ <b>Igual que la serie anterior</b>: desde la S2, copia peso y reps de la anterior con un toque.',
     '⇄ cambia de variante, ✎ edita series, rango, descanso, incremento y vídeo. «▶ Técnica» abre YouTube.',
-    '⏱ Bajo el título del día ves la <b>duración estimada</b>. La <b>real</b> se mide sola desde tu primera serie ✓ hasta «Guardar sesión»; si paras más de 20 min, esa pausa no cuenta. Tras 2 sesiones verás tu media real.',
-    'Al final, «Guardar sesión»: verás resumen, volumen y récords personales (1RM estimado).'
+    '⏱ Bajo el título del día ves la <b>duración estimada</b>; la <b>real</b> se mide desde tu primera serie ✓ hasta «Guardar sesión» (las pausas de más de 20 min no cuentan).',
+    'Al final, «Guardar sesión»: resumen, volumen, récords personales y 📸 <b>Tarjeta</b> para compartir (también desde Progreso → Historial). 🗑️ «Abandonar» borra lo apuntado hoy, con confirmación.'
   ]],
   ['🏆 Retos', [
-    'En Entreno → bloque <b>🏆 RETOS</b>: dominadas, flexiones, fondos, sentadillas, burpees, plancha y rueda abdominal. Al empezar dices cuántas haces seguidas y la app te coloca en un nivel (≈70 % de tu máximo).',
-    'El nivel es la 1.ª serie; el resto se calcula sola (en niveles altos: 100 · 54 · 50 · 50 · 46 %). Marca cada serie con ✓ (arranca el descanso); en la plancha, ▶ cronometra la serie.',
+    'En Entreno → <b>🏆 RETOS</b>: dominadas, flexiones, fondos, sentadillas, burpees, plancha y rueda abdominal. Al empezar haces un test (todas las que puedas seguidas) y la app te coloca en un nivel (≈70 % de tu máximo).',
+    'El nivel es la 1.ª serie; el resto se calcula solo. Marca cada serie con ✓ (arranca el descanso); en la plancha, ▶ cronometra.',
     'Al terminar, elige 😣 Me ha costado (repites; si pasa dos veces, bajas un nivel), 🙂 Bien (+1 nivel) o 😎 Voy sobrado (+2). Si no completas las series, cuenta como «me ha costado».',
-    '🛞 <b>Rueda abdominal</b>: 3 series (100 · 70 · 60 %) con bajada lenta. Fase 1 de rodillas hasta 30; al completar el nivel 30 se desbloquea la fase 2, de pie (1–15).',
-    'Deja 48 h entre sesiones del mismo reto. Cada 6 sesiones te propone un test de máximo. Las kcal se suman al gym del día en Dieta.'
+    '🛞 <b>Rueda abdominal</b>: fase 1 de rodillas hasta el nivel 30; al completarla se desbloquea la fase 2, de pie.',
+    'Deja 48 h entre sesiones del mismo reto. Cada 6 sesiones te propone un 🎯 test de máximo. Los tests salen en el historial y el calendario y cuentan en el mapa muscular.',
+    '📸 Al terminar un reto o un test, «Tarjeta» crea una imagen para compartir. Las kcal se suman al gym del día en Dieta.'
   ]],
   ['🔥 Cardio', [
-    'Elige bicicleta o caminata, minutos e intensidad. «Calcular con IA» estima calorías <b>netas</b> (lo que gastas por encima del reposo) usando tu último peso.',
-    'La app compara con un cálculo estándar (MET) y te avisa si la IA se desvía mucho. Puedes corregir el número antes de registrar.',
-    'El finisher de bici de los hábitos <b>no suma calorías</b>: si lo haces, regístralo aquí.'
+    'En Entreno → <b>🔥 CARDIO</b>: elige la actividad, los minutos y la intensidad. «Calcular» estima las calorías <b>netas</b> (lo que gastas por encima del reposo) con tu último peso; con clave de IA, más afinado.',
+    '✎ en «Registrar cardio» → <b>Mis actividades</b>: quita las que no haces, añade otras (correr, natación, pádel, remo…) o crea la tuya.',
+    '⌚ <b>Datos del reloj</b> (opcional): distancia, desnivel, FC media y kcal del reloj. La app calcula la velocidad media (o el ritmo por 100 m en natación) y, con la FC, la intensidad. Puedes usar las kcal del reloj con «Usar».',
+    'El cardio aparece en Dieta, pero <b>no amplía</b> lo que te queda por comer, salvo que lo actives en Ajustes → Objetivos.'
   ]],
   ['🥗 Dieta y raciones', [
     'Foto (cámara o galería) y/o descripción. Lo que escribas <b>manda</b>: «200 g de pollo» fija esa cantidad.',
     'Tras «Estimar macros con IA», ajusta cada alimento con <b>P / M / G</b> (pequeña, mediana, grande) u «Otra» con los gramos exactos. ✕ quita un alimento que la IA vio por error.',
-    '🥩 <b>Proteína por comida</b>: en recomposición importa repartirla. Cada toma principal (desayuno, comida, puente, cena) debería llegar al mínimo (25 g por defecto). «Otro» (picoteos) no cuenta. Al registrar verás si la toma llega, sumando lo ya registrado en ese tipo.',
-    'Consumidas · Cardio · Neto: el cardio se muestra pero <b>no amplía</b> lo que te queda por comer, salvo que lo actives en Ajustes.',
-    '🏋️ <b>Gym</b>: la app estima las kcal netas de cada sesión con la duración real, las series, los kilos y tu peso (MET 3,5 a 6). Salen en Dieta junto al cardio (Comidas · Cardio · Gym · Neto) y puedes corregirlas en Progreso → Historial → ajustar.',
-    '🎯 La app se abre en la <b>dieta de hoy</b>: anillo exterior = kcal (ámbar); dentro, proteína (cian), carbohidratos (verde) y grasas (rosa). Si te pasas, el exceso da una segunda vuelta y sale una etiqueta «+…». Con un entreno a medias (últimas 3 h) se abre en Entreno. El <b>logo</b> siempre te trae aquí.',
-    '👆 Deslizar el dedo: en Dieta pasa al día siguiente o anterior (como las flechas ‹ ›); en Entreno, al bloque siguiente o anterior (con un entreno en curso no hace nada, para no sacarte de la serie); en Progreso, sobre el mapa muscular, cambia entre Ahora, 7 días y 30 días. Las pestañas se cambian con la barra de abajo.',
-    '📅 Toca la <b>fecha</b> de Dieta para abrir el calendario del mes: punto verde/ámbar/rojo según la dieta, 🏋️ si hubo pesas y 🔥 si hubo cardio. Al tocar un día ves el detalle y puedes ir a sus comidas.',
-    '✎ en una comida la edita y ☆ la guarda en favoritas; ⭐ «Favoritas y habituales» te enseña primero tus favoritas y luego tus platos más frecuentes de ese tipo, y el buscador encuentra cualquiera del historial.'
+    '🥩 <b>Proteína por comida</b>: cada toma principal (desayuno, comida, puente, cena) debería llegar al mínimo (25 g por defecto). «Otro» (picoteos) no cuenta.',
+    'Anillo exterior = kcal (ámbar); dentro, proteína (cian), carbohidratos (verde) y grasas (rosa). Si te pasas, el exceso da una segunda vuelta y sale «+…».',
+    'Comidas · Cardio · Gym · Neto: la app estima las kcal netas de cada sesión de gym con la duración, las series, los kilos y tu peso.',
+    '✎ en una comida la edita y ☆ la guarda en favoritas. ⭐ «Favoritas y habituales» te enseña primero tus favoritas y luego tus platos más frecuentes; el buscador encuentra cualquiera del historial.',
+    '📅 Toca la <b>fecha</b> para abrir el calendario del mes: punto verde/ámbar/rojo según la dieta, 🏋️ pesas, 🏆 retos y 🔥 cardio. Desliza el dedo a los lados para cambiar de día.'
+  ]],
+  ['✅ Hábitos', [
+    'En Ajustes → Hábitos creas los tuyos: suplementos, agua, cero alcohol… Elige si son <b>diarios</b> (salen en Dieta) o <b>de entreno</b> (salen al guardar la sesión) y qué días de la semana.',
+    'Ponles un objetivo (p. ej. 8 vasos de agua) y suma con un toque. Puedes pasarte del objetivo.'
   ]],
   ['⚡ Coach IA', [
-    'El botón ⚡ de arriba (junto al «?») abre un chat con Gemini que <b>lee tus datos</b>: plan y recomendación del coach en cada ejercicio, últimas 8 sesiones, comidas de hoy y lo que te queda, dieta de la semana, cardio y medidas.',
-    'Cada vez que lo abres empieza de cero (respuestas con tus datos de ese momento). «Ver la última conversación» recupera la anterior.',
-    'Usa tu misma clave y el mismo límite gratuito que la estimación de comidas. Nunca se envían la clave ni el PIN.'
+    'El botón ⚡ de arriba abre un chat con Gemini que <b>lee tus datos</b>: plan y progresión, últimas sesiones, comidas de hoy y lo que te queda, dieta de la semana, cardio, retos y medidas.',
+    '👨‍🍳 Cuando te propone un plato, pulsa «Receta» para verlo paso a paso con los mismos ingredientes y gramos. «¿Cambiar algo?» la adapta.',
+    'Cada vez que lo abres empieza de cero; «Ver la última conversación» recupera la anterior. Usa tu clave de Gemini (Ajustes → IA). Nunca se envían la clave ni el PIN.'
   ]],
   ['📈 Progreso', [
-    'Peso y cintura en ayunas, a la misma hora. La línea del peso es la <b>media de 7 días</b>: el peso diario oscila 1–2 kg por agua y sal. Con 8+ días de pesajes verás la tendencia semanal y si va bien para recomposición (bajar 0,25–1 % por semana o mantener peso bajando cintura).',
-    '🧠 <b>Resumen semanal</b>: cada lunes (o cuando quieras) analiza 7 días de fuerza, dieta, cardio y peso, y te da 3 acciones para la semana siguiente.',
-    '🏆 <b>Récords personales</b>: mejor peso y mejor 1RM estimado de cada ejercicio, con fecha.',
-    '«Fuerza por ejercicio» dibuja tu 1RM estimado (o reps totales en ejercicios sin peso).',
-    'En el historial puedes borrar una sesión mal guardada: el coach dejará de tenerla en cuenta.'
+    'Peso y cintura en ayunas, a la misma hora. La línea del peso es la <b>media de 7 días</b>: el peso diario oscila 1–2 kg por agua y sal.',
+    '🔥 <b>Mapa muscular</b>: «Ahora» muestra qué músculos siguen cargados y cuándo estarán listos; «7 días» y «30 días», cuánto has trabajado cada uno. Desliza sobre el mapa para cambiar.',
+    '🧠 <b>Resumen semanal</b>: analiza 7 días de fuerza, dieta, cardio y peso y te da 3 acciones para la semana siguiente.',
+    '🏆 <b>Récords</b> y «Fuerza por ejercicio» (1RM estimado). En el <b>historial</b> ves sesiones, retos y tests; puedes borrar una sesión mal guardada.'
   ]],
   ['🔒 Datos, copias y PIN', [
-    'Tus datos viven <b>solo en este móvil</b>. Conecta <b>☁️ Google Drive</b> (Ajustes → Copias): cada día, al abrir la app, y al guardar cada sesión o reto, se guarda una copia en la carpeta «FITNESTEBAN – copias» (si Google pide confirmar, verás un aviso arriba para hacerlo con un toque). Desde ahí también puedes restaurar. La app te avisa si pasan más de 7 días.',
-    'La copia no incluye la clave de Gemini ni el PIN. Al importar se conservan los actuales.',
-    'Con PIN activo, «Borrar todo» e «Importar» lo piden. Antes de borrar se descarga una copia automáticamente.',
+    'Tus datos viven <b>solo en este móvil</b>. Conecta <b>☁️ Google Drive</b> (Ajustes → Copias de seguridad): cada día, y al guardar cada sesión o reto, se guarda una copia en tu Drive. Desde ahí también puedes restaurar. La app te avisa si pasan más de 7 días.',
+    'La copia no incluye la clave de Gemini ni el PIN. Con PIN activo, «Borrar todo» e «Importar» lo piden; antes de borrar se descarga una copia.',
     'Ábrela siempre desde el icono instalado, no desde Chrome.'
   ]],
-  ['🔄 Actualizar la app', [
-    'Cuando subes una versión nueva a GitHub aparece «Hay una versión nueva» → Actualizar. Comprueba el número en Ajustes → Aplicación.',
-    'Tras actualizar verás una vez las novedades. Puedes volver a verlas desde esta guía.',
+  ['ℹ️ La app', [
+    '🔄 Se <b>actualiza sola</b> al abrirla o volver a ella. Después verás una vez las novedades; puedes volver a verlas desde esta guía. Tu versión, en Ajustes → Aplicación.',
     '✈️ El avión de papel de arriba abre Telegram para escribir a Esteban: dudas, fallos o ideas.',
+    '📤 «Compartir la app» (Ajustes y abajo en esta guía) envía el canal de Telegram de FITNESTEBAN a quien quieras, para conocerla y pedir su código.',
     '🔒 Qué datos usa la app y dónde se guardan: <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.'
   ]]
 ];
