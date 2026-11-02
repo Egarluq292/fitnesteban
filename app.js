@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.55.2';
+const APP_VERSION = '4.56.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1008,7 +1008,7 @@ function noteBoxHTML(e, d) {
   return `<div class="mt-2 rounded-xl border border-brand/40 bg-ink p-3 space-y-2">
     <button class="w-full flex items-center justify-between text-[13px]" data-act="noteOpen" data-ex="${esc(e.id)}" type="button"><span class="font-semibold text-brand">💬 Comenta al Coach</span><span class="text-mute text-[11px]">▲</span></button>
     <div class="flex flex-wrap gap-1.5">${Object.entries(NOTE_TAGS).map(([k, l]) => `<button class="rounded-full border px-2.5 py-1 text-[12px] font-semibold ${nt.tags.includes(k) ? 'border-amber-300/70 bg-amber-300/10 text-amber-200' : 'border-line bg-panel text-slate-300'}" data-act="noteTag" data-ex="${esc(e.id)}" data-t="${k}" type="button">${l}</button>`).join('')}</div>
-    <input class="field text-[13px]" data-note-ex="${esc(e.id)}" maxlength="140" value="${esc(nt.text)}" placeholder="Ej: el hombro izquierdo tira en la bajada" />
+    <div class="flex gap-2"><input class="field flex-1 min-w-0 text-[13px]" data-note-ex="${esc(e.id)}" maxlength="140" value="${esc(nt.text)}" placeholder="Ej: el hombro izquierdo tira en la bajada" />${micBtn(`[data-note-ex="${e.id}"]`, 'btn-ghost px-3 py-2 shrink-0')}</div>
     <p class="text-[10px] text-mute">Lo verá el Coach IA y te lo recordaré la próxima vez. Con 😣 o 🥵 no te subo peso.</p></div>`;
 }
 function skippedToday(d) { return d.skip && d.skip.date === todayISO() ? d.skip.ids : []; }
@@ -2827,7 +2827,7 @@ function renderDiet() {
   <section class="card p-4 mt-3 space-y-3 ${ui.editing ? 'border-brand/50' : ''}" id="mealCard">
     ${ui.editing ? `<div class="flex items-center justify-between"><h3 class="section-title">✏️ Editar comida</h3><span class="text-[11px] text-mute">${esc(fmtDate(ui.editing.date))}</span></div>` : '<h3 class="section-title">➕ Añadir comida</h3>'}
     <div class="flex gap-1" data-noswipe>${typeChips}</div>
-    ${ui.editing ? '' : `<textarea class="field" id="mealDesc" rows="2" placeholder="${ui.img ? 'Opcional: añade lo que sepas para afinar (ej: 150 g de arroz, aceite de oliva)' : 'Ej: 200 g de pechuga a la plancha y 150 g de arroz'}">${esc(ui.mealDesc)}</textarea>
+    ${ui.editing ? '' : `<div class="relative">${micBtn('#mealDesc', 'mic-in')}<textarea class="field" ${SpeechRec ? 'style="padding-right:52px" ' : ''}id="mealDesc" rows="2" placeholder="${ui.img ? 'Opcional: añade lo que sepas para afinar (ej: 150 g de arroz, aceite de oliva)' : 'Ej: 200 g de pechuga a la plancha y 150 g de arroz'}">${esc(ui.mealDesc)}</textarea></div>
     ${ui.img ? `<div class="relative rounded-xl overflow-hidden border border-line">
         <img src="${ui.img}" alt="Foto del plato" class="w-full max-h-56 object-cover" />
         <button class="absolute top-2 right-2 iconbtn bg-ink/80" data-act="clearImg" type="button" aria-label="Quitar foto">✕</button>
@@ -2902,6 +2902,7 @@ function syncResultFields() {
 function addIngHTML() {
   return `<div class="flex gap-2 items-center">
       <input class="field flex-1 text-sm py-2.5" id="addIng" autocomplete="off" value="${esc(ui.addIng || '')}" placeholder="＋ Ingrediente (ej. 30 g de queso)" ${ui.addIngBusy ? 'disabled' : ''} />
+      ${ui.addIngBusy ? '' : micBtn('#addIng')}
       <button class="btn-ghost px-3 py-2.5 shrink-0" data-act="addIng" type="button" ${ui.addIngBusy ? 'disabled' : ''}>${ui.addIngBusy ? '<span class="spinner"></span>' : 'Añadir'}</button>
     </div>
     <button class="text-[11px] text-mute underline" data-act="addIngManual" type="button">o añadir un ingrediente a mano</button>`;
@@ -4526,19 +4527,37 @@ async function chatSend(text) {
 document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 /* 🎤 Dictado (Chrome/Android; en otros, el micro del teclado) */
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-let micRec = null;
-function chatMic() {
-  const inp = $('#chatInput'), btn = $('#chatMic'); if (!SpeechRec || !inp) return;
-  if (micRec) { micRec.stop(); return; }
-  const r = new SpeechRec(); micRec = r;
+let micRec = null, micSel = '';
+/* Dicta en el campo que indica el selector. Se busca el campo en cada resultado por si la pantalla se repinta. */
+function micDictate(sel, btn) {
+  if (!SpeechRec) return;
+  if (micRec) { const same = micSel === sel; micRec.stop(); if (same) return; }
+  const inp0 = document.querySelector(sel); if (!inp0 || inp0.disabled) return;
+  const r = new SpeechRec(); micRec = r; micSel = sel;
   r.lang = 'es-ES'; r.interimResults = true; r.continuous = false;
-  const base = inp.value ? inp.value.trim() + ' ' : '';
-  r.onresult = e => { let t = ''; for (const res of e.results) t += res[0].transcript; inp.value = base + t; inp.dispatchEvent(new Event('input')); };
+  const base = inp0.value ? inp0.value.trim() + ' ' : '';
+  const mark = on => document.querySelectorAll('[data-mic]').forEach(b => { if (b.dataset.mic === sel) b.classList.toggle('mic-on', on); });
+  r.onresult = e => {
+    const inp = document.querySelector(sel); if (!inp) return;
+    let t = ''; for (const res of e.results) t += res[0].transcript;
+    const max = +inp.getAttribute('maxlength') || 0;
+    inp.value = max ? (base + t).slice(0, max) : base + t;
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+  };
   r.onerror = e => { if (e.error === 'not-allowed') toast('Permite el micrófono para dictar', 'warn'); else if (e.error !== 'aborted' && e.error !== 'no-speech') toast('No se pudo dictar', 'warn'); };
-  r.onend = () => { micRec = null; if (btn) btn.classList.remove('mic-on'); };
-  btn?.classList.add('mic-on');
-  try { r.start(); } catch { micRec = null; btn?.classList.remove('mic-on'); }
+  r.onend = () => { if (micRec === r) { micRec = null; micSel = ''; } mark(false); };
+  mark(true); if (btn) btn.classList.add('mic-on');
+  try { r.start(); } catch { micRec = null; micSel = ''; mark(false); }
 }
+function chatMic() { micDictate('#chatInput', $('#chatMic')); }
+/* Botón 🎤 para cualquier campo (no aparece si el navegador no sabe dictar) */
+function micBtn(sel, cls = 'btn-ghost px-3 py-2.5 shrink-0') {
+  return SpeechRec ? `<button class="${cls}" data-mic="${esc(sel)}" type="button" aria-label="Dictar por voz">🎤</button>` : '';
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-mic]'); if (!b) return;
+  e.preventDefault(); e.stopPropagation(); micDictate(b.dataset.mic, b);
+}, true);
 function openChat(keep) {
   if (!profileOf()) return profileModal(openChat);
   if (!(keep === true && ui.chat)) { ui.chat = { msgs: [], busy: false }; ui.histOpen = false; ui.histAll = false; }
@@ -4620,7 +4639,7 @@ function recipeSheet(mi, oi) {
       ${rc.tip ? `<div class="rounded-xl px-3 py-2 text-[12px] text-amber-200" style="background:rgba(252,211,77,.08);border:1px solid rgba(252,211,77,.3)">💡 ${esc(rc.tip)}</div>` : ''}
       ${rc.wish ? `<p class="text-[11px] text-mute text-center">Rehecha con: «${esc(rc.wish)}»</p>` : ''}
       <div class="card p-3 space-y-2"><div class="text-[11px] font-bold uppercase tracking-wider text-brand">🔄 ¿Cambiar algo?</div>
-        <div class="flex gap-2"><input class="field flex-1 min-w-0 !py-2 text-sm" id="recipeWish" placeholder="Ej.: a la plancha, sin horno, en airfryer…" autocomplete="off" />
+        <div class="flex gap-2"><input class="field flex-1 min-w-0 !py-2 text-sm" id="recipeWish" placeholder="Ej.: a la plancha, sin horno, en airfryer…" autocomplete="off" />${micBtn('#recipeWish', 'btn-ghost shrink-0 !px-3 !py-2')}
         <button class="btn-primary shrink-0 !px-3 !py-2 text-sm" data-mact="redo" type="button">Rehacer</button></div>
         <p class="text-[10px] text-mute">Cambia la forma de cocinarlo; los ingredientes y gramos se mantienen.</p></div>`;
   };
@@ -4656,6 +4675,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.56.0', ['🎤 Ahora puedes dictar por voz también en Dieta (describir la comida y añadir ingredientes), al pedir cambios en una receta y en «Comenta al Coach» durante el entreno. Toca el micro, habla y el texto aparece solo.']],
   ['4.55.2', ['Ajustes internos.'], 'quiet'],
   ['4.55.0', ['🏋️ El Coach IA crea bloques de entreno a tu medida: dile qué material tienes (o que ninguno) y pulsa «＋ Añadir a mis bloques». Se guardan en la conversación, como las recetas.', '🎤 Puedes dictarle al Coach con el micro.', '🔍 La pantalla ya no hace zoom al pellizcar ni con doble toque.']],
   ['4.54.4', ['📶 Acceso: ver quién usa la app también en otros dispositivos (portátil, tablet) pegando la clave de lectura.'], 'admin'],
@@ -4836,7 +4856,7 @@ const GUIDE = [
     'El cardio aparece en Dieta, pero <b>no amplía</b> lo que te queda por comer, salvo que lo actives en Ajustes → Objetivos.'
   ]],
   ['🥗 Dieta y raciones', [
-    'Foto (cámara o galería) y/o descripción. Lo que escribas <b>manda</b>: «200 g de pollo» fija esa cantidad.',
+    'Foto (cámara o galería) y/o descripción. Lo que escribas <b>manda</b>: «200 g de pollo» fija esa cantidad. Con 🎤 puedes dictarla en vez de escribirla.',
     'Tras «Estimar macros con IA», ajusta cada alimento con <b>P / M / G</b> (pequeña, mediana, grande) u «Otra» con los gramos exactos. ✕ quita un alimento que la IA vio por error.',
     '🥩 <b>Proteína por comida</b>: cada toma principal (desayuno, comida, puente, cena) debería llegar al mínimo (25 g por defecto). «Otro» (picoteos) no cuenta.',
     'Anillo exterior = kcal (ámbar); dentro, proteína (cian), carbohidratos (verde) y grasas (rosa). Si te pasas, el exceso da una segunda vuelta y sale «+…».',
