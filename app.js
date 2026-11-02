@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.54.4';
+const APP_VERSION = '4.55.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4327,7 +4327,7 @@ function profileSectionHTML() {
 /* =========================================================================
    COACH IA (chat con tus datos)
    ========================================================================= */
-const CHAT_CHIPS = ['¿Cómo voy esta semana?', '¿Qué ceno hoy para cuadrar macros?', '¿Por qué me estanco y qué cambio?', '¿Qué entreno hoy?'];
+const CHAT_CHIPS = ['¿Cómo voy esta semana?', '¿Qué ceno hoy para cuadrar macros?', '¿Por qué me estanco y qué cambio?', '¿Qué entreno hoy?', 'Créame un bloque de entreno con lo que tengo'];
 function chatContext() {
   const T = todayISO(), st = state.settings;
   const setTxt = (exId, x, tm) => (isBwEx(exId) ? (x.w ? `PC+${x.w}` : 'PC') : `${x.w}kg`) + (tm ? ` ${x.r}s` : `x${x.r}`);
@@ -4374,6 +4374,11 @@ Reglas:
 {"opciones":[{"titulo":"nombre corto","tipo":"Desayuno|Comida|Puente|Cena|Otro","items":[{"nombre":"alimento","gramos":número,"por100":{"kcal":n,"p":n,"c":n,"g":n}}]}]}
 \`\`\`
   Una opción por cada alternativa que propongas. Valores por 100 g del alimento tal como se come. Si no propones comida concreta, no añadas el bloque.
+- Si te pide CREAR un bloque o rutina de entreno: si no sabe qué material tiene, cuántos días por semana entrena o cuánto tiempo, pregúntaselo antes (en una sola pregunta corta). Usa SOLO el material que diga que tiene (si dice que nada, solo peso corporal y objetos de casa). Ten en cuenta su nivel, sus sesiones, retos y molestias. Resume el bloque en el texto (días y ejercicios) y añade al final un bloque oculto EXACTAMENTE con este formato (no lo menciones):
+\`\`\`bloque
+{"nombre":"NOMBRE CORTO EN MAYÚSCULAS (máx. 16)","icono":"un emoji","dias":[{"label":"DÍA A (máx. 8)","titulo":"título del día","ejercicios":[{"grupo":"Pecho|Espalda|Pierna|Hombro|Brazos|Core|Cardio…","nombre":"nombre del ejercicio en español","series":3,"reps_min":8,"reps_max":12,"descanso_s":90,"peso_corporal":true,"por_tiempo":false,"nota":"consejo técnico de máx. 10 palabras","alternativas":[{"nombre":"alternativa con el mismo material","nota":"…"}]}]}]}
+\`\`\`
+  2–6 ejercicios por día, 1–5 días. Con "por_tiempo":true, reps_min y reps_max son segundos. Da 2 alternativas por ejercicio. Si solo hablas de entreno sin crear un bloque nuevo, no añadas el bloque.
 DATOS (JSON, null = sin dato):
 ${JSON.stringify(chatContext())}`;
 }
@@ -4394,7 +4399,38 @@ function chatMeals(reply) {
     } catch { /* bloque ilegible: se ignora */ }
     return '';
   }).trim();
-  return { text, meals: meals.slice(0, 4) };
+  let blocks = [];
+  const text2 = text.replace(/```bloque\s*([\s\S]*?)```/gi, (_, js) => {
+    try { const b = chatBlock(parseJSONLoose(js)); if (b) blocks.push(b); } catch { /* bloque ilegible: se ignora */ }
+    return '';
+  }).trim();
+  return { text: text2, meals: meals.slice(0, 4), blocks: blocks.slice(0, 1) };
+}
+/* Bloque de entreno propuesto por el coach → mismo formato que los bloques de la biblioteca */
+function chatBlock(d) {
+  const days = (Array.isArray(d?.dias) ? d.dias : []).slice(0, 6).map((x, i) => ({
+    label: String(x.label || `DÍA ${String.fromCharCode(65 + i)}`).toUpperCase().slice(0, 10), rotation: true,
+    title: String(x.titulo || '').slice(0, 60), subtitle: '',
+    exercises: (Array.isArray(x.ejercicios) ? x.ejercicios : []).slice(0, 10).map((e, k) => {
+      const timed = !!e.por_tiempo, bw = e.peso_corporal !== false;
+      const mn = clamp(parseInt(e.reps_min, 10) || (timed ? 30 : 8), 1, timed ? 600 : 100), mx = Math.max(mn, clamp(parseInt(e.reps_max, 10) || mn + 4, 1, timed ? 600 : 100));
+      return { id: `ia_${i}_${k}`, block: `${EX_LIB_ICON[e.grupo] || '⚡'} ${String(e.grupo || 'Ejercicio').slice(0, 20)}`, sets: clamp(parseInt(e.series, 10) || 3, 1, 8), minReps: mn, maxReps: mx,
+        increment: bw ? 2 : 2.5, rest: clamp(parseInt(e.descanso_s, 10) || 90, 15, 300), bw, ...(timed ? { timed: true } : {}), alts27: true,
+        variants: [{ name: String(e.nombre || 'Ejercicio').slice(0, 50), note: String(e.nota || '').slice(0, 90) }, ...(Array.isArray(e.alternativas) ? e.alternativas : []).slice(0, 2).map(a => ({ name: String(a.nombre || '').slice(0, 50), note: String(a.nota || '').slice(0, 90) })).filter(a => a.name)] };
+    }).filter(e => e.variants[0].name)
+  })).filter(x => x.exercises.length);
+  if (!days.length) return null;
+  return { name: String(d.nombre || 'MI BLOQUE').toUpperCase().slice(0, 16), icon: String(d.icono || '🏋️').slice(0, 4), days };
+}
+function blockFromChat(b) {
+  if (b.added && state.plan.programs.some(p => p.id === b.added)) { closeModal(); state.plan.active = b.added; ui.dayId = nextDayId(); go('train'); return; }
+  const days = clone(b.days).map(d => { const nd = normalizeDay(d); nd.id = uid('d_'); nd.exercises = nd.exercises.map(e => ({ ...e, id: uid('c_'), alts27: true })); return nd; });
+  let name = b.name; for (let n = 2; state.plan.programs.some(p => libKey(p.name) === libKey(name)); n++) name = `${b.name.slice(0, 13)} ${n}`;
+  const np = { id: uid('p_'), name, icon: b.icon, type: 'strength', fromCoach: true, days };
+  state.plan.programs.push(np); state.plan.active = np.id; ui.dayId = days[0].id;
+  b.added = np.id; saveChatConv(ui.chat); persist();
+  closeModal(); ui.view = 'train'; render(); window.scrollTo({ top: 0 });
+  toast(`Bloque ${name} añadido a tus bloques ✓`);
 }
 const mealKcal = m => Math.round(m.items.reduce((a, it) => a + it.per100.kcal * it.grams / 100, 0));
 function mealFromChat(m) {
@@ -4429,7 +4465,7 @@ function chatBodyHTML() {
     ${chatHistoryHTML()}`;
   return c.msgs.map((m, i) => m.role === 'user'
     ? `<div class="chat-me">${esc(m.text)}</div>`
-    : `<div class="chat-ai${m.error ? ' chat-err' : ''}">${mdLite(m.text)}${m.error && i === c.msgs.length - 1 ? '<button class="text-xs text-brand underline mt-1" data-mact="retry" type="button">Reintentar</button>' : ''}${(m.meals || []).map((ml, j) => `<div class="flex gap-2 items-stretch"><button class="chat-meal flex-1 min-w-0" data-mact="toDiet" data-m="${i}" data-o="${j}" type="button"><span>🍽️ Apuntar en Dieta</span><span class="text-[11px] opacity-80 truncate max-w-full">${m.meals.length > 1 ? esc(ml.title) + ' · ' : ''}${esc(ml.type || 'comida que toca')} · ~${mealKcal(ml)} kcal</span></button><button class="chat-meal !w-auto shrink-0 items-center justify-center" data-mact="recipe" data-m="${i}" data-o="${j}" type="button"><span>👨‍🍳 Receta</span><span class="text-[11px] opacity-80">${ml.recipe ? 'guardada' : 'paso a paso'}</span></button></div>`).join('')}</div>`).join('')
+    : `<div class="chat-ai${m.error ? ' chat-err' : ''}">${mdLite(m.text)}${m.error && i === c.msgs.length - 1 ? '<button class="text-xs text-brand underline mt-1" data-mact="retry" type="button">Reintentar</button>' : ''}${(m.meals || []).map((ml, j) => `<div class="flex gap-2 items-stretch"><button class="chat-meal flex-1 min-w-0" data-mact="toDiet" data-m="${i}" data-o="${j}" type="button"><span>🍽️ Apuntar en Dieta</span><span class="text-[11px] opacity-80 truncate max-w-full">${m.meals.length > 1 ? esc(ml.title) + ' · ' : ''}${esc(ml.type || 'comida que toca')} · ~${mealKcal(ml)} kcal</span></button><button class="chat-meal !w-auto shrink-0 items-center justify-center" data-mact="recipe" data-m="${i}" data-o="${j}" type="button"><span>👨‍🍳 Receta</span><span class="text-[11px] opacity-80">${ml.recipe ? 'guardada' : 'paso a paso'}</span></button></div>`).join('')}${(m.blocks || []).map((bl, j) => `<button class="chat-meal" data-mact="toBlock" data-m="${i}" data-o="${j}" type="button"><span>${bl.added ? '✓ Ver en mis bloques' : '＋ Añadir a mis bloques'}</span><span class="text-[11px] opacity-80 truncate max-w-full">${esc(bl.icon)} ${esc(bl.name)} · ${bl.days.length} día${bl.days.length > 1 ? 's' : ''} · ${bl.days.reduce((a, d) => a + d.exercises.length, 0)} ejercicios</span></button>`).join('')}</div>`).join('')
     + (c.busy ? '<div class="chat-ai chat-typing"><span></span><span></span><span></span></div>' : '');
 }
 /* Historial: conversaciones de los últimos 7 días (máx. 20). Solo la conversación abierta se envía a Gemini. */
@@ -4452,7 +4488,7 @@ function chatHistoryHTML() {
     <button class="w-full flex items-center justify-between text-xs text-mute" data-mact="histToggle" type="button"><span>🕘 Conversaciones anteriores (${list.length})</span><span class="tri ${ui.histOpen ? 'rotate-180' : ''}"></span></button>
     ${ui.histOpen ? `<div class="space-y-1 mt-2">${shown.map(cv => `<div class="flex items-center gap-1">
         <button class="flex-1 min-w-0 text-left bg-ink border border-line rounded-lg px-2.5 py-2" data-mact="openConv" data-id="${esc(cv.id)}" type="button">
-          <span class="block text-[10px] text-mute">${esc(fmtChatDate(cv.at))}${cv.msgs.some(m => m.meals?.length) ? ' · 🍽️' : ''}</span>
+          <span class="block text-[10px] text-mute">${esc(fmtChatDate(cv.at))}${cv.msgs.some(m => m.meals?.length) ? ' · 🍽️' : ''}${cv.msgs.some(m => m.blocks?.length) ? ' · 🏋️' : ''}</span>
           <span class="block text-xs truncate">${esc(chatTitle(cv))}</span></button>
         <button class="text-mute px-2 py-2" data-mact="delConv" data-id="${esc(cv.id)}" type="button" aria-label="Borrar conversación">✕</button></div>`).join('')}
       ${!ui.histAll && list.length > 5 ? `<button class="w-full text-[11px] text-brand underline mt-1" data-mact="histMore" type="button">Ver ${list.length - 5} más</button>` : ''}
@@ -4478,12 +4514,30 @@ async function chatSend(text) {
   try {
     const contents = c.msgs.slice(-12).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
     const reply = await callGemini(null, { json: false, contents, system: chatSystem(), temperature: 0.4, timeout: 60000 });
-    const { text: clean, meals } = chatMeals(reply);
-    c.msgs.push({ role: 'model', text: clean, ...(meals.length ? { meals } : {}) });
+    const { text: clean, meals, blocks } = chatMeals(reply);
+    c.msgs.push({ role: 'model', text: clean, ...(meals.length ? { meals } : {}), ...(blocks.length ? { blocks } : {}) });
     saveChatConv(c);
   } catch (e) {
     c.msgs.push({ role: 'model', text: 'No he podido responder: ' + e.message, error: true });
   } finally { c.busy = false; refreshChat(); }
+}
+/* 🔍 Sin zoom: ni pellizco ni doble toque (iPhone ignora user-scalable=no, por eso también aquí) */
+['gesturestart', 'gesturechange'].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
+document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+/* 🎤 Dictado (Chrome/Android; en otros, el micro del teclado) */
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+let micRec = null;
+function chatMic() {
+  const inp = $('#chatInput'), btn = $('#chatMic'); if (!SpeechRec || !inp) return;
+  if (micRec) { micRec.stop(); return; }
+  const r = new SpeechRec(); micRec = r;
+  r.lang = 'es-ES'; r.interimResults = true; r.continuous = false;
+  const base = inp.value ? inp.value.trim() + ' ' : '';
+  r.onresult = e => { let t = ''; for (const res of e.results) t += res[0].transcript; inp.value = base + t; inp.dispatchEvent(new Event('input')); };
+  r.onerror = e => { if (e.error === 'not-allowed') toast('Permite el micrófono para dictar', 'warn'); else if (e.error !== 'aborted' && e.error !== 'no-speech') toast('No se pudo dictar', 'warn'); };
+  r.onend = () => { micRec = null; if (btn) btn.classList.remove('mic-on'); };
+  btn?.classList.add('mic-on');
+  try { r.start(); } catch { micRec = null; btn?.classList.remove('mic-on'); }
 }
 function openChat(keep) {
   if (!profileOf()) return profileModal(openChat);
@@ -4496,6 +4550,7 @@ function openChat(keep) {
     </div>
     <div id="chatBody" class="cal-body space-y-2.5"></div>
     <div class="cal-foot"><form id="chatForm" class="flex gap-2 items-end">
+      ${SpeechRec ? '<button id="chatMic" class="btn-ghost px-3 py-2.5 shrink-0" data-mact="mic" type="button" aria-label="Dictar">🎤</button>' : ''}
       <textarea id="chatInput" rows="1" class="field flex-1 resize-none max-h-28 py-2.5" placeholder="Pregunta al coach…" enterkeyhint="send"></textarea>
       <button id="chatSend" class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button>
     </form></div>`, {
@@ -4503,6 +4558,8 @@ function openChat(keep) {
     chip: (r, b) => chatSend(CHAT_CHIPS[+b.dataset.i]),
     toDiet: (r, b) => { const ml = ui.chat.msgs[+b.dataset.m]?.meals?.[+b.dataset.o]; if (ml) mealFromChat(ml); },
     recipe: (r, b) => recipeSheet(+b.dataset.m, +b.dataset.o),
+    toBlock: (r, b) => { const bl = ui.chat.msgs[+b.dataset.m]?.blocks?.[+b.dataset.o]; if (bl) blockFromChat(bl); },
+    mic: () => chatMic(),
     histToggle: () => { ui.histOpen = !ui.histOpen; refreshChat(); },
     histMore: () => { ui.histAll = true; refreshChat(); },
     openConv: (r, b) => { const cv = state.chats.find(x => x.id === b.dataset.id); if (!cv) return; ui.chat = { id: cv.id, msgs: cv.msgs.map(m => ({ ...m })), busy: false }; refreshChat(); },
@@ -4599,6 +4656,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.55.0', ['🏋️ El Coach IA crea bloques de entreno a tu medida: dile qué material tienes (o que ninguno) y pulsa «＋ Añadir a mis bloques». Se guardan en la conversación, como las recetas.', '🎤 Puedes dictarle al Coach con el micro.', '🔍 La pantalla ya no hace zoom al pellizcar ni con doble toque.']],
   ['4.54.4', ['📶 Acceso: ver quién usa la app también en otros dispositivos (portátil, tablet) pegando la clave de lectura.'], 'admin'],
   ['4.54.3', ['Arreglado un fallo al confirmar con PIN o con la palabra de seguridad.'], 'quiet'],
   ['4.54.2', ['Sin destello al pasar de una ventana a otra.'], 'quiet'],
