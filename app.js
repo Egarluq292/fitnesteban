@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.58.1';
+const APP_VERSION = '4.58.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -916,7 +916,7 @@ function renderProgHeader() {
     <div class="chips-row flex-1 relative" id="progRow">${progRow}</div>
     <button class="iconbtn iconbtn-sm shrink-0 text-brand font-black" data-act="addProg" type="button" aria-label="Añadir bloque" title="Añadir bloque">＋</button>
     <button class="iconbtn iconbtn-sm shrink-0" data-act="editProg" type="button" aria-label="Editar bloque">✎</button>
-  </div>${libCtaHTML() || libNewHTML()}`;
+  </div>${blockHeroHTML()}${libCtaHTML() ? '' : libNewHTML()}`;
 }
 /* Sin bloques de fuerza propios: invitación grande a la biblioteca */
 /* 📚 Aviso de bloques nuevos en la biblioteca (para quien ya tiene sus bloques). Desaparece al verlos o con ✕ */
@@ -938,6 +938,59 @@ function libCtaHTML() {
     <span class="text-3xl">🏋️</span>
     <span class="flex-1 min-w-0"><span class="block font-extrabold">Elige tu primer bloque de entreno</span><span class="block text-[12px] text-mute mt-0.5">Preparados por Esteban: PPT, Full Body, Brazos, Pierna… O crea el tuyo.</span></span>
     <span class="text-brand font-black text-lg">›</span></button>`;
+}
+
+/* ---------- 🎴 Tarjeta del bloque activo (foto difuminada teñida según el tipo de bloque) ---------- */
+/* Cada tipo de bloque tiene su foto; los que no encajan usan la genérica (en blanco y negro) teñida de cian */
+const BLOCK_LOOKS = [
+  { re: /kettle|🔔/i, img: 'kb', c: '#fbbf24', tag: 'Kettlebell' },
+  { re: /calist|casa|🤸|🏠/i, img: 'casa', c: '#34d399', tag: 'En casa' },
+  { re: /braz|bícep|bicep|trícep|tricep|💪/i, img: 'brazos', c: '#a78bfa', tag: 'Brazos' },
+  { re: /piern|glút|glut|cuádr|🦵/i, img: 'pierna', c: '#f472b6', tag: 'Pierna' },
+  { re: /ppt|push|pull|torso/i, img: 'ppt', c: '#60a5fa', tag: 'Fuerza' },
+  { re: /full|cuerpo/i, img: 'full', c: '#22d3ee', tag: 'Fuerza' },
+  { re: /./, img: 'gen', c: '#22d3ee', tag: 'Fuerza', tint: true }
+];
+const blockLook = p => BLOCK_LOOKS.find(L => L.re.test(`${p.name} ${p.icon || ''}`));
+function blockHeroHTML() {
+  const p = prog();
+  const hasOwn = state.plan.programs.some(x => x.type === 'strength' && x.id !== 'free' && x.days.some(d => d.exercises.length));
+  if (!hasOwn) {
+    return `<button class="bh bh-empty" data-act="addProg" type="button" style="--bh:#22d3ee">
+      <img class="bh-img" src="blk-full.webp" alt="" />
+      <span class="bh-shade"></span>
+      <span class="bh-body">
+        <span class="bh-tag">Empieza aquí</span>
+        <span class="bh-name">Elige tu primer bloque</span>
+        <span class="bh-sub">Full Body, PPT, Brazos, Pierna, Kettlebell, Calistenia en casa… preparados por Esteban, con «Cómo usarlo».</span>
+        <span class="bh-cta">📚 Abrir la biblioteca ›</span>
+      </span></button>`;
+  }
+  if (p.type !== 'strength' || p.id === 'free') return '';
+  const L = blockLook(p), T = todayISO();
+  const ids = new Set(p.days.map(d => d.id));
+  const ss = sortedSessions().filter(x => ids.has(x.dayId));
+  const rot = p.days.filter(d => d.rotation !== false && d.exercises.length);
+  const goal = Math.max(3, Math.min(6, rot.length || p.days.length)); // mínimo 3 días por semana
+  const wk = ss.filter(x => x.date > addDays(T, -7)).length;
+  const last = ss[ss.length - 1];
+  const ago = last ? Math.round((parseISO(T) - parseISO(last.date)) / 864e5) : null;
+  const week = ss.length ? Math.floor((parseISO(T) - parseISO(ss[0].date)) / (7 * 864e5)) + 1 : 0;
+  const nd = p.days.find(d => d.id === nextDayId(p));
+  const doneToday = ss.some(x => x.date === T);
+  const dots = Array.from({ length: Math.max(goal, wk) }, (_, i) => `<i class="${i < wk ? 'on' : ''}"></i>`).join('');
+  return `<section class="bh" style="--bh:${L.c}">
+    <img class="bh-img" src="blk-${L.img}.webp" alt="" />${L.tint ? '<span class="bh-tint"></span>' : ''}
+    <span class="bh-shade"></span>
+    <div class="bh-body">
+      <div class="flex items-center gap-2"><span class="bh-tag">Bloque activo · ${esc(L.tag)}</span>${week ? `<span class="bh-week">Semana ${week}</span>` : ''}</div>
+      <div class="bh-name">${p.icon ? `<span class="mr-1.5">${esc(p.icon)}</span>` : ''}${esc(p.name)}</div>
+      <div class="bh-sub">${p.days.length} ${p.days.length === 1 ? 'día' : 'días'} · ${ss.length ? `${ss.length} ${ss.length === 1 ? 'sesión hecha' : 'sesiones hechas'}` : 'Aún sin estrenar'}${last ? ` · última ${ago === 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}` : ''}</div>
+      <div class="bh-row">
+        <div class="min-w-0"><div class="bh-l">${doneToday ? 'Hoy' : 'Te toca'}</div><div class="bh-v truncate">${doneToday ? 'Entrenado ✓ toca recuperar' : esc(nd ? `${nd.label} · ${nd.title}` : '—')}</div></div>
+        <div class="shrink-0 text-right"><div class="bh-l">Esta semana</div><div class="bh-dots">${dots}</div><div class="bh-l !normal-case !tracking-normal mt-0.5">${wk} de ${goal}</div></div>
+      </div>
+    </div></section>`;
 }
 
 function renderTrain() {
@@ -974,8 +1027,8 @@ function renderTrain() {
       <div class="min-w-0">
         <h2 class="font-extrabold text-lg leading-tight">${esc(day.title)}</h2>
         ${day.subtitle ? `<p class="text-xs text-mute mt-1">${esc(day.subtitle)}</p>` : ''}
-        <p class="text-[11px] mt-2 ${day.id === next ? 'text-brand font-semibold' : 'text-mute'}">
-          ${day.id === next ? '● Te toca hoy según tu rotación · ' : ''}${lastSess ? `Última vez: ${fmtDate(lastSess.date)}` : 'Sin estrenar'}
+        <p class="text-[11px] mt-2 ${day.id === next && prog().id === 'free' ? 'text-brand font-semibold' : 'text-mute'}">
+          ${day.id === next && prog().id === 'free' ? '● Te toca hoy según tu rotación · ' : ''}${lastSess ? `Última vez: ${fmtDate(lastSess.date)}` : 'Sin estrenar'}
         </p>
         ${day.exercises.length ? (() => { const est = estimateMinutes(day, d), avg = realAverage(day.id); return `<p class="text-[11px] text-mute mt-1">⏱ ~${est} min estimados${avg ? ` · tu media real: <strong class="text-white">${avg} min</strong>` : ''}</p>`; })() : ''}
       </div>
@@ -2784,15 +2837,6 @@ function renderDiet() {
   const ai = ui.aiResult;
   const addOpen = !!(ui.addOpen || ai || ui.editing || ui.aiBusy);
   const yday = mealsOf(addDays(date, -1));
-  /* Lo que te queda, repartido entre las comidas pendientes de hoy (ver mealPlanLeft). */
-  const plan = isToday ? mealPlanLeft(date, leftK, leftP) : {};
-  const pendingTag = tp => !plan[tp] ? '<span class="d2-gs text-mute">—</span>'
-    : plan[tp].k <= 0 ? '<span class="d2-gs text-rose-300">Sin margen</span>'
-    : `<span class="d2-gs"><span class="text-mute">Quedan </span><span class="${MAC.kcal.text}">${plan[tp].k}</span> kcal${plan[tp].p > 0 ? ` · <span class="${MAC.prot.text}">P ${plan[tp].p}</span>` : ''}</span>`;
-  const ydNote = (tp, yd) => {
-    const k = Math.round(yd.reduce((a, m) => a + m.kcal, 0)), over = plan[tp] ? k - Math.max(0, plan[tp].k) : 0;
-    return over > 50 ? `<span class="block text-[11px] text-amber-300 font-semibold mt-0.5">${k} kcal · te pasas ${Math.round(over / 10) * 10}</span>` : `<span class="block text-[11px] text-mute font-normal mt-0.5">${k} kcal</span>`;
-  };
   const grouped = MEAL_TYPES.map(tp => {
     const items = mealsOf(date).filter(m => (m.type || 'Otro') === tp);
     const sub = items.reduce((a, m) => a + m.kcal, 0), subP = items.reduce((a, m) => a + (m.prot || 0), 0);
@@ -2803,13 +2847,13 @@ function renderDiet() {
       <div class="d2-gh">
         <span class="meal-ic">${icon(MEAL_IC[tp] || 'dots', 'w-[15px] h-[15px]')}</span>
         <span class="d2-gt">${tp}</span>
-        ${items.length ? `<span class="d2-gs"><span class="${MAC.kcal.text}">${Math.round(sub)}</span> kcal · <span class="${low ? 'text-amber-300' : MAC.prot.text}">P ${Math.round(subP)}${low ? ' ↓' : ''}</span></span>` : pendingTag(tp)}
+        ${items.length ? `<span class="d2-gs"><span class="${MAC.kcal.text}">${Math.round(sub)}</span> kcal · <span class="${low ? 'text-amber-300' : MAC.prot.text}">P ${Math.round(subP)}${low ? ' ↓' : ''}</span></span>` : '<span class="d2-gs text-mute">—</span>'}
         <button class="d2-plus" data-act="addFor" data-type="${tp}" type="button" aria-label="Añadir a ${tp}">＋</button>
       </div>
       ${items.map(m => `<button class="d2-meal ${ui.editing?.id === m.id ? 'd2-meal-on' : ''}" data-act="mealMenu" data-id="${esc(m.id)}" type="button">
         <span class="min-w-0 flex-1 text-left"><span class="block text-sm font-semibold truncate">${isFavMeal(normName(m.desc)) ? '<span class="text-amber-300">★ </span>' : ''}${esc(m.desc || tp)}</span>
         <span class="block text-[11px] font-mono mt-0.5">${macroLine(m)}</span></span><span class="text-mute text-lg leading-none">⋯</span></button>`).join('')}
-      ${!items.length && yd.length ? `<button class="d2-add-empty" data-act="repeatYday" data-type="${tp}" type="button">↻ Repetir el de ayer <span class="text-mute font-normal">· ${esc(yd.map(m => m.desc).join(' + ').slice(0, 38))}</span>${ydNote(tp, yd)}</button>` : ''}
+      ${!items.length && yd.length ? `<button class="d2-add-empty" data-act="repeatYday" data-type="${tp}" type="button">↻ Repetir el de ayer <span class="text-mute font-normal">· ${esc(yd.map(m => m.desc).join(' + ').slice(0, 38))}</span></button>` : ''}
     </div>`;
   }).join('');
 
@@ -2928,42 +2972,6 @@ function mealMenu(id) {
 /* ---------- Proteína por comida ---------- */
 const PROT_TYPES = ['Desayuno', 'Comida', 'Puente', 'Cena']; // «Otro» (picoteos) no cuenta
 const minProt = () => state.settings.minProtMeal || 25;
-/* 🍽️ Reparto de lo que queda del día entre las comidas pendientes.
-   - Pendientes: las comidas principales vacías que van después de la última registrada (las saltadas no cuentan).
-   - Peso de cada comida: la parte del día que suele llevarse en tus últimos 28 días (con 7+ días registrados); si no, unos pesos fijos.
-   - Una comida que registras menos de la mitad de los días (p. ej. el puente) no se lleva parte del reparto.
-   - Proteína: cada pendiente recibe al menos el mínimo por comida; si no llega para todas, se asegura primero la última (la cena).
-   Devuelve { tipo: { k, p } } solo para las pendientes. */
-const MEAL_W_DEF = { Desayuno: 0.25, Comida: 0.4, Puente: 0.1, Cena: 0.25 };
-function mealWeights(date) {
-  const share = {}, freq = {}; let days = 0;
-  for (const tp of PROT_TYPES) { share[tp] = 0; freq[tp] = 0; }
-  for (let i = 1; i <= 28; i++) {
-    const ms = mealsOf(addDays(date, -i)).filter(m => PROT_TYPES.includes(m.type));
-    const tot = ms.reduce((a, m) => a + (m.kcal || 0), 0); if (tot < 600) continue; // día sin registrar entero
-    days++;
-    for (const tp of PROT_TYPES) { const k = ms.filter(m => m.type === tp).reduce((a, m) => a + (m.kcal || 0), 0); if (k > 0) { freq[tp]++; share[tp] += k / tot; } }
-  }
-  if (days < 7) return { w: { ...MEAL_W_DEF }, usual: Object.fromEntries(PROT_TYPES.map(tp => [tp, true])) };
-  return { w: Object.fromEntries(PROT_TYPES.map(tp => [tp, share[tp] / days])), usual: Object.fromEntries(PROT_TYPES.map(tp => [tp, freq[tp] / days >= 0.5])) };
-}
-function mealPlanLeft(date, leftK, leftP) {
-  const has = tp => mealsOf(date).some(m => (m.type || 'Otro') === tp);
-  const last = Math.max(...PROT_TYPES.map((tp, i) => has(tp) ? i : -1));
-  const { w, usual } = mealWeights(date);
-  let pend = PROT_TYPES.filter((tp, i) => i > last && usual[tp] && w[tp] > 0);
-  if (!pend.length) pend = PROT_TYPES.filter((tp, i) => i > last).slice(-1); // nunca dejar el día sin ninguna pendiente si quedan huecos
-  if (!pend.length) return {};
-  const sumW = pend.reduce((a, tp) => a + (w[tp] || 0), 0) || 1;
-  const out = {};
-  for (const tp of pend) out[tp] = { k: leftK <= 0 ? 0 : Math.round(leftK * (w[tp] || 0) / sumW / 10) * 10, p: 0 };
-  if (leftP > 0) {
-    const mp = minProt(), n = pend.length;
-    if (leftP >= mp * n) for (const tp of pend) out[tp].p = Math.round(mp + (leftP - mp * n) * (w[tp] || 0) / sumW);
-    else { let rem = leftP; for (const tp of [...pend].reverse()) { const g = Math.min(mp, rem); out[tp].p = Math.round(g); rem -= g; } }
-  }
-  return out;
-}
 function protByType(date, excludeId = null) {
   const out = {};
   for (const m of mealsOf(date)) { if (m.id === excludeId || !PROT_TYPES.includes(m.type)) continue; out[m.type] = (out[m.type] || 0) + (m.prot || 0); }
@@ -4915,8 +4923,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
-  ['4.58.1', ['🍽️ «Quedan» ahora reparte según cómo sueles comer tú (últimos 28 días) y asegura tu mínimo de proteína en cada comida. El puente solo cuenta si lo sueles hacer.', '↻ «Repetir el de ayer» enseña sus kcal y te avisa si te pasarías.'], 'quiet'],
-  ['4.58.0', ['🍽️ En Dieta, las comidas que aún te faltan hoy te dicen lo que te queda para ellas: kcal y proteína, repartiendo lo que te falta del día.']],
+  ['4.58.0', ['🎴 Entreno estrena tarjeta para tu bloque activo: qué día te toca, cuántas sesiones llevas y cómo vas esta semana, con una foto y un color propios para cada tipo de bloque.', '📚 Si aún no tienes bloque, la tarjeta te lleva directo a la biblioteca.']],
   ['4.57.1', ['Guía actualizada.'], 'quiet'],
   ['4.57.0', ['🥗 Dieta renovada: lo que has comido sale arriba, con un ＋ en cada comida para añadir. «Te quedan» te dice las kcal y la proteína que faltan, y una franja con los últimos 7 días te enseña cómo vas.', '🏷️ Escanea el código de barras de los envases y se añaden con los valores de su etiqueta. Si un producto no aparece, haz una foto de la tabla nutricional.', '↻ «Repetir el de ayer» en una comida vacía y menú al tocar cada comida: editar, favorita, duplicar o borrar.']],
   ['4.56.0', ['🎤 Ahora puedes dictar por voz también en Dieta (describir la comida y añadir ingredientes), al pedir cambios en una receta y en «Comenta al Coach» durante el entreno. Toca el micro, habla y el texto aparece solo.']],
@@ -5063,6 +5070,7 @@ const GUIDE = [
   ]],
   ['🏋️ Entreno: bloques y días', [
     'Arriba eliges el <b>bloque</b> ({{BLOQUES}}) y debajo el <b>día</b>. El punto ● marca el día que te toca según tu rotación; ✓ el que ya hiciste hoy.',
+    '🎴 La <b>tarjeta del bloque activo</b> te dice qué día te toca, cuántas sesiones llevas (y en qué semana del bloque vas) y cuántas has hecho en los últimos 7 días, con un objetivo mínimo de 3. Cada tipo de bloque tiene su foto y su color.',
     'Cada bloque lleva su propia rotación: {{ROTACION}}',
     '＋ (junto al ✎ de arriba) abre la <b>biblioteca</b>: bloques preparados por Esteban (Full Body, PPT, Brazos, Pierna, Calistenia en casa, Kettlebell…), cada uno con su descripción y «Cómo usarlo». También puedes crear uno vacío.',
     'Para cambiar ejercicios, usa «＋ Añadir ejercicio» (crear uno o elegir entre los preparados) y el ✎ de cada ejercicio. «＋ Día» añade días. El ✎ del bloque o del día permite renombrar, reordenar (◀ ▶) o eliminar. El historial nunca se borra al eliminar.'
@@ -5102,8 +5110,6 @@ const GUIDE = [
   ]],
   ['🥗 Dieta y raciones', [
     'En «Hoy has comido» toca el <b>＋</b> de la comida que toque (Desayuno, Comida, Puente, Cena) para abrir el panel de añadir. Si esa comida está vacía y ayer la registraste, «↻ Repetir el de ayer» la copia con un toque.',
-    'En las comidas que aún te faltan hoy, la cabecera te dice lo que <b>te queda</b> para ellas (kcal y proteína). Lo que te falta del día se reparte según cómo sueles comer tú (últimos 28 días), cada comida con al menos tu mínimo de proteína. Una comida que casi nunca haces, como el puente, no se lleva parte. Si ya no hay margen, pone «Sin margen».',
-    'En «↻ Repetir el de ayer» ves sus kcal; si no cabe en lo que te queda, te avisa en ámbar de cuánto te pasarías.',
     'Foto (cámara o galería) y/o descripción. Lo que escribas <b>manda</b>: «200 g de pollo» fija esa cantidad. Con 🎤 puedes dictarla en vez de escribirla.',
     '🏷️ <b>Código</b>: escanea el código de barras de un envase y se añade con los valores de su etiqueta (Open Food Facts). Si no aparece, haz una foto de la tabla nutricional y la IA la lee; la próxima vez saldrá directo.',
     'Tras «Estimar macros con IA», ajusta cada alimento con <b>P / M / G</b> (pequeña, mediana, grande) u «Otra» con los gramos exactos. ✕ quita un alimento que la IA vio por error.',
