@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.54.2';
+const APP_VERSION = '4.54.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3488,8 +3488,9 @@ function guardModal({ title, text, danger, word, onOk }) {
   `, {
     autofocus: true,
     ok: async root => {
+      let pin = '';
       if (hasPin) {
-        const pin = pinVal(root, 'pin');
+        pin = pinVal(root, 'pin');
         if (!pin) return toast('Introduce el PIN', 'warn');
         if (await hashPin(pin) !== state.settings.pinHash) {
           fails++;
@@ -4598,6 +4599,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.54.3', ['Arreglado un fallo al confirmar con PIN o con la palabra de seguridad.'], 'quiet'],
   ['4.54.2', ['Sin destello al pasar de una ventana a otra.'], 'quiet'],
   ['4.54.1', ['☀️ Nuevo modo claro: al abrir la app eliges el tema (Oscuro, Claro o como tu móvil). Puedes cambiarlo en Ajustes → Aplicación → Tema.']],
   ['4.53.3', ['📸 Más frases en las tarjetas, según tu sesión.'], 'quiet'],
