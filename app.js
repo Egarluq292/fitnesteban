@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.54.0';
+const APP_VERSION = '4.54.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4597,7 +4597,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
-  ['4.54.0', ['☀️ Nuevo modo claro: elígelo en Ajustes → Aplicación → Tema (Oscuro, Claro o Auto, que sigue el modo de tu móvil). El oscuro sigue siendo el de siempre.']],
+  ['4.54.1', ['☀️ Nuevo modo claro: al abrir la app eliges el tema (Oscuro, Claro o como tu móvil). Puedes cambiarlo en Ajustes → Aplicación → Tema.']],
   ['4.53.3', ['📸 Más frases en las tarjetas, según tu sesión.'], 'quiet'],
   ['4.53.2', ['📖 Guía actualizada.'], 'quiet'],
   ['4.53.1', ['🤸 Bloque CALISTENIA EN CASA en la biblioteca.'], 'quiet'],
@@ -5774,6 +5774,34 @@ function applyTheme() {
 }
 try { matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (themePref() === 'auto') applyTheme(); }); } catch { /* nada */ }
 applyTheme();
+/* Primera vez (o primera apertura tras actualizar): elegir tema. Se pregunta una sola vez */
+function themeAsk(next) {
+  let chosen = null; try { chosen = localStorage.getItem(THEME_KEY); } catch { /* nada */ }
+  if (chosen) return next();
+  let k = 'dark';
+  const opt = (key, ic, t, sub, bg, fg, card) => `<button class="w-full flex items-center gap-3 rounded-2xl border-2 p-3 text-left ${k === key ? 'border-brand bg-brand/10' : 'border-line bg-ink'}" data-mact="pick" data-k="${key}" type="button">
+      <span class="shrink-0 w-14 h-20 rounded-xl overflow-hidden border border-line flex flex-col gap-1 p-1.5" style="background:${bg}">${key === 'auto' ? '<span class="flex-1 rounded" style="background:linear-gradient(90deg,#0c1317 50%,#ffffff 50%)"></span><span class="h-2 rounded" style="background:linear-gradient(90deg,#00d2df 50%,#0891b2 50%)"></span><span class="flex-1 rounded" style="background:linear-gradient(90deg,#0c1317 50%,#ffffff 50%)"></span>' : `<span class="flex-1 rounded" style="background:${card}"></span><span class="h-2 rounded" style="background:${fg}"></span><span class="flex-1 rounded" style="background:${card}"></span>`}</span>
+      <span class="flex-1 min-w-0"><span class="block font-extrabold text-[15px]">${ic} ${t}</span><span class="block text-[12px] text-mute mt-0.5">${sub}</span></span>
+      <span class="shrink-0 w-6 h-6 rounded-full border-2 ${k === key ? 'border-brand bg-brand' : 'border-line'} grid place-items-center text-[12px] font-black ${k === key ? 'text-white' : ''}">${k === key ? '✓' : ''}</span></button>`;
+  const html = () => `<div class="text-center"><h3 class="modal-title">¿Cómo quieres ver la app?</h3><p class="text-xs text-mute mt-1">Puedes cambiarlo cuando quieras en Ajustes → Aplicación → Tema.</p></div>
+    <div class="space-y-2">
+      ${opt('dark', '🌙', 'Oscuro', 'El de siempre. Ideal en el gimnasio y de noche.', '#05080a', '#00d2df', '#0c1317')}
+      ${opt('light', '☀️', 'Claro', 'Fondo blanco. Se lee mejor a pleno sol.', '#eef2f4', '#0891b2', '#ffffff')}
+      ${opt('auto', '📱', 'Como mi móvil', 'Claro u oscuro según la configuración del sistema.', '#05080a', '', '')}
+    </div>
+    <button class="btn-primary w-full" data-mact="ok" type="button">Continuar</button>`;
+  const set = v => { try { localStorage.setItem(THEME_KEY, v); } catch { /* nada */ } applyTheme(); };
+  openModal(html(), {
+    noClose: true,
+    pick: (root, b) => { k = b.dataset.k; applyThemeTo(k); root.querySelector('.modal-sheet').innerHTML = html(); },
+    ok: () => { set(k); closeModal(); render(); setTimeout(next, 250); }
+  });
+}
+function applyThemeTo(t) {
+  const light = t === 'light' || (t === 'auto' && matchMedia('(prefers-color-scheme: light)').matches);
+  document.documentElement.classList.toggle('light', light);
+  const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = light ? '#ffffff' : '#05080a';
+}
 function versionStatusHTML() {
   const v = ui.remoteVer;
   if (!v) return '<p class="text-[11px] text-mute">Comprobando la versión publicada…</p>';
@@ -5997,8 +6025,8 @@ function unlock(me) {
   if (me.admin && !state.settings.profile) { state.settings.profile = { name: 'Esteban', sex: 'h', age: '', goal: 'recomp' }; persist(); }
   $('#lockScreen')?.remove(); document.body.classList.remove('overflow-hidden');
   if (ui.view === 'settings') render();
-  if (needsOnboarding(me)) setTimeout(onboarding, 300);
-  else if (!newsChecked) { newsChecked = true; maybeShowNews(); setTimeout(maybeAskEmail, 2500); }
+  if (needsOnboarding(me)) setTimeout(() => themeAsk(onboarding), 300);
+  else if (!newsChecked) { newsChecked = true; themeAsk(() => { maybeShowNews(); setTimeout(maybeAskEmail, 2500); }); }
   setTimeout(emailSync, 4000);
   // biblioteca al día al entrar: avisos de bloques nuevos e iconos
   setTimeout(() => { const before = JSON.stringify(remoteLib.map(x => x.lib)); fetchRemoteLib().then(() => { if (JSON.stringify(remoteLib.map(x => x.lib)) !== before && (ui.view === 'home' || ui.view === 'train') && !$('#modalRoot').classList.contains('open')) render(); }); }, 1500);
