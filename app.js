@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.54.3';
+const APP_VERSION = '4.54.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4599,6 +4599,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.54.4', ['📶 Acceso: ver quién usa la app también en otros dispositivos (portátil, tablet) pegando la clave de lectura.'], 'admin'],
   ['4.54.3', ['Arreglado un fallo al confirmar con PIN o con la palabra de seguridad.'], 'quiet'],
   ['4.54.2', ['Sin destello al pasar de una ventana a otra.'], 'quiet'],
   ['4.54.1', ['☀️ Nuevo modo claro: al abrir la app eliges el tema (Oscuro, Claro o como tu móvil). Puedes cambiarlo en Ajustes → Aplicación → Tema.']],
@@ -5593,6 +5594,7 @@ const actions = {
   },
   closeAccess: () => { ui.accessOpen = false; render(); },
   usageSetup: () => usageSetupModal(),
+  usageHere: () => usageHereModal(),
   copyHashes: () => {
     const rows = (access.list || []).map(x => `${x.hash}\t${(x.hash === access.me?.hash ? (state.accessNames[x.hash] || 'Yo (admin)') : (state.accessNames[x.hash] || 'Sin nombre')).replace(/\s+/g, ' ')}`);
     const txt = ['huella\tnombre', ...rows].join('\n');
@@ -6324,6 +6326,28 @@ function syncUsageNames() {
     } catch { /* se reintenta la próxima vez que abras Acceso */ }
   }, 600);
 }
+/* El registro ya funciona (configurado en otro dispositivo): aquí solo falta la clave de lectura */
+function usageHereModal() {
+  openModal(`<h3 class="modal-title">📶 Ver quién usa la app aquí</h3>
+    <p class="text-xs text-mute">El registro ya está configurado (en tu móvil). Para verlo también en este dispositivo, pega la <b class="text-slate-300">clave de lectura</b>: está en tu hoja → Extensiones → Apps Script, <b class="text-slate-300">línea 2</b>: <span class="font-mono">const READ_KEY = '…';</span> (lo que va entre comillas).</p>
+    <label class="lbl">Clave de lectura<input class="field mt-1 font-mono text-xs" name="key" autocomplete="off" spellcheck="false" placeholder="Ej: 3f9a1c…" /></label>
+    <button class="btn-primary w-full" data-mact="go" type="button">Comprobar y guardar</button>
+    <p class="text-[11px] text-mute">Se guarda cifrada con tu PIN solo en este dispositivo. No cambia nada del script ni de tu móvil.</p>`, {
+    autofocus: true,
+    go: async root => {
+      const key = mval(root, 'key').trim().replace(/^['"]|['"];?$/g, '');
+      if (key.length < 6) return toast('Pega la clave completa', 'warn');
+      const btn = root.querySelector('[data-mact=go]'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Comprobando…';
+      try {
+        const d = await (await fetch(`${access.usageUrl}?key=${encodeURIComponent(key)}&t=${Date.now()}`, { cache: 'no-store' })).json();
+        if (!d.ok) throw new Error(d.error === 'clave' ? 'Esa clave no coincide con la del script' : 'El registro no respondió bien');
+      } catch (e) { btn.disabled = false; btn.textContent = 'Comprobar y guardar'; return toast(e.message === 'Failed to fetch' ? 'No se pudo conectar con el script' : e.message, 'error'); }
+      const save = async pin => { lsSet(USE_KEY, await secretEnc(key, pin)); ui.accessPin = pin; closeModal(); render(); toast('Listo: ya ves el uso en este dispositivo ✓'); ui.usage = null; loadUsage(); };
+      if (ui.accessPin) save(ui.accessPin);
+      else askPin({ title: 'Guardar la clave', text: 'Tu PIN cifra la clave en este dispositivo.', onPin: save });
+    }
+  });
+}
 async function usageSetupModal() {
   // la misma clave hasta que se active: así da igual cerrar y reabrir esta ventana
   let key = lsGet('fitnesteban_usekey_pending');
@@ -6495,6 +6519,7 @@ function accessSectionHTML() {
     ${list.length ? '<button class="btn-ghost w-full" data-act="copyHashes" type="button">📋 Copiar huellas y nombres (para tu hoja)</button>' : ''}
     ${access.usageUrl && lsGet(USE_KEY)
       ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : 'actualizado ahora · nombres, correos, altas y dispositivos') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
+      : access.usageUrl ? `<button class="btn-ghost w-full" data-act="usageHere" type="button">📶 Ver quién usa la app en este dispositivo</button>`
       : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
     ${access.usageUrl && lsGet(USE_KEY) ? (lsGet(SHEET_KEY) && !ui.sheetEdit
       ? `<div class="flex items-center gap-2"><a class="btn-ghost flex-1 text-center block" href="${esc(lsGet(SHEET_KEY))}" target="_blank" rel="noopener">📊 Abrir hoja de uso</a><button class="text-[11px] text-mute underline shrink-0" data-act="sheetEdit" type="button">Cambiar</button></div>`
