@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.53.3';
+const APP_VERSION = '4.54.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3453,6 +3453,8 @@ function renderSettings() {
     ${versionStatusHTML()}
     ${planOf(access.me) ? `<div class="text-[11px] text-mute">⏳ Tu acceso: ${planLabel(access.me)}</div>` : ''}
     ${access.usageUrl ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span class="min-w-0">🔑 Este dispositivo: <span class="${/✓/.test(deviceDiag) ? 'text-emerald-300' : 'text-amber-300'}">${esc(deviceDiag || 'sin comprobar')}</span><br><span class="opacity-70">${esc(deviceLabel())} · script …${esc(access.usageUrl.replace(/\/exec.*$/, '').slice(-6))}</span></span><button class="underline text-brand shrink-0" data-act="devCheck" type="button">Comprobar</button></div>` : ''}
+    <div><div class="lbl mb-1.5">Tema</div><div class="grid grid-cols-3 gap-1.5">${[['dark', '🌙 Oscuro'], ['light', '☀️ Claro'], ['auto', '📱 Auto']].map(([k, l]) => `<button class="chip justify-center whitespace-nowrap px-2 ${themePref() === k ? 'chip-on' : ''}" data-act="setTheme" data-k="${k}" type="button">${l}</button>`).join('')}</div>
+      <p class="text-[11px] text-mute mt-1.5">«Auto» sigue el modo claro u oscuro de tu móvil.</p></div>
     <button class="btn-danger w-full" data-act="wipe" type="button">Borrar todo</button>
     <p class="text-[11px] text-mute">Versión ${APP_VERSION} · ${state.sessions.length} sesiones · ${Object.keys(state.meals).length} días de dieta</p>
 `)}`;
@@ -4595,6 +4597,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.54.0', ['☀️ Nuevo modo claro: elígelo en Ajustes → Aplicación → Tema (Oscuro, Claro o Auto, que sigue el modo de tu móvil). El oscuro sigue siendo el de siempre.']],
   ['4.53.3', ['📸 Más frases en las tarjetas, según tu sesión.'], 'quiet'],
   ['4.53.2', ['📖 Guía actualizada.'], 'quiet'],
   ['4.53.1', ['🤸 Bloque CALISTENIA EN CASA en la biblioteca.'], 'quiet'],
@@ -5616,6 +5619,7 @@ const actions = {
   copyCode: async b => { const c = await accessCodeOf(b.dataset.hash); if (c) navigator.clipboard.writeText(fmtCode(c)).then(() => toast('Código copiado')).catch(() => toast('Cópialo a mano: ' + fmtCode(c), 'warn')); },
   regenAccess: b => regenAccess(b.dataset.hash),
   planAccess: b => planModal(b.dataset.hash),
+  setTheme: b => { try { localStorage.setItem(THEME_KEY, b.dataset.k); } catch { /* nada */ } applyTheme(); render(); },
   retoCard: b => openRetoCard(b.dataset.reto, b.dataset.at),
   libNewSee: () => { libMarkSeen(); render(); libraryModal(); },
   libNewHide: () => { libMarkSeen(); render(); },
@@ -5760,6 +5764,16 @@ async function checkRemoteVersion(force = false) {
   } catch { ui.remoteVer = navigator.onLine ? 'error' : 'offline'; }
   if (ui.view === 'settings') render();
 }
+/* 🌗 Tema: oscuro (por defecto), claro o automático (según el móvil) */
+const THEME_KEY = 'fitnesteban_theme';
+const themePref = () => { try { return localStorage.getItem(THEME_KEY) || 'dark'; } catch { return 'dark'; } };
+function applyTheme() {
+  const t = themePref(), light = t === 'light' || (t === 'auto' && matchMedia('(prefers-color-scheme: light)').matches);
+  document.documentElement.classList.toggle('light', light);
+  const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = light ? '#ffffff' : '#05080a';
+}
+try { matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (themePref() === 'auto') applyTheme(); }); } catch { /* nada */ }
+applyTheme();
 function versionStatusHTML() {
   const v = ui.remoteVer;
   if (!v) return '<p class="text-[11px] text-mute">Comprobando la versión publicada…</p>';
