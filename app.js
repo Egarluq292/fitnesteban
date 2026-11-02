@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.57.1';
+const APP_VERSION = '4.58.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2784,6 +2784,16 @@ function renderDiet() {
   const ai = ui.aiResult;
   const addOpen = !!(ui.addOpen || ai || ui.editing || ui.aiBusy);
   const yday = mealsOf(addDays(date, -1));
+  /* Comidas pendientes de hoy: las vacías que van después de la última registrada (si te saltaste el desayuno, ya no cuenta).
+     Lo que te queda del día se reparte entre ellas para que cada comida vacía diga cuánto le toca. */
+  const filledIdx = PROT_TYPES.map((tp, i) => mealsOf(date).some(m => (m.type || 'Otro') === tp) ? i : -1);
+  const lastFilled = Math.max(...filledIdx);
+  const pending = isToday ? PROT_TYPES.filter((tp, i) => i > lastFilled) : [];
+  const shareK = pending.length ? Math.round(leftK / pending.length / 10) * 10 : 0;
+  const shareP = pending.length ? Math.round(leftP / pending.length) : 0;
+  const pendingTag = tp => !pending.includes(tp) ? '<span class="d2-gs text-mute">—</span>'
+    : shareK <= 0 ? '<span class="d2-gs text-rose-300">Sin margen</span>'
+    : `<span class="d2-gs"><span class="text-mute">Quedan </span><span class="${MAC.kcal.text}">${shareK}</span> kcal${shareP > 0 ? ` · <span class="${MAC.prot.text}">P ${shareP}</span>` : ''}</span>`;
   const grouped = MEAL_TYPES.map(tp => {
     const items = mealsOf(date).filter(m => (m.type || 'Otro') === tp);
     const sub = items.reduce((a, m) => a + m.kcal, 0), subP = items.reduce((a, m) => a + (m.prot || 0), 0);
@@ -2794,7 +2804,7 @@ function renderDiet() {
       <div class="d2-gh">
         <span class="meal-ic">${icon(MEAL_IC[tp] || 'dots', 'w-[15px] h-[15px]')}</span>
         <span class="d2-gt">${tp}</span>
-        ${items.length ? `<span class="d2-gs"><span class="${MAC.kcal.text}">${Math.round(sub)}</span> kcal · <span class="${low ? 'text-amber-300' : MAC.prot.text}">P ${Math.round(subP)}${low ? ' ↓' : ''}</span></span>` : '<span class="d2-gs text-mute">—</span>'}
+        ${items.length ? `<span class="d2-gs"><span class="${MAC.kcal.text}">${Math.round(sub)}</span> kcal · <span class="${low ? 'text-amber-300' : MAC.prot.text}">P ${Math.round(subP)}${low ? ' ↓' : ''}</span></span>` : pendingTag(tp)}
         <button class="d2-plus" data-act="addFor" data-type="${tp}" type="button" aria-label="Añadir a ${tp}">＋</button>
       </div>
       ${items.map(m => `<button class="d2-meal ${ui.editing?.id === m.id ? 'd2-meal-on' : ''}" data-act="mealMenu" data-id="${esc(m.id)}" type="button">
@@ -4870,6 +4880,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.58.0', ['🍽️ En Dieta, las comidas que aún te faltan hoy te dicen lo que te queda para ellas: kcal y proteína, repartiendo lo que te falta del día.']],
   ['4.57.1', ['Guía actualizada.'], 'quiet'],
   ['4.57.0', ['🥗 Dieta renovada: lo que has comido sale arriba, con un ＋ en cada comida para añadir. «Te quedan» te dice las kcal y la proteína que faltan, y una franja con los últimos 7 días te enseña cómo vas.', '🏷️ Escanea el código de barras de los envases y se añaden con los valores de su etiqueta. Si un producto no aparece, haz una foto de la tabla nutricional.', '↻ «Repetir el de ayer» en una comida vacía y menú al tocar cada comida: editar, favorita, duplicar o borrar.']],
   ['4.56.0', ['🎤 Ahora puedes dictar por voz también en Dieta (describir la comida y añadir ingredientes), al pedir cambios en una receta y en «Comenta al Coach» durante el entreno. Toca el micro, habla y el texto aparece solo.']],
@@ -5055,6 +5066,7 @@ const GUIDE = [
   ]],
   ['🥗 Dieta y raciones', [
     'En «Hoy has comido» toca el <b>＋</b> de la comida que toque (Desayuno, Comida, Puente, Cena) para abrir el panel de añadir. Si esa comida está vacía y ayer la registraste, «↻ Repetir el de ayer» la copia con un toque.',
+    'En las comidas que aún te faltan hoy, la cabecera te dice lo que <b>te queda</b> para ellas (kcal y proteína), repartiendo lo que te falta del día. Si ya no hay margen, pone «Sin margen».',
     'Foto (cámara o galería) y/o descripción. Lo que escribas <b>manda</b>: «200 g de pollo» fija esa cantidad. Con 🎤 puedes dictarla en vez de escribirla.',
     '🏷️ <b>Código</b>: escanea el código de barras de un envase y se añade con los valores de su etiqueta (Open Food Facts). Si no aparece, haz una foto de la tabla nutricional y la IA la lee; la próxima vez saldrá directo.',
     'Tras «Estimar macros con IA», ajusta cada alimento con <b>P / M / G</b> (pequeña, mediana, grande) u «Otra» con los gramos exactos. ✕ quita un alimento que la IA vio por error.',
