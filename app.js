@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.53.2';
+const APP_VERSION = '4.53.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1301,7 +1301,23 @@ function saveSession() {
 }
 
 /* ---------- Tarjeta para compartir (imagen 1080 × 1350) ---------- */
-const MOTTOS = ['Hoy has sumado. Mañana, más.', 'La constancia gana a la motivación.', 'Un día más cerca de tu mejor versión.', 'Trabajo hecho. Recupera y vuelve.', 'El progreso se construye serie a serie.', 'Disciplina hoy, resultados mañana.'];
+const MOTTOS = {
+  pr: ['Nuevo récord. A por el siguiente.', 'Hoy has movido más que nunca.', 'Tu techo de ayer es tu suelo de hoy.', 'Más fuerte que la semana pasada. Eso es progresar.', 'Los números no mienten: estás mejorando.', 'Lo que antes pesaba, hoy se queda corto.', 'Récord en el bolsillo. Recupera y repite.'],
+  up: ['Un nivel más. Paso a paso se llega lejos.', 'Lo que hoy cuesta, mañana es tu calentamiento.', 'Nivel superado. El siguiente te espera.', 'Hoy has hecho lo que hace un mes no podías.'],
+  test: ['Ahora ya sabes de lo que eres capaz.', 'Tu marca de hoy es el punto de partida.', 'Ese número es tuyo. Vamos a superarlo.', 'Medirse es el primer paso para mejorar.', 'Lo has dado todo. Eso también es entrenar.', 'Hoy sabes dónde estás. Mañana, más lejos.'],
+  gen: ['Hoy has sumado. Mañana, más.', 'La constancia gana a la motivación.', 'Trabajo hecho. Recupera y vuelve.', 'El progreso se construye serie a serie.', 'Disciplina hoy, resultados mañana.', 'No hace falta que sea perfecto. Hace falta que sea hoy.', 'Las excusas no levantan peso.', 'Otra sesión que nadie te podrá quitar.', 'Poco a poco se llega muy lejos.', 'Entrenar cansado también cuenta. Y mucho.', 'Lo difícil era empezar. Lo has hecho.', 'Cada repetición suma, aunque no se vea.', 'El hábito te lleva donde la motivación no llega.']
+};
+/* Frase de la tarjeta: según lo que pasó, sin repetir las últimas; la misma tarjeta conserva su frase */
+function pickMotto(group, key) {
+  const st = state.settings, L = MOTTOS[group] || MOTTOS.gen;
+  st.mottoMap = st.mottoMap || {}; st.mottoRecent = st.mottoRecent || [];
+  if (st.mottoMap[key] && L.includes(st.mottoMap[key])) return st.mottoMap[key];
+  const pool = L.filter(m => !st.mottoRecent.includes(m));
+  const m = (pool.length ? pool : L)[Math.floor(Math.random() * (pool.length ? pool.length : L.length))];
+  st.mottoMap[key] = m; st.mottoRecent = [m, ...st.mottoRecent].slice(0, 8);
+  const ks = Object.keys(st.mottoMap); if (ks.length > 60) for (const k of ks.slice(0, ks.length - 60)) delete st.mottoMap[k];
+  persist(); return m;
+}
 function sessionStats(s) {
   let nSets = 0, vol = 0;
   for (const e of s.exercises) for (const x of e.sets) { nSets++; vol += (x.w || 0) * x.r; }
@@ -1364,7 +1380,7 @@ async function buildShareCard(s) {
     ctx.fillText(line.replace(/……+$/, '…'), 70, y); y += 60;
   }
   ctx.fillStyle = '#00d2df'; ctx.font = `italic 700 40px ${F}`;
-  ctx.fillText(MOTTOS[(s.id.length + st.nSets) % MOTTOS.length], 70, Math.max(y, 1220));
+  ctx.fillText(pickMotto(st.prs.length ? 'pr' : 'gen', 's:' + s.id), 70, Math.max(y, 1220));
   ctx.fillStyle = '#4b5b63'; ctx.font = `700 28px ${F}`; ctx.textAlign = 'right'; ctx.fillText('#FITNESTEBAN', W - 70, H - 50); ctx.textAlign = 'left';
   return new Promise(res => c.toBlob(res, 'image/png'));
 }
@@ -1407,7 +1423,7 @@ async function buildRetoCard(id, h) {
   roundRect(ctx, 70, 1150, Math.max(22, (W - 140) * pct), 22, 11); ctx.fillStyle = '#fbbf24'; ctx.fill();
   ctx.fillStyle = '#8a9ba5'; ctx.font = `600 28px ${F}`; ctx.fillText(`Nivel ${lv} de ${r.max}`, 70, 1215);
   ctx.fillStyle = '#00d2df'; ctx.font = `italic 700 40px ${F}`;
-  ctx.fillText(MOTTOS[(total + (h.at || 0)) % MOTTOS.length], 70, 1275);
+  ctx.fillText(pickMotto(h.test ? 'test' : h.completed && h.feel !== 'hard' ? 'up' : 'gen', `r:${id}:${h.at}`), 70, 1275);
   ctx.fillStyle = '#4b5b63'; ctx.font = `700 28px ${F}`; ctx.textAlign = 'right'; ctx.fillText('#FITNESTEBAN', W - 70, H - 40); ctx.textAlign = 'left';
   return new Promise(res => c.toBlob(res, 'image/png'));
 }
@@ -4579,6 +4595,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.53.3', ['📸 Más frases en las tarjetas, según tu sesión.'], 'quiet'],
   ['4.53.2', ['📖 Guía actualizada.'], 'quiet'],
   ['4.53.1', ['🤸 Bloque CALISTENIA EN CASA en la biblioteca.'], 'quiet'],
   ['4.53.0', ['📸 Tarjetas de retos para compartir: al terminar un reto o un test de máximo, y desde Progreso → Historial.', '🎯 Los tests de máximo aparecen en el historial y el calendario.']],
