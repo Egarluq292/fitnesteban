@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.59.0';
+const APP_VERSION = '4.59.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -711,6 +711,7 @@ function openModal(html, handlers = {}) {
   if (first && handlers.autofocus) first.focus();
 }
 function closeModal() {
+  micStop(); // si se estaba dictando en la ventana, deja de escuchar
   const root = $('#modalRoot');
   root.innerHTML = '';
   root.classList.remove('open');
@@ -4778,28 +4779,65 @@ async function chatSend(text) {
 document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 /* 🎤 Dictado (Chrome/Android; en otros, el micro del teclado) */
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-let micRec = null, micSel = '';
-/* Dicta en el campo que indica el selector. Se busca el campo en cada resultado por si la pantalla se repinta. */
+/* El móvil corta la escucha tras una pausa breve: la app vuelve a escuchar sola y va sumando lo dictado.
+   Se para al tocar otra vez el micro, tras unos segundos de silencio, al cerrar la ventana o a los 2 minutos. */
+let mic = null, micHint = false;
+function micMark(m, on) {
+  document.querySelectorAll('[data-mic]').forEach(b => { if (b.dataset.mic === m.sel) b.classList.toggle('mic-on', on); });
+  if (m.btn) m.btn.classList.toggle('mic-on', on);
+  if (m.sel === '#chatInput') $('#chatMic')?.classList.toggle('mic-on', on);
+}
+function micStop() {
+  const m = mic; if (!m) return;
+  mic = null; try { m.rec?.abort(); } catch { /* ya parado */ }
+  micMark(m, false);
+}
+/* Texto de una escucha sin repetir frases (en Android cada resultado puede traer otra vez el anterior) */
+function micJoin(results) {
+  let t = '';
+  for (const res of results) {
+    const s = String(res[0]?.transcript || '').trim(); if (!s) continue;
+    const a = t.toLowerCase(), b = s.toLowerCase();
+    if (!t || b.startsWith(a)) t = s; else if (!a.endsWith(b)) t += ' ' + s;
+  }
+  return t;
+}
+function micWrite(m, extra) {
+  const inp = document.querySelector(m.sel); if (!inp) return false;
+  const txt = [m.base, m.said, extra].filter(Boolean).join(' ');
+  const max = +inp.getAttribute('maxlength') || 0;
+  inp.value = max ? txt.slice(0, max) : txt;
+  inp.dispatchEvent(new Event('input', { bubbles: true }));
+  return true;
+}
+function micListen(m) {
+  if (mic !== m) return;
+  const r = new SpeechRec(); m.rec = r;
+  let got = '', fatal = false;
+  r.lang = 'es-ES'; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
+  r.onresult = e => { got = micJoin(e.results); if (mic === m && !micWrite(m, got)) micStop(); };
+  r.onerror = e => {
+    const msg = { 'not-allowed': 'Permite el micrófono para dictar', 'service-not-allowed': 'Permite el micrófono para dictar', 'audio-capture': 'No encuentro el micrófono', network: 'Sin conexión no se puede dictar' }[e.error];
+    if (msg) { fatal = true; if (mic === m) toast(msg, 'warn'); }
+  };
+  r.onend = () => {
+    if (mic !== m) return;
+    if (got) { m.said = [m.said, got].filter(Boolean).join(' '); m.quiet = 0; } else m.quiet++;
+    if (!micWrite(m, '') || fatal || m.quiet >= 2 || Date.now() - m.t0 > 120000 || document.hidden) return micStop();
+    setTimeout(() => micListen(m), 80);
+  };
+  try { r.start(); } catch { micStop(); }
+}
 function micDictate(sel, btn) {
   if (!SpeechRec) return;
-  if (micRec) { const same = micSel === sel; micRec.stop(); if (same) return; }
-  const inp0 = document.querySelector(sel); if (!inp0 || inp0.disabled) return;
-  const r = new SpeechRec(); micRec = r; micSel = sel;
-  r.lang = 'es-ES'; r.interimResults = true; r.continuous = false;
-  const base = inp0.value ? inp0.value.trim() + ' ' : '';
-  const mark = on => document.querySelectorAll('[data-mic]').forEach(b => { if (b.dataset.mic === sel) b.classList.toggle('mic-on', on); });
-  r.onresult = e => {
-    const inp = document.querySelector(sel); if (!inp) return;
-    let t = ''; for (const res of e.results) t += res[0].transcript;
-    const max = +inp.getAttribute('maxlength') || 0;
-    inp.value = max ? (base + t).slice(0, max) : base + t;
-    inp.dispatchEvent(new Event('input', { bubbles: true }));
-  };
-  r.onerror = e => { if (e.error === 'not-allowed') toast('Permite el micrófono para dictar', 'warn'); else if (e.error !== 'aborted' && e.error !== 'no-speech') toast('No se pudo dictar', 'warn'); };
-  r.onend = () => { if (micRec === r) { micRec = null; micSel = ''; } mark(false); };
-  mark(true); if (btn) btn.classList.add('mic-on');
-  try { r.start(); } catch { micRec = null; micSel = ''; mark(false); }
+  if (mic) { const same = mic.sel === sel; micStop(); if (same) return; }
+  const inp = document.querySelector(sel); if (!inp || inp.disabled) return;
+  const m = mic = { sel, btn, base: inp.value.trim(), said: '', quiet: 0, t0: Date.now() };
+  micMark(m, true);
+  if (!micHint) { micHint = true; toast('Habla con calma: puedes hacer pausas. Toca 🎤 otra vez para terminar.'); }
+  micListen(m);
 }
+document.addEventListener('visibilitychange', () => { if (document.hidden) micStop(); });
 function chatMic() { micDictate('#chatInput', $('#chatMic')); }
 /* Botón 🎤 para cualquier campo (no aparece si el navegador no sabe dictar) */
 function micBtn(sel, cls = 'btn-ghost px-3 py-2.5 shrink-0') {
@@ -4926,6 +4964,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.59.1', ['🎤 El dictado por voz ya no se corta tras una pausa y el micro deja de parpadear al terminar.'], 'quiet'],
   ['4.59.0', ['🔥 El mapa muscular muestra una figura femenina si en tu perfil pone «Mujer».']],
   ['4.58.0', ['🎴 Entreno estrena tarjeta para tu bloque activo: qué día te toca, cuántas sesiones llevas y cómo vas esta semana, con una foto y un color propios para cada tipo de bloque.', '📚 Si aún no tienes bloque, la tarjeta te lleva directo a la biblioteca.']],
   ['4.57.1', ['Guía actualizada.'], 'quiet'],
@@ -5130,7 +5169,7 @@ const GUIDE = [
   ]],
   ['⚡ Coach IA', [
     'El botón ⚡ de arriba abre un chat con Gemini que <b>lee tus datos</b>: plan y progresión, últimas sesiones, comidas de hoy y lo que te queda, dieta de la semana, cardio, retos y medidas.',
-    '🎤 Puedes <b>dictarle</b> en vez de escribir: toca el micro, habla y el texto aparece solo.',
+    '🎤 Puedes <b>dictarle</b> en vez de escribir: toca el micro y habla; puedes hacer pausas. Toca 🎤 otra vez para terminar (o se para solo tras unos segundos de silencio).',
     '👨‍🍳 Cuando te propone un plato, pulsa «Receta» para verlo paso a paso con los mismos ingredientes y gramos. «¿Cambiar algo?» la adapta (también por voz).',
     '🏋️ Pídele un <b>bloque de entreno</b> con el material que tienes (o sin nada): pulsa «＋ Añadir a mis bloques» y aparece en Entreno. Se guarda en la conversación, como las recetas.',
     'Cada vez que lo abres empieza de cero; «Ver la última conversación» recupera la anterior. Usa tu clave de Gemini (Ajustes → IA). Nunca se envían la clave ni el PIN.'
