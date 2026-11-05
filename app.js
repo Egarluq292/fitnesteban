@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.60.1';
+const APP_VERSION = '4.61.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -281,17 +281,22 @@ function publishBlockModal(progId) {
     } })
   });
 }
-function addLibBlock(lib) {
-  const L = libAll().find(x => x.lib === lib); if (!L) return;
+function makeLibProg(lib) {
+  const L = libAll().find(x => x.lib === lib); if (!L) return null;
   const days = clone(L.days()).map(d => {
     const nd = normalizeDay(d); nd.id = uid('d_');
     nd.exercises = nd.exercises.map(e => ({ ...e, id: uid('c_'), alts27: true }));
     return nd;
   });
   const np = { id: uid('p_'), name: L.name, icon: L.icon, lib: L.lib, type: 'strength', days };
-  state.plan.programs.push(np); state.plan.active = np.id; ui.dayId = days[0].id;
+  state.plan.programs.push(np);
+  return np;
+}
+function addLibBlock(lib) {
+  const np = makeLibProg(lib); if (!np) return;
+  state.plan.active = np.id; ui.dayId = np.days[0]?.id; ui.trainHome = false;
   persist(); closeModal(); ui.view = 'train'; render(); window.scrollTo({ top: 0 });
-  toast(`Bloque ${L.name} añadido ✓`);
+  toast(`Bloque ${np.name} añadido ✓`);
 }
 function libraryModal() {
   const html = () => `<h3 class="modal-title">＋ Añadir bloque</h3>
@@ -655,6 +660,7 @@ if (!state.settings.habitsFix252) {
 
 /* ---------- Estado de interfaz ---------- */
 const ui = {
+  trainHome: true,
   view: 'diet',
   remoteVer: null,
   remoteVerAt: 0,
@@ -950,6 +956,7 @@ const BLOCK_LOOKS = [
   { re: /piern|glút|glut|cuádr|🦵/i, img: 'pierna', c: '#f472b6', tag: 'Pierna' },
   { re: /ppt|push|pull|torso/i, img: 'ppt', c: '#60a5fa', tag: 'Fuerza' },
   { re: /full|cuerpo/i, img: 'full', c: '#22d3ee', tag: 'Fuerza' },
+  { re: /h[ií]brido/i, img: 'hibrido', c: '#f97316', tag: 'Fuerza · 5 días' },
   { re: /./, img: 'gen', c: '#22d3ee', tag: 'Fuerza', tint: true }
 ];
 const blockLook = p => BLOCK_LOOKS.find(L => L.re.test(`${p.name} ${p.icon || ''}`));
@@ -988,15 +995,114 @@ function blockHeroHTML() {
       <div class="bh-name">${p.icon ? `<span class="mr-1.5">${esc(p.icon)}</span>` : ''}${esc(p.name)}</div>
       <div class="bh-sub">${p.days.length} ${p.days.length === 1 ? 'día' : 'días'} · ${ss.length ? `${ss.length} ${ss.length === 1 ? 'sesión hecha' : 'sesiones hechas'}` : 'Aún sin estrenar'}${last ? ` · última ${ago === 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}` : ''}</div>
       <div class="bh-row">
-        <div class="min-w-0"><div class="bh-l">${doneToday ? 'Hoy' : 'Te toca'}</div><div class="bh-v truncate">${doneToday ? 'Entrenado ✓ toca recuperar' : esc(nd ? `${nd.label} · ${nd.title}` : '—')}</div></div>
+        <div class="min-w-0"><div class="bh-l">${doneToday ? 'Hoy' : 'Te toca'}</div><div class="bh-v truncate">${doneToday ? 'Entrenado ✓ toca recuperar' : esc(nd ? (nd.title || nd.label) : '—')}</div></div>
         <div class="shrink-0 text-right"><div class="bh-l">Esta semana</div><div class="bh-dots">${dots}</div><div class="bh-l !normal-case !tracking-normal mt-0.5">${wk} de ${goal}</div></div>
       </div>
     </div></section>`;
 }
 
+/* ---------- 🗂 Entreno: tarjetas de todos los bloques ----------
+   Arriba «Hoy te toca», luego RETOS, FREE y CARDIO, tus bloques y los de Esteban (todos, sin tener que añadirlos).
+   Cada tarjeta se puede ocultar (⋯). Al abrir un bloque de Esteban por primera vez se copia a tus bloques. */
+const progForLib = L => state.plan.programs.find(p => p.lib === L.lib || p.pubId === L.lib || (L.base && p.lib === L.base) || (p.type === 'strength' && libKey(p.name) === libKey(L.name)));
+const RETOS_LOOK = { img: 'retos', c: '#f59e0b', tag: 'Retos' };
+function libIdsOwnedProgs() { return new Set(libAll().map(progForLib).filter(Boolean).map(p => p.id)); }
+function blockStats(p) {
+  const ids = new Set(p.days.map(d => d.id)), ss = sortedSessions().filter(x => ids.has(x.dayId));
+  const last = ss[ss.length - 1], T = todayISO();
+  const ago = last ? Math.round((parseISO(T) - parseISO(last.date)) / 864e5) : null;
+  return { n: ss.length, ago, wk: ss.filter(x => x.date > addDays(T, -7)).length };
+}
+function galleryCard({ key, name, icon, look, sub, tag, extra = '', menu = true, dim = false }) {
+  return `<div class="bh bh-sm ${dim ? 'opacity-50' : ''}" style="--bh:${look.c}" data-act="openBlock" data-key="${esc(key)}" role="button" tabindex="0">
+    <img class="bh-img" src="blk-${look.img}.webp" alt="" loading="lazy" />${look.tint ? '<span class="bh-tint"></span>' : ''}
+    <span class="bh-shade"></span>
+    ${menu ? `<button class="bh-menu" data-act="blockMenu" data-key="${esc(key)}" type="button" aria-label="Opciones">⋯</button>` : ''}
+    <div class="bh-body">
+      <span class="bh-tag">${tag}</span>
+      <div class="bh-name !text-[22px] !mt-1">${icon ? `<span class="mr-1.5">${esc(icon)}</span>` : ''}${esc(name)}</div>
+      <div class="bh-sub">${sub}</div>${extra}
+    </div></div>`;
+}
+function renderTrainHome() {
+  const hid = new Set(state.settings.hiddenBlocks || []), show = !!ui.showHidden;
+  const retos = state.plan.programs.find(p => p.type === 'retos');
+  const ownedLib = libIdsOwnedProgs(), activeId = state.plan.active;
+  const stratCard = (p, key, isLib, L) => {
+    const look = blockLook(p.name ? p : L), st = p.days ? blockStats(p) : { n: 0, ago: null, wk: 0 };
+    const nd = p.days?.find(d => d.id === nextDayId(p));
+    const nDays = (p.days || L?.days?.() || []).length, nEx = (p.days || L?.days?.() || []).reduce((a, d) => a + (d.exercises?.length || 0), 0);
+    const isNew = isLib && L && libIsNew(L) && !st.n;
+    const tag = `${isNew ? '<span class="text-white">Nuevo · </span>' : ''}${isLib ? 'De Esteban' : 'Tuyo'} · ${esc(look.tag)}`;
+    const sub = `${nDays} ${nDays === 1 ? 'día' : 'días'} · ${nEx} ejercicios${st.n ? ` · última ${st.ago === 0 ? 'hoy' : st.ago === 1 ? 'ayer' : `hace ${st.ago} días`}` : ''}`;
+    const extra = st.n && nd ? `<div class="bh-next"><span class="bh-l">Te toca</span> <b>${esc(nd.title || nd.label)}</b></div>` : '';
+    return galleryCard({ key, name: p.name || L.name, icon: p.icon || L?.icon, look, sub, tag, extra, dim: hid.has(key) });
+  };
+  const own = state.plan.programs.filter(p => p.type === 'strength' && p.id !== 'free' && !ownedLib.has(p.id))
+    .map(p => ({ key: 'p:' + p.id, html: () => stratCard(p, 'p:' + p.id, false) }));
+  const libs = libAll().map(L => { const p = progForLib(L), key = 'lib:' + L.lib; return { key, html: () => stratCard(p || {}, key, true, L), last: p ? blockStats(p).ago ?? 999 : 1000 }; })
+    .sort((a, b) => a.last - b.last);
+  const vis = arr => arr.filter(x => show || !hid.has(x.key));
+  const nHid = [...own, ...libs].filter(x => hid.has(x.key)).length;
+  const rs = retos ? RETO_IDS.filter(id => retoOf(id)).length : 0;
+  const tc = todayCardHTML();
+  return `${tc}${tc ? '<div class="h-3"></div>' : ''}
+  ${retos ? galleryCard({ key: 'retos', name: 'RETOS', icon: '🏆', look: RETOS_LOOK, tag: 'Retos de calistenia', menu: false,
+      sub: rs ? `${rs} ${rs === 1 ? 'reto en marcha' : 'retos en marcha'} · niveles que suben contigo` : 'Flexiones, dominadas, sentadillas… a tu ritmo' }) : ''}
+  <div class="grid grid-cols-2 gap-2 mt-3">
+    <button class="gal-btn" data-act="openBlock" data-key="free" type="button"><span class="text-xl">🎲</span><span><b>FREE</b><small>Ejercicios sueltos de hoy</small></span></button>
+    <button class="gal-btn" data-act="openBlock" data-key="cardio" type="button"><span class="text-xl">🔥</span><span><b>CARDIO</b><small>Correr, bici, nadar…</small></span></button>
+  </div>
+  <div class="gal-h"><span>Tus bloques</span><button class="text-brand text-xs font-bold" data-act="newBlock" type="button">＋ Crear bloque</button></div>
+  ${vis(own).map(x => x.html()).join('') || '<p class="text-[12px] text-mute px-1 -mt-1 mb-2">Aún no has creado ninguno. Crea el tuyo o usa uno de Esteban: se guarda tu progreso en cada uno.</p>'}
+  <div class="gal-h"><span>Bloques de Esteban</span></div>
+  ${vis(libs).map(x => x.html()).join('')}
+  ${nHid ? `<button class="w-full text-center text-[12px] text-mute underline py-3" data-act="toggleHidden" type="button">${show ? 'Esconder los bloques ocultos' : `Ver ${nHid === 1 ? '1 bloque oculto' : `${nHid} bloques ocultos`}`}</button>` : ''}`;
+}
+function openBlock(key) {
+  let p = null;
+  if (key === 'retos' || key === 'cardio') p = state.plan.programs.find(x => x.type === key);
+  else if (key === 'free') p = state.plan.programs.find(x => x.id === 'free');
+  else if (key.startsWith('p:')) p = state.plan.programs.find(x => x.id === key.slice(2));
+  else if (key.startsWith('lib:')) { const L = libAll().find(x => x.lib === key.slice(4)); if (L) p = progForLib(L) || makeLibProg(L.lib); }
+  if (!p) return;
+  state.plan.active = p.id; ui.retoId = null; ui.dayId = p.days?.length ? nextDayId(p) : null; ui.trainHome = false;
+  persist(); render(); window.scrollTo({ top: 0 });
+}
+function blockMenu(key) {
+  const hid = new Set(state.settings.hiddenBlocks || []), isHid = hid.has(key), own = key.startsWith('p:');
+  const L = own ? null : libAll().find(x => x.lib === key.slice(4));
+  const name = own ? state.plan.programs.find(x => x.id === key.slice(2))?.name : L?.name;
+  openModal(`<h3 class="modal-title">${esc(name || 'Bloque')}</h3>
+    ${L?.desc ? `<p class="text-[12px] text-slate-300 leading-snug whitespace-pre-line -mt-1">${esc(L.desc).replace(/\nCómo usarlo:/, '\n<b class="text-brand">Cómo usarlo:</b>')}</p>` : ''}
+    <div class="grid gap-2">
+      <button class="btn-ghost" data-mact="open" type="button">Abrir</button>
+      <button class="btn-ghost" data-mact="edit" type="button">${own ? '✎ Editar o borrar' : '✎ Editar (tu copia)'}</button>
+      <button class="btn-ghost" data-mact="hide" type="button">${isHid ? '👁 Volver a mostrarlo' : '🙈 Ocultar este bloque'}</button>
+    </div>
+    <p class="text-[11px] text-mute text-center">${own ? '' : 'Los cambios se hacen en tu copia: el bloque original de Esteban no cambia. '}${isHid ? '' : 'Ocultarlo no borra nada: lo recuperas abajo, en «Ver bloques ocultos».'}</p>`, {
+    open: () => { closeModal(); openBlock(key); },
+    edit: () => {
+      closeModal();
+      let p = own ? state.plan.programs.find(x => x.id === key.slice(2)) : null;
+      if (!own) { const L = libAll().find(x => x.lib === key.slice(4)); if (L) p = progForLib(L) || makeLibProg(L.lib); persist(); }
+      if (!p) return; state.plan.active = p.id; editProgModal(p.id);
+    },
+    hide: () => { const s = new Set(state.settings.hiddenBlocks || []); if (isHid) s.delete(key); else s.add(key); state.settings.hiddenBlocks = [...s]; persist(); closeModal(); render(); toast(isHid ? 'Visible otra vez ✓' : 'Bloque oculto'); }
+  });
+}
+function blockBackHTML() {
+  const p = prog(), strength = p.type === 'strength';
+  return `<div class="flex items-center gap-2 mb-2.5">
+    <button class="back-btn" data-act="trainHome" type="button">‹ Bloques</button>
+    <span class="flex-1 min-w-0 truncate text-[13px] font-extrabold text-mute text-center">${p.type === 'strength' && p.id !== 'free' ? '' : esc(progLabel(p).replace(/<[^>]+>/g, ''))}</span>
+    ${strength ? '<button class="iconbtn iconbtn-sm shrink-0" data-act="editProg" type="button" aria-label="Editar bloque">✎</button>' : ''}
+  </div>${strength && p.id !== 'free' ? blockHeroHTML() : ''}`;
+}
 function renderTrain() {
-  if (prog().type === 'cardio') return renderProgHeader() + renderCardio();
-  if (prog().type === 'retos') return renderProgHeader() + renderRetos();
+  if (ui.trainHome) return renderTrainHome();
+  if (prog().type === 'cardio') return blockBackHTML() + renderCardio();
+  if (prog().type === 'retos') return blockBackHTML() + (ui.retoId ? '' : '') + renderRetos();
   const day = currentDay();
   const d = draftOf(day.id);
   const next = nextDayId();
@@ -1019,7 +1125,7 @@ function renderTrain() {
     </label>`).join('');
 
   return `
-  ${renderProgHeader()}
+  ${blockBackHTML()}
   ${renderDeloadCard()}
   <div class="chips-row -mx-4 px-4">${chips}</div>
 
@@ -1588,7 +1694,7 @@ function editProgModal(progId) {
       for (const d of p.days) delete state.drafts[d.id];
       state.plan.programs = state.plan.programs.filter(x => x.id !== progId);
       if (state.plan.active === progId) state.plan.active = state.plan.programs[0].id;
-      ui.dayId = nextDayId();
+      ui.dayId = nextDayId(); ui.trainHome = true;
       persist(); closeModal(); render();
     }
   });
@@ -2227,7 +2333,7 @@ function renderRetos() {
           <span class="flex justify-between text-[10px] mt-1"><span class="${rest?.warn ? 'text-amber-300' : rest?.done ? 'text-emerald-300' : 'text-brand font-bold'}">${rest ? esc(rest.text) : retoDueTest(id) ? '🎯 Listo · toca test de máximo' : '● Listo para hoy'}</span><span class="text-mute">${retoU(r, r.max)}</span></span>
         </span></button>`;
   }).join('');
-  return `${todayCardHTML()}<section class="card p-4 mt-3">
+  return `<section class="card p-4">
     <h2 class="font-extrabold text-lg">🏆 Retos</h2>
     <p class="text-[11px] text-mute mt-1">Cada reto empieza según tus repeticiones máximas seguidas. Al terminar cada sesión dime cómo te has sentido y ajusto la siguiente.</p>
     <div class="space-y-2 mt-3">${cards}</div>
@@ -4242,8 +4348,7 @@ document.addEventListener('visibilitychange', () => {
 /* Entreno se abre en RETOS (con acceso directo a la sesión de hoy), salvo con un entreno en curso */
 function trainToRetos() {
   if (activeWip()) return false;
-  const r = state.plan.programs.find(p => p.type === 'retos'); if (!r) return false;
-  state.plan.active = r.id; ui.retoId = null; ui.dayId = null; return true;
+  ui.trainHome = true; ui.retoId = null; return true;
 }
 /* Dieta vuelve a «hoy» al regresar a la pestaña, tras 30 min fuera de la app o si ha cambiado el día,
    salvo que tengas una comida a medias (estimación o edición) en otro día */
@@ -4703,13 +4808,13 @@ function chatBlock(d) {
   return { name: String(d.nombre || 'MI BLOQUE').toUpperCase().slice(0, 16), icon: String(d.icono || '🏋️').slice(0, 4), days };
 }
 function blockFromChat(b) {
-  if (b.added && state.plan.programs.some(p => p.id === b.added)) { closeModal(); state.plan.active = b.added; ui.dayId = nextDayId(); go('train'); return; }
+  if (b.added && state.plan.programs.some(p => p.id === b.added)) { closeModal(); state.plan.active = b.added; ui.dayId = nextDayId(); ui.trainHome = false; ui.view = 'train'; render(); window.scrollTo({ top: 0 }); return; }
   const days = clone(b.days).map(d => { const nd = normalizeDay(d); nd.id = uid('d_'); nd.exercises = nd.exercises.map(e => ({ ...e, id: uid('c_'), alts27: true })); return nd; });
   let name = b.name; for (let n = 2; state.plan.programs.some(p => libKey(p.name) === libKey(name)); n++) name = `${b.name.slice(0, 13)} ${n}`;
   const np = { id: uid('p_'), name, icon: b.icon, type: 'strength', fromCoach: true, days };
   state.plan.programs.push(np); state.plan.active = np.id; ui.dayId = days[0].id;
   b.added = np.id; saveChatConv(ui.chat); persist();
-  closeModal(); ui.view = 'train'; render(); window.scrollTo({ top: 0 });
+  closeModal(); ui.trainHome = false; ui.view = 'train'; render(); window.scrollTo({ top: 0 });
   toast(`Bloque ${name} añadido a tus bloques ✓`);
 }
 const mealKcal = m => Math.round(m.items.reduce((a, it) => a + it.per100.kcal * it.grams / 100, 0));
@@ -5020,6 +5125,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.61.0', ['🗂 Entreno se renueva: todos tus entrenos en tarjetas con foto. RETOS, botones de FREE y CARDIO, tus bloques y todos los bloques de Esteban, listos para entrar sin añadirlos.', '⋯ En cada tarjeta puedes ocultar los bloques que no uses (los recuperas al final) o editarlos.', '⚡ Nuevo bloque HÍBRIDO 5: 5 días en los que cada músculo trabaja 2 veces por semana.']],
   ['4.60.1', ['⏱ Los pitidos del descanso se programan al empezar, para que suenen a su hora aunque salgas de la app. Nuevo «🔊 Probar el pitido» en la ventana de descanso.'], 'quiet'],
   ['4.60.0', ['🥗 En Dieta, cada comida sale plegada con sus kcal y macros: despliégala con la flechita ▶.', '✍️ El dictado por voz ya pone mayúsculas, comas y puntos.']],
   ['4.59.1', ['🎤 El dictado por voz ya no se corta tras una pausa y el micro deja de parpadear al terminar.'], 'quiet'],
@@ -5167,13 +5273,15 @@ const GUIDE = [
   ['🏠 Inicio', [
     'Al abrir la app ves 4 tarjetas: <b>Entrenamientos</b> (lo que te toca hoy y si tienes músculos aún cargados), <b>Nutrición</b> (lo comido y lo que te queda), <b>Progreso</b> (tu peso y cuánto has bajado o subido) y <b>Asistente IA</b> (el Coach). Toca una para ir allí.',
     'Vuelve a salir al abrir la app de cero o tras 1 hora sin usarla. Con un entreno a medias, la app se abre directamente en él. El <b>logo</b> de arriba siempre te trae a Inicio.',
-    '📚 Si hay bloques nuevos en la biblioteca, lo verás en la tarjeta de Entrenamientos.'
+    '📚 Si Esteban publica bloques nuevos, lo verás en la tarjeta de Entrenamientos y en Entreno con la etiqueta «Nuevo».'
   ]],
   ['🏋️ Entreno: bloques y días', [
-    'Arriba eliges el <b>bloque</b> ({{BLOQUES}}) y debajo el <b>día</b>. El punto ● marca el día que te toca según tu rotación; ✓ el que ya hiciste hoy.',
+    'Entreno muestra todos tus entrenos en <b>tarjetas</b>: arriba «Hoy te toca», luego <b>RETOS</b>, los botones <b>FREE</b> (ejercicios sueltos del día) y <b>CARDIO</b>, <b>tus bloques</b> y los <b>bloques de Esteban</b> (todos disponibles, sin tener que añadirlos). Toca una tarjeta para entrar; «‹ Bloques» o el botón Entreno de abajo te devuelven.',
+    'El <b>⋯</b> de cada tarjeta permite <b>ocultar</b> un bloque que no uses (no se borra nada: «Ver bloques ocultos», al final, lo recupera) y <b>editarlo</b>. Al abrir o editar un bloque de Esteban se hace tu copia, con tu progreso; el original no cambia.',
+    'Dentro de un bloque eliges el <b>día</b>: el punto ● marca el que te toca según tu rotación; ✓ el que ya hiciste hoy.',
     '🎴 La <b>tarjeta del bloque activo</b> te dice qué día te toca, cuántas sesiones llevas (y en qué semana del bloque vas) y cuántas has hecho en los últimos 7 días, con un objetivo mínimo de 3. Cada tipo de bloque tiene su foto y su color.',
     'Cada bloque lleva su propia rotación: {{ROTACION}}',
-    '＋ (junto al ✎ de arriba) abre la <b>biblioteca</b>: bloques preparados por Esteban (Full Body, PPT, Brazos, Pierna, Calistenia en casa, Kettlebell…), cada uno con su descripción y «Cómo usarlo». También puedes crear uno vacío.',
+    '«＋ Crear bloque» (en Tus bloques) crea uno vacío para montar el tuyo. Los bloques de Esteban (Full Body, PPT, Híbrido 5, Brazos, Pierna, Calistenia en casa, Kettlebell…) traen su descripción y «Cómo usarlo»: la ves en el ⋯ de su tarjeta.',
     'Para cambiar ejercicios, usa «＋ Añadir ejercicio» (crear uno o elegir entre los preparados) y el ✎ de cada ejercicio. «＋ Día» añade días. El ✎ del bloque o del día permite renombrar, reordenar (◀ ▶) o eliminar. El historial nunca se borra al eliminar.'
   ]],
   ['🧭 Cómo decide el coach el peso', [
@@ -5485,7 +5593,7 @@ function goToWip() {
   ui.dayId = w.dayId;
   const t = wipTarget(w);
   if (t && !t.save) { w.d.open = w.d.open || {}; w.d.open[t.key] = true; }
-  if (ui.view !== 'train') go('train'); else render();
+  ui.trainHome = false; ui.view = 'train'; render();
   setTimeout(() => {
     const el = t && !t.save ? document.getElementById(`set-${t.exId}-${t.i}`) : document.getElementById('saveRow');
     if (!el) return;
@@ -5503,6 +5611,7 @@ function go(view) {
   if (view === 'coach') return openChat();
   if (view === 'diet' && ui.view !== 'diet') { ui._animRings = true; dietBackToToday(); }
   if (view === 'train' && ui.view !== 'train') trainToRetos();
+  else if (view === 'train' && !ui.trainHome) { ui.trainHome = true; ui.retoId = null; } // tocar Entreno estando dentro de un bloque vuelve a las tarjetas
   ui.view = view;
   if (view === 'settings' && navigator.onLine) loadGis().catch(() => null);
   if (view === 'settings') checkRemoteVersion();
@@ -5894,7 +6003,12 @@ const actions = {
     persist(); render();
   },
   openCal: () => openCalendar(),
-  goToday: b => { state.plan.active = b.dataset.prog; ui.dayId = b.dataset.day; ui.retoId = null; persist(); render(); window.scrollTo({ top: 0 }); },
+  goToday: b => { state.plan.active = b.dataset.prog; ui.dayId = b.dataset.day; ui.retoId = null; ui.trainHome = false; persist(); render(); window.scrollTo({ top: 0 }); },
+  openBlock: b => openBlock(b.dataset.key),
+  blockMenu: b => blockMenu(b.dataset.key),
+  trainHome: () => { ui.trainHome = true; ui.retoId = null; render(); window.scrollTo({ top: 0 }); },
+  toggleHidden: () => { ui.showHidden = !ui.showHidden; render(); },
+  newBlock: () => editProgModal(null),
   retoOpen: b => { ui.retoId = b.dataset.reto; render(); window.scrollTo({ top: 0 }); },
   retoBack: () => { ui.retoId = null; render(); window.scrollTo({ top: 0 }); },
   retoStart: b => {
@@ -6076,7 +6190,7 @@ const actions = {
   planAccess: b => planModal(b.dataset.hash),
   setTheme: b => { try { localStorage.setItem(THEME_KEY, b.dataset.k); } catch { /* nada */ } applyTheme(); render(); },
   retoCard: b => openRetoCard(b.dataset.reto, b.dataset.at),
-  libNewSee: () => { libMarkSeen(); render(); libraryModal(); },
+  libNewSee: () => { libMarkSeen(); go('train'); ui.trainHome = true; render(); },
   libNewHide: () => { libMarkSeen(); render(); },
   accRow: b => { ui.accOpenH = ui.accOpenH === b.dataset.hash ? null : b.dataset.hash; render(); accFilterDom(); },
   accF: b => { ui.accF = b.dataset.k; render(); accFilterDom(); },
@@ -7084,7 +7198,7 @@ $('#homeBtn').addEventListener('click', goHome);
 ui.dayId = nextDayId();
 {
   const wip = workoutInProgress();
-  if (wip) { state.plan.active = wip.prog; ui.dayId = wip.day; ui.view = 'train'; }
+  if (wip) { state.plan.active = wip.prog; ui.dayId = wip.day; ui.view = 'train'; ui.trainHome = false; }
   else ui.view = 'home';
 }
 render();

@@ -1,5 +1,755 @@
 [
  {
+  "lib": "pub_hibrido5",
+  "name": "HÍBRIDO 5",
+  "icon": "⚡",
+  "desc": "Torso · Pierna · Empuje · Tirón · Pierna y brazos: cinco días en los que cada músculo grande trabaja 2 veces por semana, las piernas tienen dos sesiones (cuádriceps y femoral-glúteo) y los brazos su propio espacio sin quitar energía al resto. 5-6 ejercicios por día, ~60 min.\nCómo usarlo: 5 días por semana en orden Torso → Pierna A → Empuje → Tirón → Pierna B, por ejemplo de lunes a viernes con el fin de semana libre. Si un día no puedes, no te lo saltes: haz el que toca al día siguiente. Sube el peso cuando completes todas las repeticiones en todas las series. Si estás en déficit y vas justo de fuerzas, quita la última serie de los ejercicios de aislamiento antes que tocar los pesados.",
+  "author": "Esteban",
+  "at": "2026-11-05",
+  "days": [
+   {
+    "label": "TORSO",
+    "rotation": true,
+    "title": "Día 1 · Torso pesado",
+    "subtitle": "Banca, remo y press de hombro pesados + jalón y laterales",
+    "exercises": [
+     {
+      "id": "h5_bench",
+      "block": "🏋️ Empuje pesado",
+      "sets": 4,
+      "minReps": 6,
+      "maxReps": 8,
+      "increment": 2.5,
+      "rest": 150,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Press de banca con barra",
+        "note": "Escápulas retraídas y pies firmes; baja en 2 s."
+       },
+       {
+        "name": "Press de banca con mancuernas",
+        "note": "Codos a 45º, recorrido completo."
+       },
+       {
+        "name": "Press de pecho en máquina",
+        "note": "Sin bloquear codos arriba."
+       }
+      ]
+     },
+     {
+      "id": "h5_row",
+      "block": "🏋️ Tirón pesado",
+      "sets": 4,
+      "minReps": 6,
+      "maxReps": 8,
+      "increment": 2.5,
+      "rest": 150,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Remo con barra",
+        "note": "Torso a 45º, lleva la barra al ombligo."
+       },
+       {
+        "name": "Remo con mancuerna a una mano",
+        "note": "Apoya rodilla y mano en el banco."
+       },
+       {
+        "name": "Remo en máquina",
+        "note": "Pecho pegado al apoyo."
+       }
+      ]
+     },
+     {
+      "id": "h5_ohp",
+      "block": "🎯 Hombro",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 10,
+      "increment": 2,
+      "rest": 120,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Press militar con mancuernas",
+        "note": "Sentado, sin arquear la zona lumbar."
+       },
+       {
+        "name": "Press militar con barra",
+        "note": "De pie, glúteo y abdomen apretados."
+       },
+       {
+        "name": "Press de hombro en máquina",
+        "note": "Baja hasta la altura de las orejas."
+       }
+      ]
+     },
+     {
+      "id": "h5_pulldown",
+      "block": "🔙 Espalda",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 10,
+      "increment": 2.5,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Jalón al pecho",
+        "note": "Lleva la barra a la parte alta del pecho, codos hacia abajo."
+       },
+       {
+        "name": "Dominadas",
+        "note": "Barbilla por encima de la barra."
+       },
+       {
+        "name": "Dominadas asistidas",
+        "note": "Con goma o máquina."
+       }
+      ]
+     },
+     {
+      "id": "h5_lat",
+      "block": "🎯 Hombro lateral",
+      "sets": 3,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 1,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Elevaciones laterales con mancuernas",
+        "note": "Codos un poco flexionados, sube hasta la altura del hombro."
+       },
+       {
+        "name": "Elevaciones laterales en polea",
+        "note": "Tensión constante."
+       },
+       {
+        "name": "Elevaciones laterales en máquina",
+        "note": "Sin impulso."
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "label": "PIERNA A",
+    "rotation": true,
+    "title": "Día 2 · Pierna (cuádriceps)",
+    "subtitle": "Sentadilla pesada + prensa, búlgara, extensiones y gemelo",
+    "exercises": [
+     {
+      "id": "h5_squat",
+      "block": "🏋️ Cuádriceps pesado",
+      "sets": 4,
+      "minReps": 6,
+      "maxReps": 8,
+      "increment": 2.5,
+      "rest": 150,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Sentadilla trasera con barra",
+        "note": "Profundidad paralela o más, rodillas siguiendo la punta del pie."
+       },
+       {
+        "name": "Sentadilla en multipower",
+        "note": "Pies un poco adelantados."
+       },
+       {
+        "name": "Sentadilla goblet al pecho",
+        "note": "Mancuerna pegada al esternón."
+       }
+      ]
+     },
+     {
+      "id": "h5_press",
+      "block": "🦵 Cuádriceps",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 5,
+      "rest": 120,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Prensa de piernas",
+        "note": "Pies a media altura, sin bloquear rodillas."
+       },
+       {
+        "name": "Sentadilla hack",
+        "note": "Espalda pegada al respaldo."
+       },
+       {
+        "name": "Sentadilla frontal con barra",
+        "note": "Codos altos, torso erguido."
+       }
+      ]
+     },
+     {
+      "id": "h5_bulg",
+      "block": "🦵 Unilateral",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 10,
+      "increment": 2,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Sentadilla búlgara",
+        "note": "Pie trasero en el banco. Reps por pierna."
+       },
+       {
+        "name": "Zancadas caminando",
+        "note": "Paso largo, rodilla casi al suelo."
+       },
+       {
+        "name": "Zancadas inversas",
+        "note": "Paso atrás, rodilla casi al suelo."
+       }
+      ]
+     },
+     {
+      "id": "h5_ext",
+      "block": "🎯 Aislamiento",
+      "sets": 3,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Extensión de cuádriceps",
+        "note": "Aguanta 1 s arriba."
+       },
+       {
+        "name": "Sentadilla sissy",
+        "note": "Rodillas adelante, cuerpo en bloque."
+       },
+       {
+        "name": "Extensión de cuádriceps a una pierna",
+        "note": "Reps por pierna."
+       }
+      ]
+     },
+     {
+      "id": "h5_calf",
+      "block": "🦶 Gemelo",
+      "sets": 4,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Elevación de gemelos de pie",
+        "note": "Pausa de 1 s abajo y arriba."
+       },
+       {
+        "name": "Elevación de gemelos en prensa",
+        "note": "Recorrido completo."
+       },
+       {
+        "name": "Elevación de gemelos a una pierna",
+        "note": "Con mancuerna en la mano del mismo lado."
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "label": "EMPUJE",
+    "rotation": true,
+    "title": "Día 3 · Empuje",
+    "subtitle": "Pecho inclinado, hombro y tríceps con volumen",
+    "exercises": [
+     {
+      "id": "h5_incl",
+      "block": "💪 Pecho",
+      "sets": 4,
+      "minReps": 8,
+      "maxReps": 10,
+      "increment": 2,
+      "rest": 120,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Press inclinado con mancuernas",
+        "note": "Banco a 30º, baja hasta estirar el pecho."
+       },
+       {
+        "name": "Press inclinado con barra",
+        "note": "Barra a la parte alta del pecho."
+       },
+       {
+        "name": "Press inclinado en máquina",
+        "note": "Recorrido completo."
+       }
+      ]
+     },
+     {
+      "id": "h5_mach",
+      "block": "🎯 Hombro",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 10,
+      "increment": 2,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Press de hombro en máquina",
+        "note": "Espalda pegada al respaldo."
+       },
+       {
+        "name": "Press Arnold",
+        "note": "Gira las muñecas al subir."
+       },
+       {
+        "name": "Press militar con mancuernas",
+        "note": "Sentado y sin arquear."
+       }
+      ]
+     },
+     {
+      "id": "h5_fly",
+      "block": "💪 Pecho aislamiento",
+      "sets": 3,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Cruce de poleas",
+        "note": "Brazos semiflexionados, junta las manos delante del pecho."
+       },
+       {
+        "name": "Aperturas con mancuernas",
+        "note": "Baja abriendo hasta notar el estiramiento."
+       },
+       {
+        "name": "Contractora de pecho",
+        "note": "Aguanta 1 s cerrado."
+       }
+      ]
+     },
+     {
+      "id": "h5_lat2",
+      "block": "🎯 Hombro lateral",
+      "sets": 3,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 1,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Elevaciones laterales en polea",
+        "note": "Tensión constante, sin impulso."
+       },
+       {
+        "name": "Elevaciones laterales con mancuernas",
+        "note": "Sube hasta la altura del hombro."
+       },
+       {
+        "name": "Elevaciones laterales en máquina",
+        "note": "Controla la bajada."
+       }
+      ]
+     },
+     {
+      "id": "h5_dips",
+      "block": "🔱 Tríceps",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 12,
+      "increment": 2.5,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Fondos en paralelas",
+        "note": "Torso vertical para cargar el tríceps."
+       },
+       {
+        "name": "Fondos en banco",
+        "note": "Pies en el suelo o elevados."
+       },
+       {
+        "name": "Press cerrado con barra",
+        "note": "Codos pegados al cuerpo."
+       }
+      ]
+     },
+     {
+      "id": "h5_ohext",
+      "block": "🔱 Tríceps aislamiento",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Extensión de tríceps sobre la cabeza en polea",
+        "note": "Codos apuntando al frente, estira abajo."
+       },
+       {
+        "name": "Extensión de tríceps sobre la cabeza con mancuerna",
+        "note": "A dos manos."
+       },
+       {
+        "name": "Press francés con barra Z",
+        "note": "Baja la barra hacia la frente."
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "label": "TIRÓN",
+    "rotation": true,
+    "title": "Día 4 · Tirón",
+    "subtitle": "Dominadas, remos, hombro posterior y bíceps",
+    "exercises": [
+     {
+      "id": "h5_pull",
+      "block": "🔙 Espalda vertical",
+      "sets": 4,
+      "minReps": 6,
+      "maxReps": 10,
+      "increment": 2.5,
+      "rest": 120,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Dominadas",
+        "note": "Barbilla por encima de la barra, baja del todo."
+       },
+       {
+        "name": "Jalón al pecho",
+        "note": "Codos hacia abajo y atrás."
+       },
+       {
+        "name": "Dominadas asistidas",
+        "note": "Con goma o máquina."
+       }
+      ]
+     },
+     {
+      "id": "h5_dbrow",
+      "block": "🔙 Espalda horizontal",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 10,
+      "increment": 2.5,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Remo con mancuerna a una mano",
+        "note": "Lleva el codo hacia la cadera."
+       },
+       {
+        "name": "Remo con barra",
+        "note": "Torso a 45º."
+       },
+       {
+        "name": "Remo en máquina",
+        "note": "Aprieta las escápulas al final."
+       }
+      ]
+     },
+     {
+      "id": "h5_cable",
+      "block": "🔙 Espalda",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2.5,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Remo sentado en polea",
+        "note": "Pecho fuera, sin balancear el torso."
+       },
+       {
+        "name": "Jalón con agarre estrecho",
+        "note": "Lleva el agarre al esternón."
+       },
+       {
+        "name": "Pullover en polea",
+        "note": "Brazos casi rectos."
+       }
+      ]
+     },
+     {
+      "id": "h5_face",
+      "block": "🎯 Hombro posterior",
+      "sets": 3,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Face pull",
+        "note": "Cuerda a la altura de la cara, codos altos."
+       },
+       {
+        "name": "Pájaros con mancuernas",
+        "note": "Torso inclinado, sin impulso."
+       },
+       {
+        "name": "Contractora inversa",
+        "note": "Aguanta 1 s atrás."
+       }
+      ]
+     },
+     {
+      "id": "h5_curl",
+      "block": "💪 Bíceps",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 10,
+      "increment": 2,
+      "rest": 75,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl con barra Z",
+        "note": "Codos quietos, sin balanceo."
+       },
+       {
+        "name": "Curl con barra",
+        "note": "Agarre al ancho de hombros."
+       },
+       {
+        "name": "Curl en polea",
+        "note": "Tensión constante."
+       }
+      ]
+     },
+     {
+      "id": "h5_hammer",
+      "block": "💪 Bíceps y antebrazo",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl martillo",
+        "note": "Palmas enfrentadas."
+       },
+       {
+        "name": "Curl martillo en polea con cuerda",
+        "note": "Codos pegados."
+       },
+       {
+        "name": "Curl invertido con barra Z",
+        "note": "Agarre prono."
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "label": "PIERNA B",
+    "rotation": true,
+    "title": "Día 5 · Pierna (femoral y glúteo) + brazos",
+    "subtitle": "Rumano, hip thrust y femoral + superseries de brazo",
+    "exercises": [
+     {
+      "id": "h5_rdl",
+      "block": "🍑 Femoral y glúteo pesado",
+      "sets": 4,
+      "minReps": 8,
+      "maxReps": 10,
+      "increment": 2.5,
+      "rest": 120,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Peso muerto rumano",
+        "note": "Cadera atrás, barra pegada a las piernas, espalda neutra."
+       },
+       {
+        "name": "Peso muerto rumano con mancuernas",
+        "note": "Rodillas algo flexionadas y fijas."
+       },
+       {
+        "name": "Buenos días con barra",
+        "note": "Bisagra de cadera, recorrido corto."
+       }
+      ]
+     },
+     {
+      "id": "h5_hip",
+      "block": "🍑 Glúteo",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 12,
+      "increment": 5,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Hip thrust con barra",
+        "note": "Pausa de 1 s arriba, barbilla al pecho."
+       },
+       {
+        "name": "Hip thrust en máquina",
+        "note": "Empuja con los talones."
+       },
+       {
+        "name": "Puente de glúteo con barra",
+        "note": "Desde el suelo."
+       }
+      ]
+     },
+     {
+      "id": "h5_leg",
+      "block": "🎯 Femoral",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl femoral tumbado",
+        "note": "Baja en 3 s."
+       },
+       {
+        "name": "Curl femoral sentado",
+        "note": "Cadera pegada al asiento."
+       },
+       {
+        "name": "Curl nórdico asistido",
+        "note": "Bajada lo más lenta posible."
+       }
+      ]
+     },
+     {
+      "id": "h5_inccurl",
+      "block": "💪 Bíceps estirado",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 1,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl inclinado con mancuernas",
+        "note": "Banco a 45º, brazos colgando por detrás del cuerpo."
+       },
+       {
+        "name": "Curl en banco Scott",
+        "note": "Sin despegar los brazos del apoyo."
+       },
+       {
+        "name": "Curl bayesiano en polea",
+        "note": "De espaldas a la polea."
+       }
+      ]
+     },
+     {
+      "id": "h5_push",
+      "block": "🔱 Tríceps",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Extensión de tríceps en polea",
+        "note": "Codos pegados, estira del todo abajo."
+       },
+       {
+        "name": "Press francés con barra Z",
+        "note": "Baja la barra hacia la frente."
+       },
+       {
+        "name": "Patada de tríceps en polea",
+        "note": "Codo fijo a la altura del torso."
+       }
+      ]
+     },
+     {
+      "id": "h5_calf2",
+      "block": "🦶 Gemelo",
+      "sets": 3,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Elevación de gemelos sentado",
+        "note": "Pausa de 1 s abajo."
+       },
+       {
+        "name": "Elevación de gemelos de pie",
+        "note": "Recorrido completo."
+       },
+       {
+        "name": "Elevación de gemelos en prensa",
+        "note": "Sin rebotar."
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
   "lib": "pub_mvwdhuvedm",
   "name": "FULL BODY",
   "icon": "🏋️",

@@ -1,6 +1,6 @@
 /* FITNESTEBAN service worker: funciona sin conexión.
    Al cambiar cualquier archivo de la app, sube el número de CACHE para que el móvil descargue la versión nueva. */
-const CACHE = 'fitnesteban-4.60.1';
+const CACHE = 'fitnesteban-4.61.0';
 const ASSETS = [
   './',
   './index.html',
@@ -23,6 +23,8 @@ const ASSETS = [
   './blk-kb.webp',
   './blk-casa.webp',
   './blk-gen.webp',
+  './blk-hibrido.webp',
+  './blk-retos.webp',
   './home-dieta.webp',
   './home-progreso.webp',
   './home-coach.webp'
