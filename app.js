@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.62.0';
+const APP_VERSION = '4.62.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1692,6 +1692,9 @@ function editProgModal(progId) {
     del: () => {
       if (!confirm(`¿Eliminar el bloque "${p.name}" con todos sus días y ejercicios?`)) return;
       for (const d of p.days) delete state.drafts[d.id];
+      // si era tu copia de un bloque de Esteban, su tarjeta tampoco vuelve a salir (queda en «Ver bloques ocultos» por si lo quieres recuperar)
+      const gone = libAll().filter(L => progForLib(L) === p).map(L => 'lib:' + L.lib);
+      if (gone.length) state.settings.hiddenBlocks = [...new Set([...(state.settings.hiddenBlocks || []), ...gone])];
       state.plan.programs = state.plan.programs.filter(x => x.id !== progId);
       if (state.plan.active === progId) state.plan.active = state.plan.programs[0].id;
       ui.dayId = nextDayId(); ui.trainHome = true;
@@ -5125,6 +5128,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.62.1', ['🗑 Si borras tu copia de un bloque de Esteban, ya no te vuelve a salir (queda en «Ver bloques ocultos» por si lo quieres recuperar).'], 'quiet'],
   ['4.62.0', ['👥 Acceso: ahora ves quién usa cada dispositivo de un código (el nombre de su perfil), su último día y sus días de uso, también en la columna «dispositivos» de tu hoja. Actualiza el script a la v10: Ajustes → Acceso → Reconfigurar.'], 'admin'],
   ['4.61.0', ['🗂 Entreno se renueva: todos tus entrenos en tarjetas con foto. RETOS, botones de FREE y CARDIO, tus bloques y todos los bloques de Esteban, listos para entrar sin añadirlos.', '⋯ En cada tarjeta puedes ocultar los bloques que no uses (los recuperas al final) o editarlos.', '⚡ Nuevo bloque HÍBRIDO 5: 5 días en los que cada músculo trabaja 2 veces por semana.']],
   ['4.60.1', ['⏱ Los pitidos del descanso se programan al empezar, para que suenen a su hora aunque salgas de la app. Nuevo «🔊 Probar el pitido» en la ventana de descanso.'], 'quiet'],
@@ -5278,7 +5282,7 @@ const GUIDE = [
   ]],
   ['🏋️ Entreno: bloques y días', [
     'Entreno muestra todos tus entrenos en <b>tarjetas</b>: arriba «Hoy te toca», luego <b>RETOS</b>, los botones <b>FREE</b> (ejercicios sueltos del día) y <b>CARDIO</b>, <b>tus bloques</b> y los <b>bloques de Esteban</b> (todos disponibles, sin tener que añadirlos). Toca una tarjeta para entrar; «‹ Bloques» o el botón Entreno de abajo te devuelven.',
-    'El <b>⋯</b> de cada tarjeta permite <b>ocultar</b> un bloque que no uses (no se borra nada: «Ver bloques ocultos», al final, lo recupera) y <b>editarlo</b>. Al abrir o editar un bloque de Esteban se hace tu copia, con tu progreso; el original no cambia.',
+    'El <b>⋯</b> de cada tarjeta permite <b>ocultar</b> un bloque que no uses (no se borra nada: «Ver bloques ocultos», al final, lo recupera) y <b>editarlo</b>. Al abrir o editar un bloque de Esteban se hace tu copia, con tu progreso: tus cambios se quedan en ella y el original no cambia. Si la borras, ese bloque deja de salirte (si te arrepientes, está en «Ver bloques ocultos»).',
     'Dentro de un bloque eliges el <b>día</b>: el punto ● marca el que te toca según tu rotación; ✓ el que ya hiciste hoy.',
     '🎴 La <b>tarjeta del bloque activo</b> te dice qué día te toca, cuántas sesiones llevas (y en qué semana del bloque vas) y cuántas has hecho en los últimos 7 días, con un objetivo mínimo de 3. Cada tipo de bloque tiene su foto y su color.',
     'Cada bloque lleva su propia rotación: {{ROTACION}}',
