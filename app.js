@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.59.1';
+const APP_VERSION = '4.60.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2847,14 +2847,19 @@ function renderDiet() {
     const low = PROT_TYPES.includes(tp) && items.length && subP < minProt();
     const yd = yday.filter(m => (m.type || 'Otro') === tp);
     if (!items.length && tp === 'Otro') return `<button class="d2-add-empty d2-add-otro" data-act="addFor" data-type="Otro" type="button">＋ Picoteo u otra cosa</button>`;
+    const open = items.length && !!(ui.dietOpen || {})[tp];
     return `<div class="d2-group">
       <div class="d2-gh">
-        <span class="meal-ic">${icon(MEAL_IC[tp] || 'dots', 'w-[15px] h-[15px]')}</span>
-        <span class="d2-gt">${tp}</span>
-        ${items.length ? `<span class="d2-gs"><span class="${MAC.kcal.text}">${Math.round(sub)}</span> kcal · <span class="${low ? 'text-amber-300' : MAC.prot.text}">P ${Math.round(subP)}${low ? ' ↓' : ''}</span></span>` : '<span class="d2-gs text-mute">—</span>'}
+        <button class="d2-ghb" ${items.length ? `data-act="dietFold" data-type="${tp}" aria-expanded="${open}"` : 'disabled'} type="button">
+          <span class="meal-ic">${icon(MEAL_IC[tp] || 'dots', 'w-[15px] h-[15px]')}</span>
+          <span class="d2-gt">${tp}</span>
+          ${items.length ? (() => { const sC = items.reduce((a, m) => a + (m.carbs || 0), 0), sF = items.reduce((a, m) => a + (m.fat || 0), 0);
+            return `<span class="d2-gs"><span class="${MAC.kcal.text}">${Math.round(sub)} kcal</span><span class="d2-gm"><span class="${low ? 'text-amber-300' : MAC.prot.text}">P ${Math.round(subP)}${low ? '↓' : ''}</span> <span class="${MAC.carbs.text}">C ${Math.round(sC)}</span> <span class="${MAC.fat.text}">G ${Math.round(sF)}</span></span></span>`; })() : '<span class="d2-gs text-mute">—</span>'}
+        </button>
+        ${items.length ? `<button class="d2-fold ${open ? 'd2-fold-on' : ''}" data-act="dietFold" data-type="${tp}" type="button" aria-label="${open ? 'Plegar' : 'Desplegar'} ${tp}"><span class="d2-tri"></span></button>` : ''}
         <button class="d2-plus" data-act="addFor" data-type="${tp}" type="button" aria-label="Añadir a ${tp}">＋</button>
       </div>
-      ${items.map(m => `<button class="d2-meal ${ui.editing?.id === m.id ? 'd2-meal-on' : ''}" data-act="mealMenu" data-id="${esc(m.id)}" type="button">
+      ${!open ? '' : items.map(m => `<button class="d2-meal ${ui.editing?.id === m.id ? 'd2-meal-on' : ''}" data-act="mealMenu" data-id="${esc(m.id)}" type="button">
         <span class="min-w-0 flex-1 text-left"><span class="block text-sm font-semibold truncate">${isFavMeal(normName(m.desc)) ? '<span class="text-amber-300">★ </span>' : ''}${esc(m.desc || tp)}</span>
         <span class="block text-[11px] font-mono mt-0.5">${macroLine(m)}</span></span><span class="text-mute text-lg leading-none">⋯</span></button>`).join('')}
       ${!items.length && yd.length ? `<button class="d2-add-empty" data-act="repeatYday" data-type="${tp}" type="button">↻ Repetir el de ayer <span class="text-mute font-normal">· ${esc(yd.map(m => m.desc).join(' + ').slice(0, 38))}</span></button>` : ''}
@@ -3331,13 +3336,13 @@ async function geminiOnce(model, body, timeout) {
     throw e;
   } finally { clearTimeout(tm); }
 }
-async function callGemini(parts, { json = true, timeout = 45000, contents = null, system = null, temperature = 0.2 } = {}) {
+async function callGemini(parts, { json = true, timeout = 45000, contents = null, system = null, temperature = 0.2, only = null } = {}) {
   const s = state.settings;
   if (!s.apiKey) throw new Error('Falta la clave de Gemini (Ajustes).');
   if (!navigator.onLine) throw new Error('Sin conexión a internet.');
   const body = JSON.stringify({ contents: contents || [{ parts }], ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), generationConfig: json ? { responseMimeType: 'application/json', temperature } : { temperature } });
   const main = s.model || DEFAULT_MODEL;
-  const models = [main, ...GEMINI_FALLBACKS.filter(m => m !== main)];
+  const models = only || [main, ...GEMINI_FALLBACKS.filter(m => m !== main)];
   let last = null;
   for (let mi = 0; mi < models.length; mi++) {
     const tries = mi === 0 ? 2 : 1;
@@ -4791,6 +4796,34 @@ function micStop() {
   const m = mic; if (!m) return;
   mic = null; try { m.rec?.abort(); } catch { /* ya parado */ }
   micMark(m, false);
+  micPolish(m);
+}
+/* ✍️ El dictado llega sin puntuación. Al terminar: mayúscula y signo final al momento y, con clave de IA,
+   Gemini pone comas, puntos y ¿? sin tocar ninguna palabra (si cambiara alguna, se descarta su versión). */
+/* La puntuación usa los modelos «Lite»: tienen su propia cuota diaria, así no gasta la del modelo de las fotos y el Coach */
+const MIC_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite'];
+const MIC_Q = /^(qué|que|cómo|como|cuánt|cuant|cuál|cual|dónde|donde|cuándo|cuando|quién|quien|por qué|porque|puedo|podría|podria|puedes|debo|debería|deberia|me recomiendas|me puedes|es mejor|vale la pena|hay )/i;
+const micWords = t => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9ñ ]+/g, ' ').split(/\s+/).filter(Boolean).join(' ');
+function micRules(txt, startCap, ask) {
+  let t = String(txt).trim(); if (!t) return t;
+  if (startCap) t = t[0].toUpperCase() + t.slice(1);
+  if (!/[.!?…]$/.test(t)) t = ask && MIC_Q.test(t) ? `${startCap ? '¿' : ''}${t}?` : t + '.';
+  return t;
+}
+async function micPolish(m) {
+  const raw = [m.said, m.cur].filter(Boolean).join(' ').trim(); if (!raw) return;
+  const startCap = !m.base || /[.!?…]$/.test(m.base);
+  const put = (txt, guard) => {
+    const inp = document.querySelector(m.sel); if (!inp || (guard && inp.value !== guard)) return null;
+    const v = [m.base, txt].filter(Boolean).join(' '), max = +inp.getAttribute('maxlength') || 0;
+    inp.value = max ? v.slice(0, max) : v; inp.dispatchEvent(new Event('input', { bubbles: true })); return inp.value;
+  };
+  const shown = put(micRules(raw, startCap, m.sel === '#chatInput')); if (shown == null) return; // ¿? solo en el chat: en comidas «como pollo…» no es pregunta
+  if (!state.settings.apiKey || !navigator.onLine || raw.split(/\s+/).length < 4) return;
+  try {
+    const out = String(await callGemini([{ text: `Corrige SOLO la puntuación y las mayúsculas de este texto dictado por voz en español de España: añade comas, puntos y signos de interrogación o exclamación (¿? ¡!) donde correspondan.${startCap ? '' : ' Es la continuación de una frase: empieza en minúscula.'} No cambies, añadas, quites ni reordenes ninguna palabra y no conviertas números. Devuelve solo el texto, sin comillas.\nTexto: ${raw}` }], { json: false, timeout: 12000, temperature: 0, only: MIC_MODELS })).trim().replace(/^["«»“”]+|["«»“”]+$/g, '');
+    if (out && micWords(out) === micWords(raw)) put(out, shown);
+  } catch { /* sin IA se queda la versión sencilla */ }
 }
 /* Texto de una escucha sin repetir frases (en Android cada resultado puede traer otra vez el anterior) */
 function micJoin(results) {
@@ -4815,7 +4848,7 @@ function micListen(m) {
   const r = new SpeechRec(); m.rec = r;
   let got = '', fatal = false;
   r.lang = 'es-ES'; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
-  r.onresult = e => { got = micJoin(e.results); if (mic === m && !micWrite(m, got)) micStop(); };
+  r.onresult = e => { got = micJoin(e.results); m.cur = got; if (mic === m && !micWrite(m, got)) micStop(); };
   r.onerror = e => {
     const msg = { 'not-allowed': 'Permite el micrófono para dictar', 'service-not-allowed': 'Permite el micrófono para dictar', 'audio-capture': 'No encuentro el micrófono', network: 'Sin conexión no se puede dictar' }[e.error];
     if (msg) { fatal = true; if (mic === m) toast(msg, 'warn'); }
@@ -4823,6 +4856,7 @@ function micListen(m) {
   r.onend = () => {
     if (mic !== m) return;
     if (got) { m.said = [m.said, got].filter(Boolean).join(' '); m.quiet = 0; } else m.quiet++;
+    m.cur = '';
     if (!micWrite(m, '') || fatal || m.quiet >= 2 || Date.now() - m.t0 > 120000 || document.hidden) return micStop();
     setTimeout(() => micListen(m), 80);
   };
@@ -4964,6 +4998,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.60.0', ['🥗 En Dieta, cada comida sale plegada con sus kcal y macros: despliégala con la flechita ▶.', '✍️ El dictado por voz ya pone mayúsculas, comas y puntos.']],
   ['4.59.1', ['🎤 El dictado por voz ya no se corta tras una pausa y el micro deja de parpadear al terminar.'], 'quiet'],
   ['4.59.0', ['🔥 El mapa muscular muestra una figura femenina si en tu perfil pone «Mujer».']],
   ['4.58.0', ['🎴 Entreno estrena tarjeta para tu bloque activo: qué día te toca, cuántas sesiones llevas y cómo vas esta semana, con una foto y un color propios para cada tipo de bloque.', '📚 Si aún no tienes bloque, la tarjeta te lleva directo a la biblioteca.']],
@@ -5152,7 +5187,7 @@ const GUIDE = [
     'El cardio aparece en Dieta, pero <b>no amplía</b> lo que te queda por comer, salvo que lo actives en Ajustes → Objetivos.'
   ]],
   ['🥗 Dieta y raciones', [
-    'En «Hoy has comido» toca el <b>＋</b> de la comida que toque (Desayuno, Comida, Puente, Cena) para abrir el panel de añadir. Si esa comida está vacía y ayer la registraste, «↻ Repetir el de ayer» la copia con un toque.',
+    'En «Hoy has comido» cada comida (Desayuno, Comida, Puente, Cena) sale <b>plegada</b> con sus kcal, proteína, carbohidratos y grasas; despliégala con la flechita ▶ o tocando su nombre. Su <b>＋</b> abre el panel para añadir. Si esa comida está vacía y ayer la registraste, «↻ Repetir el de ayer» la copia con un toque.',
     'Foto (cámara o galería) y/o descripción. Lo que escribas <b>manda</b>: «200 g de pollo» fija esa cantidad. Con 🎤 puedes dictarla en vez de escribirla.',
     '🏷️ <b>Código</b>: escanea el código de barras de un envase y se añade con los valores de su etiqueta (Open Food Facts). Si no aparece, haz una foto de la tabla nutricional y la IA la lee; la próxima vez saldrá directo.',
     'Tras «Estimar macros con IA», ajusta cada alimento con <b>P / M / G</b> (pequeña, mediana, grande) u «Otra» con los gramos exactos. ✕ quita un alimento que la IA vio por error.',
@@ -5169,7 +5204,7 @@ const GUIDE = [
   ]],
   ['⚡ Coach IA', [
     'El botón ⚡ de arriba abre un chat con Gemini que <b>lee tus datos</b>: plan y progresión, últimas sesiones, comidas de hoy y lo que te queda, dieta de la semana, cardio, retos y medidas.',
-    '🎤 Puedes <b>dictarle</b> en vez de escribir: toca el micro y habla; puedes hacer pausas. Toca 🎤 otra vez para terminar (o se para solo tras unos segundos de silencio).',
+    '🎤 Puedes <b>dictarle</b> en vez de escribir: toca el micro y habla; puedes hacer pausas. Toca 🎤 otra vez para terminar (o se para solo tras unos segundos de silencio). Al terminar se ponen mayúsculas, comas y puntos (con un modelo ligero de Gemini que no gasta la cuota de las fotos).',
     '👨‍🍳 Cuando te propone un plato, pulsa «Receta» para verlo paso a paso con los mismos ingredientes y gramos. «¿Cambiar algo?» la adapta (también por voz).',
     '🏋️ Pídele un <b>bloque de entreno</b> con el material que tienes (o sin nada): pulsa «＋ Añadir a mis bloques» y aparece en Entreno. Se guarda en la conversación, como las recetas.',
     'Cada vez que lo abres empieza de cero; «Ver la última conversación» recupera la anterior. Usa tu clave de Gemini (Ajustes → IA). Nunca se envían la clave ni el PIN.'
@@ -5801,11 +5836,12 @@ const actions = {
       ui.editing = null; ui.aiResult = null; ui.addOpen = false;
       render(); return toast('Comida actualizada ✓');
     }
-    addMeal(ui.dietDate, { ...a, type: ui.mealType });
+    addMeal(ui.dietDate, { ...a, type: ui.mealType }); (ui.dietOpen ||= {})[ui.mealType] = true;
     ui.aiResult = null; ui.img = null; ui.addOpen = false; ui.mealDesc = '';
     render(); toast('Comida registrada ✓');
   },
   favMeal: b => toggleFavMeal(b.dataset.key),
+  dietFold: b => { const o = ui.dietOpen ||= {}; o[b.dataset.type] = !o[b.dataset.type]; render(); },
   mealMenu: b => mealMenu(b.dataset.id),
   addFor: b => { ui.mealType = b.dataset.type; ui.addOpen = true; ui.mealSearch = ''; render(); setTimeout(() => $('#mealCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30); },
   addClose: () => { ui.addOpen = false; ui.aiResult = null; ui.editing = null; ui.img = null; render(); },
