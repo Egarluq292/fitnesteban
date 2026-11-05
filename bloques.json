@@ -1,5 +1,281 @@
 [
  {
+  "lib": "pub_gluteo1",
+  "name": "GLÚTEO",
+  "icon": "🍑",
+  "author": "Esteban",
+  "at": "2026-11-06",
+  "desc": "Dos días centrados en el glúteo y en unas piernas tonificadas: hip thrust y peso muerto rumano pesados, trabajo a una pierna y aislamientos de glúteo medio (abducción y patadas), que dan la forma redondeada. Rangos de 8 a 20 repeticiones con mucho control. ~55 min.\nCómo usarlo: haz el A y el B cada semana, separados al menos 48 h (por ejemplo, lunes y jueves). Aprieta el glúteo 1 s arriba en cada repetición y baja despacio: aquí manda la conexión con el músculo, no mover mucho peso. Sube el peso cuando completes todas las repeticiones. Combínalo con un bloque de tren superior el resto de días.",
+  "days": [
+   {
+    "label": "GL A",
+    "rotation": true,
+    "title": "Glúteo A · Fuerza",
+    "subtitle": "Hip thrust y rumano pesados + búlgara, abducción y patada",
+    "exercises": [
+     {
+      "id": "gl_hip",
+      "block": "🍑 Glúteo pesado",
+      "sets": 4,
+      "minReps": 8,
+      "maxReps": 10,
+      "increment": 5,
+      "rest": 120,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Hip thrust con barra",
+        "note": "Pausa de 1 s arriba, barbilla al pecho, costillas abajo."
+       },
+       {
+        "name": "Hip thrust en máquina",
+        "note": "Empuja con los talones."
+       },
+       {
+        "name": "Puente de glúteo con barra",
+        "note": "Desde el suelo."
+       }
+      ]
+     },
+     {
+      "id": "gl_rdl",
+      "block": "🍑 Glúteo y femoral",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 10,
+      "increment": 2.5,
+      "rest": 120,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Peso muerto rumano",
+        "note": "Cadera atrás hasta notar el estiramiento, espalda neutra."
+       },
+       {
+        "name": "Peso muerto rumano con mancuernas",
+        "note": "Rodillas algo flexionadas y fijas."
+       },
+       {
+        "name": "Peso muerto rumano a una pierna",
+        "note": "Peso ligero, equilibrio."
+       }
+      ]
+     },
+     {
+      "id": "gl_bulg",
+      "block": "🦵 A una pierna",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Sentadilla búlgara",
+        "note": "Torso algo inclinado hacia delante para cargar el glúteo."
+       },
+       {
+        "name": "Zancadas inversas",
+        "note": "Paso largo atrás."
+       },
+       {
+        "name": "Step-up con mancuernas",
+        "note": "Sube empujando con el talón."
+       }
+      ]
+     },
+     {
+      "id": "gl_abd",
+      "block": "🎯 Glúteo medio",
+      "sets": 3,
+      "minReps": 15,
+      "maxReps": 20,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Abducción de cadera en máquina",
+        "note": "Torso algo inclinado hacia delante, pausa abierta."
+       },
+       {
+        "name": "Abducción de cadera en polea",
+        "note": "De pie, pierna estirada."
+       },
+       {
+        "name": "Abducción con banda sentada",
+        "note": "Banda por encima de las rodillas."
+       }
+      ]
+     },
+     {
+      "id": "gl_kick",
+      "block": "🎯 Glúteo aislado",
+      "sets": 3,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 1,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Patada de glúteo en polea",
+        "note": "Cadera quieta, aprieta arriba 1 s."
+       },
+       {
+        "name": "Patada de glúteo en máquina",
+        "note": "Sin arquear la zona lumbar."
+       },
+       {
+        "name": "Patada de glúteo a cuatro patas",
+        "note": "Con tobillera o banda."
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "label": "GL B",
+    "rotation": true,
+    "title": "Glúteo B · Volumen",
+    "subtitle": "Prensa con pies altos, hip thrust a una pierna, femoral y abducción",
+    "exercises": [
+     {
+      "id": "gl_press",
+      "block": "🦵 Glúteo y pierna",
+      "sets": 4,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 5,
+      "rest": 120,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Prensa de piernas con pies altos",
+        "note": "Pies arriba y abiertos: más glúteo y femoral."
+       },
+       {
+        "name": "Sentadilla sumo con mancuerna",
+        "note": "Pies muy abiertos, puntas hacia fuera."
+       },
+       {
+        "name": "Sentadilla goblet profunda",
+        "note": "Baja todo lo que puedas con la espalda recta."
+       }
+      ]
+     },
+     {
+      "id": "gl_hip1",
+      "block": "🍑 Glúteo a una pierna",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Hip thrust a una pierna",
+        "note": "Espalda en el banco, la otra pierna recogida."
+       },
+       {
+        "name": "Puente de glúteo a una pierna",
+        "note": "Desde el suelo."
+       },
+       {
+        "name": "Hip thrust con barra",
+        "note": "Pausa de 2 s arriba."
+       }
+      ]
+     },
+     {
+      "id": "gl_curl",
+      "block": "🔥 Femoral",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2.5,
+      "rest": 75,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl femoral tumbado",
+        "note": "Baja en 3 s."
+       },
+       {
+        "name": "Curl femoral sentado",
+        "note": "Cadera pegada al asiento."
+       },
+       {
+        "name": "Curl femoral con fitball",
+        "note": "Cadera arriba todo el rato."
+       }
+      ]
+     },
+     {
+      "id": "gl_hyper",
+      "block": "🍑 Glúteo y lumbar",
+      "sets": 3,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Hiperextensión para glúteo",
+        "note": "Espalda redondeada y aprieta el glúteo al subir."
+       },
+       {
+        "name": "Hiperextensión inversa",
+        "note": "Sube las piernas con el glúteo, sin impulso."
+       },
+       {
+        "name": "Buenos días con mancuerna",
+        "note": "Peso ligero, bisagra de cadera."
+       }
+      ]
+     },
+     {
+      "id": "gl_abd2",
+      "block": "🎯 Glúteo medio",
+      "sets": 3,
+      "minReps": 15,
+      "maxReps": 20,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Abducción de cadera en polea",
+        "note": "De pie, pierna estirada, sin balanceo."
+       },
+       {
+        "name": "Abducción de cadera en máquina",
+        "note": "Pausa abierta 1 s."
+       },
+       {
+        "name": "Paseo lateral con banda",
+        "note": "Pasos cortos y rodillas hacia fuera."
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
   "lib": "pub_hibrido5",
   "name": "HÍBRIDO 5",
   "icon": "⚡",
@@ -1179,7 +1455,7 @@
   "lib": "pub_mvpvpdaxt9",
   "name": "PPT",
   "icon": "🔁",
-  "desc": "Push · Pull · Torso: tres días que reparten el tren superior por patrones de movimiento. Push (empuje): pecho, hombro y tríceps. Pull (tirón): espalda y bíceps. Torso: superseries de todo el tren superior. Cada día empieza con un «peaje» de pierna o cadena posterior para no olvidarla. ~60 min.\nCómo usarlo: 3 días por semana en orden Push → Pull → Torso, con un día de descanso entre ellos o 3 seguidos y 1 de descanso. Si quieres más pierna, añade el bloque PIERNA un cuarto día. Sube el peso cuando completes todas las repeticiones.",
+  "desc": "Push · Pull · Torso: tres días que reparten el tren superior por patrones de movimiento. Push (empuje): pecho, hombro y tríceps. Pull (tirón): espalda y bíceps. Torso: superseries de todo el tren superior. Cada día empieza con un «peaje» de pierna o cadena posterior para no olvidarla. ~60 min.\nCómo usarlo: 3 días por semana en orden Push → Pull → Torso, con un día de descanso entre ellos o 3 seguidos y 1 de descanso. Si quieres más pierna, añade el día A del bloque TREN INFERIOR un cuarto día. Sube el peso cuando completes todas las repeticiones.",
   "author": "Esteban",
   "at": "2026-10-01",
   "days": [
@@ -1883,26 +2159,26 @@
  },
  {
   "lib": "pub_piernas1",
-  "name": "PIERNA",
+  "name": "TREN INFERIOR",
   "icon": "🦵",
   "author": "Esteban",
-  "at": "2026-11-01",
-  "desc": "Un día completo de tren inferior: sentadilla y peso muerto rumano pesados para cuádriceps, femoral y glúteo, después trabajo a una pierna para corregir desequilibrios y aislamientos para cerrar. ~60 min.\nCómo usarlo: 1 vez por semana como día de pierna, o 2 si tu rutina no tiene pierna. Calienta 10 min y haz 2 series de aproximación antes de la sentadilla. Deja 48–72 h antes de volver a entrenar pierna o hacer cardio intenso. Si te duelen rodillas o espalda, usa las alternativas ⇄.",
+  "at": "2026-11-06",
+  "desc": "Dos días de pierna completa con la fuerza como base: el A centrado en cuádriceps (sentadilla pesada) y el B en cadera y femoral (peso muerto rumano), con trabajo a una pierna, algo de glúteo y gemelo en los dos. Para piernas fuertes y completas. ~60 min.\nCómo usarlo: añade el A y el B a tu semana, separados al menos 48 h (por ejemplo, martes y viernes), o haz solo el A si ya entrenas pierna en otra rutina. Calienta 10 min y haz 2 series de aproximación antes del primer ejercicio. Sube el peso cuando completes todas las repeticiones. Si te duelen rodillas o espalda, usa las alternativas ⇄.",
   "days": [
    {
-    "label": "PIERNA",
+    "label": "TI A",
     "rotation": true,
-    "title": "Tren inferior",
-    "subtitle": "Sentadilla y rumano pesados + unilateral + aislamientos",
+    "title": "Tren inferior A · Cuádriceps",
+    "subtitle": "Sentadilla pesada + prensa, búlgara, extensiones y gemelo",
     "exercises": [
      {
-      "id": "lg_squat",
+      "id": "ti_squat",
       "block": "🏋️ Cuádriceps pesado",
       "sets": 4,
-      "minReps": 6,
+      "minReps": 5,
       "maxReps": 8,
       "increment": 2.5,
-      "rest": 150,
+      "rest": 180,
       "bw": false,
       "alts27": true,
       "variants": [
@@ -1911,42 +2187,42 @@
         "note": "Profundidad paralela o más, rodillas siguiendo la punta del pie."
        },
        {
-        "name": "Sentadilla en multipower",
-        "note": "Pies un poco adelantados."
+        "name": "Sentadilla frontal con barra",
+        "note": "Codos altos, torso erguido."
        },
        {
-        "name": "Prensa de piernas",
-        "note": "Sin bloquear rodillas arriba."
+        "name": "Sentadilla en multipower",
+        "note": "Pies un poco adelantados."
        }
       ]
      },
      {
-      "id": "lg_rdl",
-      "block": "🍑 Femoral y glúteo pesado",
-      "sets": 4,
+      "id": "ti_press",
+      "block": "🦵 Cuádriceps",
+      "sets": 3,
       "minReps": 8,
-      "maxReps": 10,
-      "increment": 2.5,
+      "maxReps": 12,
+      "increment": 5,
       "rest": 120,
       "bw": false,
       "alts27": true,
       "variants": [
        {
-        "name": "Peso muerto rumano",
-        "note": "Cadera atrás, barra pegada a las piernas, espalda neutra."
+        "name": "Prensa de piernas",
+        "note": "Pies a media altura, sin bloquear rodillas."
        },
        {
-        "name": "Peso muerto rumano con mancuernas",
-        "note": "Rodillas algo flexionadas y fijas."
+        "name": "Sentadilla hack",
+        "note": "Espalda pegada al respaldo."
        },
        {
-        "name": "Buenos días con barra",
-        "note": "Peso ligero, recorrido controlado."
+        "name": "Sentadilla goblet al pecho",
+        "note": "Mancuerna pegada al esternón."
        }
       ]
      },
      {
-      "id": "lg_bulg",
+      "id": "ti_bulg",
       "block": "🦵 A una pierna",
       "sets": 3,
       "minReps": 8,
@@ -1958,70 +2234,20 @@
       "variants": [
        {
         "name": "Sentadilla búlgara",
-        "note": "Pie trasero en banco, torso algo inclinado para más glúteo."
+        "note": "Pie trasero en el banco. Reps por pierna."
        },
        {
         "name": "Zancadas caminando",
-        "note": "Paso largo, rodilla trasera casi al suelo."
+        "note": "Paso largo, rodilla casi al suelo."
        },
        {
-        "name": "Step-up con mancuernas",
-        "note": "Sube empujando con el talón."
+        "name": "Zancadas inversas",
+        "note": "Paso atrás, torso erguido."
        }
       ]
      },
      {
-      "id": "lg_hip",
-      "block": "🍑 Glúteo",
-      "sets": 3,
-      "minReps": 10,
-      "maxReps": 12,
-      "increment": 5,
-      "rest": 90,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Hip thrust con barra",
-        "note": "Aprieta arriba 1 s, mentón al pecho."
-       },
-       {
-        "name": "Hip thrust en máquina",
-        "note": "Pausa arriba."
-       },
-       {
-        "name": "Puente de glúteo",
-        "note": "Con lastre sobre la cadera."
-       }
-      ]
-     },
-     {
-      "id": "lg_curl",
-      "block": "🔥 Femoral aislado",
-      "sets": 3,
-      "minReps": 10,
-      "maxReps": 12,
-      "increment": 2.5,
-      "rest": 60,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Curl femoral tumbado",
-        "note": "Bajada lenta, 3 s."
-       },
-       {
-        "name": "Curl femoral sentado",
-        "note": "Cadera pegada al asiento."
-       },
-       {
-        "name": "Peso muerto a una pierna",
-        "note": "Peso ligero, equilibrio."
-       }
-      ]
-     },
-     {
-      "id": "lg_ext",
+      "id": "ti_ext",
       "block": "⚡ Cuádriceps aislado",
       "sets": 3,
       "minReps": 12,
@@ -2033,40 +2259,173 @@
       "variants": [
        {
         "name": "Extensión de cuádriceps",
-        "note": "Aprieta arriba 1 s."
+        "note": "Aguanta 1 s arriba."
        },
        {
-        "name": "Sentadilla goblet",
-        "note": "Codos entre las rodillas."
+        "name": "Sentadilla sissy",
+        "note": "Rodillas adelante, cuerpo en bloque."
        },
        {
-        "name": "Hack squat",
-        "note": "Recorrido completo."
+        "name": "Extensión de cuádriceps a una pierna",
+        "note": "Reps por pierna."
        }
       ]
      },
      {
-      "id": "lg_calf",
-      "block": "🦶 Gemelos",
+      "id": "ti_calf",
+      "block": "🦶 Gemelo",
       "sets": 4,
-      "minReps": 12,
+      "minReps": 10,
       "maxReps": 15,
       "increment": 2.5,
-      "rest": 45,
+      "rest": 60,
       "bw": false,
       "alts27": true,
       "variants": [
        {
         "name": "Elevación de gemelos de pie",
-        "note": "Pausa abajo estirando 1 s, sin rebotar."
+        "note": "Pausa de 1 s abajo y arriba, sin rebotar."
        },
        {
-        "name": "Gemelo en prensa",
+        "name": "Elevación de gemelos en prensa",
         "note": "Recorrido completo."
        },
        {
+        "name": "Elevación de gemelos a una pierna",
+        "note": "Con mancuerna en la mano del mismo lado."
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "label": "TI B",
+    "rotation": true,
+    "title": "Tren inferior B · Femoral y cadera",
+    "subtitle": "Rumano pesado + hip thrust, femoral, zancada y gemelo",
+    "exercises": [
+     {
+      "id": "ti_rdl",
+      "block": "🍑 Femoral y glúteo pesado",
+      "sets": 4,
+      "minReps": 6,
+      "maxReps": 8,
+      "increment": 2.5,
+      "rest": 150,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Peso muerto rumano",
+        "note": "Cadera atrás, barra pegada a las piernas, espalda neutra."
+       },
+       {
+        "name": "Peso muerto convencional",
+        "note": "Barra pegada a las espinillas, empuja el suelo."
+       },
+       {
+        "name": "Peso muerto rumano con mancuernas",
+        "note": "Rodillas algo flexionadas y fijas."
+       }
+      ]
+     },
+     {
+      "id": "ti_hip",
+      "block": "🍑 Glúteo",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 10,
+      "increment": 5,
+      "rest": 120,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Hip thrust con barra",
+        "note": "Pausa de 1 s arriba, barbilla al pecho."
+       },
+       {
+        "name": "Hip thrust en máquina",
+        "note": "Empuja con los talones."
+       },
+       {
+        "name": "Puente de glúteo con barra",
+        "note": "Desde el suelo."
+       }
+      ]
+     },
+     {
+      "id": "ti_curl",
+      "block": "🔥 Femoral aislado",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2.5,
+      "rest": 75,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl femoral tumbado",
+        "note": "Baja en 3 s."
+       },
+       {
+        "name": "Curl femoral sentado",
+        "note": "Cadera pegada al asiento."
+       },
+       {
+        "name": "Curl nórdico asistido",
+        "note": "Bajada lo más lenta posible."
+       }
+      ]
+     },
+     {
+      "id": "ti_lunge",
+      "block": "🦵 A una pierna",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Zancadas caminando",
+        "note": "Paso largo y torso erguido."
+       },
+       {
+        "name": "Sentadilla búlgara",
+        "note": "Reps por pierna."
+       },
+       {
+        "name": "Zancadas inversas",
+        "note": "Rodilla trasera casi al suelo."
+       }
+      ]
+     },
+     {
+      "id": "ti_calf2",
+      "block": "🦶 Gemelo",
+      "sets": 3,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
         "name": "Elevación de gemelos sentado",
-        "note": "Para el sóleo."
+        "note": "Pausa de 1 s abajo."
+       },
+       {
+        "name": "Elevación de gemelos de pie",
+        "note": "Recorrido completo."
+       },
+       {
+        "name": "Elevación de gemelos en prensa",
+        "note": "Sin rebotar."
        }
       ]
      }
