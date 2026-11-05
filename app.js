@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.60.0';
+const APP_VERSION = '4.60.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4092,34 +4092,48 @@ async function maybeAutoDriveBackup() {
 /* =========================================================================
    TEMPORIZADOR DE DESCANSO
    ========================================================================= */
-const timer = { endAt: 0, total: 0, int: null, wake: null, ctx: null };
+const timer = { endAt: 0, total: 0, int: null, wake: null, ctx: null, sched: [] };
+/* 🔊 iPhone solo deja sonar si el audio arranca con un toque: se crea aquí y se «despierta» con un sonido mudo */
 function unlockAudio() {
-  try { if (!timer.ctx) timer.ctx = new (window.AudioContext || window.webkitAudioContext)(); if (timer.ctx.state === 'suspended') timer.ctx.resume(); } catch { /* sin audio */ }
+  try {
+    if (!timer.ctx || timer.ctx.state === 'closed') timer.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const c = timer.ctx;
+    if (c.state !== 'running') c.resume();
+    const b = c.createBuffer(1, 1, 22050), src = c.createBufferSource(); src.buffer = b; src.connect(c.destination); src.start(0);
+  } catch { /* sin audio */ }
 }
-function beep() {
-  const c = timer.ctx; if (!c) return;
-  [0, 0.22, 0.44].forEach(t => {
+/* Tres pitidos dentro de «inSec» segundos. Se programan en el reloj del audio al empezar el descanso,
+   así suenan a su hora aunque el móvil frene la app (pasa en iPhone). Devuelve los osciladores para poder cancelarlos. */
+function beepAt(inSec = 0) {
+  const c = timer.ctx; if (!c) return [];
+  if (c.state !== 'running') { try { c.resume(); } catch { /* nada */ } }
+  const t0 = c.currentTime + Math.max(0, inSec);
+  return [0, 0.22, 0.44].map(t => {
     const o = c.createOscillator(), g = c.createGain();
     o.frequency.value = 880; o.type = 'sine';
-    g.gain.setValueAtTime(0.0001, c.currentTime + t);
-    g.gain.exponentialRampToValueAtTime(0.4, c.currentTime + t + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + t + 0.18);
-    o.connect(g).connect(c.destination); o.start(c.currentTime + t); o.stop(c.currentTime + t + 0.2);
+    g.gain.setValueAtTime(0.0001, t0 + t);
+    g.gain.exponentialRampToValueAtTime(0.5, t0 + t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + t + 0.18);
+    o.connect(g).connect(c.destination); o.start(t0 + t); o.stop(t0 + t + 0.2);
+    return o;
   });
 }
+function beep() { beepAt(0); }
+function unschedBeep() { for (const o of timer.sched) { try { o.stop(0); o.disconnect(); } catch { /* ya sonó */ } } timer.sched = []; }
+function schedBeep() { unschedBeep(); if (timer.endAt) timer.sched = beepAt((timer.endAt - Date.now()) / 1000); }
 async function wakeOn() { try { if ('wakeLock' in navigator && !timer.wake) timer.wake = await navigator.wakeLock.request('screen'); timer.wake?.addEventListener?.('release', () => { timer.wake = null; }); } catch { /* sin wake lock */ } }
 function wakeOff() { try { timer.wake?.release(); } catch { /* nada */ } timer.wake = null; }
 function startTimer(sec) {
   unlockAudio();
-  timer.total = sec; timer.endAt = Date.now() + sec * 1000;
+  timer.total = sec; timer.endAt = Date.now() + sec * 1000; schedBeep();
   clearInterval(timer.int); timer.int = setInterval(tickTimer, 250);
   $('#timerPill').classList.remove('timer-ready'); $('#timerPill').classList.add('timer-run');
   document.body.classList.add('timer-on'); // «?» y ✉️ se apartan y la cuenta atrás ocupa su sitio
   tickTimer(); wakeOn();
 }
-function addTimer(sec) { if (!timer.endAt) return startTimer(sec); timer.endAt += sec * 1000; timer.total += sec; tickTimer(); }
+function addTimer(sec) { if (!timer.endAt) return startTimer(sec); unlockAudio(); timer.endAt += sec * 1000; timer.total += sec; schedBeep(); tickTimer(); }
 function stopTimer() {
-  clearInterval(timer.int); timer.endAt = 0;
+  clearInterval(timer.int); timer.endAt = 0; unschedBeep();
   $('#timerDisplay').textContent = 'Descanso'; $('#timerBar').style.width = '0%';
   $('#timerPill').classList.remove('timer-run', 'timer-ready', 'timer-low'); document.body.classList.remove('timer-on'); wakeOff();
 }
@@ -4130,7 +4144,8 @@ function tickTimer() {
     $('#timerDisplay').textContent = '¡Ya!'; $('#timerBar').style.width = '0%';
     $('#timerPill').classList.remove('timer-run', 'timer-low'); $('#timerPill').classList.add('timer-ready');
     try { navigator.vibrate?.([250, 120, 250, 120, 400]); } catch { /* nada */ }
-    beep(); wakeOff();
+    if (!timer.sched.length) beep(); // si ya estaban programados, suenan solos (no se repiten)
+    timer.sched = []; wakeOff();
     setTimeout(() => { if (!timer.endAt) { $('#timerDisplay').textContent = 'Descanso'; $('#timerPill').classList.remove('timer-ready'); document.body.classList.remove('timer-on'); } }, 5000);
     return;
   }
@@ -4210,13 +4225,20 @@ function openTimerSheet() {
     <div class="grid grid-cols-2 gap-2 mt-3">
       <button class="btn-ghost" data-mact="plus" type="button">+15 s</button>
       <button class="btn-danger" data-mact="stop" type="button">Parar</button>
-    </div>`, {
+    </div>
+    <button class="text-xs text-mute underline w-full mt-3" data-mact="test" type="button">🔊 Probar el pitido</button>
+    <p class="text-[11px] text-mute text-center mt-1">En iPhone no suena con el modo silencio activado ni con la pantalla bloqueada.</p>`, {
+    test: () => { unlockAudio(); setTimeout(() => beep(), 60); },
     go: (root, b) => { startTimer(parseInt(b.dataset.s, 10)); closeModal(); },
     plus: () => { addTimer(15); closeModal(); },
     stop: () => { stopTimer(); closeModal(); }
   });
 }
 $('#timerPill').addEventListener('click', openTimerSheet);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !timer.endAt) return;
+  if (Date.now() > timer.endAt + 2000) unschedBeep(); else schedBeep(); // reajusta si el reloj del audio se paró
+});
 /* Entreno se abre en RETOS (con acceso directo a la sesión de hoy), salvo con un entreno en curso */
 function trainToRetos() {
   if (activeWip()) return false;
@@ -4998,6 +5020,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.60.1', ['⏱ Los pitidos del descanso se programan al empezar, para que suenen a su hora aunque salgas de la app. Nuevo «🔊 Probar el pitido» en la ventana de descanso.'], 'quiet'],
   ['4.60.0', ['🥗 En Dieta, cada comida sale plegada con sus kcal y macros: despliégala con la flechita ▶.', '✍️ El dictado por voz ya pone mayúsculas, comas y puntos.']],
   ['4.59.1', ['🎤 El dictado por voz ya no se corta tras una pausa y el micro deja de parpadear al terminar.'], 'quiet'],
   ['4.59.0', ['🔥 El mapa muscular muestra una figura femenina si en tu perfil pone «Mujer».']],
@@ -5161,7 +5184,7 @@ const GUIDE = [
     '«Sesión de calibración» = aún no tiene datos de ese ejercicio (o de esa variante, o de ese bloque). Busca un peso exigente con 1–2 reps en recámara.'
   ]],
   ['📝 Registrar una sesión', [
-    'Abre «Registrar series» en cada ejercicio. El peso sugerido ya viene puesto; apunta las reps y pulsa ✓: arranca el descanso de ese ejercicio (vibra y pita al acabar).',
+    'Abre «Registrar series» en cada ejercicio. El peso sugerido ya viene puesto; apunta las reps y pulsa ✓: arranca el descanso de ese ejercicio (vibra y pita al acabar; en ⏱ puedes «🔊 Probar el pitido»). En iPhone no pita con el modo silencio ni con la pantalla bloqueada.',
     'Todo se guarda solo mientras escribes: puedes cerrar la app a mitad de sesión.',
     '🤸 <b>Peso corporal</b>: en dominadas, flexiones, fondos… el campo de peso es el <b>lastre</b>: vacío = solo tu peso (PC). Actívalo en el ✎ del ejercicio con «Con peso corporal».',
     '⏱ <b>Ejercicios por tiempo</b> (plancha, hollow hold…): ▶ cronometra la serie y apunta los segundos solos.',
