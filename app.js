@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.63.0';
+const APP_VERSION = '4.63.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1016,11 +1016,6 @@ function blockHeroHTML() {
    Cada tarjeta se puede ocultar (⋯). Al abrir un bloque de Esteban por primera vez se copia a tus bloques. */
 const progForLib = L => state.plan.programs.find(p => p.lib === L.lib || p.pubId === L.lib || (L.base && p.lib === L.base) || (p.type === 'strength' && libKey(p.name) === libKey(L.name)));
 const RETOS_LOOK = { img: 'retos', c: '#f59e0b', tag: 'Retos' };
-/* «Recomendado para ti» según el sexo del perfil: GLÚTEO a ellas, TREN INFERIOR a ellos (los dos se ven siempre) */
-function libRecommended(L) {
-  const sx = profileOf()?.sex, n = libKey(L.name);
-  return sx === 'm' ? /gl[uú]te/.test(n) : sx === 'h' ? /tren inferior/.test(n) : false;
-}
 /* «Nuevo» solo para quien ya usaba la app cuando se publicó el bloque (a un usuario nuevo todo le es nuevo: no se marca nada) */
 const libNewForMe = L => libIsNew(L) && (!L.at || L.at >= installDate());
 function libIdsOwnedProgs() { return new Set(libAll().map(progForLib).filter(Boolean).map(p => p.id)); }
@@ -1050,17 +1045,16 @@ function renderTrainHome() {
     const nd = p.days?.find(d => d.id === nextDayId(p));
     const nDays = (p.days || L?.days?.() || []).length, nEx = (p.days || L?.days?.() || []).reduce((a, d) => a + (d.exercises?.length || 0), 0);
     const isNew = isLib && L && libNewForMe(L) && !p.id; // nuevo hasta que lo abres (al abrirlo se crea tu copia)
-    const rec = isLib && L && libRecommended(L);
-    const tag = `${isNew ? '<span class="bh-newpill">NUEVO</span>' : ''}${rec ? '<span class="text-white">⭐ Para ti · </span>' : ''}${isLib ? 'De Esteban' : 'Tuyo'} · ${esc(look.tag)}`;
+    const tag = `${isNew ? '<span class="bh-newpill">NUEVO</span>' : ''}${isLib ? 'De Esteban' : 'Tuyo'} · ${esc(look.tag)}`;
     const sub = `${nDays} ${nDays === 1 ? 'día' : 'días'} · ${nEx} ejercicios${st.n ? ` · última ${st.ago === 0 ? 'hoy' : st.ago === 1 ? 'ayer' : `hace ${st.ago} días`}` : ''}`;
     const extra = st.n && nd ? `<div class="bh-next"><span class="bh-l">Te toca</span> <b>${esc(nd.title || nd.label)}</b></div>` : '';
     return galleryCard({ key, name: p.name || L.name, icon: p.icon || L?.icon, look, sub, tag, extra, dim: hid.has(key), isNew });
   };
   const own = state.plan.programs.filter(p => p.type === 'strength' && p.id !== 'free' && !ownedLib.has(p.id))
     .map(p => ({ key: 'p:' + p.id, html: () => stratCard(p, 'p:' + p.id, false) }));
-  // orden: nuevos sin abrir, luego el recomendado para tu perfil, luego los últimos que has usado
-  const libs = libAll().map(L => { const p = progForLib(L), key = 'lib:' + L.lib; return { key, html: () => stratCard(p || {}, key, true, L), last: p ? blockStats(p).ago ?? 999 : 1000, nw: !p && libNewForMe(L), rec: libRecommended(L) }; })
-    .sort((a, b) => (b.nw - a.nw) || (b.rec - a.rec) || (a.last - b.last));
+  // orden: nuevos sin abrir y luego los últimos que has usado
+  const libs = libAll().map(L => { const p = progForLib(L), key = 'lib:' + L.lib; return { key, html: () => stratCard(p || {}, key, true, L), last: p ? blockStats(p).ago ?? 999 : 1000, nw: !p && libNewForMe(L) }; })
+    .sort((a, b) => (b.nw - a.nw) || (a.last - b.last));
   const vis = arr => arr.filter(x => show || !hid.has(x.key));
   const nHid = [...own, ...libs].filter(x => hid.has(x.key)).length;
   const rs = retos ? RETO_IDS.filter(id => retoOf(id)).length : 0;
@@ -5147,7 +5141,8 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
-  ['4.63.0', ['🍑 Nuevo bloque GLÚTEO: 2 días para glúteo y piernas tonificadas.', '🦵 PIERNA pasa a ser TREN INFERIOR, ahora con 2 días: cuádriceps y femoral-cadera.', '✨ Los bloques nuevos se distinguen con la etiqueta NUEVO hasta que los abres, y «⭐ Para ti» te señala el que mejor encaja con tu perfil.']],
+  ['4.63.1', ['Se quita «⭐ Para ti» de las tarjetas de bloques.'], 'quiet'],
+  ['4.63.0', ['🍑 Nuevo bloque GLÚTEO: 2 días para glúteo y piernas tonificadas.', '🦵 PIERNA pasa a ser TREN INFERIOR, ahora con 2 días: cuádriceps y femoral-cadera.', '✨ Los bloques nuevos se distinguen con la etiqueta NUEVO hasta que los abres.']],
   ['4.62.1', ['🗑 Si borras tu copia de un bloque de Esteban, ya no te vuelve a salir (queda en «Ver bloques ocultos» por si lo quieres recuperar).'], 'quiet'],
   ['4.62.0', ['👥 Acceso: ahora ves quién usa cada dispositivo de un código (el nombre de su perfil), su último día y sus días de uso, también en la columna «dispositivos» de tu hoja. Actualiza el script a la v10: Ajustes → Acceso → Reconfigurar.'], 'admin'],
   ['4.61.0', ['🗂 Entreno se renueva: todos tus entrenos en tarjetas con foto. RETOS, botones de FREE y CARDIO, tus bloques y todos los bloques de Esteban, listos para entrar sin añadirlos.', '⋯ En cada tarjeta puedes ocultar los bloques que no uses (los recuperas al final) o editarlos.', '⚡ Nuevo bloque HÍBRIDO 5: 5 días en los que cada músculo trabaja 2 veces por semana.']],
@@ -5306,7 +5301,7 @@ const GUIDE = [
     'Dentro de un bloque eliges el <b>día</b>: el punto ● marca el que te toca según tu rotación; ✓ el que ya hiciste hoy.',
     '🎴 La <b>tarjeta del bloque activo</b> te dice qué día te toca, cuántas sesiones llevas (y en qué semana del bloque vas) y cuántas has hecho en los últimos 7 días, con un objetivo mínimo de 3. Cada tipo de bloque tiene su foto y su color.',
     'Cada bloque lleva su propia rotación: {{ROTACION}}',
-    '«＋ Crear bloque» (en Tus bloques) crea uno vacío para montar el tuyo. Los bloques de Esteban (Full Body, PPT, Híbrido 5, Brazos, Tren inferior, Glúteo, Calistenia en casa, Kettlebell…) traen su descripción y «Cómo usarlo»: la ves en el ⋯ de su tarjeta. Los que acaban de salir llevan la etiqueta <b>NUEVO</b> hasta que los abres, y «⭐ Para ti» marca el que más encaja con tu perfil.',
+    '«＋ Crear bloque» (en Tus bloques) crea uno vacío para montar el tuyo. Los bloques de Esteban (Full Body, PPT, Híbrido 5, Brazos, Tren inferior, Glúteo, Calistenia en casa, Kettlebell…) traen su descripción y «Cómo usarlo»: la ves en el ⋯ de su tarjeta. Los que acaban de salir llevan la etiqueta <b>NUEVO</b> hasta que los abres.',
     'Para cambiar ejercicios, usa «＋ Añadir ejercicio» (crear uno o elegir entre los preparados) y el ✎ de cada ejercicio. «＋ Día» añade días. El ✎ del bloque o del día permite renombrar, reordenar (◀ ▶) o eliminar. El historial nunca se borra al eliminar.'
   ]],
   ['🧭 Cómo decide el coach el peso', [
