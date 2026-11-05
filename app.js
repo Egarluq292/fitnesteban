@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.61.0';
+const APP_VERSION = '4.62.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5125,6 +5125,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.62.0', ['👥 Acceso: ahora ves quién usa cada dispositivo de un código (el nombre de su perfil), su último día y sus días de uso, también en la columna «dispositivos» de tu hoja. Actualiza el script a la v10: Ajustes → Acceso → Reconfigurar.'], 'admin'],
   ['4.61.0', ['🗂 Entreno se renueva: todos tus entrenos en tarjetas con foto. RETOS, botones de FREE y CARDIO, tus bloques y todos los bloques de Esteban, listos para entrar sin añadirlos.', '⋯ En cada tarjeta puedes ocultar los bloques que no uses (los recuperas al final) o editarlos.', '⚡ Nuevo bloque HÍBRIDO 5: 5 días en los que cada músculo trabaja 2 veces por semana.']],
   ['4.60.1', ['⏱ Los pitidos del descanso se programan al empezar, para que suenen a su hora aunque salgas de la app. Nuevo «🔊 Probar el pitido» en la ventana de descanso.'], 'quiet'],
   ['4.60.0', ['🥗 En Dieta, cada comida sale plegada con sus kcal y macros: despliégala con la flechita ▶.', '✍️ El dictado por voz ya pone mayúsculas, comas y puntos.']],
@@ -6537,7 +6538,7 @@ async function deviceAllowed(code, me) {
   if (!navigator.onLine) { deviceDiag = 'sin conexión'; return true; }
   try {
     const h = await codeHash(code), ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000); // el script de Google puede tardar en «despertar»
-    const r = await fetch(`${url}?op=check&h=${h}&d=${encodeURIComponent(deviceId())}&l=${encodeURIComponent(deviceLabel())}&t=${Date.now()}`, { cache: 'no-store', signal: ctl.signal });
+    const r = await fetch(`${url}?op=check&h=${h}&d=${encodeURIComponent(deviceId())}&l=${encodeURIComponent(deviceLabel())}&p=${encodeURIComponent(String(profileOf()?.name || '').trim().slice(0, 30))}&t=${Date.now()}`, { cache: 'no-store', signal: ctl.signal });
     clearTimeout(t);
     const txt = await r.text(); let d = {};
     try { d = JSON.parse(txt); } catch { deviceDiag = `respuesta no válida (HTTP ${r.status}): ${txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90)}`; return true; }
@@ -6736,7 +6737,7 @@ async function loadUsage() {
     const d = await r.json();
     if (!d.ok) throw new Error(d.error === 'clave' ? 'La clave del registro no coincide con la del script' : 'El registro no respondió bien');
     ui.usage = {}; for (const x of d.rows || []) ui.usage[String(x.h).toLowerCase()] = x;
-    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9);
+    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10);
     if (!ui.usageOld) syncUsageNames();
   } catch (e) { ui.usageErr = e.message || 'No se pudo leer el registro de uso'; ui.usage = null; }
   ui.usageLoading = false; ui.usageAt = Date.now();
@@ -6749,10 +6750,10 @@ function usageLine(hash) {
   if (!u) return '<div class="text-[11px] text-mute">⚪ Aún no la ha abierto (o sin conexión desde que tiene el código)</div>';
   const ago = daysBetween(u.last, todayISO()), old = u.v && cmpVer(APP_VERSION, String(u.v)) > 0;
   const when = ago <= 0 ? 'Hoy' : ago === 1 ? 'Ayer' : `Hace ${ago} días`;
-  return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} de ${DEVICE_LIMIT} dispositivos`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="truncate text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 truncate">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
+  return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} de ${DEVICE_LIMIT} dispositivos`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="truncate text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${dv.p ? `<b class="text-white">${esc(dv.p)}</b> · ` : ''}${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}${dv.k ? ` · ${dv.k} día${dv.k === 1 ? '' : 's'} de uso` : ''}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 truncate">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
 }
 function usageScript(key) {
-  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código, máx. 2; caducidad de planes) · v9
+  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 2; caducidad de planes) · v10
 const READ_KEY = '${key}';
 const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
 const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre', 'correo', 'alta', 'dispositivos', 'bloqueos'];
@@ -6778,7 +6779,7 @@ function huellas_() { return acl_().map(p => p[0].toLowerCase()); }
 function admins_() { return acl_().filter(p => p.slice(1).some(x => x.toLowerCase() === 'admin')).map(p => p[0].toLowerCase()); }
 // fecha de caducidad del plan (hasta=aaaa-mm-dd en acceso.txt), o '' si no caduca
 function hasta_(h) { const p = acl_().find(p => p[0].toLowerCase() === h); const t = p && p.slice(1).find(x => /^hasta=\\d{4}-\\d{2}-\\d{2}$/i.test(x)); return t ? t.slice(6) : ''; }
-// dispositivos de cada código: { huella: { d: [{ id, n: 'Android · Chrome', last: 'aaaa-mm-dd' }], b: bloqueos } }
+// dispositivos de cada código: { huella: { d: [{ id, n: 'Android · Chrome', p: 'nombre del perfil', last: 'aaaa-mm-dd', k: días de uso }], b: bloqueos } }
 function disp_() {
   let x = {}; try { x = JSON.parse(PropertiesService.getScriptProperties().getProperty('disp') || '{}'); } catch (e) { x = {}; }
   for (const h in x) x[h].d = (x[h].d || []).map(v => typeof v === 'string' ? { id: v, n: '', last: '' } : v);
@@ -6787,7 +6788,9 @@ function disp_() {
 function guardaDisp_(x) { PropertiesService.getScriptProperties().setProperty('disp', JSON.stringify(x)); }
 function escribeDisp_(h, x) {
   const sh = hoja_(), datos = sh.getDataRange().getValues();
-  for (let i = 1; i < datos.length; i++) if (String(datos[i][0]) === h) { sh.getRange(i + 1, 9, 1, 2).setValues([[String((x.d || []).length), String(x.b || 0)]]); return; }
+  // columna «dispositivos»: quién usa cada uno, con qué, último día y días de uso
+  const txt = (x.d || []).map(v => (v.p ? v.p + ' · ' : '') + (v.n || 'dispositivo') + (v.last ? ' · ' + v.last.slice(8, 10) + '/' + v.last.slice(5, 7) : '') + (v.k ? ' (' + v.k + ' d)' : '')).join('  |  ') || '0';
+  for (let i = 1; i < datos.length; i++) if (String(datos[i][0]) === h) { sh.getRange(i + 1, 9, 1, 2).setValues([[txt, String(x.b || 0)]]); return; }
 }
 function nombres_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('nombres') || '{}'); } catch (e) { return {}; } }
 function salida_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
@@ -6845,7 +6848,7 @@ function doGet_(e) {
   const q = (e && e.parameter) || {};
   // ¿puede este dispositivo usar este código? (máx. LIMITE dispositivos; el administrador, sin límite)
   if (q.op === 'check') { // ojo: «c» y «sid» son parámetros reservados de Google, no se pueden usar
-    const h = String(q.h || '').toLowerCase(), d = String(q.d || '').slice(0, 40), n = String(q.l || '').slice(0, 40), hoy = fecha_(new Date());
+    const h = String(q.h || '').toLowerCase(), d = String(q.d || '').slice(0, 40), n = String(q.l || '').slice(0, 40), p = String(q.p || '').trim().slice(0, 30), hoy = fecha_(new Date());
     if (!/^[0-9a-f]{32}$/.test(h) || !d || huellas_().indexOf(h) < 0) return salida_({ ok: false });
     const lock = LockService.getScriptLock(); lock.waitLock(10000);
     try {
@@ -6856,8 +6859,8 @@ function doGet_(e) {
       let ok = true;
       const ya = x.d.find(v => v.id === d);
       if ((x.q || []).indexOf(d) >= 0 && !adm) { ok = false; x.b = (x.b || 0) + 1; }
-      else if (ya) { ya.last = hoy; if (n) ya.n = n; }
-      else if (adm || x.d.length < LIMITE) x.d.push({ id: d, n, last: hoy });
+      else if (ya) { if (ya.last !== hoy) ya.k = (ya.k || 1) + 1; ya.last = hoy; if (n) ya.n = n; if (p) ya.p = p; }
+      else if (adm || x.d.length < LIMITE) x.d.push({ id: d, n, p, last: hoy, k: 1 });
       else { ok = false; x.b = (x.b || 0) + 1; }
       all[h] = x; guardaDisp_(all); escribeDisp_(h, x);
       return salida_({ ok: true, allowed: ok, n: x.d.length });
@@ -6867,12 +6870,12 @@ function doGet_(e) {
   if (q.op === 'hoy') {
     const c = CacheService.getScriptCache(); let n = c.get('hoy');
     if (n === null) { const hoy = fecha_(new Date()), adm = admins_(); n = String(hoja_().getDataRange().getValues().slice(1).filter(r => fecha_(r[1]) === hoy && adm.indexOf(String(r[0])) < 0).length); c.put('hoy', n, 60); }
-    return salida_({ ok: true, ver: 9, hoy: +n });
+    return salida_({ ok: true, ver: 10, hoy: +n });
   }
   if (q.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
   const datos = hoja_().getDataRange().getValues().slice(1);
   const dd = disp_();
-  return salida_({ ok: true, ver: 9, rows: datos.map(r => ({ h: String(r[0]), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []) })) });
+  return salida_({ ok: true, ver: 10, rows: datos.map(r => ({ h: String(r[0]), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []) })) });
 }`;
 }
 /* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
@@ -7081,7 +7084,7 @@ function accessSectionHTML() {
     ${gh ? '<p class="text-[11px] text-mute">Toca a una persona para ver su ficha: ✎ nombre · ⏳ plan · 🔄 nuevo código · 🗑 quitar acceso. Nombres y códigos solo los ves tú (cifrados con tu PIN); en GitHub solo hay huellas.</p>' : ''}
     ${list.length ? '<button class="btn-ghost w-full" data-act="copyHashes" type="button">📋 Copiar huellas y nombres (para tu hoja)</button>' : ''}
     ${access.usageUrl && lsGet(USE_KEY)
-      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : 'actualizado ahora · nombres, correos, altas y dispositivos') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
+      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : 'actualizado ahora · nombres, correos, altas y quién usa cada dispositivo') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
       : access.usageUrl ? `<button class="btn-ghost w-full" data-act="usageHere" type="button">📶 Ver quién usa la app en este dispositivo</button>`
       : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
     ${access.usageUrl && lsGet(USE_KEY) ? (lsGet(SHEET_KEY) && !ui.sheetEdit
