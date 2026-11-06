@@ -7,7 +7,6 @@ a2d909577dbb467b236923bffb0559ff plan=prueba hasta=2026-11-11
 94812483065340eb250d4b32a4bec072
 b6fb3dd1954985728351cd7a295e9540
 f4b0b37a93186e3f8321840a32331c5d
-#uso https://script.google.com/macros/s/AKfycbxbwKzXbu5HgWqO0_hEYhVYoWCAOBg5ryV6yDbZWsRCDAQ5NGU1esmvGpodWS8cDfTi9A/exec
 52f8bea46d779d0866bf416fc16fa7b7 plan=1m hasta=2026-12-06
 2f1716bb75d2296142913ccc0d5c831c plan=prueba hasta=2026-11-12
 0258f6543fa6a6456299fec8f51db347 plan=prueba hasta=2026-11-12
@@ -15,3 +14,4 @@ f4b0b37a93186e3f8321840a32331c5d
 af02eef92c88f92775e090a99debf79f plan=prueba hasta=2026-11-14
 bff66ad7b5b25711a298a0b609dafbea plan=prueba hasta=2026-11-16
 1b7b7987a0a5d95837767d6f97e7f17f plan=prueba hasta=2026-11-16
+#uso https://script.google.com/macros/s/AKfycbxbwKzXbu5HgWqO0_hEYhVYoWCAOBg5ryV6yDbZWsRCDAQ5NGU1esmvGpodWS8cDfTi9A/exec
