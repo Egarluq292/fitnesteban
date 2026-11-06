@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.65.1';
+const APP_VERSION = '4.66.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -978,7 +978,7 @@ const blockLook = p => BLOCK_LOOKS.find(L => L.re.test(`${p.name} ${p.icon || ''
 function blockHeroHTML() {
   const p = prog();
   const hasOwn = state.plan.programs.some(x => x.type === 'strength' && x.id !== 'free' && x.days.some(d => d.exercises.length));
-  if (!hasOwn) {
+  if (!hasOwn && (p.type !== 'strength' || p.id === 'free')) {
     return `<button class="bh bh-empty" data-act="addProg" type="button" style="--bh:#22d3ee">
       <img class="bh-img" src="blk-full.webp" alt="" />
       <span class="bh-shade"></span>
@@ -1104,6 +1104,7 @@ function openBlock(key) {
   else if (key.startsWith('lib:')) { const L = libAll().find(x => x.lib === key.slice(4)); if (L) p = progForLib(L) || makeLibProg(L.lib); }
   if (!p) return;
   state.plan.active = p.id; ui.retoId = null; ui.dayId = p.days?.length ? nextDayId(p) : null; ui.trainHome = false;
+  if (ui.view !== 'train') { ui.view = 'train'; ui.accessOpen = false; }
   persist(); render(); window.scrollTo({ top: 0 });
 }
 function blockMenu(key) {
@@ -1114,11 +1115,13 @@ function blockMenu(key) {
     ${L?.desc ? `<p class="text-[12px] text-slate-300 leading-snug whitespace-pre-line -mt-1">${esc(L.desc).replace(/\nCómo usarlo:/, '\n<b class="text-brand">Cómo usarlo:</b>')}</p>` : ''}
     <div class="grid gap-2">
       <button class="btn-ghost" data-mact="open" type="button">Abrir</button>
-      <button class="btn-ghost" data-mact="edit" type="button">${own ? '✎ Editar o borrar' : '✎ Editar (tu copia)'}</button>
+      <button class="btn-ghost" data-mact="edit" type="button">${own ? '✎ Cambiar nombre' : '✎ Editar (tu copia)'}</button>
       <button class="btn-ghost" data-mact="hide" type="button">${isHid ? '👁 Volver a mostrarlo' : '🙈 Ocultar este bloque'}</button>
+      ${own ? '<button class="btn-danger" data-mact="del" type="button">🗑 Eliminar este bloque</button>' : ''}
     </div>
     <p class="text-[11px] text-mute text-center">${own ? '' : 'Los cambios se hacen en tu copia: el bloque original no cambia. '}${isHid ? '' : 'Ocultarlo no borra nada: lo recuperas abajo, en «Ver bloques ocultos».'}</p>`, {
     open: () => { closeModal(); openBlock(key); },
+    del: () => deleteProgModal(key.slice(2)),
     edit: () => {
       closeModal();
       let p = own ? state.plan.programs.find(x => x.id === key.slice(2)) : null;
@@ -1181,7 +1184,14 @@ function renderTrain() {
   </section>
 
   <div class="space-y-3 mt-3">
-    ${exercises || `<div class="card p-6 text-center text-sm text-mute">Este día no tiene ejercicios todavía.</div>`}
+    ${exercises || `<div class="card p-4 text-sm leading-snug space-y-2 border-brand/40">
+      <div class="font-bold text-white">Este día está vacío</div>
+      <ol class="text-[13px] text-slate-300 space-y-1 list-decimal pl-5">
+        <li>Pulsa <b class="text-brand">＋ Añadir ejercicio</b> (justo debajo) y elige los que quieras.</li>
+        <li>Cambia de día con las pestañas de arriba (${esc(prog().days.map(x => x.label).join(', '))}) y repite.</li>
+        <li>¿Te falta un día? Pulsa <b class="text-brand">＋ Día</b> al final de las pestañas.</li>
+      </ol>
+      <p class="text-[11px] text-mute">Con ✎ (arriba a la derecha) cambias el nombre del día.</p></div>`}
   </div>
 
   <button class="btn-dashed w-full mt-3" data-act="exLibrary" type="button">＋ Añadir ejercicio</button>
@@ -1656,7 +1666,7 @@ async function showCard(build, name) {
 }
 
 /* --- Editor de días y ejercicios --- */
-function editDayModal(dayId) {
+function editDayModal(dayId, progId) {
   const isNew = !dayId;
   const day = isNew ? { label: '', title: '', subtitle: '', rotation: true } : allDays().find(d => d.id === dayId);
   openModal(`
@@ -1679,8 +1689,9 @@ function editDayModal(dayId) {
       const data = { label, title: mval(root, 'title').trim() || label, subtitle: mval(root, 'subtitle').trim(), rotation: root.querySelector('[name="rotation"]').checked };
       if (isNew) {
         const nd = { id: uid('d_'), ...data, exercises: [] };
-        prog().days.push(nd);
-        ui.dayId = nd.id;
+        const pr = (progId && state.plan.programs.find(x => x.id === progId)) || prog();
+        pr.days.push(nd);
+        if (pr === prog()) ui.dayId = nd.id;
       } else Object.assign(day, data);
       persist(); closeModal(); render();
     },
@@ -1702,7 +1713,10 @@ function editProgModal(progId) {
   openModal(`
     <h3 class="modal-title">${isNew ? 'Nuevo bloque' : 'Editar bloque'}</h3>
     <label class="lbl">Nombre del bloque<input class="field mt-1" name="name" maxlength="30" value="${esc(p.name)}" placeholder="TORSO-PIERNA" /></label>
-    ${!isNew && p.type === 'cardio' ? '<p class="text-[11px] text-mute">Bloque de cardio. Se puede renombrar, no eliminar.</p><button class="btn-ghost w-full mt-2" data-mact="cdTypes" type="button">✎ Mis actividades de cardio</button>' : !isNew && p.type === 'retos' ? '<p class="text-[11px] text-mute">Bloque de retos: dominadas, flexiones, fondos, sentadillas, burpees, plancha y rueda abdominal por niveles. Se puede renombrar, no eliminar.</p>' : isNew ? '<p class="text-[11px] text-mute">Se crea con un día vacío. Añade días con «＋ Día» y ejercicios con «＋ Añadir ejercicio».</p>' : `<p class="text-[11px] text-mute">${p.days.length} días: ${esc(p.days.map(d => d.label).join(' · '))}</p><p class="text-[11px] text-mute">Para cambiar ejercicios, usa «＋ Añadir ejercicio» y el ✎ de cada ejercicio, en la pantalla del bloque.</p>`}
+    ${isNew ? `<div class="lbl mt-3">¿Cuántos días distintos tiene?</div>
+    <div class="flex gap-1.5 mt-1" id="ndChips">${[1, 2, 3, 4, 5, 6].map(n => `<button class="chip flex-1 justify-center ${n === 3 ? 'chip-on' : ''}" data-mact="nd" data-n="${n}" type="button">${n}</button>`).join('')}</div>
+    <p class="text-[11px] text-mute mt-1.5">Ejemplo: 3 días = Día 1, Día 2 y Día 3, que vas rotando. Luego puedes añadir o quitar días.</p>` : ''}
+    ${!isNew && p.type === 'cardio' ? '<p class="text-[11px] text-mute">Bloque de cardio. Se puede renombrar, no eliminar.</p><button class="btn-ghost w-full mt-2" data-mact="cdTypes" type="button">✎ Mis actividades de cardio</button>' : !isNew && p.type === 'retos' ? '<p class="text-[11px] text-mute">Bloque de retos: dominadas, flexiones, fondos, sentadillas, burpees, plancha y rueda abdominal por niveles. Se puede renombrar, no eliminar.</p>' : isNew ? '' : `<p class="text-[11px] text-mute">${p.days.length} días: ${esc(p.days.map(d => d.label).join(' · '))}</p><p class="text-[11px] text-mute">Para cambiar ejercicios, usa «＋ Añadir ejercicio» y el ✎ de cada ejercicio, en la pantalla del bloque.</p>`}
     <div class="flex gap-2 mt-4">
       ${!isNew ? `<button class="btn-ghost" data-mact="left" type="button" aria-label="Mover a la izquierda">◀</button><button class="btn-ghost" data-mact="right" type="button" aria-label="Mover a la derecha">▶</button>` : ''}
       <button class="btn-primary flex-1" data-mact="save" type="button">Guardar</button>
@@ -1710,6 +1724,7 @@ function editProgModal(progId) {
     ${!isNew && p.type === 'strength' && p.id !== 'free' && access.me?.admin && lsGet(GH_KEY) ? `<button class="btn-ghost w-full mt-3" data-mact="share" type="button">${p.pubId ? '📢 Compartido con todos · actualizar o retirar' : '📤 Compartir con todos'}</button>` : ''}
     ${!isNew && p.type === 'strength' && state.plan.programs.length > 1 ? `<button class="btn-danger w-full mt-3" data-mact="del" type="button">Eliminar este bloque</button><p class="text-[11px] text-mute mt-2">Eliminar un bloque no borra el historial de sesiones ya guardadas.</p>` : ''}
   `, {
+    nd: (root, b) => { root.querySelectorAll('[data-mact=nd]').forEach(x => x.classList.toggle('chip-on', x === b)); },
     share: () => { closeModal(); publishBlockModal(progId); },
     cdTypes: () => { closeModal(); cardioTypesModal(); },
     autofocus: isNew,
@@ -1717,17 +1732,31 @@ function editProgModal(progId) {
       const name = mval(root, 'name').trim().toUpperCase();
       if (!name) return toast('Ponle un nombre al bloque', 'warn');
       if (isNew) {
-        const np = { id: uid('p_'), name, days: [normalizeDay({ id: uid('d_'), label: 'DÍA 1', title: `${name} · Día 1` })] };
+        const nd = +(root.querySelector('[data-mact=nd].chip-on')?.dataset.n || 3);
+        const np = { id: uid('p_'), name, type: 'strength', days: Array.from({ length: nd }, (_, i) => normalizeDay({ id: uid('d_'), label: `DÍA ${i + 1}`, title: `${name} · Día ${i + 1}` })) };
         state.plan.programs.push(np);
         state.plan.active = np.id;
-        ui.dayId = np.days[0].id;
+        // se abre el bloque recién creado, en el Día 1, listo para añadir ejercicios
+        ui.dayId = np.days[0].id; ui.retoId = null; ui.trainHome = false; ui.view = 'train';
+        persist(); closeModal(); render(); window.scrollTo({ top: 0 });
+        return toast(`Bloque creado ✓ Ahora añade ejercicios al Día 1`);
       } else p.name = name;
       persist(); closeModal(); render();
     },
     left: () => moveProg(progId, -1),
     right: () => moveProg(progId, 1),
+    del: () => deleteProgModal(progId)
+  });
+}
+/* 🗑 Eliminar un bloque tuyo (con confirmación dentro de la app) */
+function deleteProgModal(progId) {
+  const p = state.plan.programs.find(x => x.id === progId); if (!p || p.type !== 'strength' || p.id === 'free') return;
+  const nEx = p.days.reduce((a, d) => a + d.exercises.length, 0);
+  openModal(`<h3 class="modal-title">🗑 Eliminar «${esc(p.name)}»</h3>
+    <p class="text-sm text-slate-300">Se borran sus ${p.days.length} ${p.days.length === 1 ? 'día' : 'días'}${nEx ? ` y ${nEx} ejercicios` : ''}. Solo este bloque: los demás no se tocan.</p>
+    <p class="text-[11px] text-mute">Las sesiones que ya guardaste con él siguen en tu historial y en Progreso.</p>
+    <div class="grid grid-cols-3 gap-2 mt-2"><button class="btn-ghost" data-close type="button">Cancelar</button><button class="btn-danger col-span-2" data-mact="del" type="button">Eliminar bloque</button></div>`, {
     del: () => {
-      if (!confirm(`¿Eliminar el bloque "${p.name}" con todos sus días y ejercicios?`)) return;
       for (const d of p.days) delete state.drafts[d.id];
       // si era tu copia de un bloque de Esteban, su tarjeta tampoco vuelve a salir (queda en «Ver bloques ocultos» por si lo quieres recuperar)
       const gone = libAll().filter(L => progForLib(L) === p).map(L => 'lib:' + L.lib);
@@ -1735,7 +1764,7 @@ function editProgModal(progId) {
       state.plan.programs = state.plan.programs.filter(x => x.id !== progId);
       if (state.plan.active === progId) state.plan.active = state.plan.programs[0].id;
       ui.dayId = nextDayId(); ui.trainHome = true;
-      persist(); closeModal(); render();
+      persist(); closeModal(); render(); toast(`«${p.name}» eliminado`);
     }
   });
 }
@@ -3806,12 +3835,13 @@ function renderSettings() {
         <div class="text-[11px] text-mute truncate">${esc(d.title)}</div></div>
         <button class="iconbtn" data-act="editDayId" data-day="${esc(d.id)}" type="button" aria-label="Editar">✎</button>
       </div>`).join('')}
+      ${p.type === 'strength' && p.id !== 'free' ? `<div class="grid grid-cols-[1fr_1fr_auto] gap-2"><button class="btn-ghost" data-act="addDayProg" data-prog="${esc(p.id)}" type="button">＋ Día</button><button class="btn-ghost" data-act="openBlock" data-key="p:${esc(p.id)}" type="button">＋ Ejercicios</button><button class="btn-ghost px-4 text-rose-300" data-act="delProg" data-prog="${esc(p.id)}" type="button" aria-label="Eliminar bloque">🗑</button></div>` : ''}
     </div>`).join('')}
     <div class="grid grid-cols-2 gap-2">
       <button class="btn-ghost" data-act="addProg" type="button">＋ Añadir bloque</button>
-      <button class="btn-ghost" data-act="resetPlan" type="button">Vaciar bloques</button>
+      <button class="btn-ghost" data-act="resetPlan" type="button">Borrar todos</button>
     </div>
-    <p class="text-[11px] text-mute">Los días se añaden desde Entreno con «＋ Día» (en el bloque activo) y los ejercicios con el botón ✎ de cada uno.</p>
+    <p class="text-[11px] text-mute">«＋ Día» crea un día nuevo en ese bloque. «＋ Ejercicios» lo abre en Entreno, donde cada día tiene su botón «＋ Añadir ejercicio». 🗑 elimina solo ese bloque.</p>
     </div>
   </details>
 
@@ -5201,6 +5231,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.66.0', ['🧱 Crear un bloque es más fácil: eliges cuántos días tiene y se abre al momento, listo para añadir ejercicios.', 'En Ajustes → Bloques, cada bloque tiene «＋ Día», «＋ Ejercicios» y 🗑 para eliminar solo ese bloque. También en el ⋯ de su tarjeta.']],
   ['4.65.1', ['🙈 Acceso: puedes ocultar el nombre de perfil de una persona concreta (botón 👤 en su ficha). Script de uso v11.'], 'admin'],
   ['4.65.0', ['👆 Entrar con huella en tus zonas de administrador (Ajustes → PIN).'], 'admin'],
   ['4.64.4', ['Botones FREE y CARDIO más compactos.'], 'quiet'],
@@ -5372,7 +5403,8 @@ const GUIDE = [
     'Dentro de un bloque eliges el <b>día</b>: el punto ● marca el que te toca según tu rotación; ✓ el que ya hiciste hoy.',
     '🎴 La <b>tarjeta del bloque activo</b> te dice qué día te toca, cuántas sesiones llevas (y en qué semana del bloque vas) y cuántas has hecho en los últimos 7 días, con un objetivo mínimo de 3. Cada tipo de bloque tiene su foto y su color.',
     'Cada bloque lleva su propia rotación: {{ROTACION}}',
-    '«＋ Crear bloque» (en Tus bloques) crea uno vacío para montar el tuyo. Los bloques preparados (Full Body, PPT, Híbrido 5, Brazos, Tren inferior, Glúteo, Calistenia en casa, Kettlebell…) traen su descripción y «Cómo usarlo»: la ves en el ⋯ de su tarjeta. Los que acaban de salir llevan la etiqueta <b>NUEVO</b> hasta que los abres.',
+    'Para montar el tuyo: «＋ Crear bloque» (en Tus bloques) → nombre y cuántos días tiene → se abre en el Día 1. Pulsa «＋ Añadir ejercicio», cambia de día con las pestañas y repite; «＋ Día» añade otro día. También desde Ajustes → Bloques («＋ Día» y «＋ Ejercicios»). Para eliminar un bloque tuyo: ⋯ de su tarjeta → «🗑 Eliminar este bloque», o la 🗑 en Ajustes → Bloques.',
+    'Los bloques preparados (Full Body, PPT, Híbrido 5, Brazos, Tren inferior, Glúteo, Calistenia en casa, Kettlebell…) traen su descripción y «Cómo usarlo»: la ves en el ⋯ de su tarjeta. Los que acaban de salir llevan la etiqueta <b>NUEVO</b> hasta que los abres.',
     'Para cambiar ejercicios, usa «＋ Añadir ejercicio» (crear uno o elegir entre los preparados) y el ✎ de cada ejercicio. «＋ Día» añade días. El ✎ del bloque o del día permite renombrar, reordenar (◀ ▶) o eliminar. El historial nunca se borra al eliminar.'
   ]],
   ['🧭 Cómo decide el coach el peso', [
@@ -5956,6 +5988,8 @@ const actions = {
   },
   cdDel: b => { if (!confirm('¿Borrar este registro de cardio?')) return; state.cardio = state.cardio.filter(x => x.id !== b.dataset.id); persist(); render(); },
   addDay: () => editDayModal(null),
+  addDayProg: b => editDayModal(null, b.dataset.prog),
+  delProg: b => deleteProgModal(b.dataset.prog),
   editDay: () => editDayModal(currentDay().id),
   editDayId: b => editDayModal(b.dataset.day),
   addEx: () => editExModal(null),
@@ -6225,7 +6259,7 @@ const actions = {
     habPress = null; habitStep(b.dataset.name, 1);
   },
   resetPlan: () => {
-    if (!confirm('¿Empezar de cero con los bloques? Se quitan tus bloques, días y ejercicios (quedan RETOS, CARDIO y FREE). El historial se conserva. Después puedes elegir bloques en «📚 Bloques recomendados».')) return;
+    if (!confirm('¿Borrar TODOS tus bloques? Se quitan todos tus bloques, días y ejercicios (quedan RETOS, CARDIO y FREE). El historial se conserva. Después puedes elegir bloques en «📚 Bloques recomendados».')) return;
     state.plan = normalizePlan(clone(DEFAULT_PLAN)); state.selectedVariants = {}; state.drafts = {}; ui.dayId = nextDayId();
     persist(); render(); toast('Plan restaurado');
   },
