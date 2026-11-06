@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.63.2';
+const APP_VERSION = '4.63.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1002,10 +1002,10 @@ function blockHeroHTML() {
     <span class="bh-shade"></span>
     <div class="bh-body">
       <div class="flex items-center gap-2"><span class="bh-tag">Bloque activo · ${esc(L.tag)}</span>${week ? `<span class="bh-week">Semana ${week}</span>` : ''}</div>
-      <div class="bh-name">${p.icon ? `<span class="mr-1.5">${esc(p.icon)}</span>` : ''}${esc(p.name)}</div>
+      <div class="bh-name">${blockNameHTML(p.name, p.icon, 26)}</div>
       <div class="bh-sub">${p.days.length} ${p.days.length === 1 ? 'día' : 'días'} · ${ss.length ? `${ss.length} ${ss.length === 1 ? 'sesión hecha' : 'sesiones hechas'}` : 'Aún sin estrenar'}${last ? ` · última ${ago === 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}` : ''}</div>
       <div class="bh-row">
-        <div class="min-w-0"><div class="bh-l">${doneToday ? 'Hoy' : 'Te toca'}</div><div class="bh-v truncate">${doneToday ? 'Entrenado ✓ toca recuperar' : esc(nd ? (nd.title || nd.label) : '—')}</div></div>
+        <div class="min-w-0"><div class="bh-l">${doneToday ? 'Hoy' : 'Te toca'}</div><div class="bh-v leading-tight">${doneToday ? 'Entrenado ✓ toca recuperar' : esc(nd ? (nd.title || nd.label) : '—')}</div></div>
         <div class="shrink-0 text-right"><div class="bh-l">Esta semana</div><div class="bh-dots">${dots}</div><div class="bh-l !normal-case !tracking-normal mt-0.5">${wk} de ${goal}</div></div>
       </div>
     </div></section>`;
@@ -1025,6 +1025,17 @@ function blockStats(p) {
   const ago = last ? Math.round((parseISO(T) - parseISO(last.date)) / 864e5) : null;
   return { n: ss.length, ago, wk: ss.filter(x => x.date > addDays(T, -7)).length };
 }
+/* Nombre de bloque que nunca se corta: si es largo, la segunda parte va debajo en pequeño («CALISTENIA» / «EN CASA»),
+   y si aun así no cabe, la letra se reduce sola según el ancho de la pantalla */
+function blockNameHTML(name, icon, size = 22) {
+  const n = String(name || '').trim();
+  let a = n, b = '';
+  const m = n.length > 12 && n.match(/^(.+?)\s+((?:EN|DE|DEL|CON|Y|PARA|SIN)\s+.+)$/i);
+  if (m) { a = m[1]; b = m[2]; }
+  const len = Math.max(a.length + (icon ? 2 : 0), 8);
+  const fs = `font-size:clamp(15px, calc((100vw - 120px) / ${(len * 0.68).toFixed(2)}), ${size}px)`;
+  return `<span class="bh-name1" style="${fs}">${icon ? `<span class="mr-1.5">${esc(icon)}</span>` : ''}${esc(a)}</span>${b ? `<span class="bh-name2">${esc(b)}</span>` : ''}`;
+}
 function galleryCard({ key, name, icon, look, sub, tag, extra = '', menu = true, dim = false, isNew = false }) {
   return `<div class="bh bh-sm ${dim ? 'opacity-50' : ''} ${isNew ? 'bh-isnew' : ''}" style="--bh:${look.c}" data-act="openBlock" data-key="${esc(key)}" role="button" tabindex="0">
     <img class="bh-img" src="blk-${look.img}.webp" alt="" loading="lazy"${look.f ? ` style="filter:${look.f}"` : ''} />${look.tint ? '<span class="bh-tint"></span>' : ''}
@@ -1032,7 +1043,7 @@ function galleryCard({ key, name, icon, look, sub, tag, extra = '', menu = true,
     ${menu ? `<button class="bh-menu" data-act="blockMenu" data-key="${esc(key)}" type="button" aria-label="Opciones">⋯</button>` : ''}
     <div class="bh-body">
       <span class="bh-tag">${tag}</span>
-      <div class="bh-name !text-[22px] !mt-1">${icon ? `<span class="mr-1.5">${esc(icon)}</span>` : ''}${esc(name)}</div>
+      <div class="bh-name !mt-1">${blockNameHTML(name, icon, 22)}</div>
       <div class="bh-sub">${sub}</div>${extra}
     </div></div>`;
 }
@@ -2325,7 +2336,7 @@ function todayCardHTML() {
   const mh = todayMuscleHint(day);
   return `<button class="today-card" data-act="goToday" data-prog="${esc(pr.id)}" data-day="${esc(day.id)}" type="button">
       ${mh ? `<span class="shrink-0 pointer-events-none" style="width:58px">${mh.svg}</span>` : '<span class="text-2xl">🏋️</span>'}
-      <span class="flex-1 min-w-0 text-left"><span class="block text-[11px] text-mute">HOY TE TOCA</span><span class="block font-extrabold truncate">${esc(day.label)} · ${esc(pr.name)}</span><span class="block text-[11px] text-mute truncate">${day.exercises.length} ejercicios${mins ? ` · ⏱ ~${mins} min` : ''}</span>${mh ? `<span class="block text-[11px] truncate">${mh.txt}</span>` : ''}</span>
+      <span class="flex-1 min-w-0 text-left"><span class="block text-[11px] text-mute">HOY TE TOCA</span><span class="block font-extrabold leading-tight">${esc(day.label)} <span class="text-mute font-bold text-[12px]">· ${esc(pr.name)}</span></span><span class="block text-[11px] text-mute truncate">${day.exercises.length} ejercicios${mins ? ` · ⏱ ~${mins} min` : ''}</span>${mh ? `<span class="block text-[11px] truncate">${mh.txt}</span>` : ''}</span>
       <span class="text-brand font-black text-lg shrink-0">›</span></button>`;
 }
 function renderRetos() {
@@ -5141,6 +5152,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.63.3', ['Los nombres largos de los bloques ya no se cortan.'], 'quiet'],
   ['4.63.2', ['Nueva foto del bloque BRAZOS.'], 'quiet'],
   ['4.63.1', ['Se quita «⭐ Para ti» de las tarjetas de bloques.'], 'quiet'],
   ['4.63.0', ['🍑 Nuevo bloque GLÚTEO: 2 días para glúteo y piernas tonificadas.', '🦵 PIERNA pasa a ser TREN INFERIOR, ahora con 2 días: cuádriceps y femoral-cadera.', '✨ Los bloques nuevos se distinguen con la etiqueta NUEVO hasta que los abres.']],
