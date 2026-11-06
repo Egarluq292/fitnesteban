@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.70.0';
+const APP_VERSION = '4.71.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1543,6 +1543,36 @@ function sessionStats(s) {
 }
 const loadImg = src => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
 function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+/* Foto del bloque en la tarjeta: arriba a la derecha, difuminada y fundida con el fondo (sin ctx.filter, que Safari no tiene) */
+/* Escribe una línea sin que se salga: si no cabe, baja la letra (nunca se corta el texto) */
+function fitFont(ctx, txt, style, size, maxW, F, x, y) {
+  let fs = size; ctx.font = `${style} ${fs}px ${F}`;
+  while (ctx.measureText(txt).width > maxW && fs > 20) { fs -= 2; ctx.font = `${style} ${fs}px ${F}`; }
+  ctx.fillText(txt, x, y);
+}
+async function drawCardPhoto(ctx, W, look) {
+  if (!look) return;
+  let img; try { img = await loadImg(`blk-${look.img}.webp`); } catch { return; }
+  const H0 = 820, sc = Math.max(W / img.naturalWidth, H0 / img.naturalHeight);
+  const dw = img.naturalWidth * sc, dh = img.naturalHeight * sc;
+  // difuminado barato: se pinta pequeña y se amplía
+  const t = document.createElement('canvas'); t.width = Math.max(1, Math.round(dw / 7)); t.height = Math.max(1, Math.round(dh / 7));
+  const tc = t.getContext('2d'); tc.imageSmoothingQuality = 'high'; tc.drawImage(img, 0, 0, t.width, t.height);
+  ctx.save(); ctx.globalAlpha = look.tint ? 0.45 : 0.62; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(t, W - dw, 0, dw, dh);
+  ctx.restore();
+  if (look.tint) { ctx.save(); ctx.globalCompositeOperation = 'color'; ctx.fillStyle = look.c; ctx.globalAlpha = 0.5; ctx.fillRect(0, 0, W, H0); ctx.restore(); }
+  // fundido: oscuro a la izquierda (donde va el texto) y abajo
+  let g = ctx.createLinearGradient(0, 0, W, 0);
+  g.addColorStop(0, 'rgba(5,8,10,0.92)'); g.addColorStop(0.45, 'rgba(5,8,10,0.55)'); g.addColorStop(1, 'rgba(5,8,10,0.05)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H0);
+  g = ctx.createLinearGradient(0, H0 * 0.45, 0, H0);
+  g.addColorStop(0, 'rgba(5,8,10,0)'); g.addColorStop(1, 'rgba(5,8,10,1)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H0);
+  g = ctx.createLinearGradient(0, 0, 0, 260);
+  g.addColorStop(0, 'rgba(5,8,10,0.75)'); g.addColorStop(1, 'rgba(5,8,10,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, 260);
+}
 async function buildShareCard(s) {
   const W = 1080, H = 1350, F = 'system-ui, Roboto, "Segoe UI", sans-serif';
   const c = document.createElement('canvas'); c.width = W; c.height = H;
@@ -1551,6 +1581,9 @@ async function buildShareCard(s) {
   const glow = ctx.createRadialGradient(W * 0.85, H * 0.08, 20, W * 0.85, H * 0.08, W * 0.9);
   glow.addColorStop(0, 'rgba(0,210,223,0.22)'); glow.addColorStop(1, 'rgba(0,210,223,0)');
   ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+  const bp = state.plan.programs.find(p => p.type === 'strength' && p.id !== 'free' && p.days.some(d => d.id === s.dayId));
+  const look = bp ? blockLook(bp) : null;
+  await drawCardPhoto(ctx, W, look);
   // logo + marca
   try {
     const logo = await loadImg('icons/logo-512.png');
@@ -1564,7 +1597,11 @@ async function buildShareCard(s) {
   const st = sessionStats(s);
   const day = allDays().find(d => d.id === s.dayId);
   ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = '#00d2df'; ctx.font = `800 34px ${F}`; ctx.fillText('SESIÓN COMPLETADA', 70, 340);
+  // el nombre del bloque nunca se corta: si no cabe, se reduce la letra
+  const tag = bp ? `SESIÓN COMPLETADA · ${bp.name}` : 'SESIÓN COMPLETADA';
+  let tfs = 34; ctx.font = `800 ${tfs}px ${F}`;
+  while (ctx.measureText(tag).width > W - 140 && tfs > 20) { tfs -= 2; ctx.font = `800 ${tfs}px ${F}`; }
+  ctx.fillStyle = look?.c || '#00d2df'; ctx.fillText(tag, 70, 340);
   ctx.fillStyle = '#ffffff'; ctx.font = `italic 900 150px ${F}`; ctx.fillText((day?.label || 'ENTRENO').slice(0, 10), 64, 490);
   ctx.fillStyle = '#8a9ba5'; ctx.font = `500 36px ${F}`;
   const sub = `${(s.dayTitle || '').replace(/^Día \d+ · /, '')}`.slice(0, 44);
@@ -1591,8 +1628,7 @@ async function buildShareCard(s) {
     while (ctx.measureText(line).width > W - 140 && line.length > 10) line = line.slice(0, -2).trimEnd() + '…';
     ctx.fillText(line.replace(/……+$/, '…'), 70, y); y += 60;
   }
-  ctx.fillStyle = '#00d2df'; ctx.font = `italic 700 40px ${F}`;
-  ctx.fillText(pickMotto(st.prs.length ? 'pr' : 'gen', 's:' + s.id), 70, Math.max(y, 1220));
+  ctx.fillStyle = '#00d2df'; fitFont(ctx, pickMotto(st.prs.length ? 'pr' : 'gen', 's:' + s.id), 'italic 700', 40, W - 140, F, 70, Math.max(y, 1220));
   ctx.fillStyle = '#4b5b63'; ctx.font = `700 28px ${F}`; ctx.textAlign = 'right'; ctx.fillText('#FITNESTEBAN', W - 70, H - 50); ctx.textAlign = 'left';
   return new Promise(res => c.toBlob(res, 'image/png'));
 }
@@ -1609,6 +1645,7 @@ async function buildRetoCard(id, h) {
   const glow = ctx.createRadialGradient(W * 0.85, H * 0.08, 20, W * 0.85, H * 0.08, W * 0.9);
   glow.addColorStop(0, 'rgba(251,191,36,0.20)'); glow.addColorStop(1, 'rgba(251,191,36,0)');
   ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+  await drawCardPhoto(ctx, W, RETOS_LOOK);
   try { const logo = await loadImg('icons/logo-512.png'); ctx.save(); ctx.beginPath(); ctx.arc(140, 150, 70, 0, Math.PI * 2); ctx.clip(); ctx.drawImage(logo, 70, 80, 140, 140); ctx.restore(); } catch { /* sin logo */ }
   try { const img = await loadImg('icons/marca.svg'); const mh = Math.round(600 * img.naturalHeight / img.naturalWidth); ctx.drawImage(img, 240, 154 - mh / 2, 600, mh); } catch { ctx.fillStyle = '#fff'; ctx.font = `italic 900 60px ${F}`; ctx.fillText('FITNESTEBAN', 240, 175); }
   const u = r.unit === 's' ? ' s' : '', got = (h.got || []).filter(v => v > 0), total = got.reduce((a, b) => a + b, 0);
@@ -1634,8 +1671,7 @@ async function buildRetoCard(id, h) {
   roundRect(ctx, 70, 1150, W - 140, 22, 11); ctx.fillStyle = '#1c2a31'; ctx.fill();
   roundRect(ctx, 70, 1150, Math.max(22, (W - 140) * pct), 22, 11); ctx.fillStyle = '#fbbf24'; ctx.fill();
   ctx.fillStyle = '#8a9ba5'; ctx.font = `600 28px ${F}`; ctx.fillText(`Nivel ${lv} de ${r.max}`, 70, 1215);
-  ctx.fillStyle = '#00d2df'; ctx.font = `italic 700 40px ${F}`;
-  ctx.fillText(pickMotto(h.test ? 'test' : h.completed && h.feel !== 'hard' ? 'up' : 'gen', `r:${id}:${h.at}`), 70, 1275);
+  ctx.fillStyle = '#00d2df'; fitFont(ctx, pickMotto(h.test ? 'test' : h.completed && h.feel !== 'hard' ? 'up' : 'gen', `r:${id}:${h.at}`), 'italic 700', 40, W - 140, F, 70, 1275);
   ctx.fillStyle = '#4b5b63'; ctx.font = `700 28px ${F}`; ctx.textAlign = 'right'; ctx.fillText('#FITNESTEBAN', W - 70, H - 40); ctx.textAlign = 'left';
   return new Promise(res => c.toBlob(res, 'image/png'));
 }
@@ -2932,8 +2968,9 @@ function renderCalDetail(date) {
       ${act.sessions.length ? act.sessions.map(s => `<div class="mt-1">
           <div class="text-xs font-semibold">${esc(s.dayTitle || 'Sesión')}${s.durationMin ? ` · ⏱ ${s.durationMin} min` : ''}${gymKcalOf(s) ? ` · <span class="${MAC.kcal.text}">~${gymKcalOf(s)} kcal</span>` : ''}${s.deload ? ' · 🔋 descarga' : ''}</div>
           ${s.exercises.map(e => `<div class="text-[11px] text-mute leading-snug">· ${esc(e.name)}: <span class="font-mono">${e.sets.map(x => setStr(x, isBwEx(e.exId), isTimedEx(e))).join(' · ')}</span></div>`).join('')}
+          <button class="cal-card" data-mact="calCard" data-id="${esc(s.id)}" type="button">📸 Ver tarjeta</button>
         </div>`).join('') : ''}
-      ${act.retos.map(x => x.h.test ? `<div class="mt-1"><div class="text-xs font-semibold">🎯 Test de máximo · ${esc(x.r.name)}</div><div class="text-[11px] text-mute font-mono">${retoLine(x)} seguid${x.r.unit === 's' ? 'os' : 'as'}</div></div>` : `<div class="mt-1"><div class="text-xs font-semibold">🏆 Reto ${esc(x.r.name)} · nivel ${x.h.level}${x.h.kcal ? ` · <span class="${MAC.kcal.text}">~${x.h.kcal} kcal</span>` : ''}</div><div class="text-[11px] text-mute font-mono">${retoLine(x)} ${(RETO_FEEL.find(f => f[0] === x.h.feel) || ['', ''])[1]}</div></div>`).join('')}
+      ${act.retos.map(x => x.h.test ? `<div class="mt-1"><div class="text-xs font-semibold">🎯 Test de máximo · ${esc(x.r.name)}</div><div class="text-[11px] text-mute font-mono">${retoLine(x)} seguid${x.r.unit === 's' ? 'os' : 'as'}</div></div>` : `<div class="mt-1"><div class="text-xs font-semibold">🏆 Reto ${esc(x.r.name)} · nivel ${x.h.level}${x.h.kcal ? ` · <span class="${MAC.kcal.text}">~${x.h.kcal} kcal</span>` : ''}</div><div class="text-[11px] text-mute font-mono">${retoLine(x)} ${(RETO_FEEL.find(f => f[0] === x.h.feel) || ['', ''])[1]}</div></div>`).map((html, k) => html.replace(/<\/div>$/, `<button class="cal-card" data-mact="calReto" data-reto="${esc(act.retos[k].id)}" data-at="${esc(String(act.retos[k].h.at))}" type="button">📸 Ver tarjeta</button></div>`)).join('')}
       ${!act.sessions.length && !act.retos.length ? '<div class="text-xs text-mute mt-0.5">Sin entreno de fuerza.</div>' : ''}
     </div>
     <div>
@@ -2992,6 +3029,8 @@ function openCalendar() {
       if (dir) { ui.calMonth = m; calSlideMonth(dir); } else calMarkSelected();
       calSwapDetail();
     },
+    calCard: (r, b) => openShareCard(b.dataset.id),
+    calReto: (r, b) => openRetoCard(b.dataset.reto, b.dataset.at),
     calGo: () => { ui.editing = null; ui.aiResult = null; ui.dietDate = ui.calSel; ui._animRings = true; closeModal(); render(); window.scrollTo({ top: 0 }); }
   };
   openModal(renderCalendar(), { ...handlers, sheetClass: 'sheet-fixed' });
@@ -5345,6 +5384,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.71.0', ['📸 La tarjeta para compartir tu sesión lleva ahora la foto del bloque que has entrenado, difuminada al fondo, y su nombre. También en las de Retos.', '📅 Recupera la tarjeta de cualquier entreno pasado: en el calendario, toca el día y pulsa «📸 Ver tarjeta».']],
   ['4.70.0', ['🔁 Si un bloque nuevo repite un ejercicio que ya has hecho en otro (mismo nombre), el coach parte de lo que ya levantas en vez de empezar con la sesión de calibración.']],
   ['4.69.1', ['🔧 Script de uso v11 corregido: bloqueaba todos los dispositivos. Vuelve a pegarlo (Ajustes → Acceso → Reconfigurar).'], 'admin'],
   ['4.69.0', ['✏️ El Coach IA ya puede cambiar tus bloques: pídele (también por voz) «añade un día de hombro a mi bloque X», «cambia este ejercicio por otro» o «pon 4 series de sentadilla». Te enseña los cambios y tú pulsas «Aplicar» (y «Deshacer» si no te convence).']],
@@ -5544,7 +5584,7 @@ const GUIDE = [
     '⇄ cambia de variante, ✎ edita series, rango, descanso, incremento y vídeo. «▶ Técnica» abre YouTube.',
     '💬 <b>Comenta al Coach</b> (bajo las series): marca 😣 Molestia, 🥵 Muy duro, 😌 Fácil o ⏱ Poco tiempo y escribe o dicta con 🎤 lo que notes. Lo verá el Coach IA y te lo recordaré la próxima vez; con 😣 o 🥵 no te subo peso.',
     '⏱ Bajo el título del día ves la <b>duración estimada</b>; la <b>real</b> se mide desde tu primera serie ✓ hasta «Guardar sesión» (las pausas de más de 20 min no cuentan).',
-    'Al final, «Guardar sesión»: resumen, volumen, récords personales y 📸 <b>Tarjeta</b> para compartir (también desde Progreso → Historial). 🗑️ «Abandonar» borra lo apuntado hoy, con confirmación.'
+    'Al final, «Guardar sesión»: resumen, volumen, récords personales y 📸 <b>Tarjeta</b> para compartir, con la foto del bloque. La de un entreno pasado la recuperas en Progreso → Historial o en el calendario (Dieta → toca la fecha → toca el día → «📸 Ver tarjeta»). 🗑️ «Abandonar» borra lo apuntado hoy, con confirmación.'
   ]],
   ['🏆 Retos', [
     'En Entreno → <b>🏆 RETOS</b>: dominadas, flexiones, fondos, sentadillas, burpees, plancha y rueda abdominal. Al empezar haces un test (todas las que puedas seguidas) y la app te coloca en un nivel (≈70 % de tu máximo).',
