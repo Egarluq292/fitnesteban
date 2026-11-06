@@ -5394,7 +5394,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
-  ['4.72.0', ['🎯 Cada bloque puede tener sus «Veces por semana» (en su ✎). Útil para bloques de complemento, como uno de brazos de un solo día: pon 1 y te marcará «1 de 1».']],
+  ['4.72.0', ['🎯 Cada bloque puede tener sus «Veces por semana» (en su ✎). Útil para bloques de complemento, como uno de brazos de un solo día: pon 1 y te marcará «1 de 1».'], 'quiet'],
   ['4.71.0', ['📸 La tarjeta para compartir tu sesión lleva ahora la foto del bloque que has entrenado, difuminada al fondo, y su nombre. También en las de Retos.', '📅 Recupera la tarjeta de cualquier entreno pasado: en el calendario, toca el día y pulsa «📸 Ver tarjeta».']],
   ['4.70.0', ['🔁 Si un bloque nuevo repite un ejercicio que ya has hecho en otro (mismo nombre), el coach parte de lo que ya levantas en vez de empezar con la sesión de calibración.']],
   ['4.69.1', ['🔧 Script de uso v11 corregido: bloqueaba todos los dispositivos. Vuelve a pegarlo (Ajustes → Acceso → Reconfigurar).'], 'admin'],
