@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.65.0';
+const APP_VERSION = '4.65.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5201,6 +5201,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.65.1', ['🙈 Acceso: puedes ocultar el nombre de perfil de una persona concreta (botón 👤 en su ficha). Script de uso v11.'], 'admin'],
   ['4.65.0', ['👆 Entrar con huella en tus zonas de administrador (Ajustes → PIN).'], 'admin'],
   ['4.64.4', ['Botones FREE y CARDIO más compactos.'], 'quiet'],
   ['4.64.3', ['Nueva sección «En uso» en Entreno con los bloques que estás entrenando.'], 'quiet'],
@@ -6287,6 +6288,14 @@ const actions = {
   delAccess: b => delAccess(b.dataset.hash),
   ghConnect: () => ghConnectModal(),
   ghDisconnect: () => { if (!confirm('¿Desconectar GitHub? Se borra la llave guardada en este móvil.')) return; try { localStorage.removeItem(GH_KEY); } catch { /* nada */ } render(); toast('GitHub desconectado'); },
+  anonAccess: b => {
+    const hash = b.dataset.hash, x = (access.list || []).find(y => y.hash === hash); if (!x) return;
+    const who = esc(state.accessNames[hash] || 'esta persona'), on = !x.anon;
+    askPin({ title: on ? `🙈 Ocultar el nombre de ${who}` : `👤 Mostrar el nombre de ${who}`, text: on ? 'Su app dejará de enviar el nombre de su perfil y no lo verás en sus dispositivos. Con el script v11 también se borra el que ya estaba guardado en la hoja.' : 'Su app volverá a enviar el nombre de su perfil la próxima vez que la abra.', onPin: async pin => {
+      await ghEditAcl(pin, lines => lines.map(l => { const t = l.trim().split(/\s+/); return t[0]?.toLowerCase() === hash ? [...t.filter(w => w.toLowerCase() !== 'anon'), ...(on ? ['anon'] : [])].join(' ') : l; }), on ? 'Acceso: ocultar nombre' : 'Acceso: mostrar nombre');
+      ui.accessPin = pin; closeModal(); render(); toast(on ? 'Nombre oculto ✓' : 'Nombre visible ✓');
+    } });
+  },
   nameAccess: b => {
     const h = b.dataset.hash, x = (access.list || []).find(y => y.hash === h); if (!x) return;
     openModal(`<h3 class="modal-title">¿Quién es? <span class="text-mute font-mono text-sm">…${esc(h.slice(-4))}</span></h3><p class="text-xs text-mute">Solo se guarda en tu app y en tus copias.</p>
@@ -6580,7 +6589,8 @@ function parseAcl(text) {
   return String(text).split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')).map(l => {
     const p = l.split(/\s+/), admin = p.slice(1).some(t => t.toLowerCase() === 'admin');
     const hasta = (p.find(t => /^hasta=\d{4}-\d{2}-\d{2}$/i.test(t)) || '').slice(6), plan = (p.find(t => /^plan=\w+$/i.test(t)) || '').slice(5).toLowerCase();
-    return { hash: p[0].toLowerCase(), admin, ...(hasta ? { hasta } : {}), ...(plan ? { plan } : {}) };
+    const anon = p.slice(1).some(t => t.toLowerCase() === 'anon');
+    return { hash: p[0].toLowerCase(), admin, ...(hasta ? { hasta } : {}), ...(plan ? { plan } : {}), ...(anon ? { anon } : {}) };
   }).filter(x => /^[0-9a-f]{32}$/.test(x.hash));
 }
 const access = { list: null, me: null, ok: false, usageUrl: '' };
@@ -6628,7 +6638,7 @@ async function deviceAllowed(code, me) {
   if (!navigator.onLine) { deviceDiag = 'sin conexión'; return true; }
   try {
     const h = await codeHash(code), ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000); // el script de Google puede tardar en «despertar»
-    const r = await fetch(`${url}?op=check&h=${h}&d=${encodeURIComponent(deviceId())}&l=${encodeURIComponent(deviceLabel())}&p=${encodeURIComponent(String(profileOf()?.name || '').trim().slice(0, 30))}&t=${Date.now()}`, { cache: 'no-store', signal: ctl.signal });
+    const r = await fetch(`${url}?op=check&h=${h}&d=${encodeURIComponent(deviceId())}&l=${encodeURIComponent(deviceLabel())}&p=${(access.list || []).some(x => x.hash === h && x.anon) ? '' : encodeURIComponent(String(profileOf()?.name || '').trim().slice(0, 30))}&t=${Date.now()}`, { cache: 'no-store', signal: ctl.signal });
     clearTimeout(t);
     const txt = await r.text(); let d = {};
     try { d = JSON.parse(txt); } catch { deviceDiag = `respuesta no válida (HTTP ${r.status}): ${txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90)}`; return true; }
@@ -6840,10 +6850,10 @@ function usageLine(hash) {
   if (!u) return '<div class="text-[11px] text-mute">⚪ Aún no la ha abierto (o sin conexión desde que tiene el código)</div>';
   const ago = daysBetween(u.last, todayISO()), old = u.v && cmpVer(APP_VERSION, String(u.v)) > 0;
   const when = ago <= 0 ? 'Hoy' : ago === 1 ? 'Ayer' : `Hace ${ago} días`;
-  return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} de ${DEVICE_LIMIT} dispositivos`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="truncate text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${dv.p ? `<b class="text-white">${esc(dv.p)}</b> · ` : ''}${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}${dv.k ? ` · ${dv.k} día${dv.k === 1 ? '' : 's'} de uso` : ''}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 truncate">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
+  return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} de ${DEVICE_LIMIT} dispositivos`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="truncate text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${dv.p && !(access.list || []).some(x => x.hash === hash && x.anon) ? `<b class="text-white">${esc(dv.p)}</b> · ` : ''}${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}${dv.k ? ` · ${dv.k} día${dv.k === 1 ? '' : 's'} de uso` : ''}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 truncate">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
 }
 function usageScript(key) {
-  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 2; caducidad de planes) · v10
+  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 2; caducidad de planes; nombres ocultos) · v11
 const READ_KEY = '${key}';
 const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
 const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre', 'correo', 'alta', 'dispositivos', 'bloqueos'];
@@ -6866,6 +6876,8 @@ function acl_() {
   return t.split('\\n').map(l => l.trim()).filter(l => l && l[0] !== '#').map(l => l.split(/\\s+/)).filter(p => /^[0-9a-f]{32}$/.test(p[0].toLowerCase()));
 }
 function huellas_() { return acl_().map(p => p[0].toLowerCase()); }
+// códigos marcados «anon» en acceso.txt: no se guarda ni se muestra el nombre de su perfil
+function anon_(h) { return acl_().some(p => p[0].toLowerCase() === h && p.slice(1).some(x => x.toLowerCase() === 'anon')); }
 function admins_() { return acl_().filter(p => p.slice(1).some(x => x.toLowerCase() === 'admin')).map(p => p[0].toLowerCase()); }
 // fecha de caducidad del plan (hasta=aaaa-mm-dd en acceso.txt), o '' si no caduca
 function hasta_(h) { const p = acl_().find(p => p[0].toLowerCase() === h); const t = p && p.slice(1).find(x => /^hasta=\\d{4}-\\d{2}-\\d{2}$/i.test(x)); return t ? t.slice(6) : ''; }
@@ -6938,7 +6950,7 @@ function doGet_(e) {
   const q = (e && e.parameter) || {};
   // ¿puede este dispositivo usar este código? (máx. LIMITE dispositivos; el administrador, sin límite)
   if (q.op === 'check') { // ojo: «c» y «sid» son parámetros reservados de Google, no se pueden usar
-    const h = String(q.h || '').toLowerCase(), d = String(q.d || '').slice(0, 40), n = String(q.l || '').slice(0, 40), p = String(q.p || '').trim().slice(0, 30), hoy = fecha_(new Date());
+    const h = String(q.h || '').toLowerCase(), d = String(q.d || '').slice(0, 40), n = String(q.l || '').slice(0, 40), p = String(q.p || '').trim().slice(0, 30), hoy = fecha_(new Date()), an = anon_(h);
     if (!/^[0-9a-f]{32}$/.test(h) || !d || huellas_().indexOf(h) < 0) return salida_({ ok: false });
     const lock = LockService.getScriptLock(); lock.waitLock(10000);
     try {
@@ -6949,8 +6961,9 @@ function doGet_(e) {
       let ok = true;
       const ya = x.d.find(v => v.id === d);
       if ((x.q || []).indexOf(d) >= 0 && !adm) { ok = false; x.b = (x.b || 0) + 1; }
-      else if (ya) { if (ya.last !== hoy) ya.k = (ya.k || 1) + 1; ya.last = hoy; if (n) ya.n = n; if (p) ya.p = p; }
-      else if (adm || x.d.length < LIMITE) x.d.push({ id: d, n, p, last: hoy, k: 1 });
+      else if (ya) { if (ya.last !== hoy) ya.k = (ya.k || 1) + 1; ya.last = hoy; if (n) ya.n = n; if (p && !an) ya.p = p; }
+      else if (adm || x.d.length < LIMITE) x.d.push({ id: d, n, p: an ? '' : p, last: hoy, k: 1 });
+      if (an) x.d.forEach(v => { delete v.p; });
       else { ok = false; x.b = (x.b || 0) + 1; }
       all[h] = x; guardaDisp_(all); escribeDisp_(h, x);
       return salida_({ ok: true, allowed: ok, n: x.d.length });
@@ -6960,12 +6973,12 @@ function doGet_(e) {
   if (q.op === 'hoy') {
     const c = CacheService.getScriptCache(); let n = c.get('hoy');
     if (n === null) { const hoy = fecha_(new Date()), adm = admins_(); n = String(hoja_().getDataRange().getValues().slice(1).filter(r => fecha_(r[1]) === hoy && adm.indexOf(String(r[0])) < 0).length); c.put('hoy', n, 60); }
-    return salida_({ ok: true, ver: 10, hoy: +n });
+    return salida_({ ok: true, ver: 11, hoy: +n });
   }
   if (q.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
   const datos = hoja_().getDataRange().getValues().slice(1);
   const dd = disp_();
-  return salida_({ ok: true, ver: 10, rows: datos.map(r => ({ h: String(r[0]), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []) })) });
+  return salida_({ ok: true, ver: 11, rows: datos.map(r => ({ h: String(r[0]), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
 }`;
 }
 /* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
@@ -7213,8 +7226,8 @@ function accessSectionHTML() {
            <span class="flex gap-1.5"><button class="iconbtn iconbtn-sm" data-act="showCode" data-hash="${esc(x.hash)}" type="button" aria-label="Ver código">${shown ? '🙈' : '👁'}</button><button class="iconbtn iconbtn-sm" data-act="copyCode" data-hash="${esc(x.hash)}" type="button" aria-label="Copiar código">📋</button></span>`
         : `<span class="text-amber-300 text-[11px]">Código no guardado (creado antes de la 4.24). Si lo necesita, dale uno nuevo con 🔄.</span>`;
       const detail = `<div class="px-3 pb-2.5 pt-1 text-xs space-y-1.5">
-      <div class="flex items-center justify-between gap-2"><span class="min-w-0 text-[11px]">${x.admin ? '<span class="text-brand">Administrador · sin límite</span>' : `⏳ ${planLabel(x)}`}</span>
-      <span class="flex items-center gap-1.5 shrink-0"><button class="iconbtn iconbtn-sm" data-act="nameAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Poner nombre">✎</button>${gh && !x.admin ? `<button class="iconbtn iconbtn-sm" data-act="planAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Plan">⏳</button>` : ''}${gh ? `<button class="iconbtn iconbtn-sm" data-act="regenAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Nuevo código">🔄</button>` : ''}${me || !gh ? '' : `<button class="iconbtn iconbtn-sm text-rose-300" data-act="delAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Quitar acceso">🗑</button>`}</span></div>
+      <div class="flex items-center justify-between gap-2"><span class="min-w-0 text-[11px]">${x.admin ? '<span class="text-brand">Administrador · sin límite</span>' : `⏳ ${planLabel(x)}`}${x.anon ? '<span class="block text-mute">🙈 Su nombre de perfil no se registra</span>' : ''}</span>
+      <span class="flex items-center gap-1.5 shrink-0"><button class="iconbtn iconbtn-sm" data-act="nameAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Poner nombre">✎</button>${gh && !x.admin ? `<button class="iconbtn iconbtn-sm" data-act="planAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Plan">⏳</button>` : ''}${gh && !x.admin ? `<button class="iconbtn iconbtn-sm" data-act="anonAccess" data-hash="${esc(x.hash)}" type="button" aria-label="${x.anon ? 'Volver a mostrar su nombre de perfil' : 'Ocultar su nombre de perfil'}">${x.anon ? '🙈' : '👤'}</button>` : ''}${gh ? `<button class="iconbtn iconbtn-sm" data-act="regenAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Nuevo código">🔄</button>` : ''}${me || !gh ? '' : `<button class="iconbtn iconbtn-sm text-rose-300" data-act="delAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Quitar acceso">🗑</button>`}</span></div>
       <div class="flex items-center justify-between gap-2 min-h-[28px]">${codeLine}</div>${usageLine(x.hash)}</div>`;
       const open = ui.accOpenH === x.hash, st = accStatus(x), u = ui.usage?.[x.hash];
       const ago = u ? daysBetween(u.last, todayISO()) : null;
@@ -7230,7 +7243,7 @@ function accessSectionHTML() {
         ${open ? detail : ''}</div>`;
     }).join('')}</div>
     <p class="text-[12px] text-mute text-center hidden" id="accNone">Nadie coincide con la búsqueda.</p>
-    ${gh ? '<p class="text-[11px] text-mute">Toca a una persona para ver su ficha: ✎ nombre · ⏳ plan · 🔄 nuevo código · 🗑 quitar acceso. Nombres y códigos solo los ves tú (cifrados con tu PIN); en GitHub solo hay huellas.</p>' : ''}
+    ${gh ? '<p class="text-[11px] text-mute">Toca a una persona para ver su ficha: ✎ nombre · ⏳ plan · 👤/🙈 registrar u ocultar su nombre de perfil · 🔄 nuevo código · 🗑 quitar acceso. Nombres y códigos solo los ves tú (cifrados con tu PIN); en GitHub solo hay huellas.</p>' : ''}
     ${list.length ? '<button class="btn-ghost w-full" data-act="copyHashes" type="button">📋 Copiar huellas y nombres (para tu hoja)</button>' : ''}
     ${access.usageUrl && lsGet(USE_KEY)
       ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : 'actualizado ahora · nombres, correos, altas y quién usa cada dispositivo') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
