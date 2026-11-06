@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.67.0';
+const APP_VERSION = '4.67.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5236,6 +5236,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.67.1', ['iPhone: botón «Abrir en Safari» cuando el enlace se abre dentro de otra app.'], 'quiet'],
   ['4.67.0', ['Primera vez desde el navegador: la app pide instalarse antes de configurar. Lo que rellenas al empezar se guarda al momento (si sales a crear la clave de Gemini, sigues donde ibas).'], 'quiet'],
   ['4.66.0', ['🧱 Crear un bloque es más fácil: eliges cuántos días tiene y se abre al momento, listo para añadir ejercicios.', 'En Ajustes → Bloques, cada bloque tiene «＋ Día», «＋ Ejercicios» y 🗑 para eliminar solo ese bloque. También en el ⋯ de su tarjeta.']],
   ['4.65.1', ['🙈 Acceso: puedes ocultar el nombre de perfil de una persona concreta (botón 👤 en su ficha). Script de uso v11.'], 'admin'],
@@ -6570,7 +6571,9 @@ function installGateHTML() {
   let body;
   if (m === 'inapp') body = `<p class="text-sm text-slate-300 text-center">Estás dentro de otra app (WhatsApp, Instagram…). Desde aquí no se puede instalar.</p>
     ${android ? `<a class="btn-primary w-full mt-4 block text-center" href="intent://${APP_URL.replace('https://', '')}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(APP_URL)};end">Abrir en Chrome</a>`
-      : `<ol class="space-y-3 text-[15px] mt-4">${step(1, 'Pulsa <b>⋯</b> o el icono de la brújula 🧭 (arriba o abajo).')}${step(2, 'Elige <b>«Abrir en Safari»</b>.')}${step(3, 'Allí te explicamos cómo instalarla.')}</ol>`}
+      : `<a class="btn-primary w-full mt-4 block text-center" href="x-safari-${APP_URL}">Abrir en Safari</a>
+        <p class="text-[12px] text-mute text-center mt-4">¿No se abre? Hazlo a mano:</p>
+        <ol class="space-y-3 text-[15px] mt-2">${step(1, 'Pulsa <b>⋯</b> o el icono de la brújula 🧭 (arriba o abajo).')}${step(2, 'Elige <b>«Abrir en Safari»</b>.')}</ol>`}
     <button class="btn-ghost w-full mt-3" data-act="copyAppLink" type="button">📋 Copiar el enlace</button>`;
   else if (m === 'prompt') body = `<button class="btn-primary w-full mt-2 text-lg py-4" data-act="install" type="button">📲 Instalar FITNESTEBAN</button>
     <p class="text-[13px] text-mute text-center mt-3">Después, ábrela desde el icono de tu pantalla de inicio y sigue allí.</p>`;
