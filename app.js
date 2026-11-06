@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.72.0';
+const APP_VERSION = '4.72.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1030,6 +1030,7 @@ function libIdsOwnedProgs() { return new Set(libAll().map(progForLib).filter(Boo
 /* Sesiones por semana que pide un bloque: lo que elijas en ✎ («Veces por semana») o, si no, sus días (mín. 3, máx. 6) */
 const autoGoal = p => Math.max(3, Math.min(6, (p.days || []).filter(d => d.rotation !== false && d.exercises?.length).length || (p.days || []).length));
 const blockGoal = p => p.perWeek || autoGoal(p);
+const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`;
 function blockStats(p) {
   const ids = new Set(p.days.map(d => d.id)), ss = sortedSessions().filter(x => ids.has(x.dayId));
   const last = ss[ss.length - 1], T = todayISO();
@@ -3877,19 +3878,23 @@ function renderSettings() {
       <span class="flex items-center gap-2 text-[11px] text-mute">${state.plan.programs.length} bloques<span class="tri"></span></span>
     </summary>
     <div class="space-y-3 mt-3">
-    ${state.plan.programs.map(p => `<div class="space-y-1.5">
-      <div class="flex items-center justify-between">
-        <div class="text-sm font-extrabold ${p.id === prog().id ? 'text-brand' : ''}">${progLabel(p)}${p.id === prog().id ? ' <span class="text-[10px] font-semibold">· activo</span>' : ''}</div>
-        <button class="iconbtn iconbtn-sm" data-act="editProgId" data-prog="${esc(p.id)}" type="button" aria-label="Editar bloque">✎</button>
-      </div>
+    ${state.plan.programs.map(p => `<details class="blk-fold rounded-2xl border border-line px-3.5 py-3" ${openAttr('blk_' + p.id)}>
+      <summary class="flex items-center justify-between gap-2 cursor-pointer select-none">
+        <span class="min-w-0"><span class="block text-sm font-extrabold ${p.id === prog().id ? 'text-brand' : ''}">${progLabel(p)}${p.id === prog().id ? ' <span class="text-[10px] font-semibold">· activo</span>' : ''}</span>
+        <span class="block text-[11px] text-mute">${p.type === 'cardio' ? 'Cardio' : p.type === 'retos' ? 'Retos' : `${p.days.length} ${p.days.length === 1 ? 'día' : 'días'} · ${plural(p.days.reduce((a, d) => a + d.exercises.length, 0), 'ejercicio', 'ejercicios')}`}</span></span>
+        <span class="tri shrink-0"></span>
+      </summary>
+      <div class="space-y-1.5 mt-2">
+      <div class="flex justify-end"><button class="btn-ghost py-1.5 px-3 text-xs" data-act="editProgId" data-prog="${esc(p.id)}" type="button">${p.type === 'strength' && p.id !== 'free' ? '✎ Nombre y veces por semana' : '✎ Nombre'}</button></div>
       ${p.type === 'cardio' ? `<p class="text-[11px] text-mute bg-ink rounded-xl border border-line px-3 py-2">${esc(cardioVisible().map(t => t.label).join(' · '))} · con estimación de calorías.</p>` : p.type === 'retos' ? '<p class="text-[11px] text-mute bg-ink rounded-xl border border-line px-3 py-2">Retos por niveles con ajuste según cómo te sientas.</p>' : ''}
       ${p.days.map(d => `<div class="flex items-center justify-between bg-ink rounded-xl border border-line px-3 py-2">
-        <div class="min-w-0"><div class="text-sm font-bold">${esc(d.label)} <span class="text-mute font-normal text-xs">· ${d.exercises.length} ejercicios${d.rotation ? '' : ' · fuera de rotación'}</span></div>
+        <div class="min-w-0"><div class="text-sm font-bold">${esc(d.label)} <span class="text-mute font-normal text-xs">· ${plural(d.exercises.length, 'ejercicio', 'ejercicios')}${d.rotation ? '' : ' · fuera de rotación'}</span></div>
         <div class="text-[11px] text-mute truncate">${esc(d.title)}</div></div>
         <button class="iconbtn" data-act="editDayId" data-day="${esc(d.id)}" type="button" aria-label="Editar">✎</button>
       </div>`).join('')}
       ${p.type === 'strength' && p.id !== 'free' ? `<div class="grid grid-cols-[1fr_1fr_auto] gap-2"><button class="btn-ghost" data-act="addDayProg" data-prog="${esc(p.id)}" type="button">＋ Día</button><button class="btn-ghost" data-act="openBlock" data-key="p:${esc(p.id)}" type="button">＋ Ejercicios</button><button class="btn-ghost px-4 text-rose-300" data-act="delProg" data-prog="${esc(p.id)}" type="button" aria-label="Eliminar bloque">🗑</button></div>` : ''}
-    </div>`).join('')}
+      </div>
+    </details>`).join('')}
     <div class="grid grid-cols-2 gap-2">
       <button class="btn-ghost" data-act="addProg" type="button">＋ Añadir bloque</button>
       <button class="btn-ghost" data-act="resetPlan" type="button">Borrar todos</button>
@@ -5394,6 +5399,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.72.1', ['Ajustes → Bloques: cada bloque aparece plegado; tócalo para ver sus días y editarlo.'], 'quiet'],
   ['4.72.0', ['🎯 Cada bloque puede tener sus «Veces por semana» (en su ✎). Útil para bloques de complemento, como uno de brazos de un solo día: pon 1 y te marcará «1 de 1».'], 'quiet'],
   ['4.71.0', ['📸 La tarjeta para compartir tu sesión lleva ahora la foto del bloque que has entrenado, difuminada al fondo, y su nombre. También en las de Retos.', '📅 Recupera la tarjeta de cualquier entreno pasado: en el calendario, toca el día y pulsa «📸 Ver tarjeta».']],
   ['4.70.0', ['🔁 Si un bloque nuevo repite un ejercicio que ya has hecho en otro (mismo nombre), el coach parte de lo que ya levantas en vez de empezar con la sesión de calibración.']],
