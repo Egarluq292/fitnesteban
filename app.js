@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.66.0';
+const APP_VERSION = '4.67.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4645,6 +4645,9 @@ function maybeAskEmail(tries = 0) {
 
 function onboarding() {
   const d = { step: 0, ok: false, email: '', birth: '', name: '', sex: '', age: '', height: '', weight: '', activity: 'mid', goal: 'recomp', key: '', keyOk: false, testing: false };
+  // lo rellenado se guarda al momento: si sales a crear la clave y el móvil cierra la app, sigues donde ibas
+  const OB_KEY = 'fitnesteban_ob'; Object.assign(d, lsGet(OB_KEY) || {}, { testing: false });
+  const save = () => lsSet(OB_KEY, { ...d, testing: false });
   const valid = () => d.sex && ageFrom(d.birth) >= 14 && ageFrom(d.birth) <= 100 && +d.height >= 120 && +d.height <= 230 && +d.weight >= 35 && +d.weight <= 250;
   const dots = () => `<div class="flex gap-1.5 justify-center">${[0, 1, 2, 3].map(i => `<span style="height:7px;border-radius:9px;width:${i === d.step ? 22 : 7}px;background:${i === d.step ? '#22d3ee' : '#334155'}"></span>`).join('')}</div><div class="text-[11px] text-mute text-center -mt-1">Paso ${d.step + 1} de 4</div>`;
   const seg = (f, opts, cols) => `<div class="seg" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${Object.entries(opts).map(([k, v]) => `<button class="seg-btn py-2 ${d[f] === k ? 'seg-on' : ''}" data-mact="pick" data-f="${f}" data-v="${k}" type="button">${Array.isArray(v) ? v[0] : v}</button>`).join('')}</div>`;
@@ -4708,11 +4711,12 @@ function onboarding() {
     if (g('email')) d.email = g('email').value.trim().toLowerCase();
     if (g('name')) { d.name = g('name').value.trim(); d.birth = g('birth').value; d.height = g('height').value.replace(/\D/g, ''); d.weight = g('weight').value.replace(',', '.').replace(/[^\d.]/g, ''); }
     if (g('key')) d.key = g('key').value.trim();
+    save();
   };
-  const draw = root => { root.querySelector('.modal-sheet').innerHTML = html(); root.querySelector('.modal-sheet').scrollTop = 0; bindLive(root); };
+  const draw = root => { save(); root.querySelector('.modal-sheet').innerHTML = html(); root.querySelector('.modal-sheet').scrollTop = 0; bindLive(root); };
   const bindLive = root => {
     if (d.step === 2) root.querySelectorAll('[name=birth],[name=height],[name=weight]').forEach(i => i.oninput = i.onchange = () => { keep(root); const box = root.querySelector('#obTargets'), tmp = document.createElement('div'); tmp.innerHTML = s1(); box.innerHTML = tmp.querySelector('#obTargets').innerHTML; const ag = root.querySelector('#obAge'); if (ag) ag.textContent = birthHint(d.birth); });
-    if (d.step === 3) { const k = root.querySelector('[name=key]'); if (k) k.oninput = () => { d.keyOk = false; const m = root.querySelector('#obKeyMsg'); if (m) m.textContent = ''; }; }
+    if (d.step === 3) { const k = root.querySelector('[name=key]'); if (k) k.oninput = () => { d.key = k.value.trim(); d.keyOk = false; save(); const m = root.querySelector('#obKeyMsg'); if (m) m.textContent = ''; }; }
   };
   const test = async root => {
     keep(root); if (!d.key) { toast('Pega primero la clave', 'warn'); return false; }
@@ -4751,6 +4755,7 @@ function onboarding() {
       Object.assign(st, { targetKcal: t.kcal, targetProt: t.prot, targetCarbs: t.carbs, targetFat: t.fat, onboarded: todayISO(), installedAt: todayISO(), usageOk: true, email: d.email, emailAsked: todayISO() });
       if (!b.dataset.skip && d.keyOk) st.apiKey = d.key;
       state.bodyMetrics.push({ id: uid('m_'), date: todayISO(), weight: r2(+d.weight), waist: null });
+      try { localStorage.removeItem(OB_KEY); } catch { /* nada */ }
       persist(); emailSync(); closeModal(); ui._animRings = true; render();
       toast(`¡Listo, ${d.name}! Tus objetivos ya están puestos 💪`);
     }
@@ -5231,6 +5236,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.67.0', ['Primera vez desde el navegador: la app pide instalarse antes de configurar. Lo que rellenas al empezar se guarda al momento (si sales a crear la clave de Gemini, sigues donde ibas).'], 'quiet'],
   ['4.66.0', ['🧱 Crear un bloque es más fácil: eliges cuántos días tiene y se abre al momento, listo para añadir ejercicios.', 'En Ajustes → Bloques, cada bloque tiene «＋ Día», «＋ Ejercicios» y 🗑 para eliminar solo ese bloque. También en el ⋯ de su tarjeta.']],
   ['4.65.1', ['🙈 Acceso: puedes ocultar el nombre de perfil de una persona concreta (botón 👤 en su ficha). Script de uso v11.'], 'admin'],
   ['4.65.0', ['👆 Entrar con huella en tus zonas de administrador (Ajustes → PIN).'], 'admin'],
@@ -6372,6 +6378,7 @@ const actions = {
     try { if (navigator.share) { await navigator.share({ title: 'FITNESTEBAN', text }); return; } } catch (e) { if (e?.name === 'AbortError') return; }
     try { await navigator.clipboard.writeText(text); toast('Mensaje copiado: pégalo donde quieras'); } catch { toast(CHANNEL_URL); }
   },
+  skipInstall: () => { lsSet(NOINSTALL_KEY, 1); lockScreen('code'); },
   copyAppLink: () => navigator.clipboard.writeText('https://egarluq292.github.io/fitnesteban/').then(() => toast('Enlace copiado: pégalo en Chrome o Safari')).catch(() => toast('Enlace: egarluq292.github.io/fitnesteban', 'warn')),
   checkUpdate: async () => {
     checkRemoteVersion(true);
@@ -6552,12 +6559,35 @@ function installHelpModal() {
     <p class="text-[11px] text-mute">Al abrirla desde el icono te pedirá el código una vez más: es normal, el iPhone la trata como una app nueva.</p>
     <button class="btn-primary w-full" data-close type="button">Entendido</button>`);
 }
+/* 🚪 Primera vez desde el navegador: instalar antes de configurar (así no se rellena todo dos veces) */
+const NOINSTALL_KEY = 'fitnesteban_noinstall';
+const APP_URL = 'https://egarluq292.github.io/fitnesteban/';
+const needGate = () => !!installMode() && !lsGet(NOINSTALL_KEY);
+function installGateHTML() {
+  const m = installMode(), android = /android/i.test(UA);
+  const share = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-3px"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
+  const step = (n, t) => `<li class="flex gap-3 items-start"><span class="gate-n">${n}</span><span class="pt-0.5">${t}</span></li>`;
+  let body;
+  if (m === 'inapp') body = `<p class="text-sm text-slate-300 text-center">Estás dentro de otra app (WhatsApp, Instagram…). Desde aquí no se puede instalar.</p>
+    ${android ? `<a class="btn-primary w-full mt-4 block text-center" href="intent://${APP_URL.replace('https://', '')}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(APP_URL)};end">Abrir en Chrome</a>`
+      : `<ol class="space-y-3 text-[15px] mt-4">${step(1, 'Pulsa <b>⋯</b> o el icono de la brújula 🧭 (arriba o abajo).')}${step(2, 'Elige <b>«Abrir en Safari»</b>.')}${step(3, 'Allí te explicamos cómo instalarla.')}</ol>`}
+    <button class="btn-ghost w-full mt-3" data-act="copyAppLink" type="button">📋 Copiar el enlace</button>`;
+  else if (m === 'prompt') body = `<button class="btn-primary w-full mt-2 text-lg py-4" data-act="install" type="button">📲 Instalar FITNESTEBAN</button>
+    <p class="text-[13px] text-mute text-center mt-3">Después, ábrela desde el icono de tu pantalla de inicio y sigue allí.</p>`;
+  else if (m === 'ios') body = `<ol class="space-y-3 text-[15px]">${step(1, `Pulsa <b>Compartir</b> <span class="text-brand">${share}</span> (en la barra de Safari).`)}${step(2, 'Baja y elige <b>«Añadir a pantalla de inicio»</b>.')}${step(3, 'Pulsa <b>Añadir</b>.')}${step(4, 'Cierra Safari y abre <b>FITNESTEBAN</b> desde su icono.')}</ol>`;
+  else body = `<ol class="space-y-3 text-[15px]">${step(1, 'Pulsa <b>⋮</b> arriba a la derecha de Chrome.')}${step(2, 'Elige <b>«Instalar aplicación»</b> o <b>«Añadir a pantalla de inicio»</b>.')}${step(3, 'Confirma con <b>Instalar</b>.')}${step(4, 'Abre <b>FITNESTEBAN</b> desde su icono.')}</ol>
+    <p class="text-[12px] text-mute text-center mt-3">Si ya la tienes instalada, ábrela desde su icono.</p>`;
+  return `<h1 class="font-extrabold text-xl mt-5 text-center">Primero, instálala</h1>
+    <p class="text-sm text-mute mt-1 mb-5 text-center">Es un momento. Así la configuras <b class="text-white">una sola vez</b>, ya dentro de la app.</p>
+    ${body}
+    <button class="w-full text-center text-[12px] text-mute underline mt-6" data-act="skipInstall" type="button">Seguir en el navegador</button>`;
+}
 let swReg = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; render(); refreshLockInstall(); });
 window.addEventListener('appinstalled', () => { deferredInstall = null; render(); refreshLockInstall(); });
 /* En la pantalla de «Acceso privado» (sus botones van con el mismo sistema data-act) */
-function refreshLockInstall() { const slot = $('#lockInstall'); if (slot) slot.innerHTML = installBannerHTML(true); }
-window.addEventListener('appinstalled', () => { deferredInstall = null; toast('App instalada ✓'); });
+function refreshLockInstall() { const g = $('#lockGate'); if (g) { g.innerHTML = installGateHTML(); return; } const slot = $('#lockInstall'); if (slot) slot.innerHTML = installBannerHTML(true); }
+window.addEventListener('appinstalled', () => { deferredInstall = null; toast('App instalada ✓'); const g = $('#lockGate'); if (g) g.innerHTML = `<h1 class="font-extrabold text-xl mt-5 text-center">✓ Instalada</h1><p class="text-[15px] text-slate-300 text-center mt-3">Cierra el navegador y abre <b>FITNESTEBAN</b> desde el icono de tu pantalla de inicio.</p>`; });
 
 function showUpdate(worker) {
   $('#topBanner').innerHTML = `<div class="banner-info mt-3"><span>Hay una versión nueva de la app.</span><button class="btn-banner shrink-0" id="doUpdate" type="button">Actualizar</button></div>`;
@@ -6696,6 +6726,7 @@ function lockScreen(mode, msg = '') {
   document.body.classList.add('overflow-hidden');
   const logo = `<img src="icons/logo-128.png" alt="" class="w-20 h-20 rounded-full mx-auto" /><div class="mt-3 flex justify-center">${($('#homeBtn svg')?.outerHTML || '').replace('width="124.9"', 'width="200"').replace('height="14.4"', 'height="23"')}</div>`;
   if (mode === 'wait') { el.innerHTML = `<div class="lock-box text-center">${logo}<p class="text-sm text-mute mt-6"><span class="spinner"></span> Comprobando acceso…</p></div>`; return; }
+  if (!msg && needGate()) { el.innerHTML = `<div class="lock-box"><div class="text-center">${logo}</div><div id="lockGate">${installGateHTML()}</div></div>`; return; }
   el.innerHTML = `<div class="lock-box">
     <div class="text-center">${logo}<h1 class="font-extrabold text-lg mt-5">Acceso privado</h1>
     <div class="text-sm text-mute mt-1">${msg || 'Esta app es personal. Escribe el código que te ha dado Esteban.'}</div></div>
