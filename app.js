@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.64.1';
+const APP_VERSION = '4.64.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -985,7 +985,7 @@ function blockHeroHTML() {
       <span class="bh-body">
         <span class="bh-tag">Empieza aquí</span>
         <span class="bh-name">Elige tu primer bloque</span>
-        <span class="bh-sub">Full Body, PPT, Brazos, Pierna, Kettlebell, Calistenia en casa… preparados por Esteban, con «Cómo usarlo».</span>
+        <span class="bh-sub">Full Body, PPT, Híbrido 5, Glúteo, Tren inferior, Calistenia en casa… listos para usar, con «Cómo usarlo».</span>
         <span class="bh-cta">📚 Abrir la biblioteca ›</span>
       </span></button>`;
   }
@@ -1061,7 +1061,8 @@ function renderTrainHome() {
     const nd = p.days?.find(d => d.id === nextDayId(p));
     const nDays = (p.days || L?.days?.() || []).length, nEx = (p.days || L?.days?.() || []).reduce((a, d) => a + (d.exercises?.length || 0), 0);
     const isNew = isLib && L && libNewForMe(L) && !p.id; // nuevo hasta que lo abres (al abrirlo se crea tu copia)
-    const tag = `${isNew ? '<span class="bh-newpill">NUEVO</span>' : ''}${isLib ? 'De Esteban' : 'Tuyo'} · ${esc(look.tag)}`;
+    const nm = libKey(p.name || L?.name || ''), tg = libKey(look.tag.split(' · ')[0]);
+    const tag = `${isNew ? '<span class="bh-newpill">NUEVO</span>' : ''}${nm.includes(tg) ? '' : esc(look.tag)}`; // sin repetir el nombre («GLÚTEO · GLÚTEO»)
     const sub = `${nDays} ${nDays === 1 ? 'día' : 'días'} · ${nEx} ejercicios${st.n ? ` · última ${st.ago === 0 ? 'hoy' : st.ago === 1 ? 'ayer' : `hace ${st.ago} días`}` : ''}`;
     const extra = st.n && nd ? `<div class="bh-next"><span class="bh-l">Te toca</span> <b>${esc(nd.title || nd.label)}</b></div>` : '';
     return galleryCard({ key, name: p.name || L.name, icon: p.icon || L?.icon, look, sub, tag, extra, dim: hid.has(key), isNew });
@@ -1083,8 +1084,8 @@ function renderTrainHome() {
     <button class="gal-btn" data-act="openBlock" data-key="cardio" type="button"><span class="text-xl">🔥</span><span><b>CARDIO</b><small>Correr, bici, nadar…</small></span></button>
   </div>
   <div class="gal-h"><span>Tus bloques</span><button class="text-brand text-xs font-bold" data-act="newBlock" type="button">＋ Crear bloque</button></div>
-  ${vis(own).map(x => x.html()).join('') || '<p class="text-[12px] text-mute px-1 -mt-1 mb-2">Aún no has creado ninguno. Crea el tuyo o usa uno de Esteban: se guarda tu progreso en cada uno.</p>'}
-  <div class="gal-h"><span>Bloques de Esteban</span></div>
+  ${vis(own).map(x => x.html()).join('') || '<p class="text-[12px] text-mute px-1 -mt-1 mb-2">Aún no has creado ninguno. Crea el tuyo o usa uno de los preparados: se guarda tu progreso en cada uno.</p>'}
+  <div class="gal-h"><span>Bloques preparados</span></div>
   ${vis(libs).map(x => x.html()).join('')}
   ${nHid ? `<button class="w-full text-center text-[12px] text-mute underline py-3" data-act="toggleHidden" type="button">${show ? 'Esconder los bloques ocultos' : `Ver ${nHid === 1 ? '1 bloque oculto' : `${nHid} bloques ocultos`}`}</button>` : ''}`;
 }
@@ -1109,7 +1110,7 @@ function blockMenu(key) {
       <button class="btn-ghost" data-mact="edit" type="button">${own ? '✎ Editar o borrar' : '✎ Editar (tu copia)'}</button>
       <button class="btn-ghost" data-mact="hide" type="button">${isHid ? '👁 Volver a mostrarlo' : '🙈 Ocultar este bloque'}</button>
     </div>
-    <p class="text-[11px] text-mute text-center">${own ? '' : 'Los cambios se hacen en tu copia: el bloque original de Esteban no cambia. '}${isHid ? '' : 'Ocultarlo no borra nada: lo recuperas abajo, en «Ver bloques ocultos».'}</p>`, {
+    <p class="text-[11px] text-mute text-center">${own ? '' : 'Los cambios se hacen en tu copia: el bloque original no cambia. '}${isHid ? '' : 'Ocultarlo no borra nada: lo recuperas abajo, en «Ver bloques ocultos».'}</p>`, {
     open: () => { closeModal(); openBlock(key); },
     edit: () => {
       closeModal();
@@ -5191,6 +5192,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.64.2', ['Tarjetas de bloques más limpias: «NUEVO» sin brillo en el borde y sin la etiqueta «De Esteban».'], 'quiet'],
   ['4.64.1', ['⬅️ El «atrás» del móvil ya funciona en todos los pasos seguidos, sin cerrar la app antes de tiempo.'], 'quiet'],
   ['4.64.0', ['⬅️ El gesto o botón «atrás» del móvil ya no cierra la app: vuelve a la pantalla anterior (cierra ventanas, sale del bloque, vuelve a Inicio). Para salir, pulsa atrás dos veces seguidas en Inicio.']],
   ['4.63.4', ['Los nombres de bloque pueden tener hasta 30 letras y se recuperan los que se habían recortado.'], 'quiet'],
@@ -5352,12 +5354,12 @@ const GUIDE = [
     '📚 Si Esteban publica bloques nuevos, lo verás en la tarjeta de Entrenamientos y en Entreno con la etiqueta «Nuevo».'
   ]],
   ['🏋️ Entreno: bloques y días', [
-    'Entreno muestra todos tus entrenos en <b>tarjetas</b>: arriba «Hoy te toca», luego <b>RETOS</b>, los botones <b>FREE</b> (ejercicios sueltos del día) y <b>CARDIO</b>, <b>tus bloques</b> y los <b>bloques de Esteban</b> (todos disponibles, sin tener que añadirlos). Toca una tarjeta para entrar; «‹ Bloques» o el botón Entreno de abajo te devuelven.',
-    'El <b>⋯</b> de cada tarjeta permite <b>ocultar</b> un bloque que no uses (no se borra nada: «Ver bloques ocultos», al final, lo recupera) y <b>editarlo</b>. Al abrir o editar un bloque de Esteban se hace tu copia, con tu progreso: tus cambios se quedan en ella y el original no cambia. Si la borras, ese bloque deja de salirte (si te arrepientes, está en «Ver bloques ocultos»).',
+    'Entreno muestra todos tus entrenos en <b>tarjetas</b>: arriba «Hoy te toca», luego <b>RETOS</b>, los botones <b>FREE</b> (ejercicios sueltos del día) y <b>CARDIO</b>, <b>tus bloques</b> y los <b>bloques preparados</b> (todos disponibles, sin tener que añadirlos). Toca una tarjeta para entrar; «‹ Bloques» o el botón Entreno de abajo te devuelven.',
+    'El <b>⋯</b> de cada tarjeta permite <b>ocultar</b> un bloque que no uses (no se borra nada: «Ver bloques ocultos», al final, lo recupera) y <b>editarlo</b>. Al abrir o editar un bloque preparado se hace tu copia, con tu progreso: tus cambios se quedan en ella y el original no cambia. Si la borras, ese bloque deja de salirte (si te arrepientes, está en «Ver bloques ocultos»).',
     'Dentro de un bloque eliges el <b>día</b>: el punto ● marca el que te toca según tu rotación; ✓ el que ya hiciste hoy.',
     '🎴 La <b>tarjeta del bloque activo</b> te dice qué día te toca, cuántas sesiones llevas (y en qué semana del bloque vas) y cuántas has hecho en los últimos 7 días, con un objetivo mínimo de 3. Cada tipo de bloque tiene su foto y su color.',
     'Cada bloque lleva su propia rotación: {{ROTACION}}',
-    '«＋ Crear bloque» (en Tus bloques) crea uno vacío para montar el tuyo. Los bloques de Esteban (Full Body, PPT, Híbrido 5, Brazos, Tren inferior, Glúteo, Calistenia en casa, Kettlebell…) traen su descripción y «Cómo usarlo»: la ves en el ⋯ de su tarjeta. Los que acaban de salir llevan la etiqueta <b>NUEVO</b> hasta que los abres.',
+    '«＋ Crear bloque» (en Tus bloques) crea uno vacío para montar el tuyo. Los bloques preparados (Full Body, PPT, Híbrido 5, Brazos, Tren inferior, Glúteo, Calistenia en casa, Kettlebell…) traen su descripción y «Cómo usarlo»: la ves en el ⋯ de su tarjeta. Los que acaban de salir llevan la etiqueta <b>NUEVO</b> hasta que los abres.',
     'Para cambiar ejercicios, usa «＋ Añadir ejercicio» (crear uno o elegir entre los preparados) y el ✎ de cada ejercicio. «＋ Día» añade días. El ✎ del bloque o del día permite renombrar, reordenar (◀ ▶) o eliminar. El historial nunca se borra al eliminar.'
   ]],
   ['🧭 Cómo decide el coach el peso', [
