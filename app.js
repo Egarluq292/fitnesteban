@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.64.4';
+const APP_VERSION = '4.65.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3850,6 +3850,8 @@ function renderSettings() {
       <button class="btn-ghost" data-act="pinSet" type="button">${st.pinHash ? 'Cambiar PIN' : 'Crear PIN'}</button>
       ${st.pinHash ? '<button class="btn-ghost" data-act="pinRemove" type="button">Quitar PIN</button>' : ''}
     </div>
+    ${st.pinHash && isAdminUser() && (bioAvail || bioOn()) ? `<button class="btn-ghost w-full" data-act="bioSetup" type="button">${bioOn() ? '👆 Huella activada ✓' : '👆 Activar huella para entrar'}</button>
+    <p class="text-[11px] text-mute">${bioOn() ? 'Tus zonas de administrador se abren con la huella; el PIN sigue valiendo.' : 'Para abrir Acceso y compartir sin escribir el PIN. Solo en este dispositivo.'}</p>` : ''}
 `)}
 
   ${accessSectionHTML()}
@@ -3884,13 +3886,13 @@ function guardModal({ title, text, danger, word, onOk }) {
   openModal(`
     <h3 class="modal-title">${title}</h3>
     <p class="text-sm text-mute">${text}</p>
-    ${hasPin ? pinField('pin', 'Introduce tu PIN') : `<label class="lbl">Escribe <strong class="text-white">${word}</strong> para confirmar<input class="field mt-1" name="word" autocomplete="off" autocapitalize="characters" /></label>`}
+    ${hasPin ? bioBtn() + pinField('pin', 'Introduce tu PIN') : `<label class="lbl">Escribe <strong class="text-white">${word}</strong> para confirmar<input class="field mt-1" name="word" autocomplete="off" autocapitalize="characters" /></label>`}
     <div class="grid grid-cols-3 gap-2 mt-2">
       <button class="btn-ghost" data-close type="button">Cancelar</button>
       <button class="${danger ? 'btn-danger' : 'btn-primary'} col-span-2" data-mact="ok" type="button">${danger || 'Continuar'}</button>
     </div>
   `, {
-    autofocus: true,
+    autofocus: !(hasPin && bioOn()), bio: root => bioFill(root),
     ok: async root => {
       let pin = '';
       if (hasPin) {
@@ -5199,6 +5201,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.65.0', ['👆 Entrar con huella en tus zonas de administrador (Ajustes → PIN).'], 'admin'],
   ['4.64.4', ['Botones FREE y CARDIO más compactos.'], 'quiet'],
   ['4.64.3', ['Nueva sección «En uso» en Entreno con los bloques que estás entrenando.'], 'quiet'],
   ['4.64.2', ['Tarjetas de bloques más limpias: «NUEVO» sin brillo en el borde y sin la etiqueta «De Esteban».'], 'quiet'],
@@ -6344,6 +6347,7 @@ const actions = {
     }
   }),
   pinSet: () => pinSetModal(),
+  bioSetup: () => bioSetupModal(),
   pinRemove: () => guardModal({
     title: 'Quitar PIN', text: 'Borrar todo e Importar volverán a pedir solo una palabra de confirmación.', word: 'QUITAR',
     onOk: () => { state.settings.pinHash = ''; persist(); render(); toast('PIN quitado'); }
@@ -7065,8 +7069,8 @@ function regenAccess(hash) {
 }
 function askPinOnly(title, text, onOk) {
   let fails = 0;
-  openModal(`<h3 class="modal-title">${title}</h3><p class="text-sm text-mute">${text}</p>${pinField('pin', 'Tu PIN')}<button class="btn-primary w-full mt-2" data-mact="ok" type="button">Abrir</button>`, {
-    autofocus: true,
+  openModal(`<h3 class="modal-title">${title}</h3><p class="text-sm text-mute">${text}</p>${bioBtn()}${pinField('pin', 'Tu PIN')}<button class="btn-primary w-full mt-2" data-mact="ok" type="button">Abrir</button>`, {
+    autofocus: !bioOn(), bio: root => bioFill(root),
     ok: async root => {
       const pin = pinVal(root, 'pin'); if (!pin) return toast('Introduce el PIN', 'warn');
       if (await hashPin(pin) !== state.settings.pinHash) { fails++; root.querySelector('[name="pin"]').value = ''; if (fails >= 5) { closeModal(); return toast('Demasiados intentos', 'error'); } return toast(`PIN incorrecto (${fails}/5)`, 'error'); }
@@ -7077,9 +7081,9 @@ function askPinOnly(title, text, onOk) {
 function askPin({ title, text, onPin }) {
   if (!state.settings.pinHash) return toast('Primero crea un PIN en Ajustes → Seguridad', 'warn');
   let fails = 0;
-  openModal(`<h3 class="modal-title">${title}</h3><p class="text-sm text-mute">${text}</p>${pinField('pin', 'Tu PIN')}
+  openModal(`<h3 class="modal-title">${title}</h3><p class="text-sm text-mute">${text}</p>${bioBtn()}${pinField('pin', 'Tu PIN')}
     <button class="btn-primary w-full mt-2" data-mact="ok" type="button">Continuar</button>`, {
-    autofocus: true,
+    autofocus: !bioOn(), bio: root => bioFill(root),
     ok: async root => {
       const pin = pinVal(root, 'pin'); if (!pin) return toast('Introduce el PIN', 'warn');
       if (await hashPin(pin) !== state.settings.pinHash) { fails++; root.querySelector('[name="pin"]').value = ''; if (fails >= 5) { closeModal(); return toast('Demasiados intentos', 'error'); } return toast(`PIN incorrecto (${fails}/5)`, 'error'); }
@@ -7087,6 +7091,65 @@ function askPin({ title, text, onPin }) {
       try { await onPin(pin, root); } catch (e) { toast(e.message, 'error'); btn.disabled = false; btn.textContent = 'Continuar'; }
     }
   });
+}
+/* 👆 Huella (WebAuthn + PRF): guarda tu PIN cifrado con una clave que solo sale tras la huella.
+   La huella no viaja a ningún sitio: el móvil la comprueba y devuelve un secreto fijo de esa llave. */
+const BIO_KEY = 'fitnesteban_bio';
+let bioAvail = false;
+(async () => { try { bioAvail = !!(window.PublicKeyCredential && window.isSecureContext && await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); } catch { bioAvail = false; } })();
+const bioOn = () => { const b = lsGet(BIO_KEY); return !!(b && state.settings.pinHash && b.h === state.settings.pinHash); };
+async function bioAesKey(prf, salt) {
+  const base = await crypto.subtle.importKey('raw', prf, 'HKDF', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt, info: new TextEncoder().encode('fitnesteban-bio-pin') }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function bioPrf(credId, prfSalt) {
+  const a = await navigator.credentials.get({ publicKey: {
+    challenge: crypto.getRandomValues(new Uint8Array(32)), rpId: location.hostname, timeout: 60000, userVerification: 'required',
+    allowCredentials: [{ type: 'public-key', id: credId }], extensions: { prf: { eval: { first: prfSalt } } }
+  } });
+  const r = a?.getClientExtensionResults?.()?.prf?.results?.first;
+  if (!r) throw new Error('nprf');
+  return r;
+}
+async function bioEnable(pin) {
+  const prfSalt = crypto.getRandomValues(new Uint8Array(32));
+  let cred;
+  try {
+    cred = await navigator.credentials.create({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)), rp: { name: 'FITNESTEBAN', id: location.hostname },
+      user: { id: crypto.getRandomValues(new Uint8Array(16)), name: 'FITNESTEBAN admin', displayName: 'FITNESTEBAN (administrador)' },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }], timeout: 60000,
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
+      extensions: { prf: { eval: { first: prfSalt } } }
+    } });
+  } catch (e) { throw new Error(e?.name === 'NotAllowedError' ? 'Cancelado' : 'Este dispositivo no pudo crear la llave de huella'); }
+  const ext = cred.getClientExtensionResults?.()?.prf;
+  if (ext && ext.enabled === false) throw new Error('Este móvil no permite usar la huella para cifrar (falta PRF). Sigue con el PIN.');
+  let prf = ext?.results?.first;
+  if (!prf) { toast('Pon la huella otra vez para terminar'); try { prf = await bioPrf(cred.rawId, prfSalt); } catch (e) { throw new Error(e?.message === 'nprf' ? 'Este móvil no permite usar la huella para cifrar (falta PRF). Sigue con el PIN.' : 'No se completó la huella'); } }
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await bioAesKey(prf, salt), new TextEncoder().encode(pin));
+  lsSet(BIO_KEY, { id: b64e(cred.rawId), ps: b64e(prfSalt), s: b64e(salt), iv: b64e(iv), ct: b64e(ct), h: state.settings.pinHash });
+}
+/* Devuelve el PIN tras la huella, o '' si se cancela o falla */
+async function bioPin() {
+  const b = lsGet(BIO_KEY); if (!b) return '';
+  try {
+    const prf = await bioPrf(b64d(b.id), b64d(b.ps));
+    const pin = new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(b.iv) }, await bioAesKey(prf, b64d(b.s)), b64d(b.ct)));
+    if (await hashPin(pin) !== state.settings.pinHash) { toast('La huella guardaba un PIN antiguo: vuelve a activarla', 'warn'); return ''; }
+    return pin;
+  } catch (e) { if (e?.name !== 'NotAllowedError') toast('No se pudo usar la huella. Escribe el PIN.', 'warn'); return ''; }
+}
+const bioBtn = () => bioOn() ? '<button class="btn-ghost w-full mt-1 mb-1 py-3 text-base font-bold" data-mact="bio" type="button">👆 Entrar con huella</button><div class="text-center text-[11px] text-mute -mt-0.5 mb-1">o escribe tu PIN</div>' : '';
+async function bioFill(root) { const pin = await bioPin(); if (!pin) return; const f = root.querySelector('[name="pin"]'); if (f) f.value = pin; root.querySelector('[data-mact=ok]')?.click(); }
+function bioSetupModal() {
+  if (!isAdminUser() || !state.settings.pinHash) return;
+  if (bioOn()) return openModal(`<h3 class="modal-title">👆 Huella activada</h3><p class="text-sm text-mute">En este dispositivo puedes entrar en tus zonas de administrador con la huella. El PIN sigue funcionando siempre.</p>
+    <button class="btn-danger w-full mt-2" data-mact="off" type="button">Quitar la huella</button>`, { off: () => { try { localStorage.removeItem(BIO_KEY); } catch { /* nada */ } closeModal(); render(); toast('Huella quitada'); } });
+  askPin({ title: '👆 Activar huella', text: 'Escribe tu PIN una vez. Después el móvil te pedirá la huella (o la cara) para guardarlo protegido.', onPin: async pin => {
+    await bioEnable(pin); closeModal(); render(); toast('Huella activada ✓');
+  } });
 }
 /* 🔎 Buscador y filtros de Acceso */
 function accStatus(x) {
