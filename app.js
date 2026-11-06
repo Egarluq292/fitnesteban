@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.63.3';
+const APP_VERSION = '4.63.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -197,6 +197,11 @@ function libIcons() {
   let ch = false;
   // PIERNA pasó a ser TREN INFERIOR (mismo identificador): las copias sin sesiones se renuevan enteras; con sesiones, solo cambia el nombre
   const TI = remoteLib.find(x => x.lib === 'pub_piernas1' && x.name === 'TREN INFERIOR');
+  // nombres que se recortaron a 16 letras («CALISTENIA EN CA»): se recupera el nombre completo del bloque de Esteban
+  for (const p of state.plan.programs) {
+    const L = remoteLib.find(x => x.lib && (x.lib === p.lib || x.lib === p.pubId));
+    if (L && L.name.length > 16 && p.name.length === 16 && L.name.startsWith(p.name)) { p.name = L.name; ch = true; }
+  }
   if (TI) for (const p of state.plan.programs) {
     if (p.lib !== 'pub_piernas1' || p.name !== 'PIERNA') continue;
     const ids = new Set(p.days.map(d => d.id)), used = state.sessions.some(x => ids.has(x.dayId));
@@ -482,7 +487,7 @@ function normalizePlan(plan) {
   if (!programs.some(p => p.type === 'cardio')) programs.push(clone(DEFAULT_PLAN.programs.find(p => p.type === 'cardio')));
   if (!programs.some(p => p.type === 'retos')) programs.push(clone(DEFAULT_PLAN.programs.find(p => p.type === 'retos')));
   programs = programs.map(p => ({
-    id: p.id || uid('p_'), name: String(p.name || 'BLOQUE').slice(0, 16), icon: p.icon || '', lib: p.lib || (p.id === 'ppt' ? 'ppt' : p.id === 'fullbody' ? 'fullbody' : ''), ...(p.pubId ? { pubId: p.pubId } : {}),
+    id: p.id || uid('p_'), name: String(p.name || 'BLOQUE').slice(0, 30), icon: p.icon || '', lib: p.lib || (p.id === 'ppt' ? 'ppt' : p.id === 'fullbody' ? 'fullbody' : ''), ...(p.pubId ? { pubId: p.pubId } : {}),
     type: p.type === 'cardio' || p.type === 'retos' ? p.type : 'strength',
     days: p.type === 'cardio' || p.type === 'retos' ? [] : (p.days || []).map(normalizeDay)
   }));
@@ -1688,7 +1693,7 @@ function editProgModal(progId) {
   const p = isNew ? { name: '' } : state.plan.programs.find(x => x.id === progId);
   openModal(`
     <h3 class="modal-title">${isNew ? 'Nuevo bloque' : 'Editar bloque'}</h3>
-    <label class="lbl">Nombre del bloque<input class="field mt-1" name="name" maxlength="16" value="${esc(p.name)}" placeholder="TORSO-PIERNA" /></label>
+    <label class="lbl">Nombre del bloque<input class="field mt-1" name="name" maxlength="30" value="${esc(p.name)}" placeholder="TORSO-PIERNA" /></label>
     ${!isNew && p.type === 'cardio' ? '<p class="text-[11px] text-mute">Bloque de cardio. Se puede renombrar, no eliminar.</p><button class="btn-ghost w-full mt-2" data-mact="cdTypes" type="button">✎ Mis actividades de cardio</button>' : !isNew && p.type === 'retos' ? '<p class="text-[11px] text-mute">Bloque de retos: dominadas, flexiones, fondos, sentadillas, burpees, plancha y rueda abdominal por niveles. Se puede renombrar, no eliminar.</p>' : isNew ? '<p class="text-[11px] text-mute">Se crea con un día vacío. Añade días con «＋ Día» y ejercicios con «＋ Añadir ejercicio».</p>' : `<p class="text-[11px] text-mute">${p.days.length} días: ${esc(p.days.map(d => d.label).join(' · '))}</p><p class="text-[11px] text-mute">Para cambiar ejercicios, usa «＋ Añadir ejercicio» y el ✎ de cada ejercicio, en la pantalla del bloque.</p>`}
     <div class="flex gap-2 mt-4">
       ${!isNew ? `<button class="btn-ghost" data-mact="left" type="button" aria-label="Mover a la izquierda">◀</button><button class="btn-ghost" data-mact="right" type="button" aria-label="Mover a la derecha">▶</button>` : ''}
@@ -4832,7 +4837,7 @@ function chatBlock(d) {
     }).filter(e => e.variants[0].name)
   })).filter(x => x.exercises.length);
   if (!days.length) return null;
-  return { name: String(d.nombre || 'MI BLOQUE').toUpperCase().slice(0, 16), icon: String(d.icono || '🏋️').slice(0, 4), days };
+  return { name: String(d.nombre || 'MI BLOQUE').toUpperCase().slice(0, 30), icon: String(d.icono || '🏋️').slice(0, 4), days };
 }
 function blockFromChat(b) {
   if (b.added && state.plan.programs.some(p => p.id === b.added)) { closeModal(); state.plan.active = b.added; ui.dayId = nextDayId(); ui.trainHome = false; ui.view = 'train'; render(); window.scrollTo({ top: 0 }); return; }
@@ -5152,6 +5157,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.63.4', ['Los nombres de bloque pueden tener hasta 30 letras y se recuperan los que se habían recortado.'], 'quiet'],
   ['4.63.3', ['Los nombres largos de los bloques ya no se cortan.'], 'quiet'],
   ['4.63.2', ['Nueva foto del bloque BRAZOS.'], 'quiet'],
   ['4.63.1', ['Se quita «⭐ Para ti» de las tarjetas de bloques.'], 'quiet'],
