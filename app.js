@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.63.1';
+const APP_VERSION = '4.63.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5141,6 +5141,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.63.2', ['Nueva foto del bloque BRAZOS.'], 'quiet'],
   ['4.63.1', ['Se quita «⭐ Para ti» de las tarjetas de bloques.'], 'quiet'],
   ['4.63.0', ['🍑 Nuevo bloque GLÚTEO: 2 días para glúteo y piernas tonificadas.', '🦵 PIERNA pasa a ser TREN INFERIOR, ahora con 2 días: cuádriceps y femoral-cadera.', '✨ Los bloques nuevos se distinguen con la etiqueta NUEVO hasta que los abres.']],
   ['4.62.1', ['🗑 Si borras tu copia de un bloque de Esteban, ya no te vuelve a salir (queda en «Ver bloques ocultos» por si lo quieres recuperar).'], 'quiet'],
