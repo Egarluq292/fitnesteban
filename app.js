@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.68.0';
+const APP_VERSION = '4.69.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4846,6 +4846,7 @@ function chatContext() {
     dieta_ultimos_7_dias: days7,
     resumen_semana: weekData(),
     programa_activo: prog().name, plan_y_recomendacion_del_coach: plan,
+    tus_bloques: editableProgs().map(p => ({ nombre: p.name, dias: p.days.map(d => ({ dia: d.label, titulo: d.title, ejercicios: d.exercises.map(e => `${exName(e)} ${e.sets}x${e.minReps}-${e.maxReps}${e.timed ? 's' : ''}`) })) })),
     ultimas_sesiones: last,
     musculos: (() => { const f = muscleFatigue(), v = muscleVolume(30); return { fatiga_ahora_pct: Object.fromEntries(Object.entries(f).filter(([, x]) => x.frac > 0.1).map(([m, x]) => [MUSCLE_NAMES[m], Math.round(x.frac * 100)])), series_30_dias: Object.fromEntries(Object.keys(MUSCLE_NAMES).map(m => [MUSCLE_NAMES[m], Math.round((v[m] || 0) * 2) / 2])) }; })(),
     entreno_en_curso: w ? { dia: allDays().find(d => d.id === w.dayId)?.label, minutos: sessionMinutes(w.d) } : null,
@@ -4872,9 +4873,14 @@ Reglas:
   Una opción por cada alternativa que propongas. Valores por 100 g del alimento tal como se come. Si no propones comida concreta, no añadas el bloque.
 - Si te pide CREAR un bloque o rutina de entreno: si no sabe qué material tiene, cuántos días por semana entrena o cuánto tiempo, pregúntaselo antes (en una sola pregunta corta). Usa SOLO el material que diga que tiene (si dice que nada, solo peso corporal y objetos de casa). Ten en cuenta su nivel, sus sesiones, retos y molestias. Resume el bloque en el texto (días y ejercicios) y añade al final un bloque oculto EXACTAMENTE con este formato (no lo menciones):
 \`\`\`bloque
-{"nombre":"NOMBRE CORTO EN MAYÚSCULAS (máx. 16)","icono":"un emoji","dias":[{"label":"DÍA A (máx. 8)","titulo":"título del día","ejercicios":[{"grupo":"Pecho|Espalda|Pierna|Hombro|Brazos|Core|Cardio…","nombre":"nombre del ejercicio en español","series":3,"reps_min":8,"reps_max":12,"descanso_s":90,"peso_corporal":true,"por_tiempo":false,"nota":"consejo técnico de máx. 10 palabras","alternativas":[{"nombre":"alternativa con el mismo material","nota":"…"}]}]}]}
+{"nombre":"NOMBRE CORTO EN MAYÚSCULAS (máx. 30)","icono":"un emoji","dias":[{"label":"DÍA A (máx. 8)","titulo":"título del día","ejercicios":[{"grupo":"Pecho|Espalda|Pierna|Hombro|Brazos|Core|Cardio…","nombre":"nombre del ejercicio en español","series":3,"reps_min":8,"reps_max":12,"descanso_s":90,"peso_corporal":true,"por_tiempo":false,"nota":"consejo técnico de máx. 10 palabras","alternativas":[{"nombre":"alternativa con el mismo material","nota":"…"}]}]}]}
 \`\`\`
   2–6 ejercicios por día, 1–5 días. Con "por_tiempo":true, reps_min y reps_max son segundos. Da 2 alternativas por ejercicio. Si solo hablas de entreno sin crear un bloque nuevo, no añadas el bloque.
+- Si te pide CAMBIAR uno de sus bloques (están en "tus_bloques": añadir o quitar días o ejercicios, cambiar uno por otro, series, repeticiones, descanso, nombre de un día), añade al final:
+\`\`\`cambios
+{"bloque":"nombre exacto del bloque","ops":[{"op":"añadir_dia","label":"DÍA D (máx. 8)","titulo":"título","ejercicios":[mismo formato que en bloque]},{"op":"añadir_ejercicios","dia":"label exacto del día","ejercicios":[…]},{"op":"quitar_ejercicio","dia":"…","nombre":"nombre exacto actual"},{"op":"cambiar_ejercicio","dia":"…","nombre":"actual","nuevo":{ejercicio en el mismo formato}},{"op":"ajustar","dia":"…","nombre":"…","series":4,"reps_min":6,"reps_max":10,"descanso_s":120},{"op":"renombrar_dia","dia":"…","label":"NUEVO","titulo":"…"},{"op":"quitar_dia","dia":"…"}]}
+\`\`\`
+  Usa solo las operaciones necesarias y los nombres EXACTOS de "tus_bloques". Los cambios NO se hacen solos: en tu texto explica brevemente qué propones y termina con «Revisa los cambios y pulsa Aplicar». Nunca digas que ya está hecho. Si no está claro qué bloque o qué día, pregúntalo antes.
 DATOS (JSON, null = sin dato):
 ${JSON.stringify(chatContext())}`;
 }
@@ -4900,23 +4906,115 @@ function chatMeals(reply) {
     try { const b = chatBlock(parseJSONLoose(js)); if (b) blocks.push(b); } catch { /* bloque ilegible: se ignora */ }
     return '';
   }).trim();
-  return { text: text2, meals: meals.slice(0, 4), blocks: blocks.slice(0, 1) };
+  let edits = [];
+  const text3 = text2.replace(/```cambios\s*([\s\S]*?)```/gi, (_, js) => {
+    try { const e = chatEdit(parseJSONLoose(js)); if (e) edits.push(e); } catch { /* ilegible: se ignora */ }
+    return '';
+  }).trim();
+  return { text: text3, meals: meals.slice(0, 4), blocks: blocks.slice(0, 1), edits: edits.slice(0, 2) };
 }
 /* Bloque de entreno propuesto por el coach → mismo formato que los bloques de la biblioteca */
+/* Ejercicio en el formato del coach («ejercicios» de ```bloque``` y ```cambios```) → ejercicio de la app */
+function iaEx(e, id) {
+  const timed = !!e.por_tiempo, bw = e.peso_corporal !== false;
+  const mn = clamp(parseInt(e.reps_min, 10) || (timed ? 30 : 8), 1, timed ? 600 : 100), mx = Math.max(mn, clamp(parseInt(e.reps_max, 10) || mn + 4, 1, timed ? 600 : 100));
+  return { id, block: `${EX_LIB_ICON[e.grupo] || '⚡'} ${String(e.grupo || 'Ejercicio').slice(0, 20)}`, sets: clamp(parseInt(e.series, 10) || 3, 1, 8), minReps: mn, maxReps: mx,
+    increment: bw ? 2 : 2.5, rest: clamp(parseInt(e.descanso_s, 10) || 90, 15, 300), bw, ...(timed ? { timed: true } : {}), alts27: true,
+    variants: [{ name: String(e.nombre || 'Ejercicio').slice(0, 50), note: String(e.nota || '').slice(0, 90) }, ...(Array.isArray(e.alternativas) ? e.alternativas : []).slice(0, 2).map(a => ({ name: String(a.nombre || '').slice(0, 50), note: String(a.nota || '').slice(0, 90) })).filter(a => a.name)] };
+}
+const iaExList = (arr, pre) => (Array.isArray(arr) ? arr : []).slice(0, 10).map((e, k) => iaEx(e || {}, pre + k)).filter(e => e.variants[0].name && e.variants[0].name !== 'Ejercicio');
 function chatBlock(d) {
   const days = (Array.isArray(d?.dias) ? d.dias : []).slice(0, 6).map((x, i) => ({
     label: String(x.label || `DÍA ${String.fromCharCode(65 + i)}`).toUpperCase().slice(0, 10), rotation: true,
     title: String(x.titulo || '').slice(0, 60), subtitle: '',
-    exercises: (Array.isArray(x.ejercicios) ? x.ejercicios : []).slice(0, 10).map((e, k) => {
-      const timed = !!e.por_tiempo, bw = e.peso_corporal !== false;
-      const mn = clamp(parseInt(e.reps_min, 10) || (timed ? 30 : 8), 1, timed ? 600 : 100), mx = Math.max(mn, clamp(parseInt(e.reps_max, 10) || mn + 4, 1, timed ? 600 : 100));
-      return { id: `ia_${i}_${k}`, block: `${EX_LIB_ICON[e.grupo] || '⚡'} ${String(e.grupo || 'Ejercicio').slice(0, 20)}`, sets: clamp(parseInt(e.series, 10) || 3, 1, 8), minReps: mn, maxReps: mx,
-        increment: bw ? 2 : 2.5, rest: clamp(parseInt(e.descanso_s, 10) || 90, 15, 300), bw, ...(timed ? { timed: true } : {}), alts27: true,
-        variants: [{ name: String(e.nombre || 'Ejercicio').slice(0, 50), note: String(e.nota || '').slice(0, 90) }, ...(Array.isArray(e.alternativas) ? e.alternativas : []).slice(0, 2).map(a => ({ name: String(a.nombre || '').slice(0, 50), note: String(a.nota || '').slice(0, 90) })).filter(a => a.name)] };
-    }).filter(e => e.variants[0].name)
+    exercises: iaExList(x.ejercicios, `ia_${i}_`)
   })).filter(x => x.exercises.length);
   if (!days.length) return null;
   return { name: String(d.nombre || 'MI BLOQUE').toUpperCase().slice(0, 30), icon: String(d.icono || '🏋️').slice(0, 4), days };
+}
+/* ✏️ Cambios en un bloque tuyo pedidos al coach: ```cambios {json}``` → tarjeta con «Aplicar» (y «Deshacer») */
+const editableProgs = () => state.plan.programs.filter(p => p.type === 'strength' && p.id !== 'free');
+const nk = t => normTxt(String(t || '')).replace(/[^a-z0-9ñ]+/g, ' ').trim();
+function findProgByName(n) { const k = nk(n); const ps = editableProgs(); return ps.find(p => nk(p.name) === k) || ps.find(p => k && (nk(p.name).includes(k) || k.includes(nk(p.name)))); }
+function findDay(p, label) {
+  const k = nk(label); if (!k) return null;
+  return p.days.find(d => nk(d.label) === k) || p.days.find(d => nk(d.title) === k) || p.days.find(d => nk(d.title).includes(k) || nk(d.label).includes(k));
+}
+function findDayEx(day, name) {
+  const k = nk(name); if (!k) return null;
+  const nm = e => e.variants.map(v => nk(v.name));
+  return day.exercises.find(e => nm(e).includes(k)) || day.exercises.find(e => nm(e).some(v => v.includes(k) || k.includes(v)));
+}
+const exName = e => e.variants[0]?.name || 'Ejercicio';
+/* Comprueba cada cambio contra el bloque real y prepara el resumen (no cambia nada todavía) */
+function chatEdit(d) {
+  const p = findProgByName(d?.bloque); if (!p) return { name: String(d?.bloque || '¿?').slice(0, 30), miss: true, lines: [`⚠️ No encuentro el bloque «${String(d?.bloque || '').slice(0, 30)}»`], ops: [] };
+  const lines = [], ops = [];
+  for (const o of (Array.isArray(d.ops) ? d.ops : []).slice(0, 12)) {
+    const op = nk(o.op).replace(/ /g, '_');
+    const day = o.dia ? findDay(p, o.dia) : null;
+    if (op === 'anadir_dia') {
+      const ex = iaExList(o.ejercicios, 'x'); if (!ex.length) continue;
+      const label = String(o.label || `DÍA ${p.days.length + 1}`).toUpperCase().slice(0, 10);
+      ops.push({ op, label, title: String(o.titulo || label).slice(0, 60), ex: o.ejercicios });
+      lines.push(`＋ Día nuevo <b>${esc(label)}</b> · ${ex.length} ejercicios: ${esc(ex.map(exName).join(', '))}`); continue;
+    }
+    if (!day) { lines.push(`⚠️ No encuentro el día «${esc(String(o.dia || '').slice(0, 20))}» (se omite)`); continue; }
+    if (op === 'anadir_ejercicios') {
+      const ex = iaExList(o.ejercicios, 'x'); if (!ex.length) continue;
+      ops.push({ op, day: day.label, ex: o.ejercicios }); lines.push(`＋ En ${esc(day.label)}: ${esc(ex.map(exName).join(', '))}`); continue;
+    }
+    if (op === 'renombrar_dia') {
+      const label = String(o.label || day.label).toUpperCase().slice(0, 10), title = String(o.titulo || '').slice(0, 60);
+      ops.push({ op, day: day.label, label, title }); lines.push(`✎ ${esc(day.label)} → <b>${esc(label)}</b>${title ? ` · ${esc(title)}` : ''}`); continue;
+    }
+    if (op === 'quitar_dia') {
+      if (p.days.length < 2) { lines.push('⚠️ No se puede quitar el único día del bloque'); continue; }
+      ops.push({ op, day: day.label }); lines.push(`− Quitar el día <b>${esc(day.label)}</b> (${day.exercises.length} ejercicios)`); continue;
+    }
+    const e = findDayEx(day, o.nombre);
+    if (!e) { lines.push(`⚠️ No encuentro «${esc(String(o.nombre || '').slice(0, 40))}» en ${esc(day.label)} (se omite)`); continue; }
+    if (op === 'quitar_ejercicio') { ops.push({ op, day: day.label, ex: exName(e) }); lines.push(`− ${esc(day.label)}: quitar ${esc(exName(e))}`); }
+    else if (op === 'cambiar_ejercicio' && o.nuevo) { const n = iaEx(o.nuevo, 'x'); ops.push({ op, day: day.label, ex: exName(e), nuevo: o.nuevo }); lines.push(`⇄ ${esc(day.label)}: ${esc(exName(e))} → <b>${esc(exName(n))}</b>`); }
+    else if (op === 'ajustar') {
+      const ch = {}; if (o.series) ch.sets = clamp(parseInt(o.series, 10) || e.sets, 1, 8); if (o.reps_min) ch.minReps = clamp(parseInt(o.reps_min, 10), 1, 600); if (o.reps_max) ch.maxReps = clamp(parseInt(o.reps_max, 10), 1, 600); if (o.descanso_s) ch.rest = clamp(parseInt(o.descanso_s, 10), 15, 300);
+      if (ch.minReps && ch.maxReps && ch.maxReps < ch.minReps) ch.maxReps = ch.minReps;
+      if (!Object.keys(ch).length) continue;
+      ops.push({ op, day: day.label, ex: exName(e), ch });
+      lines.push(`✎ ${esc(day.label)} · ${esc(exName(e))}: ${[ch.sets ? `${ch.sets} series` : '', ch.minReps || ch.maxReps ? `${ch.minReps ?? e.minReps}-${ch.maxReps ?? e.maxReps} ${e.timed ? 's' : 'reps'}` : '', ch.rest ? `${ch.rest} s descanso` : ''].filter(Boolean).join(' · ')}`);
+    }
+  }
+  if (!ops.length && !lines.length) return null;
+  return { prog: p.id, name: p.name, lines, ops };
+}
+function applyChatEdit(ed) {
+  const p = state.plan.programs.find(x => x.id === ed.prog); if (!p) return toast('Ese bloque ya no existe', 'warn');
+  const undo = clone(p.days);
+  let n = 0;
+  for (const o of ed.ops) {
+    if (o.op === 'anadir_dia') { const nd = normalizeDay({ id: uid('d_'), label: o.label, title: o.title, subtitle: '', rotation: true, exercises: iaExList(o.ex, 'c').map(e => ({ ...e, id: uid('c_') })) }); p.days.push(nd); n++; continue; }
+    const day = findDay(p, o.day); if (!day) continue;
+    if (o.op === 'anadir_ejercicios') { day.exercises.push(...iaExList(o.ex, 'c').map(e => ({ ...e, id: uid('c_') }))); n++; }
+    else if (o.op === 'renombrar_dia') { day.label = o.label; if (o.title) day.title = o.title; n++; }
+    else if (o.op === 'quitar_dia') { if (p.days.length > 1) { p.days = p.days.filter(d => d !== day); n++; } }
+    else {
+      const e = findDayEx(day, o.ex); if (!e) continue;
+      if (o.op === 'quitar_ejercicio') { day.exercises = day.exercises.filter(x => x !== e); n++; }
+      else if (o.op === 'cambiar_ejercicio') { const ne = iaEx(o.nuevo, uid('c_')); ne.sets = ne.sets || e.sets; day.exercises[day.exercises.indexOf(e)] = ne; n++; }
+      else if (o.op === 'ajustar') { Object.assign(e, o.ch); if (e.maxReps < e.minReps) e.maxReps = e.minReps; n++; }
+    }
+  }
+  if (!n) return toast('No se pudo aplicar ningún cambio', 'warn');
+  ed.applied = true; ed.undo = undo;
+  if (!allDays().some(d => d.id === ui.dayId)) ui.dayId = nextDayId();
+  saveChatConv(ui.chat); persist(); refreshChat(); render();
+  toast(`✓ ${n} ${n === 1 ? 'cambio aplicado' : 'cambios aplicados'} en ${p.name}`);
+}
+function undoChatEdit(ed) {
+  const p = state.plan.programs.find(x => x.id === ed.prog); if (!p || !ed.undo) return;
+  p.days = ed.undo; delete ed.undo; ed.applied = false;
+  if (!allDays().some(d => d.id === ui.dayId)) ui.dayId = nextDayId();
+  saveChatConv(ui.chat); persist(); refreshChat(); render(); toast('Cambios deshechos');
 }
 function blockFromChat(b) {
   if (b.added && state.plan.programs.some(p => p.id === b.added)) { closeModal(); state.plan.active = b.added; ui.dayId = nextDayId(); ui.trainHome = false; ui.view = 'train'; render(); window.scrollTo({ top: 0 }); return; }
@@ -4961,7 +5059,11 @@ function chatBodyHTML() {
     ${chatHistoryHTML()}`;
   return c.msgs.map((m, i) => m.role === 'user'
     ? `<div class="chat-me">${esc(m.text)}</div>`
-    : `<div class="chat-ai${m.error ? ' chat-err' : ''}">${mdLite(m.text)}${m.error && i === c.msgs.length - 1 ? '<button class="text-xs text-brand underline mt-1" data-mact="retry" type="button">Reintentar</button>' : ''}${(m.meals || []).map((ml, j) => `<div class="flex gap-2 items-stretch"><button class="chat-meal flex-1 min-w-0" data-mact="toDiet" data-m="${i}" data-o="${j}" type="button"><span>🍽️ Apuntar en Dieta</span><span class="text-[11px] opacity-80 truncate max-w-full">${m.meals.length > 1 ? esc(ml.title) + ' · ' : ''}${esc(ml.type || 'comida que toca')} · ~${mealKcal(ml)} kcal</span></button><button class="chat-meal !w-auto shrink-0 items-center justify-center" data-mact="recipe" data-m="${i}" data-o="${j}" type="button"><span>👨‍🍳 Receta</span><span class="text-[11px] opacity-80">${ml.recipe ? 'guardada' : 'paso a paso'}</span></button></div>`).join('')}${(m.blocks || []).map((bl, j) => `<button class="chat-meal" data-mact="toBlock" data-m="${i}" data-o="${j}" type="button"><span>${bl.added ? '✓ Ver en mis bloques' : '＋ Añadir a mis bloques'}</span><span class="text-[11px] opacity-80 truncate max-w-full">${esc(bl.icon)} ${esc(bl.name)} · ${bl.days.length} día${bl.days.length > 1 ? 's' : ''} · ${bl.days.reduce((a, d) => a + d.exercises.length, 0)} ejercicios</span></button>`).join('')}</div>`).join('')
+    : `<div class="chat-ai${m.error ? ' chat-err' : ''}">${mdLite(m.text)}${m.error && i === c.msgs.length - 1 ? '<button class="text-xs text-brand underline mt-1" data-mact="retry" type="button">Reintentar</button>' : ''}${(m.meals || []).map((ml, j) => `<div class="flex gap-2 items-stretch"><button class="chat-meal flex-1 min-w-0" data-mact="toDiet" data-m="${i}" data-o="${j}" type="button"><span>🍽️ Apuntar en Dieta</span><span class="text-[11px] opacity-80 truncate max-w-full">${m.meals.length > 1 ? esc(ml.title) + ' · ' : ''}${esc(ml.type || 'comida que toca')} · ~${mealKcal(ml)} kcal</span></button><button class="chat-meal !w-auto shrink-0 items-center justify-center" data-mact="recipe" data-m="${i}" data-o="${j}" type="button"><span>👨‍🍳 Receta</span><span class="text-[11px] opacity-80">${ml.recipe ? 'guardada' : 'paso a paso'}</span></button></div>`).join('')}${(m.blocks || []).map((bl, j) => `<button class="chat-meal" data-mact="toBlock" data-m="${i}" data-o="${j}" type="button"><span>${bl.added ? '✓ Ver en mis bloques' : '＋ Añadir a mis bloques'}</span><span class="text-[11px] opacity-80 truncate max-w-full">${esc(bl.icon)} ${esc(bl.name)} · ${bl.days.length} día${bl.days.length > 1 ? 's' : ''} · ${bl.days.reduce((a, d) => a + d.exercises.length, 0)} ejercicios</span></button>`).join('')}${(m.edits || []).map((ed, j) => `<div class="chat-edit">
+      <div class="text-[11px] font-bold uppercase tracking-wider text-brand">✏️ Cambios en ${esc(ed.name)}</div>
+      <ul class="text-[13px] leading-snug space-y-1 mt-1.5">${ed.lines.map(l => `<li>${l}</li>`).join('')}</ul>
+      ${ed.ops.length ? (ed.applied ? `<div class="grid grid-cols-2 gap-2 mt-2.5"><button class="chat-meal items-center justify-center text-center" data-mact="editGo" data-m="${i}" data-o="${j}" type="button"><span>✓ Ver bloque</span></button><button class="chat-meal items-center justify-center text-center !bg-transparent" data-mact="editUndo" data-m="${i}" data-o="${j}" type="button"><span>↩️ Deshacer</span></button></div>`
+        : `<button class="chat-meal items-center justify-center text-center w-full mt-2.5" data-mact="editApply" data-m="${i}" data-o="${j}" type="button"><span>Aplicar cambios</span></button>`) : ''}</div>`).join('')}</div>`).join('')
     + (c.busy ? '<div class="chat-ai chat-typing"><span></span><span></span><span></span></div>' : '');
 }
 /* Historial: conversaciones de los últimos 7 días (máx. 20). Solo la conversación abierta se envía a Gemini. */
@@ -5010,8 +5112,8 @@ async function chatSend(text) {
   try {
     const contents = c.msgs.slice(-12).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
     const reply = await callGemini(null, { json: false, contents, system: chatSystem(), temperature: 0.4, timeout: 60000 });
-    const { text: clean, meals, blocks } = chatMeals(reply);
-    c.msgs.push({ role: 'model', text: clean, ...(meals.length ? { meals } : {}), ...(blocks.length ? { blocks } : {}) });
+    const { text: clean, meals, blocks, edits } = chatMeals(reply);
+    c.msgs.push({ role: 'model', text: clean, ...(meals.length ? { meals } : {}), ...(blocks.length ? { blocks } : {}), ...(edits.length ? { edits } : {}) });
     saveChatConv(c);
   } catch (e) {
     c.msgs.push({ role: 'model', text: 'No he podido responder: ' + e.message, error: true });
@@ -5138,6 +5240,9 @@ function openChat(keep) {
     chip: (r, b) => chatSend(CHAT_CHIPS[+b.dataset.i]),
     toDiet: (r, b) => { const ml = ui.chat.msgs[+b.dataset.m]?.meals?.[+b.dataset.o]; if (ml) mealFromChat(ml); },
     recipe: (r, b) => recipeSheet(+b.dataset.m, +b.dataset.o),
+    editApply: (r, b) => { const ed = ui.chat.msgs[+b.dataset.m]?.edits?.[+b.dataset.o]; if (ed && !ed.applied) applyChatEdit(ed); },
+    editUndo: (r, b) => { const ed = ui.chat.msgs[+b.dataset.m]?.edits?.[+b.dataset.o]; if (ed?.applied) undoChatEdit(ed); },
+    editGo: (r, b) => { const ed = ui.chat.msgs[+b.dataset.m]?.edits?.[+b.dataset.o]; const p = ed && state.plan.programs.find(x => x.id === ed.prog); if (p) { closeModal(); openBlock('p:' + p.id); } },
     toBlock: (r, b) => { const bl = ui.chat.msgs[+b.dataset.m]?.blocks?.[+b.dataset.o]; if (bl) blockFromChat(bl); },
     mic: () => chatMic(),
     histToggle: () => { ui.histOpen = !ui.histOpen; refreshChat(); },
@@ -5236,6 +5341,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.69.0', ['✏️ El Coach IA ya puede cambiar tus bloques: pídele (también por voz) «añade un día de hombro a mi bloque X», «cambia este ejercicio por otro» o «pon 4 series de sentadilla». Te enseña los cambios y tú pulsas «Aplicar» (y «Deshacer» si no te convence).']],
   ['4.68.0', ['👥 Acceso: los nombres que pones se pasan a tus otros dispositivos (con el script de uso v11). Un dispositivo sin nombres ya no borra los de la hoja.'], 'admin'],
   ['4.67.1', ['iPhone: botón «Abrir en Safari» cuando el enlace se abre dentro de otra app.'], 'quiet'],
   ['4.67.0', ['Primera vez desde el navegador: la app pide instalarse antes de configurar. Lo que rellenas al empezar se guarda al momento (si sales a crear la clave de Gemini, sigues donde ibas).'], 'quiet'],
@@ -5469,6 +5575,7 @@ const GUIDE = [
     '🎤 Puedes <b>dictarle</b> en vez de escribir: toca el micro y habla; puedes hacer pausas. Toca 🎤 otra vez para terminar (o se para solo tras unos segundos de silencio). Al terminar se ponen mayúsculas, comas y puntos (con un modelo ligero de Gemini que no gasta la cuota de las fotos).',
     '👨‍🍳 Cuando te propone un plato, pulsa «Receta» para verlo paso a paso con los mismos ingredientes y gramos. «¿Cambiar algo?» la adapta (también por voz).',
     '🏋️ Pídele un <b>bloque de entreno</b> con el material que tienes (o sin nada): pulsa «＋ Añadir a mis bloques» y aparece en Entreno. Se guarda en la conversación, como las recetas.',
+    '✏️ También <b>cambia tus bloques</b>: «añade un día de hombro a mi bloque X», «cambia el press militar por mancuernas», «pon 4 series de sentadilla». Te enseña la lista de cambios y no toca nada hasta que pulsas «Aplicar». Si no te convence, «Deshacer».',
     'Cada vez que lo abres empieza de cero; «Ver la última conversación» recupera la anterior. Usa tu clave de Gemini (Ajustes → IA). Nunca se envían la clave ni el PIN.'
   ]],
   ['📈 Progreso', [
