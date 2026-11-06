@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.63.4';
+const APP_VERSION = '4.64.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4386,6 +4386,26 @@ function trainToRetos() {
    salvo que tengas una comida a medias (estimación o edición) en otro día */
 function dietPending() { return !!(ui.aiResult || ui.editing); }
 function dietBackToToday() { const T = todayISO(); if (ui.dietDate !== T && !dietPending()) { ui.dietDate = T; return true; } return false; }
+/* ⬅️ Gesto o botón «atrás» (Android): la app vuelve a su pantalla anterior en vez de cerrarse.
+   Orden: cierra la ventana abierta → sale del reto o del bloque → cierra el panel de añadir comida → vuelve a Inicio.
+   En Inicio, la primera vez avisa y la segunda (antes de 2,5 s) sale de la app. */
+let backGuard = false, exitArmed = 0;
+function pushGuard() { if (backGuard) return; try { history.pushState({ fsGuard: 1 }, ''); backGuard = true; } catch { /* sin historial */ } }
+function appBack() {
+  if ($('#modalRoot')?.classList.contains('open')) { closeModal(); return true; }
+  if (ui.view === 'train' && ui.retoId) { ui.retoId = null; render(); window.scrollTo({ top: 0 }); return true; }
+  if (ui.view === 'train' && !ui.trainHome) { ui.trainHome = true; render(); window.scrollTo({ top: 0 }); return true; }
+  if (ui.view === 'diet' && (ui.addOpen || ui.aiResult || ui.editing)) { actions.addClose(); return true; }
+  if (ui.view !== 'home' && access.ok) { go('home'); return true; }
+  return false;
+}
+document.addEventListener('pointerdown', pushGuard, true);
+window.addEventListener('popstate', () => {
+  backGuard = false;
+  if (appBack()) { exitArmed = 0; pushGuard(); return; }
+  if (Date.now() - exitArmed < 2500) { history.back(); return; } // segunda vez seguida: salir de la app
+  exitArmed = Date.now(); toast('Pulsa atrás otra vez para salir'); pushGuard();
+});
 let hiddenAt = 0, hiddenDay = todayISO();
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); hiddenDay = todayISO(); if (ui.accessOpen) { ui.accessOpen = false; if (ui.view === 'settings') render(); } return; }
@@ -5157,6 +5177,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.64.0', ['⬅️ El gesto o botón «atrás» del móvil ya no cierra la app: vuelve a la pantalla anterior (cierra ventanas, sale del bloque, vuelve a Inicio). Para salir, pulsa atrás dos veces seguidas en Inicio.']],
   ['4.63.4', ['Los nombres de bloque pueden tener hasta 30 letras y se recuperan los que se habían recortado.'], 'quiet'],
   ['4.63.3', ['Los nombres largos de los bloques ya no se cortan.'], 'quiet'],
   ['4.63.2', ['Nueva foto del bloque BRAZOS.'], 'quiet'],
@@ -5312,6 +5333,7 @@ const GUIDE = [
   ['🏠 Inicio', [
     'Al abrir la app ves 4 tarjetas: <b>Entrenamientos</b> (lo que te toca hoy y si tienes músculos aún cargados), <b>Nutrición</b> (lo comido y lo que te queda), <b>Progreso</b> (tu peso y cuánto has bajado o subido) y <b>Asistente IA</b> (el Coach). Toca una para ir allí.',
     'Vuelve a salir al abrir la app de cero o tras 1 hora sin usarla. Con un entreno a medias, la app se abre directamente en él. El <b>logo</b> de arriba siempre te trae a Inicio.',
+    '⬅️ El gesto o botón <b>atrás</b> del móvil vuelve a la pantalla anterior: cierra la ventana abierta, sale del bloque o del reto y, al final, te lleva a Inicio. Para salir de la app, pulsa atrás dos veces seguidas en Inicio.',
     '📚 Si Esteban publica bloques nuevos, lo verás en la tarjeta de Entrenamientos y en Entreno con la etiqueta «Nuevo».'
   ]],
   ['🏋️ Entreno: bloques y días', [
