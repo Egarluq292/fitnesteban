@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.69.0';
+const APP_VERSION = '4.69.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5341,6 +5341,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.69.1', ['🔧 Script de uso v11 corregido: bloqueaba todos los dispositivos. Vuelve a pegarlo (Ajustes → Acceso → Reconfigurar).'], 'admin'],
   ['4.69.0', ['✏️ El Coach IA ya puede cambiar tus bloques: pídele (también por voz) «añade un día de hombro a mi bloque X», «cambia este ejercicio por otro» o «pon 4 series de sentadilla». Te enseña los cambios y tú pulsas «Aplicar» (y «Deshacer» si no te convence).']],
   ['4.68.0', ['👥 Acceso: los nombres que pones se pasan a tus otros dispositivos (con el script de uso v11). Un dispositivo sin nombres ya no borra los de la hoja.'], 'admin'],
   ['4.67.1', ['iPhone: botón «Abrir en Safari» cuando el enlace se abre dentro de otra app.'], 'quiet'],
@@ -7146,8 +7147,8 @@ function doGet_(e) {
       if ((x.q || []).indexOf(d) >= 0 && !adm) { ok = false; x.b = (x.b || 0) + 1; }
       else if (ya) { if (ya.last !== hoy) ya.k = (ya.k || 1) + 1; ya.last = hoy; if (n) ya.n = n; if (p && !an) ya.p = p; }
       else if (adm || x.d.length < LIMITE) x.d.push({ id: d, n, p: an ? '' : p, last: hoy, k: 1 });
-      if (an) x.d.forEach(v => { delete v.p; });
       else { ok = false; x.b = (x.b || 0) + 1; }
+      if (an) x.d.forEach(v => { delete v.p; });
       all[h] = x; guardaDisp_(all); escribeDisp_(h, x);
       return salida_({ ok: true, allowed: ok, n: x.d.length });
     } finally { lock.releaseLock(); }
