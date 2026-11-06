@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.67.1';
+const APP_VERSION = '4.68.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5236,6 +5236,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.68.0', ['👥 Acceso: los nombres que pones se pasan a tus otros dispositivos (con el script de uso v11). Un dispositivo sin nombres ya no borra los de la hoja.'], 'admin'],
   ['4.67.1', ['iPhone: botón «Abrir en Safari» cuando el enlace se abre dentro de otra app.'], 'quiet'],
   ['4.67.0', ['Primera vez desde el navegador: la app pide instalarse antes de configurar. Lo que rellenas al empezar se guarda al momento (si sales a crear la clave de Gemini, sigues donde ibas).'], 'quiet'],
   ['4.66.0', ['🧱 Crear un bloque es más fácil: eliges cuántos días tiene y se abre al momento, listo para añadir ejercicios.', 'En Ajustes → Bloques, cada bloque tiene «＋ Día», «＋ Ejercicios» y 🗑 para eliminar solo ese bloque. También en el ⋯ de su tarjeta.']],
@@ -6905,7 +6906,11 @@ async function loadUsage() {
     const d = await r.json();
     if (!d.ok) throw new Error(d.error === 'clave' ? 'La clave del registro no coincide con la del script' : 'El registro no respondió bien');
     ui.usage = {}; for (const x of d.rows || []) ui.usage[String(x.h).toLowerCase()] = x;
-    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10);
+    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageVer = +d.ver || 0;
+    // nombres puestos en otro dispositivo tuyo: se copian aquí si aquí no tienes uno
+    let got = 0;
+    for (const x of d.rows || []) { const h = String(x.h).toLowerCase(), nm = String(x.nm || '').trim(); if (nm && nm !== 'Sin nombre' && nm !== 'Yo (admin)' && !state.accessNames[h]) { state.accessNames[h] = nm.slice(0, 24); got++; } }
+    if (got) { persist(); toast(`${got} ${got === 1 ? 'nombre recuperado' : 'nombres recuperados'} de tus otros dispositivos`); }
     if (!ui.usageOld) syncUsageNames();
   } catch (e) { ui.usageErr = e.message || 'No se pudo leer el registro de uso'; ui.usage = null; }
   ui.usageLoading = false; ui.usageAt = Date.now();
@@ -6921,7 +6926,7 @@ function usageLine(hash) {
   return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} de ${DEVICE_LIMIT} dispositivos`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="truncate text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${dv.p && !(access.list || []).some(x => x.hash === hash && x.anon) ? `<b class="text-white">${esc(dv.p)}</b> · ` : ''}${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}${dv.k ? ` · ${dv.k} día${dv.k === 1 ? '' : 's'} de uso` : ''}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 truncate">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
 }
 function usageScript(key) {
-  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 2; caducidad de planes; nombres ocultos) · v11
+  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 2; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos) · v11
 const READ_KEY = '${key}';
 const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
 const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre', 'correo', 'alta', 'dispositivos', 'bloqueos'];
@@ -6981,7 +6986,10 @@ function doPost(e) {
       return salida_({ ok: true });
     }
     if (b.k === READ_KEY && b.names && typeof b.names === 'object') {
-      const n = {}; for (const h in b.names) if (/^[0-9a-f]{32}$/.test(h)) n[h] = String(b.names[h]).slice(0, 40);
+      // se mezclan con los que ya había: un dispositivo sin nombres no borra los de otro
+      const vivos = huellas_(), n = {}, prev = nombres_();
+      for (const h in prev) if (vivos.indexOf(h) >= 0) n[h] = prev[h];
+      for (const h in b.names) { const v = String(b.names[h] || '').trim().slice(0, 40); if (/^[0-9a-f]{32}$/.test(h) && v && v !== 'Sin nombre') n[h] = v; }
       PropertiesService.getScriptProperties().setProperty('nombres', JSON.stringify(n));
       const lock = LockService.getScriptLock(); lock.waitLock(10000);
       try {
@@ -7046,7 +7054,7 @@ function doGet_(e) {
   if (q.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
   const datos = hoja_().getDataRange().getValues().slice(1);
   const dd = disp_();
-  return salida_({ ok: true, ver: 11, rows: datos.map(r => ({ h: String(r[0]), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
+  return salida_({ ok: true, ver: 11, rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
 }`;
 }
 /* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
@@ -7058,7 +7066,9 @@ function syncUsageNames() {
       const enc = lsGet(USE_KEY);
       if (!access.usageUrl || !enc || !ui.accessPin || !navigator.onLine) return;
       const k = await secretDec(enc, ui.accessPin), names = {};
-      for (const x of access.list || []) names[x.hash] = state.accessNames[x.hash] || (x.hash === access.me?.hash ? 'Yo (admin)' : 'Sin nombre');
+      for (const x of access.list || []) { const v = state.accessNames[x.hash] || (x.hash === access.me?.hash ? 'Yo (admin)' : ''); if (v) names[x.hash] = v; }
+      // con el script antiguo (v10 o anterior) mandar la lista incompleta borraría los nombres de la hoja: solo se envía si aquí están todos
+      if ((ui.usageVer || 0) < 11 && Object.keys(names).length < (access.list || []).length) return;
       await fetch(access.usageUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ k, names }) });
     } catch { /* se reintenta la próxima vez que abras Acceso */ }
   }, 600);
