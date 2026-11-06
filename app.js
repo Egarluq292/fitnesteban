@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.64.3';
+const APP_VERSION = '4.64.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1086,8 +1086,8 @@ function renderTrainHome() {
   ${retos ? galleryCard({ key: 'retos', name: 'RETOS', icon: '🏆', look: RETOS_LOOK, tag: 'Retos de calistenia', menu: false,
       sub: rs ? `${rs} ${rs === 1 ? 'reto en marcha' : 'retos en marcha'} · niveles que suben contigo` : 'Flexiones, dominadas, sentadillas… a tu ritmo' }) : ''}
   <div class="grid grid-cols-2 gap-2 mt-3">
-    <button class="gal-btn" data-act="openBlock" data-key="free" type="button"><span class="text-xl">🎲</span><span><b>FREE</b><small>Ejercicios sueltos de hoy</small></span></button>
-    <button class="gal-btn" data-act="openBlock" data-key="cardio" type="button"><span class="text-xl">🔥</span><span><b>CARDIO</b><small>Correr, bici, nadar…</small></span></button>
+    <button class="gal-btn" data-act="openBlock" data-key="free" type="button"><span class="text-xl">🎲</span><span><b>FREE</b><small>Entreno libre</small></span></button>
+    <button class="gal-btn" data-act="openBlock" data-key="cardio" type="button"><span class="text-xl">🔥</span><span><b>CARDIO</b><small>Correr, bici…</small></span></button>
   </div>
   ${inUse.length ? `<div class="gal-h"><span>En uso</span></div>${inUse.map(x => x.html()).join('')}` : ''}
   <div class="gal-h"><span>Tus bloques</span><button class="text-brand text-xs font-bold" data-act="newBlock" type="button">＋ Crear bloque</button></div>
@@ -5199,6 +5199,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.64.4', ['Botones FREE y CARDIO más compactos.'], 'quiet'],
   ['4.64.3', ['Nueva sección «En uso» en Entreno con los bloques que estás entrenando.'], 'quiet'],
   ['4.64.2', ['Tarjetas de bloques más limpias: «NUEVO» sin brillo en el borde y sin la etiqueta «De Esteban».'], 'quiet'],
   ['4.64.1', ['⬅️ El «atrás» del móvil ya funciona en todos los pasos seguidos, sin cerrar la app antes de tiempo.'], 'quiet'],
