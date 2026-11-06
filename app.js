@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.64.0';
+const APP_VERSION = '4.64.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -4388,9 +4388,11 @@ function dietPending() { return !!(ui.aiResult || ui.editing); }
 function dietBackToToday() { const T = todayISO(); if (ui.dietDate !== T && !dietPending()) { ui.dietDate = T; return true; } return false; }
 /* ⬅️ Gesto o botón «atrás» (Android): la app vuelve a su pantalla anterior en vez de cerrarse.
    Orden: cierra la ventana abierta → sale del reto o del bloque → cierra el panel de añadir comida → vuelve a Inicio.
-   En Inicio, la primera vez avisa y la segunda (antes de 2,5 s) sale de la app. */
-let backGuard = false, exitArmed = 0;
-function pushGuard() { if (backGuard) return; try { history.pushState({ fsGuard: 1 }, ''); backGuard = true; } catch { /* sin historial */ } }
+   En Inicio avisa, y si vuelves a pulsar atrás en 2,5 s se cierra la app.
+   Chrome ignora los pasos de historial creados sin tocar la pantalla, así que se usa CloseWatcher (hecho para esto);
+   en navegadores sin él, una entrada de historial que se repone con cada toque. */
+let backGuard = false, backCW = null, backPause = 0;
+const HAS_CW = typeof window.CloseWatcher === 'function';
 function appBack() {
   if ($('#modalRoot')?.classList.contains('open')) { closeModal(); return true; }
   if (ui.view === 'train' && ui.retoId) { ui.retoId = null; render(); window.scrollTo({ top: 0 }); return true; }
@@ -4399,13 +4401,25 @@ function appBack() {
   if (ui.view !== 'home' && access.ok) { go('home'); return true; }
   return false;
 }
-document.addEventListener('pointerdown', pushGuard, true);
-window.addEventListener('popstate', () => {
-  backGuard = false;
-  if (appBack()) { exitArmed = 0; pushGuard(); return; }
-  if (Date.now() - exitArmed < 2500) { history.back(); return; } // segunda vez seguida: salir de la app
-  exitArmed = Date.now(); toast('Pulsa atrás otra vez para salir'); pushGuard();
-});
+function armBack() {
+  if (Date.now() < backPause) return; // ventana para salir de la app con el segundo «atrás»
+  if (HAS_CW) {
+    if (backCW) return;
+    try { backCW = new window.CloseWatcher(); backCW.onclose = () => { backCW = null; onBack(); }; } catch { backCW = null; }
+    return;
+  }
+  if (backGuard) return;
+  try { history.pushState({ fsGuard: 1 }, ''); backGuard = true; } catch { /* sin historial */ }
+}
+function onBack() {
+  if (appBack()) { armBack(); return; }
+  toast('Pulsa atrás otra vez para salir');
+  backPause = Date.now() + 2500; // sin vigilante durante 2,5 s: el siguiente «atrás» cierra la app
+  setTimeout(armBack, 2600);
+}
+document.addEventListener('pointerdown', armBack, true);
+window.addEventListener('popstate', () => { if (HAS_CW) return; backGuard = false; onBack(); });
+setTimeout(armBack, 600);
 let hiddenAt = 0, hiddenDay = todayISO();
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); hiddenDay = todayISO(); if (ui.accessOpen) { ui.accessOpen = false; if (ui.view === 'settings') render(); } return; }
@@ -5177,6 +5191,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.64.1', ['⬅️ El «atrás» del móvil ya funciona en todos los pasos seguidos, sin cerrar la app antes de tiempo.'], 'quiet'],
   ['4.64.0', ['⬅️ El gesto o botón «atrás» del móvil ya no cierra la app: vuelve a la pantalla anterior (cierra ventanas, sale del bloque, vuelve a Inicio). Para salir, pulsa atrás dos veces seguidas en Inicio.']],
   ['4.63.4', ['Los nombres de bloque pueden tener hasta 30 letras y se recuperan los que se habían recortado.'], 'quiet'],
   ['4.63.3', ['Los nombres largos de los bloques ya no se cortan.'], 'quiet'],
