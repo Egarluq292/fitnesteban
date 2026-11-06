@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.71.0';
+const APP_VERSION = '4.72.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -487,7 +487,7 @@ function normalizePlan(plan) {
   if (!programs.some(p => p.type === 'cardio')) programs.push(clone(DEFAULT_PLAN.programs.find(p => p.type === 'cardio')));
   if (!programs.some(p => p.type === 'retos')) programs.push(clone(DEFAULT_PLAN.programs.find(p => p.type === 'retos')));
   programs = programs.map(p => ({
-    id: p.id || uid('p_'), name: String(p.name || 'BLOQUE').slice(0, 30), icon: p.icon || '', lib: p.lib || (p.id === 'ppt' ? 'ppt' : p.id === 'fullbody' ? 'fullbody' : ''), ...(p.pubId ? { pubId: p.pubId } : {}),
+    id: p.id || uid('p_'), name: String(p.name || 'BLOQUE').slice(0, 30), icon: p.icon || '', lib: p.lib || (p.id === 'ppt' ? 'ppt' : p.id === 'fullbody' ? 'fullbody' : ''), ...(p.pubId ? { pubId: p.pubId } : {}), ...(p.perWeek >= 1 && p.perWeek <= 7 ? { perWeek: +p.perWeek } : {}),
     type: p.type === 'cardio' || p.type === 'retos' ? p.type : 'strength',
     days: p.type === 'cardio' || p.type === 'retos' ? [] : (p.days || []).map(normalizeDay)
   }));
@@ -997,8 +997,7 @@ function blockHeroHTML() {
   const L = blockLook(p), T = todayISO();
   const ids = new Set(p.days.map(d => d.id));
   const ss = sortedSessions().filter(x => ids.has(x.dayId));
-  const rot = p.days.filter(d => d.rotation !== false && d.exercises.length);
-  const goal = Math.max(3, Math.min(6, rot.length || p.days.length)); // mínimo 3 días por semana
+  const goal = blockGoal(p);
   const wk = ss.filter(x => x.date > addDays(T, -7)).length;
   const last = ss[ss.length - 1];
   const ago = last ? Math.round((parseISO(T) - parseISO(last.date)) / 864e5) : null;
@@ -1028,6 +1027,9 @@ const RETOS_LOOK = { img: 'retos', c: '#f59e0b', tag: 'Retos' };
 /* «Nuevo» solo para quien ya usaba la app cuando se publicó el bloque (a un usuario nuevo todo le es nuevo: no se marca nada) */
 const libNewForMe = L => libIsNew(L) && (!L.at || L.at >= installDate());
 function libIdsOwnedProgs() { return new Set(libAll().map(progForLib).filter(Boolean).map(p => p.id)); }
+/* Sesiones por semana que pide un bloque: lo que elijas en ✎ («Veces por semana») o, si no, sus días (mín. 3, máx. 6) */
+const autoGoal = p => Math.max(3, Math.min(6, (p.days || []).filter(d => d.rotation !== false && d.exercises?.length).length || (p.days || []).length));
+const blockGoal = p => p.perWeek || autoGoal(p);
 function blockStats(p) {
   const ids = new Set(p.days.map(d => d.id)), ss = sortedSessions().filter(x => ids.has(x.dayId));
   const last = ss[ss.length - 1], T = todayISO();
@@ -1067,8 +1069,8 @@ function renderTrainHome() {
     const isNew = isLib && L && libNewForMe(L) && !p.id; // nuevo hasta que lo abres (al abrirlo se crea tu copia)
     const nm = libKey(p.name || L?.name || ''), tg = libKey(look.tag.split(' · ')[0]);
     const tag = `${isNew ? '<span class="bh-newpill">NUEVO</span>' : ''}${nm.includes(tg) ? '' : esc(look.tag)}`; // sin repetir el nombre («GLÚTEO · GLÚTEO»)
-    const sub = `${nDays} ${nDays === 1 ? 'día' : 'días'} · ${nEx} ejercicios${st.n ? ` · última ${st.ago === 0 ? 'hoy' : st.ago === 1 ? 'ayer' : `hace ${st.ago} días`}` : ''}`;
-    const goal = Math.max(3, Math.min(6, (p.days || []).filter(d => d.rotation !== false && d.exercises?.length).length));
+    const sub = `${nDays} ${nDays === 1 ? 'día' : 'días'} · ${nEx} ${nEx === 1 ? 'ejercicio' : 'ejercicios'}${st.n ? ` · última ${st.ago === 0 ? 'hoy' : st.ago === 1 ? 'ayer' : `hace ${st.ago} días`}` : ''}`;
+    const goal = blockGoal(p);
     const extra = st.n && nd && st.ago <= 14 ? `<div class="bh-next flex items-center gap-3"><span class="min-w-0 flex-1"><span class="bh-l">Te toca</span> <b>${esc(nd.title || nd.label)}</b></span>
       <span class="shrink-0 text-right"><span class="bh-dots !mt-0">${Array.from({ length: Math.max(goal, st.wk) }, (_, i) => `<i class="${i < st.wk ? 'on' : ''}"></i>`).join('')}</span><span class="bh-l !normal-case !tracking-normal">${st.wk} de ${goal} esta semana</span></span></div>` : '';
     return galleryCard({ key, name: p.name || L.name, icon: p.icon || L?.icon, look, sub, tag, extra, dim: hid.has(key), isNew });
@@ -1119,7 +1121,7 @@ function blockMenu(key) {
     ${L?.desc ? `<p class="text-[12px] text-slate-300 leading-snug whitespace-pre-line -mt-1">${esc(L.desc).replace(/\nCómo usarlo:/, '\n<b class="text-brand">Cómo usarlo:</b>')}</p>` : ''}
     <div class="grid gap-2">
       <button class="btn-ghost" data-mact="open" type="button">Abrir</button>
-      <button class="btn-ghost" data-mact="edit" type="button">${own ? '✎ Cambiar nombre' : '✎ Editar (tu copia)'}</button>
+      <button class="btn-ghost" data-mact="edit" type="button">${own ? '✎ Nombre y veces por semana' : '✎ Editar (tu copia)'}</button>
       <button class="btn-ghost" data-mact="hide" type="button">${isHid ? '👁 Volver a mostrarlo' : '🙈 Ocultar este bloque'}</button>
       ${own ? '<button class="btn-danger" data-mact="del" type="button">🗑 Eliminar este bloque</button>' : ''}
     </div>
@@ -1756,7 +1758,10 @@ function editProgModal(progId) {
     ${isNew ? `<div class="lbl mt-3">¿Cuántos días distintos tiene?</div>
     <div class="flex gap-1.5 mt-1" id="ndChips">${[1, 2, 3, 4, 5, 6].map(n => `<button class="chip flex-1 justify-center ${n === 3 ? 'chip-on' : ''}" data-mact="nd" data-n="${n}" type="button">${n}</button>`).join('')}</div>
     <p class="text-[11px] text-mute mt-1.5">Ejemplo: 3 días = Día 1, Día 2 y Día 3, que vas rotando. Luego puedes añadir o quitar días.</p>` : ''}
-    ${!isNew && p.type === 'cardio' ? '<p class="text-[11px] text-mute">Bloque de cardio. Se puede renombrar, no eliminar.</p><button class="btn-ghost w-full mt-2" data-mact="cdTypes" type="button">✎ Mis actividades de cardio</button>' : !isNew && p.type === 'retos' ? '<p class="text-[11px] text-mute">Bloque de retos: dominadas, flexiones, fondos, sentadillas, burpees, plancha y rueda abdominal por niveles. Se puede renombrar, no eliminar.</p>' : isNew ? '' : `<p class="text-[11px] text-mute">${p.days.length} días: ${esc(p.days.map(d => d.label).join(' · '))}</p><p class="text-[11px] text-mute">Para cambiar ejercicios, usa «＋ Añadir ejercicio» y el ✎ de cada ejercicio, en la pantalla del bloque.</p>`}
+    ${!isNew && p.type === 'strength' && p.id !== 'free' ? `<div class="lbl mt-3">Veces por semana</div>
+    <div class="flex gap-1.5 mt-1">${[0, 1, 2, 3, 4, 5, 6].map(n => `<button class="chip flex-1 justify-center px-0 ${(p.perWeek || 0) === n ? 'chip-on' : ''}" data-mact="pw" data-n="${n}" type="button">${n || `Auto`}</button>`).join('')}</div>
+    <p class="text-[11px] text-mute mt-1.5">Lo que marca «Esta semana» en su tarjeta. «Auto» = ${autoGoal(p)} (sus días, mínimo 3). Pon 1 si es un complemento que haces una vez por semana.</p>` : ''}
+    ${!isNew && p.type === 'cardio' ? '<p class="text-[11px] text-mute">Bloque de cardio. Se puede renombrar, no eliminar.</p><button class="btn-ghost w-full mt-2" data-mact="cdTypes" type="button">✎ Mis actividades de cardio</button>' : !isNew && p.type === 'retos' ? '<p class="text-[11px] text-mute">Bloque de retos: dominadas, flexiones, fondos, sentadillas, burpees, plancha y rueda abdominal por niveles. Se puede renombrar, no eliminar.</p>' : isNew ? '' : `<p class="text-[11px] text-mute">${p.days.length} ${p.days.length === 1 ? 'día' : 'días'}: ${esc(p.days.map(d => d.label).join(' · '))}</p><p class="text-[11px] text-mute">Para cambiar ejercicios, usa «＋ Añadir ejercicio» y el ✎ de cada ejercicio, en la pantalla del bloque.</p>`}
     <div class="flex gap-2 mt-4">
       ${!isNew ? `<button class="btn-ghost" data-mact="left" type="button" aria-label="Mover a la izquierda">◀</button><button class="btn-ghost" data-mact="right" type="button" aria-label="Mover a la derecha">▶</button>` : ''}
       <button class="btn-primary flex-1" data-mact="save" type="button">Guardar</button>
@@ -1765,6 +1770,7 @@ function editProgModal(progId) {
     ${!isNew && p.type === 'strength' && state.plan.programs.length > 1 ? `<button class="btn-danger w-full mt-3" data-mact="del" type="button">Eliminar este bloque</button><p class="text-[11px] text-mute mt-2">Eliminar un bloque no borra el historial de sesiones ya guardadas.</p>` : ''}
   `, {
     nd: (root, b) => { root.querySelectorAll('[data-mact=nd]').forEach(x => x.classList.toggle('chip-on', x === b)); },
+    pw: (root, b) => { root.querySelectorAll('[data-mact=pw]').forEach(x => x.classList.toggle('chip-on', x === b)); },
     share: () => { closeModal(); publishBlockModal(progId); },
     cdTypes: () => { closeModal(); cardioTypesModal(); },
     autofocus: isNew,
@@ -1780,7 +1786,11 @@ function editProgModal(progId) {
         ui.dayId = np.days[0].id; ui.retoId = null; ui.trainHome = false; ui.view = 'train';
         persist(); closeModal(); render(); window.scrollTo({ top: 0 });
         return toast(`Bloque creado ✓ Ahora añade ejercicios al Día 1`);
-      } else p.name = name;
+      } else {
+        p.name = name;
+        const pw = root.querySelector('[data-mact=pw].chip-on');
+        if (pw) { const n = +pw.dataset.n; if (n) p.perWeek = n; else delete p.perWeek; }
+      }
       persist(); closeModal(); render();
     },
     left: () => moveProg(progId, -1),
@@ -5384,6 +5394,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.72.0', ['🎯 Cada bloque puede tener sus «Veces por semana» (en su ✎). Útil para bloques de complemento, como uno de brazos de un solo día: pon 1 y te marcará «1 de 1».']],
   ['4.71.0', ['📸 La tarjeta para compartir tu sesión lleva ahora la foto del bloque que has entrenado, difuminada al fondo, y su nombre. También en las de Retos.', '📅 Recupera la tarjeta de cualquier entreno pasado: en el calendario, toca el día y pulsa «📸 Ver tarjeta».']],
   ['4.70.0', ['🔁 Si un bloque nuevo repite un ejercicio que ya has hecho en otro (mismo nombre), el coach parte de lo que ya levantas en vez de empezar con la sesión de calibración.']],
   ['4.69.1', ['🔧 Script de uso v11 corregido: bloqueaba todos los dispositivos. Vuelve a pegarlo (Ajustes → Acceso → Reconfigurar).'], 'admin'],
@@ -5561,7 +5572,7 @@ const GUIDE = [
     'Entreno muestra todos tus entrenos en <b>tarjetas</b>: arriba «Hoy te toca», luego <b>RETOS</b>, los botones <b>FREE</b> (ejercicios sueltos del día) y <b>CARDIO</b>, <b>tus bloques</b> y los <b>bloques preparados</b> (todos disponibles, sin tener que añadirlos). Toca una tarjeta para entrar; «‹ Bloques» o el botón Entreno de abajo te devuelven. Los bloques que has entrenado en las últimas 2 semanas suben a «<b>En uso</b>», con lo que te toca y cómo vas esta semana.',
     'El <b>⋯</b> de cada tarjeta permite <b>ocultar</b> un bloque que no uses (no se borra nada: «Ver bloques ocultos», al final, lo recupera) y <b>editarlo</b>. Al abrir o editar un bloque preparado se hace tu copia, con tu progreso: tus cambios se quedan en ella y el original no cambia. Si la borras, ese bloque deja de salirte (si te arrepientes, está en «Ver bloques ocultos»).',
     'Dentro de un bloque eliges el <b>día</b>: el punto ● marca el que te toca según tu rotación; ✓ el que ya hiciste hoy.',
-    '🎴 La <b>tarjeta del bloque activo</b> te dice qué día te toca, cuántas sesiones llevas (y en qué semana del bloque vas) y cuántas has hecho en los últimos 7 días, con un objetivo mínimo de 3. Cada tipo de bloque tiene su foto y su color.',
+    '🎴 La <b>tarjeta del bloque activo</b> te dice qué día te toca, cuántas sesiones llevas (y en qué semana del bloque vas) y cuántas has hecho en los últimos 7 días (no de lunes a domingo). El objetivo son sus días, mínimo 3; si es un complemento (por ejemplo, brazos una vez por semana), cámbialo en su ✎ → «Veces por semana». Cada tipo de bloque tiene su foto y su color.',
     'Cada bloque lleva su propia rotación: {{ROTACION}}',
     'Para montar el tuyo: «＋ Crear bloque» (en Tus bloques) → nombre y cuántos días tiene → se abre en el Día 1. Pulsa «＋ Añadir ejercicio», cambia de día con las pestañas y repite; «＋ Día» añade otro día. También desde Ajustes → Bloques («＋ Día» y «＋ Ejercicios»). Para eliminar un bloque tuyo: ⋯ de su tarjeta → «🗑 Eliminar este bloque», o la 🗑 en Ajustes → Bloques.',
     'Los bloques preparados (Full Body, PPT, Híbrido 5, Brazos, Tren inferior, Glúteo, Calistenia en casa, Kettlebell…) traen su descripción y «Cómo usarlo»: la ves en el ⋯ de su tarjeta. Los que acaban de salir llevan la etiqueta <b>NUEVO</b> hasta que los abres.',
