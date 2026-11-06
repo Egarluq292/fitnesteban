@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.69.1';
+const APP_VERSION = '4.70.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -751,11 +751,15 @@ const mval = (root, name) => root.querySelector(`[name="${name}"]`)?.value ?? ''
 function sortedSessions() {
   return state.sessions.map((s, i) => ({ s, i })).sort((a, b) => (a.s.date < b.s.date ? -1 : a.s.date > b.s.date ? 1 : a.i - b.i)).map(x => x.s);
 }
+/* Historial de un ejercicio. Cuenta también el mismo ejercicio (mismo nombre) hecho en OTROS bloques:
+   así un bloque nuevo arranca desde lo que ya levantas, no desde cero. */
+const exNameKey = n => normTxt(String(n || '')).replace(/[^a-z0-9ñ]+/g, ' ').trim();
 function exHistory(exKey) {
-  const h = [];
+  const h = [], id = String(exKey || '').replace(/_v\d+$/, ''), vi = +(String(exKey || '').match(/_v(\d+)$/)?.[1] || 0);
+  const nk0 = exNameKey(findEx(id)?.ex.variants?.[vi]?.name);
   for (const s of sortedSessions()) for (const e of s.exercises) {
     if (s.deload) continue; // las semanas de descarga no cuentan para la progresión
-    if (e.exKey === exKey && e.sets.some(x => x.r > 0)) h.push({ date: s.date, sets: e.sets });
+    if ((e.exKey === exKey || (nk0 && e.name && exNameKey(e.name) === nk0)) && e.sets.some(x => x.r > 0)) h.push({ date: s.date, sets: e.sets });
   }
   if (!h.length && state.memory[exKey]?.sets?.some(x => x.r > 0)) h.push(state.memory[exKey]);
   return h;
@@ -5341,6 +5345,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.70.0', ['🔁 Si un bloque nuevo repite un ejercicio que ya has hecho en otro (mismo nombre), el coach parte de lo que ya levantas en vez de empezar con la sesión de calibración.']],
   ['4.69.1', ['🔧 Script de uso v11 corregido: bloqueaba todos los dispositivos. Vuelve a pegarlo (Ajustes → Acceso → Reconfigurar).'], 'admin'],
   ['4.69.0', ['✏️ El Coach IA ya puede cambiar tus bloques: pídele (también por voz) «añade un día de hombro a mi bloque X», «cambia este ejercicio por otro» o «pon 4 series de sentadilla». Te enseña los cambios y tú pulsas «Aplicar» (y «Deshacer» si no te convence).']],
   ['4.68.0', ['👥 Acceso: los nombres que pones se pasan a tus otros dispositivos (con el script de uso v11). Un dispositivo sin nombres ya no borra los de la hoja.'], 'admin'],
@@ -5527,7 +5532,7 @@ const GUIDE = [
     'Si no llegas al mínimo <b>dos sesiones seguidas</b> con el mismo peso → baja un 10 %. Tres sesiones sin sumar reps → aviso de estancamiento.',
     'Si hace 14 días o más que no haces un ejercicio → vuelta con −10 %.',
     '🔋 <b>Semana de descarga</b>: solo se sugiere si llevas 6+ semanas seguidas con 3 o más sesiones y hay ejercicios estancados (o 8+ semanas). Durante esa semana: −10 % de peso y mitad de series; esas sesiones no cuentan para la progresión.',
-    '«Sesión de calibración» = aún no tiene datos de ese ejercicio (o de esa variante, o de ese bloque). Busca un peso exigente con 1–2 reps en recámara.'
+    '«Sesión de calibración» = aún no tiene datos de ese ejercicio. Si ya lo hiciste en otro bloque con el mismo nombre, el coach parte de ahí (la última vez que lo hiciste, en cualquier bloque). Busca un peso exigente con 1–2 reps en recámara.'
   ]],
   ['📝 Registrar una sesión', [
     'Abre «Registrar series» en cada ejercicio. El peso sugerido ya viene puesto; apunta las reps y pulsa ✓: arranca el descanso de ese ejercicio (vibra y pita al acabar; en ⏱ puedes «🔊 Probar el pitido»). En iPhone no pita con el modo silencio ni con la pantalla bloqueada.',
