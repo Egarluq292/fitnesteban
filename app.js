@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.72.1';
+const APP_VERSION = '4.73.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1903,38 +1903,151 @@ function moveEx(exId, dir) {
 /* =========================================================================
    TENDENCIA DE PESO · RÉCORDS · DESCARGA · RESUMEN SEMANAL
    ========================================================================= */
-/* Media móvil de 7 días por fecha de pesaje */
-function trendSeries(points) {
-  return points.map(p => {
-    const from = addDays(p.x, -6);
-    const win = points.filter(q => q.x >= from && q.x <= p.x);
-    return { x: p.x, y: Math.round(win.reduce((a, q) => a + q.y, 0) / win.length * 10) / 10 };
-  });
+/* ⚖️ ANÁLISIS DE PESO Y COMPOSICIÓN: una sola fuente de verdad para Progreso, Inicio, informe semanal y Coach IA.
+   - Tendencia = media móvil exponencial por días (cada día nuevo pesa un 20 %: suaviza el ruido sin ir muy por detrás); el dato de un día no se juzga solo.
+   - Pico de un día = el último pesaje frente a lo que predice la recta de las 3 semanas anteriores (así no confunde una tendencia con un pico).
+   - Ritmo = regresión lineal de los pesajes de las últimas 3 semanas (kg/semana y % del peso/semana).
+   - Interpretación según SU objetivo, su adherencia real en Dieta, su fuerza y su cintura. Nunca afirma «músculo» sin 4+ semanas de pruebas. */
+const BODY_RULES = { minN: 10, win: 21, spike: 0.8, muscleWeeks: 4 };
+function emaSeries(pts) {
+  const out = []; let t = null, prev = null;
+  for (const p of pts) {
+    if (t === null) t = p.y;
+    else { const dd = Math.max(1, daysBetween(prev, p.x)); t += (1 - Math.pow(0.8, dd)) * (p.y - t); }
+    prev = p.x; out.push({ x: p.x, y: Math.round(t * 100) / 100 });
+  }
+  return out;
 }
 function trendAt(trend, date) { let v = null; for (const t of trend) if (t.x <= date) v = t; return v; }
-function weightTrend() {
+/* pendiente (unidades/día) por mínimos cuadrados */
+function slopePerDay(pts) {
+  if (pts.length < 2) return null;
+  const t0 = parseISO(pts[0].x).getTime(), xs = pts.map(p => (parseISO(p.x).getTime() - t0) / 864e5), ys = pts.map(p => p.y);
+  const mx = xs.reduce((a, b) => a + b, 0) / xs.length, my = ys.reduce((a, b) => a + b, 0) / ys.length;
+  const den = xs.reduce((a, x) => a + (x - mx) ** 2, 0);
+  return den ? xs.reduce((a, x, i) => a + (x - mx) * (ys[i] - my), 0) / den : null;
+}
+/* Fuerza: ejercicios con carga (no peso corporal, que se infla al subir de peso) comparando las últimas 4 semanas con las 4 anteriores */
+function strengthTrend(T) {
+  const now = new Map(), before = new Map(), a = addDays(T, -28), b = addDays(T, -56);
+  for (const ss of sortedSessions()) for (const e of ss.exercises) {
+    if (!e.exKey || ss.deload || isTimedEx(e) || isBwEx(e.exId)) continue;
+    const best = Math.max(0, ...e.sets.filter(x => x.r > 0 && x.w > 0).map(x => e1rm(x.w, x.r)));
+    if (!best) continue;
+    const m = ss.date > a ? now : ss.date > b ? before : null;
+    if (m) m.set(e.exKey, Math.max(m.get(e.exKey) || 0, best));
+  }
+  let up = 0, n = 0;
+  for (const [k, v] of now) if (before.has(k)) { n++; if (v > before.get(k) * 1.01) up++; }
+  return { n, up, sustained: n >= 3 && up / n >= 0.6 };
+}
+function bodyAnalysis() {
+  const T = todayISO(), goal = profileOf()?.goal || 'recomp', st = state.settings;
   const pts = [...state.bodyMetrics].filter(m => m.weight !== null).sort((a, b) => (a.date < b.date ? -1 : 1)).map(m => ({ x: m.date, y: m.weight }));
-  const trend = trendSeries(pts);
-  if (pts.length < 3 || daysBetween(pts[0].x, pts[pts.length - 1].x) < 7) return { pts, trend, ready: false };
-  const last = trend[trend.length - 1];
-  const prev = trendAt(trend, addDays(last.x, -7));
-  const days = Math.max(1, daysBetween(prev.x, last.x));
-  const kgWeek = (last.y - prev.y) / days * 7;
-  const pctWeek = kgWeek / prev.y * 100;
-  // 3 semanas: peso y cintura
-  const old3 = trendAt(trend, addDays(last.x, -21));
+  const trend = emaSeries(pts);
+  const out = { goal, pts, trend, ready: false, n21: 0 };
+  if (!pts.length) return { ...out, tone: 'info', title: 'Sin pesajes todavía', lines: ['Apunta tu peso unos días por semana, siempre en las mismas condiciones.'] };
+  const last = trend[trend.length - 1]; out.last = last; out.lastRaw = pts[pts.length - 1];
+  // pico de un día: último pesaje frente a la tendencia de antes
+  const prev = pts.slice(0, -1).filter(q => q.x > addDays(out.lastRaw.x, -BODY_RULES.win));
+  out.spike = 0;
+  if (prev.length >= 5 && daysBetween(out.lastRaw.x, T) <= 2) {
+    const sp = slopePerDay(prev), my = prev.reduce((a, q) => a + q.y, 0) / prev.length;
+    const t0 = parseISO(prev[0].x).getTime(), mx = prev.reduce((a, q) => a + (parseISO(q.x).getTime() - t0) / 864e5, 0) / prev.length;
+    const pred = my + (sp || 0) * ((parseISO(out.lastRaw.x).getTime() - t0) / 864e5 - mx);
+    const res = r2(out.lastRaw.y - pred);
+    if (Math.abs(res) >= BODY_RULES.spike) out.spike = res;
+  }
+  // ventana de 3 semanas
+  const w21 = pts.filter(p => p.x > addDays(last.x, -BODY_RULES.win));
+  out.n21 = w21.length;
+  const span = w21.length ? daysBetween(w21[0].x, w21[w21.length - 1].x) : 0;
+  // también vale quien se pesa menos pero lleva tiempo: 6+ pesajes en 4 semanas que cubran 3 semanas
+  const w28 = pts.filter(p => p.x > addDays(last.x, -28)), span28 = w28.length ? daysBetween(w28[0].x, w28[w28.length - 1].x) : 0;
+  const win = w21.length >= BODY_RULES.minN && span >= 14 ? w21 : w28.length >= 6 && span28 >= 21 ? w28 : null;
+  // cintura: cambio en ~4 semanas (o lo que haya, mínimo 3)
   const waist = [...state.bodyMetrics].filter(m => m.waist !== null).sort((a, b) => (a.date < b.date ? -1 : 1));
-  const wLast = waist[waist.length - 1], wOld = [...waist].reverse().find(m => m.date <= addDays(last.x, -21));
-  const waistChange3 = wLast && wOld ? r2(wLast.waist - wOld.waist) : null;
-  const flat3 = old3 && daysBetween(old3.x, last.x) >= 18 ? Math.abs((last.y - old3.y) / old3.y * 100) < 0.3 : false;
-  let tone = 'ok', msg;
-  if (pctWeek < -1) { tone = 'warn'; msg = `Bajas ${fmtNum(Math.abs(r2(pctWeek)))} % por semana: demasiado rápido para recomposición, riesgo de perder músculo. Sube 100–150 kcal.`; }
-  else if (pctWeek <= -0.25) msg = `Bajas ~${fmtNum(Math.abs(r2(kgWeek)))} kg/semana (${fmtNum(Math.abs(r2(pctWeek)))} %): ritmo adecuado para recomposición.`;
-  else if (pctWeek <= 0.25) {
-    if (flat3 && waistChange3 !== null && waistChange3 >= 0) { tone = 'warn'; msg = 'Peso y cintura estables 3 semanas: estancado. Revisa que registras todo y baja ~100 kcal o añade cardio suave.'; }
-    else msg = waistChange3 !== null && waistChange3 < 0 ? `Peso estable y cintura −${fmtNum(Math.abs(waistChange3))} cm en 3 semanas: recomposición funcionando.` : 'Peso estable. En recomposición es normal si la cintura baja: vigílala.';
-  } else { tone = 'warn'; msg = `Subes ~${fmtNum(r2(kgWeek))} kg/semana. Si la cintura también sube, baja 100–150 kcal.`; }
-  return { pts, trend, ready: true, last, kgWeek, pctWeek, tone, msg, waistChange3 };
+  const wL = waist[waist.length - 1], wO = wL && [...waist].reverse().find(m => m.date <= addDays(wL.date, -21));
+  out.waist = wL && wO ? { cm: r2(wL.waist - wO.waist), days: daysBetween(wO.date, wL.date), last: wL.waist } : wL ? { cm: null, last: wL.waist } : null;
+  // adherencia real en Dieta (14 días)
+  let nd = 0, kc = 0, pr = 0;
+  for (let i = 1; i <= 14; i++) { const d = addDays(T, -i); if (!mealsOf(d).length) continue; const t = totalsOf(d); nd++; kc += t.kcal; pr += t.prot; }
+  out.diet = { days: nd, kcal: nd ? Math.round(kc / nd) : null, prot: nd ? Math.round(pr / nd) : null, target: st.targetKcal, targetProt: st.targetProt };
+  out.strength = strengthTrend(T);
+  const first = sortedSessions()[0]; out.beginner = !first || daysBetween(first.date, T) < 180;
+  if (!win) {
+    return { ...out, tone: 'info', title: 'Aún no hay datos para saberlo',
+      lines: [`Llevas ${w21.length} ${w21.length === 1 ? 'pesaje' : 'pesajes'} en 3 semanas. Con unos 10 (o 6 repartidos en 4 semanas) te diré tu tendencia real.`, 'Hasta entonces, ningún pesaje dice si vas bien o mal: el peso de un día sube y baja 1–2 kg por agua y comida.'] };
+  }
+  const sl = slopePerDay(out.spike && win.length > 5 && win[win.length - 1] === out.lastRaw ? win.slice(0, -1) : win); // un pico de un día no cambia el ritmo
+  out.ready = true; out.kgWeek = r2(sl * 7); out.pctWeek = Math.round(sl * 7 / last.y * 1000) / 10; out.pctMonth = Math.round(sl * 30.4 / last.y * 1000) / 10;
+  out.weeks = Math.round(daysBetween(pts[0].x, last.x) / 7);
+  const kgw = `${out.kgWeek > 0 ? '+' : out.kgWeek < 0 ? '−' : ''}${fmtNum(Math.abs(out.kgWeek))} kg/semana (${fmtNum(Math.abs(out.pctWeek))} %)`;
+  const lowLog = nd < 10, d = out.diet, wc = out.waist?.cm;
+  const waistTxt = wc === null || wc === undefined ? null : wc <= -1 ? `cintura −${fmtNum(Math.abs(wc))} cm en ${Math.round(out.waist.days / 7)} semanas` : wc >= 1 ? `cintura +${fmtNum(wc)} cm en ${Math.round(out.waist.days / 7)} semanas` : 'cintura estable';
+  const logTxt = lowLog ? `Solo hay ${nd} de los últimos 14 días registrados en Dieta: sin eso no se puede saber si el problema es lo que comes o lo que se queda sin apuntar.` : null;
+  // criterios para hablar de músculo (todos a la vez, 4+ semanas)
+  const crit = [
+    ['4 semanas o más de pesajes', daysBetween(pts[0].x, last.x) >= 28],
+    ['tendencia de peso al alza', out.pctWeek > 0.05],
+    ['cintura estable o bajando (4 semanas)', wc !== null && wc !== undefined && wc <= 0.5 && out.waist.days >= 21],
+    ['fuerza subiendo de forma sostenida', out.strength.sustained],
+    ['comida suficiente (≥ mantenimiento y proteína)', !lowLog && d.kcal >= d.target * 0.95 && d.prot >= d.targetProt * 0.9]
+  ];
+  out.muscleCrit = crit; out.muscleLikely = crit.every(c => c[1]);
+  const missing = crit.filter(c => !c[1]).map(c => c[0]);
+  let tone = 'ok', title, lines = [];
+  const p = out.pctWeek;
+  if (goal === 'fat') {
+    if (p <= -1) { tone = 'warn'; title = 'Bajas más rápido de lo recomendable'; lines.push(`Tendencia ${kgw}. Por encima del ~1 % semanal aumenta el riesgo de perder músculo. Prueba a subir 100–150 kcal.`); }
+    else if (p <= -0.5) { title = 'Ritmo adecuado para perder grasa'; lines.push(`Tendencia ${kgw}: dentro del ~0,5–1 % semanal recomendado.`); }
+    else if (p < -0.1) { title = 'Bajas despacio'; lines.push(`Tendencia ${kgw}.${wc !== null && wc <= -1 ? ' Con la cintura bajando, vas bien aunque sea lento.' : ' Si la cintura tampoco baja en 2–3 semanas, baja 100–150 kcal o suma pasos.'}`); }
+    else {
+      tone = 'warn'; title = p > 0.1 ? 'El peso sube y tu objetivo es perder grasa' : 'El peso no baja';
+      lines.push(`Tendencia ${kgw}.`);
+      if (lowLog) lines.push(logTxt);
+      else if (d.kcal > d.target * 1.05) lines.push(`Comes de media ${fmtNum(d.kcal)} kcal frente a ${fmtNum(d.target)} de objetivo: el primer ajuste es acercarte a tu objetivo.`);
+      else lines.push(`Cumples tu objetivo de ${fmtNum(d.target)} kcal y aun así no baja: probablemente esté algo alto. Baja 100–150 kcal o suma pasos, y revisa que pesas bien las raciones.`);
+      if (wc !== null && wc <= -1) lines.push('La cintura sí baja: puede haber pérdida de grasa aunque la báscula no lo refleje todavía.');
+    }
+  } else if (goal === 'muscle') {
+    const lo = out.beginner ? 0.5 : 0.25, hi = out.beginner ? 1.5 : 0.5, pm = out.pctMonth;
+    if (pm < 0.1) { tone = 'warn'; title = 'No estás subiendo de peso'; lines.push(`Tendencia ${kgw}. Para ganar músculo hace falta un pequeño superávit: sube 100–150 kcal.`); if (lowLog) lines.push(logTxt); }
+    else if (pm > hi * 2) { tone = 'warn'; title = 'Subes más rápido de lo que se puede ganar músculo'; lines.push(`Ritmo de ~${fmtNum(pm)} % al mes. Lo realista es ~${fmtNum(lo)}–${fmtNum(hi)} % al mes${out.beginner ? ' empezando' : ' entrenando de antes'}: probablemente gran parte sea grasa. Baja 100–150 kcal.`); }
+    else { title = pm > hi ? 'Subes algo rápido' : 'Ritmo de volumen razonable'; lines.push(`Ritmo de ~${fmtNum(pm)} % al mes (lo realista: ${fmtNum(lo)}–${fmtNum(hi)} %).`); }
+  } else {
+    if (p <= -1) { tone = 'warn'; title = 'Bajas demasiado rápido para recomposición'; lines.push(`Tendencia ${kgw}. A este ritmo es difícil conservar músculo: sube 100–150 kcal.`); }
+    else if (p <= -0.25) { title = 'Bajas de peso'; lines.push(`Tendencia ${kgw}: perder algo de grasa es compatible con recomposición.`); }
+    else if (p < 0.25) {
+      title = 'Peso estable'; lines.push('En recomposición, un peso estable NO es fracaso: lo que manda es la cintura y la fuerza.');
+      if (wc !== null && wc <= -1 && out.strength.sustained) lines.push(`Con ${waistTxt} y la fuerza subiendo, la recomposición es probable.`);
+      else if (wc !== null && wc >= 0 && out.waist.days >= 18) { tone = 'warn'; lines.push(`Peso y cintura sin cambios. ${lowLog ? logTxt : 'Baja ~100 kcal o añade pasos o cardio suave.'}`); }
+      else if (wc === null || wc === undefined) lines.push('Mide la cintura una vez por semana: sin ella no se puede distinguir recomposición de estancamiento.');
+    } else { tone = 'warn'; title = 'El peso sube'; lines.push(`Tendencia ${kgw}.${wc !== null && wc >= 1 ? ' La cintura también sube: probablemente sea grasa. Baja 100–150 kcal.' : ''}`); if (lowLog) lines.push(logTxt); }
+  }
+  if (out.pctWeek > 0.05 && goal !== 'fat') lines.push(out.muscleLikely ? 'Ganancia de músculo: probable (se cumplen todos los criterios durante 4+ semanas).' : `Ganancia de músculo: aún no se puede saber. Falta: ${missing.join(', ')}.`);
+  if (waistTxt && !lines.some(l => l.includes('cintura'))) lines.push(`${waistTxt.charAt(0).toUpperCase() + waistTxt.slice(1)}.`);
+  return { ...out, tone, title, lines };
+}
+/* compatibilidad con lo que ya usaba weightTrend() */
+function weightTrend() {
+  const a = bodyAnalysis();
+  return { ...a, kgWeek: a.kgWeek ?? 0, pctWeek: a.pctWeek ?? 0, msg: [a.title, ...a.lines].join(' '), waistChange3: a.waist?.cm ?? null };
+}
+/* Para el Coach IA y el informe semanal: el mismo análisis, resumido */
+const BODY_AI_RULES = `PESO Y COMPOSICIÓN: usa SIEMPRE "analisis_peso_de_la_app" / "peso_y_composicion" (es lo mismo que ve el usuario en la app) y no lo contradigas. El peso de un día no se juzga: lo que cuenta es la tendencia. Una subida brusca de un día (pico_del_dia_kg) es casi siempre agua y glucógeno (hidratos, sal, entreno intenso, ciclo menstrual, poco descanso, digestión), no grasa: 1 kg de grasa son ~7.700 kcal. Si "hay_datos_suficientes" es false, di que aún no hay datos para saberlo y no saques conclusiones. NUNCA atribuyas una subida de peso a músculo ni a «estar más fuerte» salvo que "musculo_probable" sea true, y aun así di «probable»; si no, explica qué criterio falta. La recomposición visible lleva meses, no días. Interpreta según SU objetivo: perder grasa ≈ 0,5–1 % del peso/semana; recomposición = peso estable con cintura bajando y fuerza subiendo (peso estable no es fracaso); ganar músculo = subida lenta (~0,25–0,5 %/mes entrenados, algo más principiantes). Distingue lo seguro, lo probable y lo que aún no se sabe. Si los datos van contra su objetivo, dilo claro y propone un ajuste pequeño y concreto (±100–150 kcal, más pasos, revisar proteína) según su adherencia real ("dieta_14_dias"). Si expresa vergüenza o miedo a pesarse, normaliza las fluctuaciones y anímale a seguir registrando; nunca uses el peso como juicio personal.`;
+function bodyForAI() {
+  const a = bodyAnalysis();
+  return {
+    objetivo: (GOALS[a.goal] || GOALS.recomp)[0], pesajes_ultimas_3_semanas: a.n21, hay_datos_suficientes: a.ready,
+    peso_tendencia_kg: a.last ? Math.round(a.last.y * 10) / 10 : null, ultimo_pesaje: a.lastRaw ? { fecha: a.lastRaw.x, kg: a.lastRaw.y } : null,
+    pico_del_dia_kg: a.spike || 0, ritmo_kg_semana: a.ready ? a.kgWeek : null, ritmo_pct_semana: a.ready ? a.pctWeek : null, ritmo_pct_mes: a.ready ? a.pctMonth : null,
+    cintura: a.waist ? { ultima_cm: a.waist.last, cambio_cm: a.waist.cm, en_dias: a.waist.days || null } : null,
+    dieta_14_dias: a.diet, fuerza_4_semanas: a.strength ? { ejercicios_comparados: a.strength.n, suben: a.strength.up, progreso_sostenido: a.strength.sustained } : null,
+    principiante_en_la_app: a.beginner, musculo_probable: !!a.muscleLikely,
+    criterios_musculo: a.muscleCrit ? Object.fromEntries(a.muscleCrit.map(([k, v]) => [k, v])) : null,
+    conclusion_de_la_app: [a.title, ...(a.lines || [])].join(' ')
+  };
 }
 
 function personalRecords() {
@@ -2062,7 +2175,6 @@ function weekData() {
     for (const l of ps.low) lowTypes[l] = (lowTypes[l] || 0) + 1;
   }
   const cardio = state.cardio.filter(c => inRange(c.date));
-  const wt = weightTrend();
   const habits = sess.reduce((a, s) => a + (s.habits?.length || 0), 0);
   return {
     periodo: `${from} a ${to}`, objetivo: (GOALS[profileOf()?.goal] || GOALS.recomp)[0].toLowerCase(),
@@ -2072,7 +2184,7 @@ function weekData() {
     proteina_media_g: nd ? Math.round(pr / nd) : null, objetivo_proteina_g: state.settings.targetProt, dias_proteina_cumplida: protOk,
     comidas_con_proteina_suficiente: mealsTot ? `${mealsOk} de ${mealsTot} (mínimo ${minProt()} g por comida)` : null, comidas_con_proteina_baja_por_tipo: lowTypes,
     cardio_sesiones: cardio.length, cardio_minutos: cardio.reduce((a, c) => a + c.minutes, 0), cardio_kcal: cardio.reduce((a, c) => a + c.kcal, 0), gym_kcal_estimadas: sess.reduce((a, x) => a + gymKcalOf(x), 0),
-    peso_tendencia_kg: wt.ready ? wt.last.y : null, cambio_peso_kg_semana: wt.ready ? r2(wt.kgWeek) : null, cambio_cintura_cm_3_semanas: wt.ready ? wt.waistChange3 : null,
+    peso_y_composicion: bodyForAI(),
     habitos_cumplidos_en_sesiones: habits, semana_de_descarga: deloadActive(),
     comentarios_del_usuario: sess.flatMap(s => (s.notes || []).map(n => `${s.date} ${n.name}: ${noteTxt(n)}`)),
     habitos_diarios: (state.settings.habitList || []).filter(h => h.where === 'daily').map(h => {
@@ -2091,7 +2203,7 @@ async function generateReport() {
       const prompt = `Eres entrenador personal y nutricionista deportivo. Analiza la última semana de ${profileText()}.
 Datos (JSON, null = sin datos): ${JSON.stringify(data)}
 Objetivos diarios configurados: ${state.settings.targetKcal} kcal y ${state.settings.targetProt} g de proteína; peso actual: ${latestWeight() || 'desconocido'} kg.
-Reglas: básate SOLO en estos datos; si faltan datos importantes, dilo en "mejorar". Si los objetivos diarios claramente no encajan con su perfil y objetivo, dilo en "mejorar" con cifras orientativas. Sé directo, concreto y breve, en español de España. Nada de frases motivacionales vacías.
+Reglas: básate SOLO en estos datos; si faltan datos importantes, dilo en "mejorar". ${BODY_AI_RULES} Si los objetivos diarios claramente no encajan con su perfil y objetivo, dilo en "mejorar" con cifras orientativas. Sé directo, concreto y breve, en español de España. Nada de frases motivacionales vacías.
 Responde SOLO con JSON válido:
 {"titular": "una frase con el balance de la semana", "bien": ["máx. 3 puntos"], "mejorar": ["máx. 3 puntos"], "acciones": ["exactamente 3 acciones concretas y medibles para la próxima semana"]}`;
       const r = parseJSONLoose(await callGemini([{ text: prompt }], { timeout: 45000 }));
@@ -2120,7 +2232,7 @@ function renderReport(r, open) {
   const d = r.data;
   const chips = [
     `🏋️ ${d.sesiones_fuerza} sesiones`, d.kcal_media !== null ? `<span class="${MAC.kcal.text}">${d.kcal_media} kcal/día</span>` : null, d.proteina_media_g !== null ? `<span class="${MAC.prot.text}">P ${d.proteina_media_g} g</span>` : null,
-    d.cardio_minutos ? `🔥 ${d.cardio_minutos} min cardio` : null, d.cambio_peso_kg_semana !== null ? `⚖️ ${d.cambio_peso_kg_semana > 0 ? '+' : ''}${fmtNum(d.cambio_peso_kg_semana)} kg/sem` : null
+    d.cardio_minutos ? `🔥 ${d.cardio_minutos} min cardio` : null, (() => { const k = d.peso_y_composicion ? d.peso_y_composicion.ritmo_kg_semana : d.cambio_peso_kg_semana; return k !== null && k !== undefined ? `⚖️ ${k > 0 ? '+' : ''}${fmtNum(k)} kg/sem (tendencia)` : null; })()
   ].filter(Boolean);
   const list = (icon, arr) => arr?.length ? `<ul class="space-y-1 mt-1">${arr.map(x => `<li class="text-xs leading-relaxed">${icon} ${esc(x)}</li>`).join('')}</ul>` : '';
   return `<details class="bg-ink rounded-xl border border-line px-3 py-2.5" ${openAttr('rep_' + r.id, open)}>
@@ -3769,10 +3881,11 @@ function renderProgress() {
     </div>
     <button class="btn-primary w-full" data-act="saveMetric" type="button">Registrar medición</button>
     <div>
-      <div class="flex justify-between text-[11px] text-mute"><span>Peso <span class="opacity-70">· línea = media de 7 días, puntos = pesajes</span></span><span>${delta(wPts, 'kg')}</span></div>
-      ${lineChart(wPts, { color: '#00d2df', unit: ' kg', label: 'el peso', trend: wt.trend.length >= 2 ? wt.trend : null })}
-      ${wt.ready ? `<div class="coach ${wt.tone === 'warn' ? 'coach-stall' : 'coach-hold'} mt-2"><div class="font-bold text-xs">📉 Tendencia: ${wt.kgWeek > 0 ? '+' : ''}${fmtNum(r2(wt.kgWeek))} kg/semana</div><p class="text-xs mt-1 opacity-90 leading-relaxed">${esc(wt.msg)}</p></div>`
-        : wPts.length ? '<p class="text-[11px] text-mute mt-1">Con pesajes durante al menos 8 días te diré la tendencia semanal.</p>' : ''}
+      <div class="flex justify-between gap-2 text-[11px] text-mute"><span class="shrink-0">Peso <span class="opacity-70">· línea = tendencia</span></span><span class="text-right">${wt.last ? `<b class="text-white">${fmtNum(Math.round(wt.last.y * 10) / 10)} kg</b>${wt.ready ? ` · ${wt.kgWeek > 0 ? '+' : wt.kgWeek < 0 ? '−' : ''}${fmtNum(Math.abs(wt.kgWeek))} kg/sem` : ''}` : ''}</span></div>
+      ${lineChart(wPts, { color: '#00d2df', unit: ' kg', label: 'el peso', trend: wt.trend.length >= 2 ? wt.trend.map(t => ({ x: t.x, y: Math.round(t.y * 10) / 10 })) : null })}
+      ${wt.spike ? `<div class="coach coach-hold mt-2"><div class="font-bold text-xs">${wt.spike > 0 ? '↗️' : '↘️'} Hoy ${wt.spike > 0 ? '+' : '−'}${fmtNum(Math.abs(wt.spike))} kg sobre tu tendencia</div><p class="text-xs mt-1 opacity-90 leading-relaxed">${wt.spike > 0 ? 'Es un pico de un día: casi seguro agua y glucógeno (más hidratos o sal, entreno intenso, ciclo, poco descanso, digestión). No es grasa: 1 kg de grasa son ~7.700 kcal. Sigue registrando: la tendencia lo absorbe.' : 'Bajada de un día: suele ser agua (menos hidratos o sal, más sudor). No cuenta como grasa perdida; mira la tendencia.'}</p></div>` : ''}
+      ${wPts.length ? `<div class="coach ${wt.tone === 'warn' ? 'coach-stall' : wt.tone === 'ok' ? 'coach-up' : 'coach-hold'} mt-2"><div class="font-bold text-xs">⚖️ ${esc(wt.title)}</div>${wt.lines.map(l => `<p class="text-xs mt-1 opacity-90 leading-relaxed">${esc(l)}</p>`).join('')}</div>` : ''}
+      <p class="text-[11px] text-mute mt-2 leading-snug">📌 Pésate en las mismas condiciones: al levantarte, después del baño y antes de comer. La cintura, una vez por semana a la altura del ombligo.</p>
     </div>
     <div>
       <div class="flex justify-between text-[11px] text-mute"><span>Cintura</span><span>${delta(cPts, 'cm')}</span></div>
@@ -4910,6 +5023,7 @@ function chatContext() {
     entreno_en_curso: w ? { dia: allDays().find(d => d.id === w.dayId)?.label, minutos: sessionMinutes(w.d) } : null,
     cardio_14_dias: state.cardio.filter(c => c.date >= addDays(T, -13)).map(c => ({ fecha: c.date, tipo: cardioType(c.type).label, min: c.minutes, intensidad: c.intensity, kcal: c.kcal, ...(watchLine(c) ? { reloj: watchLine(c) } : {}) })),
     medidas_corporales: [...state.bodyMetrics].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8).map(m => ({ fecha: m.date, peso: m.weight, cintura: m.waist })),
+    analisis_peso_de_la_app: bodyForAI(),
     semana_de_descarga: deloadActive(),
     retos: RETO_IDS.filter(id => state.retos[id]).map(id => { const r = RETOS[id], st = state.retos[id]; return { reto: r.name, unidad: r.unit, nivel: st.level, meta: r.max, mejor_marca: st.best, proxima_sesion: retoSets(id, st.level), ultimas: st.history.slice(-3).map(h => ({ fecha: h.date, hecho: h.got, sensacion: h.feel })) }; })
   };
@@ -4921,6 +5035,7 @@ Reglas:
 - Básate en SUS DATOS de abajo. Cita números concretos (kg, reps, g, kcal, fechas). Si faltan datos para responder, dilo y pide el dato concreto.
 - El campo "coach_app" es lo que la app le recomienda en cada ejercicio (doble progresión). No lo contradigas sin explicar por qué.
 - "quedan" = lo que le falta hoy para sus objetivos (negativo = se ha pasado). Para comidas, propone platos normales de España con cantidades en gramos y sus macros aproximados.
+- ${BODY_AI_RULES}
 - Nada de frases motivacionales vacías. Si menciona dolor, lesión o algo médico, recomienda consultar a un profesional y no diagnostiques.
 - Ten en cuenta sus comentarios por ejercicio ("comentarios" en ultimas_sesiones: molestias, muy duro, fácil, poco tiempo, notas). Si se repiten molestias o "muy duro" en un ejercicio, propón una alternativa (puede cambiarla con ⇄ en la app) o ajustar carga/volumen; si algo le resulta fácil varias veces, anímale a progresar.
 - Comprueba si sus objetivos diarios ("objetivos": kcal y proteína) encajan con su sexo, edad, altura, peso actual y objetivo. Si claramente NO encajan (p. ej. demasiado altos o bajos para esa persona), avísale una sola vez en la conversación, en una o dos frases, con cifras orientativas y diciendo que los cambia en Ajustes → Objetivos diarios. Si faltan edad o altura, puedes sugerir que las añada en Ajustes → Mi perfil.
@@ -5399,6 +5514,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.73.0', ['⚖️ Peso más fiable y sin sustos: la gráfica muestra tu tendencia real y la interpreta según tu objetivo, tu dieta y tu fuerza. Un pico de un día se explica (agua, no grasa). El Coach IA usa el mismo análisis y ya no da conclusiones que tus datos no permiten.']],
   ['4.72.1', ['Ajustes → Bloques: cada bloque aparece plegado; tócalo para ver sus días y editarlo.'], 'quiet'],
   ['4.72.0', ['🎯 Cada bloque puede tener sus «Veces por semana» (en su ✎). Útil para bloques de complemento, como uno de brazos de un solo día: pon 1 y te marcará «1 de 1».'], 'quiet'],
   ['4.71.0', ['📸 La tarjeta para compartir tu sesión lleva ahora la foto del bloque que has entrenado, difuminada al fondo, y su nombre. También en las de Retos.', '📅 Recupera la tarjeta de cualquier entreno pasado: en el calendario, toca el día y pulsa «📸 Ver tarjeta».']],
@@ -5642,7 +5758,10 @@ const GUIDE = [
     'Cada vez que lo abres empieza de cero; «Ver la última conversación» recupera la anterior. Usa tu clave de Gemini (Ajustes → IA). Nunca se envían la clave ni el PIN.'
   ]],
   ['📈 Progreso', [
-    'Peso y cintura en ayunas, a la misma hora. La línea del peso es la <b>media de 7 días</b>: el peso diario oscila 1–2 kg por agua y sal.',
+    '⚖️ <b>Peso y cintura</b>: pésate al levantarte, después del baño y antes de comer; la cintura, una vez por semana a la altura del ombligo. <b>Registra siempre, también los días que sube</b>: un pesaje suelto no dice nada.',
+    'La línea es tu <b>tendencia</b> (los puntos, cada pesaje). El peso de un día sube y baja 1–2 kg por agua y glucógeno (hidratos, sal, entreno, ciclo, descanso); 1 kg de grasa son ~7.700 kcal, así que un salto de un día no es grasa. Con unos 10 pesajes en 3 semanas (o 6 en 4) verás tu ritmo real en kg/semana.',
+    'La app lo interpreta según <b>tu objetivo</b> (Ajustes): perder grasa ≈ 0,5–1 % de tu peso por semana; recomposición = peso estable con la cintura bajando y la fuerza subiendo (peso estable no es fracaso); ganar músculo = subida lenta. Usa también lo que registras en Dieta y tu fuerza.',
+    'Nunca te dirá que has ganado músculo con pocos días de datos: solo «probable» tras 4 semanas o más con peso al alza, cintura estable, fuerza subiendo y comida suficiente. El Coach IA usa exactamente este mismo análisis.',
     '🔥 <b>Mapa muscular</b>: «Ahora» muestra qué músculos siguen cargados y cuándo estarán listos; «7 días» y «30 días», cuánto has trabajado cada uno. Desliza sobre el mapa para cambiar. La figura es femenina o masculina según el sexo de tu perfil (Ajustes).',
     '🧠 <b>Resumen semanal</b>: analiza 7 días de fuerza, dieta, cardio y peso y te da 3 acciones para la semana siguiente.',
     '🏆 <b>Récords</b> y «Fuerza por ejercicio» (1RM estimado). En el <b>historial</b> ves sesiones, retos y tests; puedes borrar una sesión mal guardada.'
@@ -5806,14 +5925,9 @@ function homeSub(v) {
     return [`${fmtNum(Math.round(t.kcal))} de ${fmtNum(budget)} kcal`, left >= 0 ? `Quedan ${fmtNum(left)} kcal${pl > 0 ? ` · ${fmtNum(pl)} g prot.` : ''}` : `<span class="text-amber-200">Te pasas ${fmtNum(-left)} kcal</span>`];
   }
   if (v === 'progress') {
-    const ws = [...state.bodyMetrics].filter(m => m.weight !== null).sort((a, b) => (a.date < b.date ? -1 : 1));
-    if (!ws.length) return ['Apunta tu peso y medidas'];
-    const w = ws[ws.length - 1].weight, first = ws[0];
-    const kg = x => `${x > 0 ? '+' : '−'}${fmtNum(Math.abs(x))} kg`, col = x => x < 0 ? 'text-emerald-300' : 'text-amber-200';
-    const old = first.date <= addDays(T, -30) ? bodyweightAt(addDays(T, -30)) : null, d30 = old ? Math.round((w - old) * 10) / 10 : null;
-    const tot = ws.length > 1 ? Math.round((w - first.weight) * 10) / 10 : null;
-    const l2 = tot ? `<span class="${col(tot)}">${kg(tot)}</span> desde el ${esc(fmtDateShort(first.date))}` : '';
-    return [fmtKg(w) + (d30 ? ` · ${kg(d30)} en 30 días` : ''), l2];
+    const a = bodyAnalysis();
+    if (!a.pts.length) return ['Apunta tu peso y medidas'];
+    return [`${fmtKg(Math.round(a.last.y * 10) / 10)}${a.ready ? ` · ${a.kgWeek > 0 ? '+' : a.kgWeek < 0 ? '−' : ''}${fmtNum(Math.abs(a.kgWeek))} kg/sem` : ''}`, !a.ready ? 'Aún sin datos para tu tendencia' : a.tone === 'warn' ? '<span class="text-amber-200">Revisa tu tendencia</span>' : '✓ Según tu objetivo'];
   }
   return ['Pregunta a tu coach'];
 }
@@ -6344,7 +6458,9 @@ const actions = {
     const ex = state.bodyMetrics.find(m => m.date === date);
     if (ex) { if (weight !== null) ex.weight = weight; if (waist !== null) ex.waist = waist; }
     else state.bodyMetrics.push({ id: uid('m_'), date, weight, waist });
-    persist(); render(); toast('Medición guardada ✓');
+    persist(); render();
+    const a = bodyAnalysis();
+    toast(weight !== null && a.spike > 0 && date === a.lastRaw?.x ? `Registrado ✓ +${fmtNum(a.spike)} kg sobre tu tendencia: casi seguro agua, no grasa` : 'Registrado ✓ Lo que cuenta es la tendencia');
   },
   delMetric: b => { if (!confirm('¿Borrar esta medición?')) return; state.bodyMetrics = state.bodyMetrics.filter(m => m.id !== b.dataset.id); persist(); render(); },
   delSession: b => { if (!confirm('¿Borrar esta sesión del historial? El coach dejará de tenerla en cuenta.')) return; state.sessions = state.sessions.filter(s => s.id !== b.dataset.id); persist(); render(); },
