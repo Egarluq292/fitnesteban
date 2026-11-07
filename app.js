@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.75.2';
+const APP_VERSION = '4.76.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1077,7 +1077,8 @@ function renderTrainHome() {
     const tag = `${isNew ? '<span class="bh-newpill">NUEVO</span>' : ''}${nm.includes(tg) ? '' : esc(look.tag)}`; // sin repetir el nombre («GLÚTEO · GLÚTEO»)
     const sub = `${nDays} ${nDays === 1 ? 'día' : 'días'} · ${nEx} ${nEx === 1 ? 'ejercicio' : 'ejercicios'}${st.n ? ` · última ${st.ago === 0 ? 'hoy' : st.ago === 1 ? 'ayer' : `hace ${st.ago} días`}` : ''}`;
     const goal = blockGoal(p);
-    const extra = st.n && nd && st.ago <= 14 ? `<div class="bh-next flex items-center gap-3"><span class="min-w-0 flex-1"><span class="bh-l">Te toca</span> <b>${esc(nd.title || nd.label)}</b></span>
+    const mh = st.n && nd && st.ago <= 14 && nd.exercises.length ? todayMuscleHint(nd) : null; // mismo mapa que «Hoy te toca»: tus músculos cargados o recuperados
+    const extra = st.n && nd && st.ago <= 14 ? `<div class="bh-next flex items-center gap-3">${mh ? `<span class="shrink-0 pointer-events-none bh-mus">${dayMuscleSVG(nd, 27)}</span>` : ''}<span class="min-w-0 flex-1"><span class="bh-l">Te toca</span> <b>${esc(nd.title || nd.label)}</b>${mh ? `<span class="block text-[11px] leading-snug mt-0.5">${mh.txt}</span>` : ''}</span>
       <span class="shrink-0 text-right"><span class="bh-dots !mt-0">${Array.from({ length: Math.max(goal, st.wk) }, (_, i) => `<i class="${i < st.wk ? 'on' : ''}"></i>`).join('')}</span><span class="bh-l !normal-case !tracking-normal">${st.wk} de ${goal} esta semana</span></span></div>` : '';
     return galleryCard({ key, name: p.name || L.name, icon: p.icon || L?.icon, look, sub, tag, extra, dim: hid.has(key), isNew });
   };
@@ -2523,6 +2524,12 @@ function muscleMapHTML() {
   </section>`;
 }
 /* Mini silueta para «Hoy te toca» */
+/* Músculos que trabaja un día: principales a tope, secundarios a medias (para las tarjetas de cada bloque) */
+function dayMuscleSVG(day, width) {
+  const v = {};
+  for (const e of day.exercises) for (const [m, w] of Object.entries(musclesOf(variantOf(e).variant.name))) v[m] = Math.max(v[m] || 0, w === 1 ? 1 : 0.45);
+  return bodySVG(v, width);
+}
 function todayMuscleHint(day) {
   const prim = new Set(); for (const e of day.exercises) for (const [m, w] of Object.entries(musclesOf(variantOf(e).variant.name))) if (w === 1) prim.add(m);
   if (!prim.size) return null;
@@ -2539,7 +2546,7 @@ function todayCardHTML() {
   const doneSess = sortedSessions().filter(x => x.date === T && programOfDay(x.dayId)?.id === pr.id).pop();
   if (doneSess) {
     const dd = pr.days.find(d => d.id === doneSess.dayId);
-    return `<div class="today-card today-done"><span class="text-2xl">✅</span><span class="flex-1 min-w-0"><span class="block text-[11px] text-mute">HOY</span><span class="block font-extrabold">Ya entrenaste ${esc(dd?.label || 'hoy')} · ${esc(pr.name)}</span></span></div>`;
+    return `<div class="today-card today-done"><span class="text-2xl">✅</span><span class="flex-1 min-w-0"><span class="block text-[11px] text-mute">HOY</span><span class="block font-extrabold">Ya entrenaste ${esc(dd?.label || 'hoy')}${libKey(dd?.label || '') === libKey(pr.name) ? '' : ` · ${esc(pr.name)}`}</span></span></div>`;
   }
   const day = pr.days.find(d => d.id === nextDayId(pr)); if (!day || !day.exercises.length) return '';
   const mins = estimateMinutes(day, state.drafts[day.id] || { sets: {}, counts: {}, done: {} });
@@ -5619,6 +5626,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.76.0', ['💪 Tarjetas de tus bloques en uso: cada una muestra los músculos que trabaja el día que te toca y si están aún cargados o ya recuperados.']],
   ['4.75.2', ['Cardio: las actividades son ahora píldoras pequeñas; «＋ Otras» para añadir, quitar o crear la tuya.'], 'quiet'],
   ['4.75.1', ['Cardio: «Funcional» activada para todos y la primera, con su descripción (circuitos, HIIT, CrossFit y clases). El ✎ pasa a ser la casilla «＋ Otras actividades».'], 'quiet'],
   ['4.75.0', ['🤸 Nueva actividad de cardio: «Funcional» (circuitos, HIIT, CrossFit, clases). Actívala en el ✎ de Registrar cardio. También la reconoce al leer una captura de Strava o del reloj.', '🍽️ Cambio en Dieta: «Te quedan» es ahora siempre tu objetivo de kcal menos lo que has comido. El ejercicio ya no lo amplía (se quita la opción de Ajustes; si la tenías activada, verás menos kcal disponibles).', 'Ejemplo: objetivo 2500, has comido 208 y nadado 285 → antes «Te quedan 2577»; ahora «Te quedan 2292». Lo quemado sigue apareciendo debajo («Cardio −285 · Neto»).', 'Por qué: los cálculos de ejercicio y los relojes suelen pasarse, y comérselas enteras frena el progreso. Si entrenas mucho a diario, sube tu objetivo de kcal en Ajustes → Objetivos.']],
