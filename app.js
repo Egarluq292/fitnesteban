@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.76.0';
+const APP_VERSION = '4.76.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2731,8 +2731,9 @@ function renderCardio() {
     ${!est ? `<button class="btn-primary w-full" data-act="cdEstimate" type="button" ${c.busy ? 'disabled' : ''}>${c.busy ? '<span class="spinner"></span> Calculando…' : '⚡ Calcular calorías con IA'}</button>` : `
     <div class="border-t border-line pt-3 space-y-3">
       <div class="text-xs text-mute bg-ink rounded-xl p-2.5 border border-line leading-relaxed">${est.ai ? '🤖 ' : '📐 '}${esc(est.note)}</div>
-      <label class="lbl text-amber-300">Calorías quemadas (netas)<input class="field mt-1 text-center text-xl font-black" id="cdKcal" inputmode="numeric" value="${est.kcal}" /></label>
-      ${est.wkcal ? `<div class="flex items-center justify-between gap-2 text-[12px] bg-ink rounded-xl border border-line px-3 py-2"><span class="text-slate-300">⌚ Reloj: <strong class="text-white">${est.wkcal} kcal</strong> <span class="text-mute">(cada reloj calcula a su manera)</span></span><button class="btn-mini text-brand shrink-0" data-act="cdUseWatch" type="button">Usar</button></div>` : ''}
+      <label class="lbl text-amber-300">Calorías quemadas (${est.usedWatch ? 'las de tu reloj' : 'netas'})<input class="field mt-1 text-center text-xl font-black" id="cdKcal" inputmode="numeric" value="${est.kcal}" /></label>
+      ${est.wkcal ? `<div class="flex items-center justify-between gap-2 text-[12px] bg-ink rounded-xl border border-line px-3 py-2">${est.usedWatch ? `<span class="text-slate-300 leading-snug">⌚ Registrarás las <strong class="text-white">${est.wkcal} kcal de tu reloj</strong>. La app calculaba <strong class="text-amber-300">${est.appKcal} netas</strong> (sin lo que gastarías en reposo).</span><button class="btn-mini text-brand shrink-0" data-act="cdUseApp" type="button">Volver</button>`
+        : `<span class="text-slate-300 leading-snug">⌚ Tu reloj: <strong class="text-white">${est.wkcal} kcal brutas</strong>. La app registra <strong class="text-amber-300">${est.kcal} netas</strong>: le quita lo que gastarías en reposo y es prudente con el reloj, que suele pasarse.${+est.wkcal !== +est.kcal ? ' Pulsa «Usar» si prefieres las del reloj.' : ''}</span><button class="btn-mini text-brand shrink-0" data-act="cdUseWatch" type="button">Usar</button>`}</div>` : ''}
       ${est.speed ? `<p class="text-[11px] text-mute">Media: <strong class="text-white">${esc(est.speed)}</strong></p>` : ''}
       ${est.warn ? `<p class="text-[11px] text-amber-300">${esc(est.warn)}</p>` : ''}
       <div class="grid grid-cols-3 gap-2">
@@ -2754,7 +2755,7 @@ function renderCardio() {
         <div class="min-w-0 flex-1">
           <div class="text-sm font-semibold">${esc(cardioType(x.type).label)} · ${x.minutes} min · ${esc((INTENSITIES.find(i => i[0] === x.intensity) || ['', x.intensity])[1])}</div>
           ${watchLine(x) ? `<div class="text-[11px] text-slate-300">${esc(watchLine(x))}</div>` : ''}
-          <div class="text-[11px] text-mute">${esc(fmtDate(x.date))} · <span class="text-amber-300">${x.kcal} kcal</span>${x.ai ? ' · IA' : ''}${x.wkcal ? ` · ⌚ ${x.wkcal}` : ''}</div>
+          <div class="text-[11px] text-mute">${esc(fmtDate(x.date))} · <span class="text-amber-300">${x.kcal} kcal netas</span>${x.ai ? ' · IA' : ''}${x.wkcal ? ` · ⌚ ${x.wkcal} del reloj` : ''}</div>
         </div>
         <button class="iconbtn iconbtn-sm" data-act="cdDel" data-id="${esc(x.id)}" type="button" aria-label="Borrar">✕</button>
       </div>`).join('') || '<p class="text-sm text-mute">Aún no has registrado cardio.</p>'}
@@ -3364,6 +3365,15 @@ function renderDiet() {
   </section>`;
 }
 
+/* Barra apilada: altura = kcal frente al objetivo; dentro, cada macro en su color según las kcal que aporta (P y C ×4, G ×9) */
+function macroStackBar(t, h, state2 = 'ok') {
+  const p = (t.prot || 0) * 4, c = (t.carbs || 0) * 4, f = (t.fat || 0) * 9, tot = p + c + f;
+  if (!(tot > 0)) return `<span class="d2-bar bg-amber-300" style="height:${h}%"></span>`;
+  const seg = (v, hex) => v > 0 ? `<span style="display:block;height:${(v / tot * 100).toFixed(1)}%;background:${hex}"></span>` : '';
+  // de abajo arriba: proteína, grasas, carbohidratos (el cian y el verde no van juntos: se distinguen mal)
+  // apagada = te quedas corto · normal = en tu objetivo · con tope rojo = te pasas
+  return `<span class="d2-bar d2-stack ${state2 === 'short' ? 'd2-short' : state2 === 'over' ? 'd2-over' : ''}" style="height:${h}%">${state2 === 'over' ? '<span style="display:block;height:3px;flex:none;background:#f43f5e"></span>' : ''}${seg(c, MAC.carbs.hex)}${seg(f, MAC.fat.hex)}${seg(p, MAC.prot.hex)}</span>`;
+}
 /* Franja de 7 días: barra = kcal frente al objetivo; punto = proteína cumplida */
 function weekStripHTML(sel) {
   const st = state.settings, T = todayISO();
@@ -3375,14 +3385,15 @@ function weekStripHTML(sel) {
     const cls = !has ? '' : pct > 1.1 ? 'bg-rose-400' : pct >= 0.85 ? 'bg-amber-300' : 'bg-amber-300/50';
     const pOk = has && t.prot >= st.targetProt * 0.9;
     return `<button class="d2-day ${d === sel ? 'd2-day-on' : ''}" data-act="dietGo" data-date="${d}" type="button" aria-label="${esc(fmtDate(d))}">
-      <span class="d2-kc">${has ? Math.round(t.kcal) : ''}</span>
-      <span class="d2-barbox"><span class="d2-goal"></span>${has ? `<span class="d2-bar ${cls}" style="height:${Math.max(6, Math.round(pct / 1.25 * 100))}%"></span>` : ''}</span>
+      <span class="d2-kc"${has && pct > 1.1 ? ' style="color:#fda4af"' : ''}>${has ? Math.round(t.kcal) : ''}</span>
+      <span class="d2-barbox"><span class="d2-goal"></span>${has ? macroStackBar(t, Math.max(6, Math.round(pct / 1.25 * 100)), pct > 1.1 ? 'over' : pct >= 0.85 || d === T ? 'ok' : 'short') : ''}</span>
       <span class="d2-dot ${pOk ? 'd2-dot-on' : ''}"></span>
       <span class="d2-dl">${DAY_LETTER[parseISO(d).getDay()]}</span></button>`;
   }).join('');
   return `<section class="card px-3 pt-3 pb-2 mt-3">
     <div class="flex items-center justify-between px-1"><h3 class="text-[11px] font-bold uppercase tracking-wider text-mute">Últimos 7 días</h3>
-      <span class="text-[10px] text-mute"><span class="inline-block w-2 h-2 rounded-sm bg-amber-300 align-middle"></span> kcal · <span class="d2-dot d2-dot-on !inline-block align-middle"></span> proteína ✓</span></div>
+      <span class="text-[10px] text-mute">${['prot', 'fat', 'carbs'].map(k => `<span class="inline-block w-2 h-2 rounded-sm align-middle" style="background:${MAC[k].hex}"></span> ${MAC[k].short}`).join(' ')} · <span class="d2-dot d2-dot-on !inline-block align-middle"></span> prot. ✓</span></div>
+      <p class="text-[10px] text-mute mt-1">Apagada: te quedas corto · viva: en tu objetivo · tope rojo: te pasas</p>
     <div class="grid grid-cols-7 gap-1 mt-2">${cells}</div></section>`;
 }
 function mealMenu(id) {
@@ -5626,6 +5637,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.76.1', ['📊 «Últimos 7 días» en Dieta: cada barra se rellena con los colores de proteína, grasas y carbohidratos según lo que aporta cada uno. Apagada = te quedas corto; viva = en tu objetivo; con tope rojo = te pasas.', 'Cardio: se explica por qué las kcal registradas (netas) son menos que las del reloj (brutas), y que con «Usar» puedes quedarte con las del reloj.']],
   ['4.76.0', ['💪 Tarjetas de tus bloques en uso: cada una muestra los músculos que trabaja el día que te toca y si están aún cargados o ya recuperados.']],
   ['4.75.2', ['Cardio: las actividades son ahora píldoras pequeñas; «＋ Otras» para añadir, quitar o crear la tuya.'], 'quiet'],
   ['4.75.1', ['Cardio: «Funcional» activada para todos y la primera, con su descripción (circuitos, HIIT, CrossFit y clases). El ✎ pasa a ser la casilla «＋ Otras actividades».'], 'quiet'],
@@ -6384,7 +6396,8 @@ const actions = {
   editProgId: b => editProgModal(b.dataset.prog),
   homeGo: b => go(b.dataset.v),
   cdWatch: () => { keepCardioInputs(); state.settings.watchOpen = !state.settings.watchOpen; persist(); render(); },
-  cdUseWatch: () => { const e = ui.cardio.est; if (!e?.wkcal) return; $('#cdKcal').value = e.wkcal; toast('Puestas las kcal del reloj'); },
+  cdUseWatch: () => { const e = ui.cardio.est; if (!e?.wkcal) return; keepCardioInputs(); e.appKcal = e.appKcal ?? e.kcal; e.kcal = +e.wkcal; e.usedWatch = true; render(); toast('Puestas las kcal del reloj'); },
+  cdUseApp: () => { const e = ui.cardio.est; if (!e?.usedWatch) return; keepCardioInputs(); e.kcal = e.appKcal; e.usedWatch = false; render(); },
   cdTypes: () => { keepCardioInputs(); cardioTypesModal(); },
   cdType: b => { keepCardioInputs(); ui.cardio.type = b.dataset.type; ui.cardio.est = null; render(); },
   cdInt: b => { keepCardioInputs(); ui.cardio.intensity = b.dataset.int; ui.cardio.est = null; render(); },
