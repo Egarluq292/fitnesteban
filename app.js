@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.73.2';
+const APP_VERSION = '4.74.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2690,6 +2690,8 @@ function renderCardio() {
   return `
   <section class="card p-4 mt-1 space-y-3">
     <div class="flex items-center justify-between gap-2"><h2 class="font-extrabold text-lg">🔥 Registrar cardio</h2><button class="iconbtn iconbtn-sm" data-act="cdTypes" type="button" aria-label="Mis actividades">✎</button></div>
+    ${state.settings.apiKey ? `<button class="btn-ghost w-full" data-act="cdShot" type="button">📷 Desde captura o foto del reloj</button>
+    <p class="text-[11px] text-mute -mt-1.5 leading-snug">Una captura de Strava, Garmin, Salud… funciona mejor que una foto a la pantalla del reloj. Rellena los datos y tú revisas antes de registrar.</p>` : ''}
     <label class="lbl">Fecha<input class="field mt-1 px-2" type="date" id="cdDate" value="${c.date}" max="${today}" /></label>
     <div class="flex flex-wrap justify-center gap-2">
       ${vis.map(v => `<button class="cardio-type ${c.type === v.key ? 'cardio-type-on' : ''}" style="width:${vis.length === 2 || vis.length === 4 ? 'calc(50% - 4px)' : 'calc(33.333% - 5.34px)'}" data-act="cdType" data-type="${esc(v.key)}" type="button"><span class="text-2xl">${esc(v.icon)}</span><span class="truncate max-w-full px-1">${esc(v.label)}</span></button>`).join('')}
@@ -2795,6 +2797,51 @@ function cardioTypesModal() {
   });
 }
 
+/* 📷 Cardio desde una captura (Strava, Garmin, Salud…) o una foto del reloj: la IA lee los datos y rellena el formulario */
+const cdShotFile = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*', hidden: true });
+document.body.appendChild(cdShotFile);
+cdShotFile.addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  keepCardioInputs();
+  openModal(`<div class="text-center py-6"><span class="spinner" style="width:34px;height:34px;border-width:3px;border-color:rgba(34,211,238,.25);border-top-color:#22d3ee"></span><h3 class="modal-title mt-3">Leyendo la actividad…</h3><p class="text-sm text-mute">Puede tardar unos segundos.</p></div>`, {});
+  const keys = [...Object.keys(CARDIO_TYPES), ...Object.keys(CARDIO_EXTRA)];
+  const list = keys.map(k => `${k} = ${cardioType(k).label}`).join(', ');
+  const fail = msg => openModal(`<div class="text-center text-4xl">⌚</div><h3 class="modal-title text-center">No he podido leerla</h3><p class="text-sm text-mute text-center">${msg}</p>
+    <button class="btn-primary w-full" data-mact="again" type="button">📷 Probar con otra imagen</button><button class="text-xs text-mute underline w-full" data-close type="button">Rellenarlo a mano</button>`, { again: () => cdShotFile.click() });
+  let r;
+  try {
+    const img = await compressImage(f, 1400);
+    const prompt = `Es una captura de una app deportiva (Strava, Garmin Connect, Salud de Apple, Polar, Huawei…) o una foto de la pantalla de un reloj deportivo. Extrae SOLO los datos que aparezcan; si un dato no aparece, pon null (no lo inventes ni lo calcules).
+- actividad: una de estas claves: ${list}. Si no encaja ninguna, null.
+- fecha: AAAA-MM-DD si se ve una fecha concreta; si pone «Hoy», «hoy»; si pone «Ayer», «ayer»; si no, null.
+- minutos: el tiempo EN MOVIMIENTO (o tiempo de actividad) en minutos, con decimales si hay segundos. Si solo hay tiempo total, usa ese.
+- distancia_km (para bici, carrera, caminata…) o distancia_m (para natación, en metros).
+- fc_media (ppm), desnivel_m (desnivel positivo) y kcal (calorías que da el reloj o la app).
+- legible: false si la imagen no es de una actividad deportiva o no se lee.
+Responde SOLO con JSON válido: {"actividad": "clave" | null, "fecha": "…" | null, "minutos": número | null, "distancia_km": número | null, "distancia_m": número | null, "fc_media": número | null, "desnivel_m": número | null, "kcal": número | null, "legible": true | false}`;
+    r = parseJSONLoose(await callGemini([{ text: prompt }, { inlineData: { mimeType: 'image/jpeg', data: img.split(',')[1] } }], { timeout: 30000 }));
+  } catch (err) { return fail(esc(err.message || 'Error de conexión') + '. Prueba de nuevo.'); }
+  const min = Math.round(num(r.minutos) || 0);
+  if (r.legible === false || !(min > 0)) return fail('No encuentro el tiempo de la actividad. Prueba con una captura de la pantalla de resumen (la que muestra distancia, tiempo y calorías).');
+  const c = ui.cardio, T = todayISO();
+  if (r.actividad && keys.includes(r.actividad)) {
+    c.type = r.actividad;
+    // si esa actividad no estaba entre las suyas, se activa para poder registrarla
+    if (!cardioOnKeys().includes(r.actividad)) state.settings.cardioOn = [...cardioOnKeys(), r.actividad];
+  }
+  const fd = String(r.fecha || '').toLowerCase();
+  if (fd === 'hoy') c.date = T; else if (fd === 'ayer') c.date = addDays(T, -1); else if (/^\d{4}-\d{2}-\d{2}$/.test(fd) && fd <= T && fd >= addDays(T, -60)) c.date = fd;
+  c.minutes = String(Math.min(600, min));
+  for (const f of ['km', 'm', 'gain', 'hr', 'wkcal']) c[f] = '';
+  const put = (f, v) => { const n = num(v); if (n > 0) c[f] = String(f === 'km' ? Math.round(n * 100) / 100 : Math.round(n)); };
+  if (c.type === 'swim') put('m', r.distancia_m || (num(r.distancia_km) ? num(r.distancia_km) * 1000 : null)); else put('km', r.distancia_km || (num(r.distancia_m) ? num(r.distancia_m) / 1000 : null));
+  put('hr', r.fc_media); put('gain', r.desnivel_m); put('wkcal', r.kcal);
+  state.settings.watchOpen = true; c.est = null; persist();
+  closeModal(); render();
+  toast('Datos leídos ✓ Revisa y pulsa «Registrar»');
+  // calcula ya las calorías con esos datos (no registra: lo confirma el usuario)
+  setTimeout(() => estimateCardio(), 50);
+});
 async function estimateCardio() {
   const c = ui.cardio;
   keepCardioInputs();
@@ -5563,6 +5610,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.74.0', ['⌚ Cardio desde una captura: en Registrar cardio, «📷 Desde captura o foto del reloj». La IA lee la actividad, el tiempo, la distancia, la FC y las kcal (Strava, Garmin, Salud…), rellena el formulario y tú revisas antes de registrar.']],
   ['4.73.2', ['🏷️ Foto de la tabla nutricional: ahora ves «Leyendo la tabla…» hasta que termina, y si no se puede leer o es un complemento sin calorías (vitaminas…), te lo dice claro con opciones.'], 'quiet'],
   ['4.73.1', ['🔍 Buscador de comidas más cómodo: la barra queda arriba y los resultados justo debajo, a la vista, con la descripción completa, lo buscado resaltado y sus macros. Busca sin tildes y por varias palabras («pollo arroz»).']],
   ['4.73.0', ['⚖️ Peso más fiable y sin sustos: la gráfica muestra tu tendencia real y la interpreta según tu objetivo, tu dieta y tu fuerza. Un pico de un día se explica (agua, no grasa). El Coach IA usa el mismo análisis y ya no da conclusiones que tus datos no permiten.']],
@@ -5781,6 +5829,7 @@ const GUIDE = [
   ['🔥 Cardio', [
     'En Entreno → <b>🔥 CARDIO</b>: elige la actividad, los minutos y la intensidad. «Calcular» estima las calorías <b>netas</b> (lo que gastas por encima del reposo) con tu último peso; con clave de IA, más afinado.',
     '✎ en «Registrar cardio» → <b>Mis actividades</b>: quita las que no haces, añade otras (correr, natación, pádel, remo…) o crea la tuya.',
+    '📷 <b>Desde captura o foto del reloj</b>: haz una captura del resumen de la actividad en Strava, Garmin Connect, Salud… (mejor que una foto a la pantalla del reloj). La IA rellena actividad, fecha, minutos en movimiento, distancia, FC y kcal; tú revisas y pulsas «Registrar». La imagen no se guarda.',
     '⌚ <b>Datos del reloj</b> (opcional): distancia, desnivel, FC media y kcal del reloj. La app calcula la velocidad media (o el ritmo por 100 m en natación) y, con la FC, la intensidad. Puedes usar las kcal del reloj con «Usar».',
     'El cardio aparece en Dieta, pero <b>no amplía</b> lo que te queda por comer, salvo que lo actives en Ajustes → Objetivos.'
   ]],
@@ -6319,6 +6368,7 @@ const actions = {
   cdType: b => { keepCardioInputs(); ui.cardio.type = b.dataset.type; ui.cardio.est = null; render(); },
   cdInt: b => { keepCardioInputs(); ui.cardio.intensity = b.dataset.int; ui.cardio.est = null; render(); },
   cdEstimate: () => estimateCardio(),
+  cdShot: () => cdShotFile.click(),
   cdCancel: () => { ui.cardio.est = null; render(); },
   cdSave: () => {
     const c = ui.cardio;
