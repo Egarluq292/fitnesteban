@@ -273,7 +273,8 @@
      }
     ]
    }
-  ]
+  ],
+  "perWeek": 2
  },
  {
   "lib": "pub_hibrido5",
@@ -1023,7 +1024,8 @@
      }
     ]
    }
-  ]
+  ],
+  "perWeek": 5
  },
  {
   "lib": "pub_mvwdhuvedm",
@@ -1449,7 +1451,8 @@
      }
     ]
    }
-  ]
+  ],
+  "perWeek": 3
  },
  {
   "lib": "pub_mvpvpdaxt9",
@@ -1962,7 +1965,8 @@
      }
     ]
    }
-  ]
+  ],
+  "perWeek": 3
  },
  {
   "lib": "pub_brazos1",
@@ -2155,7 +2159,8 @@
      }
     ]
    }
-  ]
+  ],
+  "perWeek": 1
  },
  {
   "lib": "pub_piernas1",
@@ -2431,7 +2436,8 @@
      }
     ]
    }
-  ]
+  ],
+  "perWeek": 2
  },
  {
   "lib": "pub_kettlebell1",
@@ -2574,7 +2580,8 @@
      }
     ]
    }
-  ]
+  ],
+  "perWeek": 2
  },
  {
   "lib": "pub_calistenia1",
@@ -2927,6 +2934,7 @@
      }
     ]
    }
-  ]
+  ],
+  "perWeek": 3
  }
 ]

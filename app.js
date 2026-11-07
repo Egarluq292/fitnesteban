@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.76.1';
+const APP_VERSION = '4.77.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -170,9 +170,9 @@ const KB_DAYS = [{
   ]
 }];
 const LIB_BLOCKS = [
-  { lib: 'kb', name: 'KETTLEBELL', icon: '🔔', desc: 'Potencia y quema-grasa con kettlebell: swing, goblet, clean & press, zancadas y remo. Ideal en casa.', days: () => KB_DAYS },
-  { lib: 'ppt', name: 'PPT', icon: '', desc: 'Push / Pull / Torso en 3 días, con «peaje» de pierna al inicio de cada sesión.', days: () => PPT_DAYS },
-  { lib: 'fullbody', name: 'FULL BODY', icon: '', desc: 'Cuerpo completo en 2 días alternos (A y B): básicos pesados y accesorios.', days: () => FULLBODY_DAYS }
+  { lib: 'kb', name: 'KETTLEBELL', perWeek: 2, icon: '🔔', desc: 'Potencia y quema-grasa con kettlebell: swing, goblet, clean & press, zancadas y remo. Ideal en casa.', days: () => KB_DAYS },
+  { lib: 'ppt', name: 'PPT', perWeek: 3, icon: '', desc: 'Push / Pull / Torso en 3 días, con «peaje» de pierna al inicio de cada sesión.', days: () => PPT_DAYS },
+  { lib: 'fullbody', name: 'FULL BODY', perWeek: 3, icon: '', desc: 'Cuerpo completo en 2 días alternos (A y B): básicos pesados y accesorios.', days: () => FULLBODY_DAYS }
 ];
 /* Bloques que Esteban publica desde su app (bloques.json del repositorio). Se leen al abrir la biblioteca. */
 const LIB_FILE = 'bloques.json', LIB_CACHE = 'fitnesteban_lib';
@@ -283,7 +283,7 @@ function publishBlockModal(progId) {
     go: root => {
       const desc = mval(root, 'desc').trim(); if (!desc) return toast('Escribe una descripción', 'warn');
       askPin({ title: '📤 Compartir bloque', text: 'Tu PIN abre la llave de GitHub para compartirlo.', onPin: async pin => {
-        const item = { lib: existing?.lib || pubId, name: p.name, icon: p.icon || existing?.icon || '', desc, author: 'Esteban', at: existing?.at || todayISO(), days: blockForLib(p) };
+        const item = { lib: existing?.lib || pubId, name: p.name, icon: p.icon || existing?.icon || '', desc, author: 'Esteban', at: existing?.at || todayISO(), perWeek: p.perWeek || existing?.perWeek || blockGoal(p), days: blockForLib(p) };
         await ghEditLib(pin, list => [item, ...list.filter(x => x.lib !== pubId && x.lib !== item.lib)], `Biblioteca: ${existing ? 'actualiza' : 'publica'} ${p.name}`);
         p.pubId = item.lib; p.lib = item.lib; persist(); closeModal(); render(); toast(`«${p.name}» compartido con todos ✓`);
       } });
@@ -1033,7 +1033,13 @@ const RETOS_LOOK = { img: 'retos', c: '#f59e0b', tag: 'Retos' };
 const libNewForMe = L => libIsNew(L) && (!L.at || L.at >= installDate());
 function libIdsOwnedProgs() { return new Set(libAll().map(progForLib).filter(Boolean).map(p => p.id)); }
 /* Sesiones por semana que pide un bloque: lo que elijas en ✎ («Veces por semana») o, si no, sus días (mín. 3, máx. 6) */
-const autoGoal = p => Math.max(3, Math.min(6, (p.days || []).filter(d => d.rotation !== false && d.exercises?.length).length || (p.days || []).length));
+/* Veces por semana por defecto: las que indica el bloque (los de Esteban lo traen en su descripción) o, si no, sus días */
+function libPerWeek(p) {
+  if (p.perWeekLib) return p.perWeekLib;
+  const L = libAll().find(L => L.lib && (L.lib === p.lib || L.lib === p.pubId || (L.base && L.base === p.lib))) || (p.type === 'strength' ? libAll().find(L => libKey(L.name) === libKey(p.name)) : null);
+  return L && L.perWeek >= 1 ? +L.perWeek : 0;
+}
+const autoGoal = p => libPerWeek(p) || Math.max(1, Math.min(7, (p.days || []).filter(d => d.rotation !== false && d.exercises?.length).length || (p.days || []).length || 1));
 const blockGoal = p => p.perWeek || autoGoal(p);
 const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`;
 function blockStats(p) {
@@ -1767,7 +1773,7 @@ function editProgModal(progId) {
     <p class="text-[11px] text-mute mt-1.5">Ejemplo: 3 días = Día 1, Día 2 y Día 3, que vas rotando. Luego puedes añadir o quitar días.</p>` : ''}
     ${!isNew && p.type === 'strength' && p.id !== 'free' ? `<div class="lbl mt-3">Veces por semana</div>
     <div class="flex gap-1.5 mt-1">${[0, 1, 2, 3, 4, 5, 6].map(n => `<button class="chip flex-1 justify-center px-0 ${(p.perWeek || 0) === n ? 'chip-on' : ''}" data-mact="pw" data-n="${n}" type="button">${n || `Auto`}</button>`).join('')}</div>
-    <p class="text-[11px] text-mute mt-1.5">Lo que marca «Esta semana» en su tarjeta. «Auto» = ${autoGoal(p)} (sus días, mínimo 3). Pon 1 si es un complemento que haces una vez por semana.</p>` : ''}
+    <p class="text-[11px] text-mute mt-1.5">Lo que marca «Esta semana» en su tarjeta. «Auto» = ${autoGoal(p)} (${libPerWeek(p) ? 'lo que indica el bloque' : 'sus días'}). Pon 1 si es un complemento que haces una vez por semana.</p>` : ''}
     ${!isNew && p.type === 'cardio' ? '<p class="text-[11px] text-mute">Bloque de cardio. Se puede renombrar, no eliminar.</p><button class="btn-ghost w-full mt-2" data-mact="cdTypes" type="button">✎ Mis actividades de cardio</button>' : !isNew && p.type === 'retos' ? '<p class="text-[11px] text-mute">Bloque de retos: dominadas, flexiones, fondos, sentadillas, burpees, plancha y rueda abdominal por niveles. Se puede renombrar, no eliminar.</p>' : isNew ? '' : `<p class="text-[11px] text-mute">${p.days.length} ${p.days.length === 1 ? 'día' : 'días'}: ${esc(p.days.map(d => d.label).join(' · '))}</p><p class="text-[11px] text-mute">Para cambiar ejercicios, usa «＋ Añadir ejercicio» y el ✎ de cada ejercicio, en la pantalla del bloque.</p>`}
     <div class="flex gap-2 mt-4">
       ${!isNew ? `<button class="btn-ghost" data-mact="left" type="button" aria-label="Mover a la izquierda">◀</button><button class="btn-ghost" data-mact="right" type="button" aria-label="Mover a la derecha">▶</button>` : ''}
@@ -2540,20 +2546,45 @@ function todayMuscleHint(day) {
   return { svg: bodySVG(vals, 26), txt };
 }
 
+/* 🗓️ ¿Qué te toca hoy? Entre tus bloques en uso (últimos 14 días), el que más te conviene:
+   1) el más atrasado en sus veces por semana, 2) con los músculos del día recuperados, 3) el que lleva más días sin hacerse */
+function todayPick() {
+  const T = todayISO(), hid = new Set(state.settings.hiddenBlocks || []);
+  const progs = state.plan.programs.filter(p => p.type === 'strength' && p.id !== 'free' && p.days.some(d => d.exercises.length) && !hid.has('p:' + p.id));
+  const doneToday = sortedSessions().filter(x => x.date === T).map(x => programOfDay(x.dayId)).filter(p => p && p.type === 'strength' && p.id !== 'free').pop();
+  if (doneToday) return { pr: doneToday, done: true };
+  const f = muscleFatigue();
+  const cands = progs.map(p => {
+    const st = blockStats(p); if (st.ago === null || st.ago > 14) return null;
+    const day = p.days.find(d => d.id === nextDayId(p)); if (!day || !day.exercises.length) return null;
+    const prim = new Set(); for (const e of day.exercises) for (const [m, w] of Object.entries(musclesOf(variantOf(e).variant.name))) if (w === 1) prim.add(m);
+    const loaded = [...prim].filter(m => (f[m]?.frac || 0) >= 0.5);
+    const goal = blockGoal(p);
+    return { pr: p, day, goal, wk: st.wk, ago: st.ago, need: Math.max(0, goal - st.wk), loaded };
+  }).filter(Boolean);
+  if (!cands.length) { const pr = mainStrengthProg(); return pr ? { pr, day: pr.days.find(d => d.id === nextDayId(pr)) } : null; }
+  const pending = cands.filter(c => c.need > 0);
+  const pool = pending.length ? pending : cands;
+  pool.sort((a, b) => (a.loaded.length ? 1 : 0) - (b.loaded.length ? 1 : 0) || b.need / b.goal - a.need / a.goal || b.ago - a.ago);
+  const c = pool[0];
+  const others = cands.filter(x => x !== c).map(x => x.need <= 0 ? `${x.pr.name} ya cumplido` : x.loaded.length && !c.loaded.length ? `${x.pr.name}: ${x.loaded.map(m => MUSCLE_NAMES[m]).slice(0, 2).join(', ').toLowerCase()} aún cargado` : `${x.pr.name} ${x.wk} de ${x.goal}`).slice(0, 2);
+  const why = pending.length ? [`${c.pr.name} va ${c.wk} de ${c.goal} esta semana`, ...others].join(' · ') : 'Tus bloques van al día esta semana: si entrenas, esto es lo más descansado';
+  return { pr: c.pr, day: c.day, why, weekDone: !pending.length };
+}
 function todayCardHTML() {
-  const pr = mainStrengthProg(); if (!pr) return '';
-  const T = todayISO();
+  const tp = todayPick(); if (!tp) return '';
+  const pr = tp.pr, T = todayISO();
   const doneSess = sortedSessions().filter(x => x.date === T && programOfDay(x.dayId)?.id === pr.id).pop();
   if (doneSess) {
     const dd = pr.days.find(d => d.id === doneSess.dayId);
     return `<div class="today-card today-done"><span class="text-2xl">✅</span><span class="flex-1 min-w-0"><span class="block text-[11px] text-mute">HOY</span><span class="block font-extrabold">Ya entrenaste ${esc(dd?.label || 'hoy')}${libKey(dd?.label || '') === libKey(pr.name) ? '' : ` · ${esc(pr.name)}`}</span></span></div>`;
   }
-  const day = pr.days.find(d => d.id === nextDayId(pr)); if (!day || !day.exercises.length) return '';
+  const day = tp.day; if (!day || !day.exercises.length) return '';
   const mins = estimateMinutes(day, state.drafts[day.id] || { sets: {}, counts: {}, done: {} });
   const mh = todayMuscleHint(day);
   return `<button class="today-card" data-act="goToday" data-prog="${esc(pr.id)}" data-day="${esc(day.id)}" type="button">
       ${mh ? `<span class="shrink-0 pointer-events-none" style="width:58px">${mh.svg}</span>` : '<span class="text-2xl">🏋️</span>'}
-      <span class="flex-1 min-w-0 text-left"><span class="block text-[11px] text-mute">HOY TE TOCA</span><span class="block font-extrabold leading-tight">${esc(day.label)} <span class="text-mute font-bold text-[12px]">· ${esc(pr.name)}</span></span><span class="block text-[11px] text-mute truncate">${day.exercises.length} ejercicios${mins ? ` · ⏱ ~${mins} min` : ''}</span>${mh ? `<span class="block text-[11px] truncate">${mh.txt}</span>` : ''}</span>
+      <span class="flex-1 min-w-0 text-left"><span class="block text-[11px] text-mute">${tp.weekDone ? 'SEMANA CUMPLIDA ✓ · SI ENTRENAS' : 'HOY TE TOCA'}</span><span class="block font-extrabold leading-tight">${esc(day.label)}${libKey(day.label) === libKey(pr.name) ? '' : ` <span class="text-mute font-bold text-[12px]">· ${esc(pr.name)}</span>`}</span><span class="block text-[11px] text-mute truncate">${day.exercises.length} ejercicios${mins ? ` · ⏱ ~${mins} min` : ''}</span>${mh ? `<span class="block text-[11px] truncate">${mh.txt}</span>` : ''}${tp.why ? `<span class="block text-[11px] text-mute leading-snug mt-0.5">${esc(tp.why)}</span>` : ''}</span>
       <span class="text-brand font-black text-lg shrink-0">›</span></button>`;
 }
 function renderRetos() {
@@ -5169,7 +5200,7 @@ Reglas:
   Una opción por cada alternativa que propongas. Valores por 100 g del alimento tal como se come. Si no propones comida concreta, no añadas el bloque.
 - Si te pide CREAR un bloque o rutina de entreno: si no sabe qué material tiene, cuántos días por semana entrena o cuánto tiempo, pregúntaselo antes (en una sola pregunta corta). Usa SOLO el material que diga que tiene (si dice que nada, solo peso corporal y objetos de casa). Ten en cuenta su nivel, sus sesiones, retos y molestias. Resume el bloque en el texto (días y ejercicios) y añade al final un bloque oculto EXACTAMENTE con este formato (no lo menciones):
 \`\`\`bloque
-{"nombre":"NOMBRE CORTO EN MAYÚSCULAS (máx. 30)","icono":"un emoji","dias":[{"label":"DÍA A (máx. 8)","titulo":"título del día","ejercicios":[{"grupo":"Pecho|Espalda|Pierna|Hombro|Brazos|Core|Cardio…","nombre":"nombre del ejercicio en español","series":3,"reps_min":8,"reps_max":12,"descanso_s":90,"peso_corporal":true,"por_tiempo":false,"nota":"consejo técnico de máx. 10 palabras","alternativas":[{"nombre":"alternativa con el mismo material","nota":"…"}]}]}]}
+{"nombre":"NOMBRE CORTO EN MAYÚSCULAS (máx. 30)","icono":"un emoji","veces_por_semana":número de sesiones por semana que recomiendas,"dias":[{"label":"DÍA A (máx. 8)","titulo":"título del día","ejercicios":[{"grupo":"Pecho|Espalda|Pierna|Hombro|Brazos|Core|Cardio…","nombre":"nombre del ejercicio en español","series":3,"reps_min":8,"reps_max":12,"descanso_s":90,"peso_corporal":true,"por_tiempo":false,"nota":"consejo técnico de máx. 10 palabras","alternativas":[{"nombre":"alternativa con el mismo material","nota":"…"}]}]}]}
 \`\`\`
   2–6 ejercicios por día, 1–5 días. Con "por_tiempo":true, reps_min y reps_max son segundos. Da 2 alternativas por ejercicio. Si solo hablas de entreno sin crear un bloque nuevo, no añadas el bloque.
 - Si te pide CAMBIAR uno de sus bloques (están en "tus_bloques": añadir o quitar días o ejercicios, cambiar uno por otro, series, repeticiones, descanso, nombre de un día), añade al final:
@@ -5226,7 +5257,8 @@ function chatBlock(d) {
     exercises: iaExList(x.ejercicios, `ia_${i}_`)
   })).filter(x => x.exercises.length);
   if (!days.length) return null;
-  return { name: String(d.nombre || 'MI BLOQUE').toUpperCase().slice(0, 30), icon: String(d.icono || '🏋️').slice(0, 4), days };
+  const pw = parseInt(d.veces_por_semana, 10);
+  return { name: String(d.nombre || 'MI BLOQUE').toUpperCase().slice(0, 30), icon: String(d.icono || '🏋️').slice(0, 4), days, ...(pw >= 1 && pw <= 7 ? { perWeek: pw } : {}) };
 }
 /* ✏️ Cambios en un bloque tuyo pedidos al coach: ```cambios {json}``` → tarjeta con «Aplicar» (y «Deshacer») */
 const editableProgs = () => state.plan.programs.filter(p => p.type === 'strength' && p.id !== 'free');
@@ -5316,7 +5348,7 @@ function blockFromChat(b) {
   if (b.added && state.plan.programs.some(p => p.id === b.added)) { closeModal(); state.plan.active = b.added; ui.dayId = nextDayId(); ui.trainHome = false; ui.view = 'train'; render(); window.scrollTo({ top: 0 }); return; }
   const days = clone(b.days).map(d => { const nd = normalizeDay(d); nd.id = uid('d_'); nd.exercises = nd.exercises.map(e => ({ ...e, id: uid('c_'), alts27: true })); return nd; });
   let name = b.name; for (let n = 2; state.plan.programs.some(p => libKey(p.name) === libKey(name)); n++) name = `${b.name.slice(0, 13)} ${n}`;
-  const np = { id: uid('p_'), name, icon: b.icon, type: 'strength', fromCoach: true, days };
+  const np = { id: uid('p_'), name, icon: b.icon, type: 'strength', fromCoach: true, days, ...(b.perWeek ? { perWeek: b.perWeek } : {}) };
   state.plan.programs.push(np); state.plan.active = np.id; ui.dayId = days[0].id;
   b.added = np.id; saveChatConv(ui.chat); persist();
   closeModal(); ui.trainHome = false; ui.view = 'train'; render(); window.scrollTo({ top: 0 });
@@ -5637,6 +5669,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.77.0', ['🗓️ «Hoy te toca» ahora elige entre todos tus bloques en uso: el que va más atrasado esta semana y con los músculos recuperados (te dice por qué). Si ya has cumplido la semana, te lo dice.', '🎯 Cada bloque viene con sus veces por semana: las de su descripción (Brazos 1, PPT 3, Glúteo 2…) o, en los tuyos, sus días. Puedes cambiarlo en su ⋯ → «Nombre y veces por semana».']],
   ['4.76.1', ['📊 «Últimos 7 días» en Dieta: cada barra se rellena con los colores de proteína, grasas y carbohidratos según lo que aporta cada uno. Apagada = te quedas corto; viva = en tu objetivo; con tope rojo = te pasas.', 'Cardio: se explica por qué las kcal registradas (netas) son menos que las del reloj (brutas), y que con «Usar» puedes quedarte con las del reloj.']],
   ['4.76.0', ['💪 Tarjetas de tus bloques en uso: cada una muestra los músculos que trabaja el día que te toca y si están aún cargados o ya recuperados.']],
   ['4.75.2', ['Cardio: las actividades son ahora píldoras pequeñas; «＋ Otras» para añadir, quitar o crear la tuya.'], 'quiet'],
@@ -5823,10 +5856,10 @@ const GUIDE = [
     '📚 Si Esteban publica bloques nuevos, lo verás en la tarjeta de Entrenamientos y en Entreno con la etiqueta «Nuevo».'
   ]],
   ['🏋️ Entreno: bloques y días', [
-    'Entreno muestra todos tus entrenos en <b>tarjetas</b>: arriba «Hoy te toca», luego <b>RETOS</b>, los botones <b>FREE</b> (ejercicios sueltos del día) y <b>CARDIO</b>, <b>tus bloques</b> y los <b>bloques preparados</b> (todos disponibles, sin tener que añadirlos). Toca una tarjeta para entrar; «‹ Bloques» o el botón Entreno de abajo te devuelven. Los bloques que has entrenado en las últimas 2 semanas suben a «<b>En uso</b>», con lo que te toca y cómo vas esta semana.',
+    'Entreno muestra todos tus entrenos en <b>tarjetas</b>: arriba «Hoy te toca» (elige entre tus bloques en uso el que va más atrasado esta semana y con los músculos recuperados, y te dice por qué), luego <b>RETOS</b>, los botones <b>FREE</b> (ejercicios sueltos del día) y <b>CARDIO</b>, <b>tus bloques</b> y los <b>bloques preparados</b> (todos disponibles, sin tener que añadirlos). Toca una tarjeta para entrar; «‹ Bloques» o el botón Entreno de abajo te devuelven. Los bloques que has entrenado en las últimas 2 semanas suben a «<b>En uso</b>», con lo que te toca y cómo vas esta semana.',
     'El <b>⋯</b> de cada tarjeta permite <b>ocultar</b> un bloque que no uses (no se borra nada: «Ver bloques ocultos», al final, lo recupera) y <b>editarlo</b>. Al abrir o editar un bloque preparado se hace tu copia, con tu progreso: tus cambios se quedan en ella y el original no cambia. Si la borras, ese bloque deja de salirte (si te arrepientes, está en «Ver bloques ocultos»).',
     'Dentro de un bloque eliges el <b>día</b>: el punto ● marca el que te toca según tu rotación; ✓ el que ya hiciste hoy.',
-    '🎴 La <b>tarjeta del bloque activo</b> te dice qué día te toca, cuántas sesiones llevas (y en qué semana del bloque vas) y cuántas has hecho en los últimos 7 días (no de lunes a domingo). El objetivo son sus días, mínimo 3; si es un complemento (por ejemplo, brazos una vez por semana), cámbialo en su ✎ → «Veces por semana». Cada tipo de bloque tiene su foto y su color.',
+    '🎴 La <b>tarjeta del bloque activo</b> te dice qué día te toca, cuántas sesiones llevas (y en qué semana del bloque vas) y cuántas has hecho en los últimos 7 días (no de lunes a domingo). El objetivo son las veces por semana que indica el bloque (Brazos 1, PPT 3, Glúteo 2…) o, en los tuyos, sus días; puedes cambiarlo en su ⋯ → «Nombre y veces por semana». Cada tipo de bloque tiene su foto y su color.',
     'Cada bloque lleva su propia rotación: {{ROTACION}}',
     'Para montar el tuyo: «＋ Crear bloque» (en Tus bloques) → nombre y cuántos días tiene → se abre en el Día 1. Pulsa «＋ Añadir ejercicio», cambia de día con las pestañas y repite; «＋ Día» añade otro día. También desde Ajustes → Bloques («＋ Día» y «＋ Ejercicios»). Para eliminar un bloque tuyo: ⋯ de su tarjeta → «🗑 Eliminar este bloque», o la 🗑 en Ajustes → Bloques.',
     'Los bloques preparados (Full Body, PPT, Híbrido 5, Brazos, Tren inferior, Glúteo, Calistenia en casa, Kettlebell…) traen su descripción y «Cómo usarlo»: la ves en el ⋯ de su tarjeta. Los que acaban de salir llevan la etiqueta <b>NUEVO</b> hasta que los abres.',
@@ -5874,7 +5907,7 @@ const GUIDE = [
     '🥩 <b>Proteína por comida</b>: cada toma principal (desayuno, comida, puente, cena) debería llegar al mínimo (25 g por defecto). «Otro» (picoteos) no cuenta.',
     'Anillo exterior = kcal (ámbar); dentro, proteína (cian), carbohidratos (verde) y grasas (rosa). Si te pasas, el exceso da una segunda vuelta y sale «+…».',
     '«Te quedan» dice las kcal y la proteína que te faltan. Los días con cardio o gym verás también lo quemado y el neto (la app estima el gym con la duración, las series, los kilos y tu peso).',
-    '📊 <b>Últimos 7 días</b>: barra de kcal (la raya es tu objetivo; roja si te pasaste) y punto azul si llegaste a la proteína. Toca un día para verlo.',
+    '📊 <b>Últimos 7 días</b>: la altura de cada barra son las kcal (la raya es tu objetivo) y su relleno, tus macros (proteína, grasas, carbohidratos). Apagada = te quedas corto; viva = en tu objetivo; tope rojo = te pasas. El punto azul, si llegaste a la proteína. Toca un día para verlo.',
     'Toca una comida para <b>editarla</b>, guardarla en ☆ favoritas, duplicarla (o «comerla hoy» si es de otro día) o borrarla. Al añadir, «Tus habituales» muestra primero tus favoritas y luego lo que más repites; el buscador (arriba) encuentra cualquiera del historial: sin tildes, por varias palabras («pollo arroz») y con lo buscado resaltado. Toca un resultado para apuntarlo.',
     '📅 Toca la <b>fecha</b> para abrir el calendario del mes: punto verde/ámbar/rojo según la dieta, 🏋️ pesas, 🏆 retos y 🔥 cardio. Desliza el dedo a los lados para cambiar de día.'
   ]],
@@ -6044,13 +6077,14 @@ function homeSub(v) {
   const T = todayISO();
   if (v === 'train') {
     if (activeWip()) return ['Sesión en curso'];
-    const pr = mainStrengthProg(); if (!pr) return ['Retos, cardio y tus bloques'];
-    if (sortedSessions().some(x => x.date === T && programOfDay(x.dayId)?.id === pr.id)) return ['Hoy ya entrenaste ✓', '<span class="text-brand">Toca recuperar</span>'];
-    const d = pr.days.find(x => x.id === nextDayId(pr)); if (!d) return ['Retos, cardio y tus bloques'];
+    const tp = todayPick(); if (!tp) return ['Retos, cardio y tus bloques'];
+    if (tp.done) return ['Hoy ya entrenaste ✓', '<span class="text-brand">Toca recuperar</span>'];
+    const d = tp.day; if (!d) return ['Retos, cardio y tus bloques'];
+    if (tp.weekDone) return ['Semana cumplida ✓', '<span class="text-brand">Hoy puedes descansar</span>'];
     const prim = new Set(); for (const e of d.exercises) for (const [m, w] of Object.entries(musclesOf(variantOf(e).variant.name))) if (w === 1) prim.add(m);
     const f = muscleFatigue(), loaded = [...prim].filter(m => (f[m]?.frac || 0) >= 0.5).map(m => (MUSCLE_NAMES[m] || m).toLowerCase());
     const tip = !prim.size ? '' : `<span class="text-brand">${loaded.length ? `Aún cargado${loaded.length > 1 ? 's' : ''}: ${esc(loaded.join(', '))}` : 'Músculos recuperados ✓'}</span>`;
-    return [`Hoy toca: ${esc(d.label)}`, tip];
+    return [`Hoy toca: ${esc(d.label)}${libKey(d.label) === libKey(tp.pr.name) ? '' : ` · ${esc(tp.pr.name)}`}`, tip];
   }
   if (v === 'diet') {
     const st = state.settings, t = totalsOf(T), budget = Math.round(st.targetKcal + (st.eatBackCardio ? exerciseBurnOf(T) : 0));
