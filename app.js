@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.74.1';
+const APP_VERSION = '4.75.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -373,7 +373,9 @@ const CARDIO_EXTRA = {
   football: { label: 'Fútbol', icon: '⚽', met: { baja: 5, 'media-baja': 6, media: 7, 'media-alta': 8, alta: 10 } },
   rope: { label: 'Comba', icon: '🪢', met: { baja: 7, 'media-baja': 8.8, media: 10, 'media-alta': 11.8, alta: 12.3 } },
   dance: { label: 'Baile', icon: '💃', met: { baja: 3, 'media-baja': 4, media: 5, 'media-alta': 6, alta: 7.3 } },
-  stairs: { label: 'Escaleras', icon: '🪜', met: { baja: 4, 'media-baja': 5, media: 6.8, 'media-alta': 8.8, alta: 9 } }
+  stairs: { label: 'Escaleras', icon: '🪜', met: { baja: 4, 'media-baja': 5, media: 6.8, 'media-alta': 8.8, alta: 9 } },
+  // circuitos, HIIT, CrossFit, clases funcionales (Compendium: circuito moderado 4,3 · vigoroso 8 · HIIT/CrossFit ~8–10)
+  functional: { label: 'Funcional', icon: '🤸', met: { baja: 3.8, 'media-baja': 4.3, media: 6, 'media-alta': 8, alta: 9.5 }, hint: { baja: 'Movilidad o circuito muy suave', 'media-baja': 'Circuito suave con pausas', media: 'Circuito continuo, respiras fuerte', 'media-alta': 'HIIT o CrossFit, cuesta hablar', alta: 'HIIT muy intenso, al límite' } }
 };
 const CARDIO_GENERIC_MET = { baja: 3, 'media-baja': 4, media: 5.5, 'media-alta': 7.5, alta: 9.5 };
 function cardioType(k) {
@@ -496,6 +498,7 @@ function normalizePlan(plan) {
   return { active, programs };
 }
 function normalize(s) {
+  if (s && s.settings) s.settings.eatBackCardio = false; // 4.75.0: ya no existe la opción de sumar el ejercicio a lo que puedes comer
   const d = defaultState();
   const out = { ...d, ...s };
   out.settings = { ...d.settings, ...(s.settings || {}) };
@@ -2812,7 +2815,7 @@ cdShotFile.addEventListener('change', async e => {
   try {
     const img = await compressImage(f, 1400);
     const prompt = `Es una captura de una app deportiva (Strava, Garmin Connect, Salud de Apple, Polar, Huawei…) o una foto de la pantalla de un reloj deportivo. Extrae SOLO los datos que aparezcan; si un dato no aparece, pon null (no lo inventes ni lo calcules).
-- actividad: una de estas claves: ${list}. Si no encaja ninguna, null.
+- actividad: una de estas claves: ${list}. HIIT, CrossFit, circuitos, «entrenamiento funcional» o clases colectivas = functional. Si no encaja ninguna, null.
 - fecha: AAAA-MM-DD si se ve una fecha concreta; si pone «Hoy», «hoy»; si pone «Ayer», «ayer»; si no, null.
 - minutos: el tiempo EN MOVIMIENTO (o tiempo de actividad) en minutos, con decimales si hay segundos. Si solo hay tiempo total, usa ese.
 - distancia_km (para bici, carrera, caminata…) o distancia_m (para natación, en metros).
@@ -4077,7 +4080,6 @@ function renderSettings() {
     </div>
     <label class="lbl">Proteína mínima por comida (g)<input class="field mt-1" id="tPM" inputmode="numeric" value="${st.minProtMeal || 25}" /></label>
     <p class="text-[11px] ${Math.abs(sumK - st.targetKcal) > st.targetKcal * 0.05 ? 'text-amber-300' : 'text-mute'}">Tus macros suman ${sumK} kcal (objetivo ${st.targetKcal}).</p>
-    <label class="habit"><input type="checkbox" id="tEat" ${st.eatBackCardio ? 'checked' : ''} /><span class="text-xs">Sumar las calorías del ejercicio (cardio y gym) a lo que puedo comer <span class="text-mute">(desactivado = déficit más fiable)</span></span></label>
     <button class="btn-primary w-full" data-act="saveGoals" type="button">Guardar objetivos</button>
 `)}
 
@@ -5610,6 +5612,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.75.0', ['🤸 Nueva actividad de cardio: «Funcional» (circuitos, HIIT, CrossFit, clases). Actívala en el ✎ de Registrar cardio. También la reconoce al leer una captura de Strava o del reloj.', '🍽️ Cambio en Dieta: «Te quedan» es ahora siempre tu objetivo de kcal menos lo que has comido. El ejercicio ya no lo amplía (se quita la opción de Ajustes; si la tenías activada, verás menos kcal disponibles).', 'Ejemplo: objetivo 2500, has comido 208 y nadado 285 → antes «Te quedan 2577»; ahora «Te quedan 2292». Lo quemado sigue apareciendo debajo («Cardio −285 · Neto»).', 'Por qué: los cálculos de ejercicio y los relojes suelen pasarse, y comérselas enteras frena el progreso. Si entrenas mucho a diario, sube tu objetivo de kcal en Ajustes → Objetivos.']],
   ['4.74.1', ['Cardio desde el reloj: botones «📸 Cámara» y «🖼️ Captura», como en Dieta.'], 'quiet'],
   ['4.74.0', ['⌚ Cardio desde una captura: en Registrar cardio, «📸 Cámara» o «🖼️ Captura». La IA lee la actividad, el tiempo, la distancia, la FC y las kcal (Strava, Garmin, Salud…), rellena el formulario y tú revisas antes de registrar.']],
   ['4.73.2', ['🏷️ Foto de la tabla nutricional: ahora ves «Leyendo la tabla…» hasta que termina, y si no se puede leer o es un complemento sin calorías (vitaminas…), te lo dice claro con opciones.'], 'quiet'],
@@ -5832,7 +5835,7 @@ const GUIDE = [
     '✎ en «Registrar cardio» → <b>Mis actividades</b>: quita las que no haces, añade otras (correr, natación, pádel, remo…) o crea la tuya.',
     '⌚ <b>Desde tu reloj o app deportiva</b>: «📸 Cámara» para fotografiar la pantalla del reloj, o «🖼️ Captura» para elegir una captura del resumen de la actividad en Strava, Garmin Connect, Salud… (mejor que una foto a la pantalla del reloj). La IA rellena actividad, fecha, minutos en movimiento, distancia, FC y kcal; tú revisas y pulsas «Registrar». La imagen no se guarda.',
     '⌚ <b>Datos del reloj</b> (opcional): distancia, desnivel, FC media y kcal del reloj. La app calcula la velocidad media (o el ritmo por 100 m en natación) y, con la FC, la intensidad. Puedes usar las kcal del reloj con «Usar».',
-    'El cardio aparece en Dieta, pero <b>no amplía</b> lo que te queda por comer, salvo que lo actives en Ajustes → Objetivos.'
+    'El cardio aparece en Dieta (quemado y balance neto), pero <b>no amplía</b> lo que te queda por comer: tu objetivo es siempre el de Ajustes. Los cálculos de ejercicio (y los relojes) tienden a pasarse, y así el déficit es más fiable.'
   ]],
   ['🥗 Dieta y raciones', [
     'En «Hoy has comido» cada comida (Desayuno, Comida, Puente, Cena) sale <b>plegada</b> con sus kcal, proteína, carbohidratos y grasas; despliégala con la flechita ▶ o tocando su nombre. Su <b>＋</b> abre el panel para añadir. Si esa comida está vacía y ayer la registraste, «↻ Repetir el de ayer» la copia con un toque.',
@@ -6599,7 +6602,6 @@ const actions = {
     const v = id => parseInt($(id).value, 10);
     const g = { targetKcal: v('#tK'), targetProt: v('#tP'), targetCarbs: v('#tC'), targetFat: v('#tF') };
     if (Object.values(g).some(x => !(x > 0))) return toast('Revisa los objetivos', 'warn');
-    g.eatBackCardio = $('#tEat').checked;
     const pm = parseInt($('#tPM').value, 10); if (pm > 0 && pm <= 100) g.minProtMeal = pm;
     Object.assign(state.settings, g); persist(); render(); toast('Objetivos guardados ✓');
   },
