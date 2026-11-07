@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.73.1';
+const APP_VERSION = '4.73.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3532,17 +3532,38 @@ const labelFile = Object.assign(document.createElement('input'), { type: 'file',
 labelFile.setAttribute('capture', 'environment'); document.body.appendChild(labelFile);
 labelFile.addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-  const code = ui.labelCode; closeModal(); toast('Leyendo la etiqueta…');
+  const code = ui.labelCode;
+  // ventana fija mientras lee: el aviso pequeño desaparecía antes de que la IA terminara
+  openModal(`<div class="text-center py-6"><span class="spinner" style="width:34px;height:34px;border-width:3px;border-color:rgba(34,211,238,.25);border-top-color:#22d3ee"></span><h3 class="modal-title mt-3">Leyendo la tabla…</h3><p class="text-sm text-mute">Puede tardar unos segundos.</p></div>`, {});
+  const retry = (title, text) => openModal(`<div class="text-center text-4xl">🏷️</div><h3 class="modal-title text-center">${title}</h3><p class="text-sm text-mute text-center">${text}</p>
+    <button class="btn-primary w-full" data-mact="again" type="button">📷 Repetir la foto</button>
+    <button class="btn-ghost w-full" data-mact="hand" type="button">✍️ Escribirlo a mano</button>
+    <button class="text-xs text-mute underline w-full" data-close type="button">Cancelar</button>`, {
+    again: () => { ui.labelCode = code; labelFile.click(); },
+    hand: () => { closeModal(); if (!ui.aiResult) ui.aiResult = { desc: ui.mealDesc.trim() || ui.mealType, items: [], kcal: 0, prot: 0, carbs: 0, fat: 0, note: '' }; addIngManual(); }
+  });
+  let r;
   try {
     const img = await compressImage(f, 1400);
     const prompt = `Lee la tabla de información nutricional de este envase (España). Devuelve los valores POR 100 g (o 100 ml) tal como pone la tabla; si solo da valores por ración, conviértelos a 100 g. Si se ve el nombre del producto, dalo corto; si no, "Producto". Si aparece el tamaño de una ración en gramos, dalo; si no, null.
-Responde SOLO con JSON válido: {"name": "…", "kcal": número, "protein": número, "carbs": número, "fat": número, "serving_g": número o null}`;
-    const r = parseJSONLoose(await callGemini([{ text: prompt }, { inlineData: { mimeType: 'image/jpeg', data: img.split(',')[1] } }], { timeout: 30000 }));
-    if (!(num(r.kcal) > 0 || num(r.protein) > 0)) throw new Error('no he podido leer la tabla; prueba con una foto más cerca y sin reflejos');
-    const it = barItem(r.name, { kcal: r.kcal, prot: r.protein, carbs: r.carbs, fat: r.fat }, r.serving_g);
-    if (code) barSave(code, it);
-    barUse(it);
-  } catch (err) { toast('Etiqueta: ' + err.message, 'error'); }
+Si la tabla NO da energía ni macronutrientes (por ejemplo un complemento de vitaminas, minerales o creatina), pon "sin_macros": true y los números a 0. Si no se ve ninguna tabla legible, pon "legible": false.
+Responde SOLO con JSON válido: {"name": "…", "kcal": número, "protein": número, "carbs": número, "fat": número, "serving_g": número o null, "sin_macros": true|false, "legible": true|false}`;
+    r = parseJSONLoose(await callGemini([{ text: prompt }, { inlineData: { mimeType: 'image/jpeg', data: img.split(',')[1] } }], { timeout: 30000 }));
+  } catch (err) { return retry('No he podido leer la foto', esc(err.message || 'Error de conexión') + '. Prueba otra vez, más cerca y sin reflejos.'); }
+  const has = num(r.kcal) > 0 || num(r.protein) > 0 || num(r.carbs) > 0 || num(r.fat) > 0;
+  if (r.legible === false && !has) return retry('No veo la tabla', 'Haz la foto de cerca a la «Información nutricional», con buena luz y sin reflejos.');
+  if (!has || r.sin_macros) {
+    const name = String(r.name || 'Complemento').slice(0, 40);
+    return openModal(`<div class="text-center text-4xl">💊</div><h3 class="modal-title text-center">Sin calorías ni macros</h3>
+      <p class="text-sm text-mute text-center"><b class="text-white">${esc(name)}</b> no tiene energía, proteína, hidratos ni grasas en su tabla (parece un complemento: vitaminas, minerales…). No cuenta para tus objetivos, así que no hace falta apuntarlo.</p>
+      <button class="btn-primary w-full" data-close type="button">Entendido</button>
+      <button class="btn-ghost w-full" data-mact="zero" type="button">Anotarlo igualmente (0 kcal)</button>`, {
+      zero: () => { const it = barItem(name, { kcal: 0, prot: 0, carbs: 0, fat: 0 }, null); if (code) barSave(code, it); closeModal(); barUse(it); }
+    });
+  }
+  const it = barItem(r.name, { kcal: r.kcal, prot: r.protein, carbs: r.carbs, fat: r.fat }, r.serving_g);
+  if (code) barSave(code, it);
+  closeModal(); barUse(it);
 });
 /* Ventana del escáner */
 let scanStream = null;
@@ -5542,6 +5563,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.73.2', ['🏷️ Foto de la tabla nutricional: ahora ves «Leyendo la tabla…» hasta que termina, y si no se puede leer o es un complemento sin calorías (vitaminas…), te lo dice claro con opciones.'], 'quiet'],
   ['4.73.1', ['🔍 Buscador de comidas más cómodo: la barra queda arriba y los resultados justo debajo, a la vista, con la descripción completa, lo buscado resaltado y sus macros. Busca sin tildes y por varias palabras («pollo arroz»).']],
   ['4.73.0', ['⚖️ Peso más fiable y sin sustos: la gráfica muestra tu tendencia real y la interpreta según tu objetivo, tu dieta y tu fuerza. Un pico de un día se explica (agua, no grasa). El Coach IA usa el mismo análisis y ya no da conclusiones que tus datos no permiten.']],
   ['4.72.1', ['Ajustes → Bloques: cada bloque aparece plegado; tócalo para ver sus días y editarlo.'], 'quiet'],
