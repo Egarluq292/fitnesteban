@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.73.0';
+const APP_VERSION = '4.73.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2871,11 +2871,32 @@ function toggleFavMeal(key) {
   state.settings.favMeals = on ? [...l, key] : l.filter(k => k !== key);
   persist(); render(); toast(on ? '★ Guardada en favoritas' : 'Quitada de favoritas');
 }
+/* 🔍 Buscador de comidas: sin tildes ni mayúsculas, todas las palabras, y resalta lo encontrado */
+const searchNorm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+const searchWords = q => searchNorm(q).replace(/[^a-z0-9ñ ]/g, ' ').split(' ').filter(w => w.length >= 1).slice(0, 5);
+function hlMatch(text, words) {
+  const raw = String(text || ''); if (!words.length) return esc(raw);
+  const n = searchNorm(raw); // misma longitud que raw salvo letras compuestas: se resalta por posiciones
+  if (n.length !== raw.length) return esc(raw);
+  const mark = new Array(raw.length).fill(false);
+  for (const w of words) { let i = n.indexOf(w); while (i >= 0) { for (let k = i; k < i + w.length; k++) mark[k] = true; i = n.indexOf(w, i + w.length); } }
+  let out = '', on = false;
+  for (let k = 0; k < raw.length; k++) { if (mark[k] !== on) { out += mark[k] ? '<mark class="ms-hl">' : '</mark>'; on = mark[k]; } out += esc(raw[k]); }
+  return out + (on ? '</mark>' : '');
+}
 function mealPicks() {
   const groups = mealGroups();
-  const q = normName(ui.mealSearch || '');
-  if (q) {
-    return { mode: 'search', list: groups.filter(e => e.key.includes(q)).sort((a, b) => b.count - a.count || (a.lastDate < b.lastDate ? 1 : -1)).slice(0, 20) };
+  const words = searchWords(ui.mealSearch);
+  if (words.length) {
+    const full = e => searchNorm(e.last.desc || '');
+    const hits = groups.map(e => {
+      const f = full(e); if (!words.every(w => f.includes(w))) return null;
+      // primero: empieza por lo buscado; luego palabra entera; luego más veces comida; luego la más reciente
+      const score = (f.startsWith(words[0]) ? 4 : 0) + (words.every(w => new RegExp(`(^|[^a-z0-9ñ])${w}`).test(f)) ? 2 : 0) + (isFavMeal(e.key) ? 1 : 0);
+      return { e, score };
+    }).filter(Boolean);
+    hits.sort((a, b) => b.score - a.score || b.e.count - a.e.count || (a.e.lastDate < b.e.lastDate ? 1 : -1));
+    return { mode: 'search', list: hits.slice(0, 15).map(h => h.e), total: hits.length };
   }
   const t = ui.mealType;
   const byFreq = (a, b, ka, kb) => kb - ka || (a.lastDate < b.lastDate ? 1 : a.lastDate > b.lastDate ? -1 : 0);
@@ -2884,9 +2905,16 @@ function mealPicks() {
   return { mode: 'top', list: [...favs, ...rest.slice(0, 10)], nFav: favs.length };
 }
 function renderPickList() {
-  const { mode, list } = mealPicks();
+  const { mode, list, total } = mealPicks();
   ui._picks = list;
-  if (!list.length) return `<p class="text-xs text-mute">${mode === 'search' ? 'Nada encontrado en tu historial.' : `Aún no has registrado ninguna comida como «${esc(ui.mealType)}». Usa el buscador para encontrar otras.`}</p>`;
+  if (mode === 'search' && list.length) {
+    const words = searchWords(ui.mealSearch);
+    return `<div class="w-full space-y-1.5">${list.map((e, i) => `<button class="ms-row" data-act="repeatMeal" data-i="${i}" type="button">
+      <span class="block text-[14px] leading-snug text-white">${isFavMeal(e.key) ? '<span class="text-amber-300">★ </span>' : ''}${hlMatch(e.last.desc || e.last.type, words)}</span>
+      <span class="block text-[11px] mt-0.5">${macroLine(e.last)}<span class="text-mute"> · ${esc(e.last.type)}${e.count > 1 ? ` · ×${e.count}` : ''}</span></span>
+      <span class="ms-add">＋</span></button>`).join('')}${total > list.length ? `<p class="text-[11px] text-mute text-center pt-1">Y ${total - list.length} más: escribe otra palabra para afinar.</p>` : ''}</div>`;
+  }
+  if (!list.length) return `<p class="text-xs text-mute">${mode === 'search' ? `Nada con «${esc(ui.mealSearch.trim())}» en tu historial.` : `Aún no has registrado ninguna comida como «${esc(ui.mealType)}». Usa el buscador para encontrar otras.`}</p>`;
   return list.map((e, i) => isFavMeal(e.key) ? `<span class="chip chip-sm !p-0 overflow-hidden" style="border-color:rgba(252,211,77,.45)"><button class="pl-2.5 pr-1.5 py-1.5 text-amber-300 text-sm leading-none" data-act="favMeal" data-key="${esc(e.key)}" type="button" aria-label="Quitar de favoritas">★</button><button class="pr-3 py-1.5 text-left" data-act="repeatMeal" data-i="${i}" type="button">${esc((e.last.desc || e.last.type).slice(0, 34))} <span class="text-mute">· <span class="${MAC.kcal.text}">${Math.round(e.last.kcal)}</span>${e.count > 1 ? ` · ×${e.count}` : ''}</span></button></span>` : `<button class="chip chip-sm text-left" data-act="repeatMeal" data-i="${i}" type="button">${esc((e.last.desc || e.last.type).slice(0, 34))} <span class="text-mute">· <span class="${MAC.kcal.text}">${Math.round(e.last.kcal)}</span>${e.count > 1 ? ` · ×${e.count}` : ''}</span></button>`).join('');
 }
 /* ---------- Colores fijos de cada macro (mismos en toda la app) ---------- */
@@ -3261,8 +3289,8 @@ function renderDiet() {
     ${ai ? renderMealResult(ai) : ''}
     ${hasHistory && !ai && !ui.editing ? `<div class="pt-3 border-t border-line">
       <div class="text-[11px] font-bold uppercase tracking-wider text-mute">⭐ Tus habituales en ${esc(ui.mealType.toLowerCase())}</div>
+      <input class="field mt-2 py-2.5 text-[15px]" id="mealSearch" type="search" enterkeyhint="search" autocomplete="off" placeholder="🔍 Buscar en todo tu historial…" value="${esc(ui.mealSearch || '')}" />
       <div class="flex flex-wrap gap-1.5 mt-2" id="mealPicks">${renderPickList()}</div>
-      <input class="field mt-2.5 py-2 text-xs" id="mealSearch" type="search" autocomplete="off" placeholder="🔍 Buscar en todo tu historial…" value="${esc(ui.mealSearch || '')}" />
     </div>` : ''}
   </section>` : ''}
 
@@ -5514,6 +5542,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.73.1', ['🔍 Buscador de comidas más cómodo: la barra queda arriba y los resultados justo debajo, a la vista, con la descripción completa, lo buscado resaltado y sus macros. Busca sin tildes y por varias palabras («pollo arroz»).']],
   ['4.73.0', ['⚖️ Peso más fiable y sin sustos: la gráfica muestra tu tendencia real y la interpreta según tu objetivo, tu dieta y tu fuerza. Un pico de un día se explica (agua, no grasa). El Coach IA usa el mismo análisis y ya no da conclusiones que tus datos no permiten.']],
   ['4.72.1', ['Ajustes → Bloques: cada bloque aparece plegado; tócalo para ver sus días y editarlo.'], 'quiet'],
   ['4.72.0', ['🎯 Cada bloque puede tener sus «Veces por semana» (en su ✎). Útil para bloques de complemento, como uno de brazos de un solo día: pon 1 y te marcará «1 de 1».'], 'quiet'],
@@ -5742,7 +5771,7 @@ const GUIDE = [
     'Anillo exterior = kcal (ámbar); dentro, proteína (cian), carbohidratos (verde) y grasas (rosa). Si te pasas, el exceso da una segunda vuelta y sale «+…».',
     '«Te quedan» dice las kcal y la proteína que te faltan. Los días con cardio o gym verás también lo quemado y el neto (la app estima el gym con la duración, las series, los kilos y tu peso).',
     '📊 <b>Últimos 7 días</b>: barra de kcal (la raya es tu objetivo; roja si te pasaste) y punto azul si llegaste a la proteína. Toca un día para verlo.',
-    'Toca una comida para <b>editarla</b>, guardarla en ☆ favoritas, duplicarla (o «comerla hoy» si es de otro día) o borrarla. Al añadir, «Tus habituales» muestra primero tus favoritas y luego lo que más repites; el buscador encuentra cualquiera del historial.',
+    'Toca una comida para <b>editarla</b>, guardarla en ☆ favoritas, duplicarla (o «comerla hoy» si es de otro día) o borrarla. Al añadir, «Tus habituales» muestra primero tus favoritas y luego lo que más repites; el buscador (arriba) encuentra cualquiera del historial: sin tildes, por varias palabras («pollo arroz») y con lo buscado resaltado. Toca un resultado para apuntarlo.',
     '📅 Toca la <b>fecha</b> para abrir el calendario del mes: punto verde/ámbar/rojo según la dieta, 🏋️ pesas, 🏆 retos y 🔥 cardio. Desliza el dedo a los lados para cambiar de día.'
   ]],
   ['✅ Hábitos', [
@@ -6740,6 +6769,12 @@ app.addEventListener('change', e => {
   else if (t.id === 'cdDate') { keepCardioInputs(); ui.cardio.est = null; render(); }
 });
 app.addEventListener('toggle', e => { if (e.target.id === 'aiBox') ui.aiOpen = e.target.open; if (e.target.id === 'blocksBox') ui.blocksOpen = e.target.open; const k = e.target.dataset?.openKey; if (k) openKeys[k] = e.target.open; }, true);
+app.addEventListener('focusin', e => {
+  if (e.target.id === 'mealSearch') {
+    const top = () => { const r = e.target.getBoundingClientRect(), hd = $('header')?.getBoundingClientRect().bottom || 70; if (r.top < hd + 4 || r.top > hd + 24) window.scrollBy({ top: r.top - hd - 12, behavior: 'smooth' }); };
+    setTimeout(top, 60); setTimeout(top, 400); // otra vez cuando el teclado ya ha salido
+  }
+});
 app.addEventListener('focusin', e => { if (e.target.classList?.contains('field-set')) setTimeout(() => e.target.select?.(), 0); });
 
 async function onMealImage(e) {
