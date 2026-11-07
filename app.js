@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.75.0';
+const APP_VERSION = '4.75.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -362,6 +362,8 @@ const CARDIO_TYPES = {
 /* Actividades extra que cada usuario puede activar (MET orientativos, Compendium) */
 const CARDIO_HINT = { baja: 'Suave, hablas sin esfuerzo', 'media-baja': 'Algo de esfuerzo, conversación fácil', media: 'Respiras fuerte, frases cortas', 'media-alta': 'Cuesta hablar, sudas bastante', alta: 'Casi sin poder hablar / a tope' };
 const CARDIO_EXTRA = {
+  // circuitos, HIIT, CrossFit, clases funcionales (Compendium: circuito moderado 4,3 · vigoroso 8 · HIIT/CrossFit ~8–10)
+  functional: { label: 'Funcional', desc: 'circuitos, HIIT, CrossFit y clases', icon: '🤸', met: { baja: 3.8, 'media-baja': 4.3, media: 6, 'media-alta': 8, alta: 9.5 }, hint: { baja: 'Movilidad o circuito muy suave', 'media-baja': 'Circuito suave con pausas', media: 'Circuito continuo, respiras fuerte', 'media-alta': 'HIIT o CrossFit, cuesta hablar', alta: 'HIIT muy intenso, al límite' } },
   run: { label: 'Correr', icon: '🏃', met: { baja: 6, 'media-baja': 8, media: 9.8, 'media-alta': 11, alta: 12.8 }, hint: { baja: 'Trote muy suave (~7 km/h)', 'media-baja': 'Trote cómodo (~8 km/h)', media: 'Ritmo medio (~9,5 km/h)', 'media-alta': 'Ritmo vivo (~11 km/h)', alta: 'Muy rápido o series' } },
   elliptical: { label: 'Elíptica', icon: '🏋️', met: { baja: 4, 'media-baja': 5, media: 6, 'media-alta': 7.5, alta: 9 } },
   swim: { label: 'Natación', icon: '🏊', met: { baja: 4.8, 'media-baja': 5.8, media: 7, 'media-alta': 8.3, alta: 10 } },
@@ -373,9 +375,7 @@ const CARDIO_EXTRA = {
   football: { label: 'Fútbol', icon: '⚽', met: { baja: 5, 'media-baja': 6, media: 7, 'media-alta': 8, alta: 10 } },
   rope: { label: 'Comba', icon: '🪢', met: { baja: 7, 'media-baja': 8.8, media: 10, 'media-alta': 11.8, alta: 12.3 } },
   dance: { label: 'Baile', icon: '💃', met: { baja: 3, 'media-baja': 4, media: 5, 'media-alta': 6, alta: 7.3 } },
-  stairs: { label: 'Escaleras', icon: '🪜', met: { baja: 4, 'media-baja': 5, media: 6.8, 'media-alta': 8.8, alta: 9 } },
-  // circuitos, HIIT, CrossFit, clases funcionales (Compendium: circuito moderado 4,3 · vigoroso 8 · HIIT/CrossFit ~8–10)
-  functional: { label: 'Funcional', icon: '🤸', met: { baja: 3.8, 'media-baja': 4.3, media: 6, 'media-alta': 8, alta: 9.5 }, hint: { baja: 'Movilidad o circuito muy suave', 'media-baja': 'Circuito suave con pausas', media: 'Circuito continuo, respiras fuerte', 'media-alta': 'HIIT o CrossFit, cuesta hablar', alta: 'HIIT muy intenso, al límite' } }
+  stairs: { label: 'Escaleras', icon: '🪜', met: { baja: 4, 'media-baja': 5, media: 6.8, 'media-alta': 8.8, alta: 9 } }
 };
 const CARDIO_GENERIC_MET = { baja: 3, 'media-baja': 4, media: 5.5, 'media-alta': 7.5, alta: 9.5 };
 function cardioType(k) {
@@ -384,10 +384,11 @@ function cardioType(k) {
   const c = (state.settings.cardioCustom || []).find(x => x.id === k);
   return { key: k, label: c ? c.label : 'Cardio', icon: c ? c.icon || '🔥' : '🔥', met: CARDIO_GENERIC_MET, hint: CARDIO_HINT, custom: true };
 }
-const cardioOnKeys = () => state.settings.cardioOn || ['bike', 'walk'];
+const CARDIO_ORDER = () => ['functional', ...Object.keys(CARDIO_TYPES), ...Object.keys(CARDIO_EXTRA).filter(k => k !== 'functional')];
+const cardioOnKeys = () => state.settings.cardioOn || ['functional', 'bike', 'walk'];
 function cardioVisible() {
   const on = cardioOnKeys();
-  return [...[...Object.keys(CARDIO_TYPES), ...Object.keys(CARDIO_EXTRA)].filter(k => on.includes(k)), ...(state.settings.cardioCustom || []).filter(c => !c.off).map(c => c.id)].map(cardioType);
+  return [...CARDIO_ORDER().filter(k => on.includes(k)), ...(state.settings.cardioCustom || []).filter(c => !c.off).map(c => c.id)].map(cardioType);
 }
 
 /* Datos del reloj por actividad: qué campos tiene sentido apuntar */
@@ -498,6 +499,7 @@ function normalizePlan(plan) {
   return { active, programs };
 }
 function normalize(s) {
+  if (s && s.settings && Array.isArray(s.settings.cardioOn) && !s.settings.funcOn) { if (!s.settings.cardioOn.includes('functional')) s.settings.cardioOn = ['functional', ...s.settings.cardioOn]; s.settings.funcOn = true; } // 4.75.1: Funcional activada para todos (una vez; luego se puede quitar)
   if (s && s.settings) s.settings.eatBackCardio = false; // 4.75.0: ya no existe la opción de sumar el ejercicio a lo que puedes comer
   const d = defaultState();
   const out = { ...d, ...s };
@@ -2685,6 +2687,7 @@ function renderCardio() {
   const vis = cardioVisible();
   if (!vis.some(t => t.key === c.type) && vis.length) c.type = vis[0].key;
   const T = cardioType(c.type);
+  const nT = vis.length + 1, tileW = nT === 2 || nT === 4 ? 'calc(50% - 4px)' : 'calc(33.333% - 5.34px)';
   const w = latestWeight();
   const today = todayISO();
   const dayMin = cardioOf(c.date).reduce((a, x) => a + x.minutes, 0);
@@ -2692,12 +2695,13 @@ function renderCardio() {
   const est = c.est;
   return `
   <section class="card p-4 mt-1 space-y-3">
-    <div class="flex items-center justify-between gap-2"><h2 class="font-extrabold text-lg">🔥 Registrar cardio</h2><button class="iconbtn iconbtn-sm" data-act="cdTypes" type="button" aria-label="Mis actividades">✎</button></div>
+    <h2 class="font-extrabold text-lg">🔥 Registrar cardio</h2>
     ${state.settings.apiKey ? `<div><div class="lbl mb-1.5">⌚ Desde tu reloj o app deportiva</div><div class="grid grid-cols-2 gap-2"><button class="btn-ghost !px-2" data-act="cdShot" data-cam="1" type="button">📸 Cámara</button><button class="btn-ghost !px-2" data-act="cdShot" type="button">🖼️ Captura</button></div></div>
     <p class="text-[11px] text-mute -mt-1.5 leading-snug">Una captura del resumen en Strava, Garmin, Salud… funciona mejor que una foto a la pantalla del reloj. Rellena los datos y tú revisas antes de registrar.</p>` : ''}
     <label class="lbl">Fecha<input class="field mt-1 px-2" type="date" id="cdDate" value="${c.date}" max="${today}" /></label>
     <div class="flex flex-wrap justify-center gap-2">
-      ${vis.map(v => `<button class="cardio-type ${c.type === v.key ? 'cardio-type-on' : ''}" style="width:${vis.length === 2 || vis.length === 4 ? 'calc(50% - 4px)' : 'calc(33.333% - 5.34px)'}" data-act="cdType" data-type="${esc(v.key)}" type="button"><span class="text-2xl">${esc(v.icon)}</span><span class="truncate max-w-full px-1">${esc(v.label)}</span></button>`).join('')}
+      ${vis.map(v => `<button class="cardio-type ${c.type === v.key ? 'cardio-type-on' : ''}" style="width:${tileW}" data-act="cdType" data-type="${esc(v.key)}" type="button"><span class="text-2xl">${esc(v.icon)}</span><span class="truncate max-w-full px-1">${esc(v.label)}</span>${v.desc ? `<span class="text-[10px] font-normal text-mute leading-tight px-1 text-center">(${esc(v.desc)})</span>` : ''}</button>`).join('')}
+      <button class="cardio-type cardio-more" style="width:${tileW}" data-act="cdTypes" type="button"><span class="text-2xl">＋</span><span class="px-1 text-center leading-tight">Otras actividades</span><span class="text-[10px] font-normal text-mute leading-tight px-1 text-center">(añadir, quitar o crear la tuya)</span></button>
     </div>
     <label class="lbl">Minutos<input class="field mt-1 text-lg" id="cdMin" inputmode="numeric" value="${esc(c.minutes)}" placeholder="Ej: 30" /></label>
     <div>
@@ -2750,9 +2754,9 @@ function renderCardio() {
 
 function cardioTypesModal() {
   const st = state.settings;
-  const keys = [...Object.keys(CARDIO_TYPES), ...Object.keys(CARDIO_EXTRA)];
+  const keys = CARDIO_ORDER();
   const row = (t, on, act, extra = '') => `<div class="flex items-center justify-between gap-2 bg-ink rounded-xl border ${on ? 'border-amber-400/60' : 'border-line'} px-3 py-2">
-      <div class="flex items-center gap-2.5 min-w-0"><span class="text-xl">${esc(t.icon)}</span><span class="font-semibold text-[14px] truncate">${esc(t.label)}</span>${extra}</div>
+      <div class="flex items-center gap-2.5 min-w-0"><span class="text-xl">${esc(t.icon)}</span><span class="min-w-0"><span class="block font-semibold text-[14px] leading-tight">${esc(t.label)}</span>${t.desc ? `<span class="block text-[11px] text-mute leading-snug mt-0.5">(${esc(t.desc)})</span>` : ''}</span>${extra}</div>
       ${act}</div>`;
   let more = false;
   const html = () => {
@@ -5612,6 +5616,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.75.1', ['Cardio: «Funcional» activada para todos y la primera, con su descripción (circuitos, HIIT, CrossFit y clases). El ✎ pasa a ser la casilla «＋ Otras actividades».'], 'quiet'],
   ['4.75.0', ['🤸 Nueva actividad de cardio: «Funcional» (circuitos, HIIT, CrossFit, clases). Actívala en el ✎ de Registrar cardio. También la reconoce al leer una captura de Strava o del reloj.', '🍽️ Cambio en Dieta: «Te quedan» es ahora siempre tu objetivo de kcal menos lo que has comido. El ejercicio ya no lo amplía (se quita la opción de Ajustes; si la tenías activada, verás menos kcal disponibles).', 'Ejemplo: objetivo 2500, has comido 208 y nadado 285 → antes «Te quedan 2577»; ahora «Te quedan 2292». Lo quemado sigue apareciendo debajo («Cardio −285 · Neto»).', 'Por qué: los cálculos de ejercicio y los relojes suelen pasarse, y comérselas enteras frena el progreso. Si entrenas mucho a diario, sube tu objetivo de kcal en Ajustes → Objetivos.']],
   ['4.74.1', ['Cardio desde el reloj: botones «📸 Cámara» y «🖼️ Captura», como en Dieta.'], 'quiet'],
   ['4.74.0', ['⌚ Cardio desde una captura: en Registrar cardio, «📸 Cámara» o «🖼️ Captura». La IA lee la actividad, el tiempo, la distancia, la FC y las kcal (Strava, Garmin, Salud…), rellena el formulario y tú revisas antes de registrar.']],
@@ -5832,7 +5837,7 @@ const GUIDE = [
   ]],
   ['🔥 Cardio', [
     'En Entreno → <b>🔥 CARDIO</b>: elige la actividad, los minutos y la intensidad. «Calcular» estima las calorías <b>netas</b> (lo que gastas por encima del reposo) con tu último peso; con clave de IA, más afinado.',
-    '✎ en «Registrar cardio» → <b>Mis actividades</b>: quita las que no haces, añade otras (correr, natación, pádel, remo…) o crea la tuya.',
+    '«<b>＋ Otras actividades</b>» (la última casilla en «Registrar cardio»): quita las que no haces, añade otras (correr, natación, pádel, remo…) o crea la tuya. «Funcional» (circuitos, HIIT, CrossFit y clases) viene activada.',
     '⌚ <b>Desde tu reloj o app deportiva</b>: «📸 Cámara» para fotografiar la pantalla del reloj, o «🖼️ Captura» para elegir una captura del resumen de la actividad en Strava, Garmin Connect, Salud… (mejor que una foto a la pantalla del reloj). La IA rellena actividad, fecha, minutos en movimiento, distancia, FC y kcal; tú revisas y pulsas «Registrar». La imagen no se guarda.',
     '⌚ <b>Datos del reloj</b> (opcional): distancia, desnivel, FC media y kcal del reloj. La app calcula la velocidad media (o el ritmo por 100 m en natación) y, con la FC, la intensidad. Puedes usar las kcal del reloj con «Usar».',
     'El cardio aparece en Dieta (quemado y balance neto), pero <b>no amplía</b> lo que te queda por comer: tu objetivo es siempre el de Ajustes. Los cálculos de ejercicio (y los relojes) tienden a pasarse, y así el déficit es más fiable.'
