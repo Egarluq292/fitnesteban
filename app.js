@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.75.1';
+const APP_VERSION = '4.75.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2687,7 +2687,6 @@ function renderCardio() {
   const vis = cardioVisible();
   if (!vis.some(t => t.key === c.type) && vis.length) c.type = vis[0].key;
   const T = cardioType(c.type);
-  const nT = vis.length + 1, tileW = nT === 2 || nT === 4 ? 'calc(50% - 4px)' : 'calc(33.333% - 5.34px)';
   const w = latestWeight();
   const today = todayISO();
   const dayMin = cardioOf(c.date).reduce((a, x) => a + x.minutes, 0);
@@ -2699,9 +2698,13 @@ function renderCardio() {
     ${state.settings.apiKey ? `<div><div class="lbl mb-1.5">⌚ Desde tu reloj o app deportiva</div><div class="grid grid-cols-2 gap-2"><button class="btn-ghost !px-2" data-act="cdShot" data-cam="1" type="button">📸 Cámara</button><button class="btn-ghost !px-2" data-act="cdShot" type="button">🖼️ Captura</button></div></div>
     <p class="text-[11px] text-mute -mt-1.5 leading-snug">Una captura del resumen en Strava, Garmin, Salud… funciona mejor que una foto a la pantalla del reloj. Rellena los datos y tú revisas antes de registrar.</p>` : ''}
     <label class="lbl">Fecha<input class="field mt-1 px-2" type="date" id="cdDate" value="${c.date}" max="${today}" /></label>
-    <div class="flex flex-wrap justify-center gap-2">
-      ${vis.map(v => `<button class="cardio-type ${c.type === v.key ? 'cardio-type-on' : ''}" style="width:${tileW}" data-act="cdType" data-type="${esc(v.key)}" type="button"><span class="text-2xl">${esc(v.icon)}</span><span class="truncate max-w-full px-1">${esc(v.label)}</span>${v.desc ? `<span class="text-[10px] font-normal text-mute leading-tight px-1 text-center">(${esc(v.desc)})</span>` : ''}</button>`).join('')}
-      <button class="cardio-type cardio-more" style="width:${tileW}" data-act="cdTypes" type="button"><span class="text-2xl">＋</span><span class="px-1 text-center leading-tight">Otras actividades</span><span class="text-[10px] font-normal text-mute leading-tight px-1 text-center">(añadir, quitar o crear la tuya)</span></button>
+    <div>
+      <div class="lbl mb-1.5">Actividad</div>
+      <div class="flex flex-wrap gap-1.5">
+      ${vis.map(v => `<button class="cd-pill ${c.type === v.key ? 'cd-pill-on' : ''}" data-act="cdType" data-type="${esc(v.key)}" type="button"><span>${esc(v.icon)}</span>${esc(v.label)}</button>`).join('')}
+      <button class="cd-pill cd-pill-more" data-act="cdTypes" type="button">＋ Otras</button>
+      </div>
+      ${T.desc ? `<p class="text-[11px] text-mute mt-1.5">${esc(T.icon)} ${esc(T.label)}: ${esc(T.desc)}.</p>` : ''}
     </div>
     <label class="lbl">Minutos<input class="field mt-1 text-lg" id="cdMin" inputmode="numeric" value="${esc(c.minutes)}" placeholder="Ej: 30" /></label>
     <div>
@@ -5616,6 +5619,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.75.2', ['Cardio: las actividades son ahora píldoras pequeñas; «＋ Otras» para añadir, quitar o crear la tuya.'], 'quiet'],
   ['4.75.1', ['Cardio: «Funcional» activada para todos y la primera, con su descripción (circuitos, HIIT, CrossFit y clases). El ✎ pasa a ser la casilla «＋ Otras actividades».'], 'quiet'],
   ['4.75.0', ['🤸 Nueva actividad de cardio: «Funcional» (circuitos, HIIT, CrossFit, clases). Actívala en el ✎ de Registrar cardio. También la reconoce al leer una captura de Strava o del reloj.', '🍽️ Cambio en Dieta: «Te quedan» es ahora siempre tu objetivo de kcal menos lo que has comido. El ejercicio ya no lo amplía (se quita la opción de Ajustes; si la tenías activada, verás menos kcal disponibles).', 'Ejemplo: objetivo 2500, has comido 208 y nadado 285 → antes «Te quedan 2577»; ahora «Te quedan 2292». Lo quemado sigue apareciendo debajo («Cardio −285 · Neto»).', 'Por qué: los cálculos de ejercicio y los relojes suelen pasarse, y comérselas enteras frena el progreso. Si entrenas mucho a diario, sube tu objetivo de kcal en Ajustes → Objetivos.']],
   ['4.74.1', ['Cardio desde el reloj: botones «📸 Cámara» y «🖼️ Captura», como en Dieta.'], 'quiet'],
@@ -5837,7 +5841,7 @@ const GUIDE = [
   ]],
   ['🔥 Cardio', [
     'En Entreno → <b>🔥 CARDIO</b>: elige la actividad, los minutos y la intensidad. «Calcular» estima las calorías <b>netas</b> (lo que gastas por encima del reposo) con tu último peso; con clave de IA, más afinado.',
-    '«<b>＋ Otras actividades</b>» (la última casilla en «Registrar cardio»): quita las que no haces, añade otras (correr, natación, pádel, remo…) o crea la tuya. «Funcional» (circuitos, HIIT, CrossFit y clases) viene activada.',
+    '«<b>＋ Otras</b>» (la última píldora de Actividad en «Registrar cardio»): quita las que no haces, añade otras (correr, natación, pádel, remo…) o crea la tuya. «Funcional» (circuitos, HIIT, CrossFit y clases) viene activada.',
     '⌚ <b>Desde tu reloj o app deportiva</b>: «📸 Cámara» para fotografiar la pantalla del reloj, o «🖼️ Captura» para elegir una captura del resumen de la actividad en Strava, Garmin Connect, Salud… (mejor que una foto a la pantalla del reloj). La IA rellena actividad, fecha, minutos en movimiento, distancia, FC y kcal; tú revisas y pulsas «Registrar». La imagen no se guarda.',
     '⌚ <b>Datos del reloj</b> (opcional): distancia, desnivel, FC media y kcal del reloj. La app calcula la velocidad media (o el ritmo por 100 m en natación) y, con la FC, la intensidad. Puedes usar las kcal del reloj con «Usar».',
     'El cardio aparece en Dieta (quemado y balance neto), pero <b>no amplía</b> lo que te queda por comer: tu objetivo es siempre el de Ajustes. Los cálculos de ejercicio (y los relojes) tienden a pasarse, y así el déficit es más fiable.'
