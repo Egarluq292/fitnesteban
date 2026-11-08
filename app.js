@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.80.1';
+const APP_VERSION = '4.80.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5806,6 +5806,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.80.2', ['🧪 Acceso: la lista «En prueba gratis» ya no desaparece al actualizar los nombres de la hoja.'], 'admin'],
   ['4.80.1', ['🧪 Acceso: nueva lista «En prueba gratis» con el correo, días de uso y días que le quedan a cada uno, y botón para darle su código personal.'], 'admin'],
   ['4.80.0', ['🎁 Prueba gratis de 15 días: quien no tiene código puede entrar con Google desde la pantalla de acceso. Una prueba por cuenta de Google y por instalación; al terminar, pide su código. Necesita el script v12 (Acceso → Reconfigurar).'], 'admin'],
   ['4.79.2', ['🕵️ El calendario de AD(GYM)VIENTO ya tiene nombre en clave: Operación Polvorón.'], 'quiet'],
@@ -7521,6 +7522,8 @@ const TRIAL_KEY = 'fitnesteban_trial', TRIAL_DAYS = 15;
 function trialMe(t = lsGet(TRIAL_KEY)) { return t?.h && t.hasta ? { hash: t.h, admin: false, plan: 'prueba', hasta: t.hasta, trial: true } : null; }
 const trialEndMsg = () => `Tu prueba gratis de ${TRIAL_DAYS} días ha terminado. Pide tu código personal a Esteban y seguirás con todos tus datos.${contactBtn('Pedir mi código', 'mx-auto mt-3')}`;
 const trialDevMsg = r => r === 'device' ? `Este dispositivo ya ha usado su prueba gratis con otra cuenta de Google. Para seguir, pide tu código personal a Esteban.${contactBtn('Pedir mi código', 'mx-auto mt-3')}` : `Esa cuenta ya tiene su prueba abierta en ${DEVICE_LIMIT} dispositivos. Para seguir, pide tu código personal a Esteban.${contactBtn('Pedir mi código', 'mx-auto mt-3')}`;
+async function trialHashOf(m) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('fitnesteban-prueba|' + m)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('').slice(0, 32); }
+const fecha10 = x => String(x || '').slice(0, 10);
 async function trialCall(tk = '') {
   if (!access.usageUrl) await fetchAcl();
   if (!access.usageUrl) throw new Error('No se puede comprobar la prueba ahora');
@@ -7791,6 +7794,8 @@ async function loadUsage() {
     const d = await r.json();
     if (!d.ok) throw new Error(d.error === 'clave' ? 'La clave del registro no coincide con la del script' : 'El registro no respondió bien');
     ui.usage = {}; for (const x of d.rows || []) ui.usage[String(x.h).toLowerCase()] = x;
+    ui.trialH = {}; // 🧪 filas de prueba gratis: su huella es la del correo (así no dependen de la columna «nombre»)
+    for (const x of d.rows || []) { const m = String(x.m || '').trim().toLowerCase(), h = String(x.h).toLowerCase(); if (m && !(access.list || []).some(y => y.hash === h) && await trialHashOf(m) === h) ui.trialH[h] = (String(x.nm || '').match(/\d{4}-\d{2}-\d{2}/) || [''])[0] || (x.first ? addDays(fecha10(x.first), TRIAL_DAYS - 1) : ''); }
     ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageOld12 = !(d.ver >= 12); ui.usageVer = +d.ver || 0;
     // nombres puestos en otro dispositivo tuyo: se copian aquí si aquí no tienes uno
     let got = 0;
@@ -7985,6 +7990,7 @@ function syncUsageNames() {
       if (!access.usageUrl || !enc || !ui.accessPin || !navigator.onLine) return;
       const k = await secretDec(enc, ui.accessPin), names = {};
       for (const x of access.list || []) { const v = state.accessNames[x.hash] || (x.hash === access.me?.hash ? 'Yo (admin)' : ''); if (v) names[x.hash] = v; }
+      for (const [h, hasta] of Object.entries(ui.trialH || {})) names[h] = '🧪 Prueba hasta ' + (hasta || '?');
       // con el script antiguo (v10 o anterior) mandar la lista incompleta borraría los nombres de la hoja: solo se envía si aquí están todos
       if ((ui.usageVer || 0) < 11 && Object.keys(names).length < (access.list || []).length) return;
       await fetch(access.usageUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ k, names }) });
@@ -8207,8 +8213,8 @@ async function loadActiveCount() {
 /* 🧪 Quien está de prueba gratis (filas de la hoja que no son de ningún código de acceso.txt) */
 function trialRows() {
   if (!ui.usage) return [];
-  const known = new Set((access.list || []).map(x => x.hash));
-  return Object.values(ui.usage).filter(u => !known.has(String(u.h).toLowerCase()) && /prueba/i.test(u.nm || '')).map(u => ({ ...u, hasta: (String(u.nm).match(/\d{4}-\d{2}-\d{2}/) || [''])[0] }))
+  const T = ui.trialH || {};
+  return Object.values(ui.usage).filter(u => String(u.h).toLowerCase() in T).map(u => ({ ...u, hasta: T[String(u.h).toLowerCase()] }))
     .sort((a, b) => (b.last || '').localeCompare(a.last || ''));
 }
 function trialRowsHTML() {
