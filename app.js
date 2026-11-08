@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.81.2';
+const APP_VERSION = '4.82.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1389,7 +1389,7 @@ function renderExerciseCard(e, idx, day, d) {
     </div>
     <div class="flex items-center justify-between gap-3 mt-2">
       <p class="text-xs text-mute italic min-w-0">${esc(variant.note)}</p>
-      <a class="btn-video" href="${esc(videoUrl(variant))}" target="_blank" rel="noopener noreferrer" aria-label="Ver técnica en YouTube">▶ Técnica${variant.video ? '' : ' 🔎'}</a>
+      <span class="flex gap-1.5 shrink-0">${isAdminUser() && gym3dOf(variant.name) ? `<button class="btn-3d" data-act="gym3d" data-n="${esc(variant.name)}" type="button" aria-label="Ver el movimiento en 3D">🧍 3D</button>` : ''}<a class="btn-video" href="${esc(videoUrl(variant))}" target="_blank" rel="noopener noreferrer" aria-label="Ver técnica en YouTube">▶ Técnica${variant.video ? '' : ' 🔎'}</a></span>
     </div>
     <div class="coach ${tone.cls} mt-3">
       <div class="font-bold text-sm">${tone.icon} ${esc(c.title)}</div>
@@ -5807,6 +5807,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.82.0', ['🧍 Prueba solo para ti: botón «3D» en los ejercicios de los bloques, con el maniquí y las 3 claves. El resto de usuarios aún no lo ve.'], 'admin'],
   ['4.81.2', ['🔜 «Próximamente» sale justo después de cerrar la ventana de novedades, en vez de perderse.'], 'quiet'],
   ['4.81.1', ['📲 Si abres el enlace desde WhatsApp o Telegram y no te deja instalar, la pantalla te explica cómo abrirlo en Chrome o Safari.'], 'quiet'],
   ['4.81.0', ['🔜 Nuevo «Próximamente»: al abrir la app (una vez al día) verás lo que está por llegar. Puedes pulsar «No volver a mostrar».'], 'quiet'],
@@ -6484,6 +6485,84 @@ async function man3dShow(el, pose, lv) {
   catch { el.innerHTML = '<span class="text-mute text-sm">No se pudo cargar la animación. Mira el vídeo.</span>'; }
 }
 function man3dStop() { try { man3dMod?.stop(); } catch { /* nada */ } }
+/* 🧍 Ejercicio (por su nombre) → animación 3D (gym3d.js). De lo más concreto a lo más general.
+   Máquinas, poleas y superseries («+»): sin animación (se quedan con YouTube). El material sale del nombre. */
+const GYM3D_MAP = [
+  [/m[aá]quina|polea|prensa|smith|multipower|jal[oó]n|contractora|cable|pec ?deck|hack|extensi[oó]n de cu[aá]driceps|curl femoral|curl n[oó]rdico|\+|gemelos sentado|pica|sissy|thruster|hiperextensi|patada|p[aá]jaro|apertura|abducci|aducci|paseo lateral|clean/i, null],
+  [/burpee/i, 'burpee'], [/hollow/i, 'hollow'], [/crunch/i, 'crunch'], [/plancha lateral/i, 'sk'], [/plancha/i, 'plank'],
+  [/mountain|escalador/i, 'mc'], [/jumping|tijera/i, 'jj'],
+  [/renegad/i, 'reneg'], [/remo invertido/i, 'invrow'], [/dominada/i, 'pull'], [/fondos en paralelas/i, 'dips'], [/fondos/i, 'dp'],
+  [/press franc[eé]s/i, 'skull'], [/extensi[oó]n.*cabeza/i, 'ohext'],
+  [/face ?pull/i, 'facep'], [/elevaci(o|ó)n(es)? lateral/i, 'lat'], [/gemelo|talones/i, 'calfdb'],
+  [/swing/i, 'swing'], [/(press|push press).*kettlebell/i, 'kbpress'],
+  [/press (de )?banca|press en suelo|press cerrado/i, 'bench'], [/press inclinado/i, 'incl'],
+  [/press (militar|arnold)|push press/i, 'ohp'],
+  [/flexiones con rodillas/i, 'pu'], [/flexiones/i, 'pushup'],
+  [/buenos d[ií]as sin/i, null], [/rumano|peso muerto a una pierna/i, 'rdl'], [/buenos d[ií]as/i, 'gm'], [/peso muerto/i, 'dl'],
+  [/puente de gl[uú]teo a una pierna/i, 'br1'], [/puente de gl[uú]teo con barra|hip thrust/i, 'hipth'], [/puente de gl[uú]teo/i, 'br'],
+  [/b[uú]lgara/i, 'bulg'], [/step.?up/i, 'stepdb'], [/zancada/i, 'lunge'],
+  [/sentadilla sumo/i, 'sumo'], [/goblet|sentadilla.*(mancuerna|kettlebell)/i, 'goblet'], [/sentadilla (trasera|frontal|con barra|con peso)/i, 'sqbar'], [/^sentadilla( con salto)?$/i, 'sq'],
+  [/remo/i, 'bbrow'], [/curl/i, 'curl']
+];
+const GYM3D_EQ = n => /mancuerna/i.test(n) ? 'db' : /kettlebell/i.test(n) ? 'kb' : /barra|\bez\b|\bz\b/i.test(n) ? 'bar' : /toalla|banda|trx|mesa/i.test(n) ? 'none' : '';
+const GYM3D_DEF = { bench: 'bar', incl: 'db', ohp: 'bar', rdl: 'bar', dl: 'bar', bbrow: 'bar', curl: 'db', hipth: 'bar', skull: 'bar', lunge: 'db', calfdb: 'db', stepdb: 'db', bulg: 'db', sumo: 'db', goblet: 'db', gm: 'bar', sqbar: 'bar', ohext: 'db' };
+function gym3dOf(name) {
+  for (const [re, id] of GYM3D_MAP) if (re.test(name || '')) { if (!id) return null; const eq = GYM3D_EQ(name); return eq && eq !== GYM3D_DEF[id] && GYM3D_DEF[id] ? `${id}:${eq}` : id; }
+  return null;
+}
+
+/* 💡 Las 3 claves de cada movimiento (texto propio): se leen antes de empezar y se cuida una en cada serie */
+const GYM3D_CUES = {
+  sqbar: ['Pies a la anchura de los hombros y apoyo en todo el pie', 'Las rodillas van hacia donde apuntan los pies', 'Pecho alto: baja controlado y sin rebotar abajo'],
+  sq: ['Pies a la anchura de los hombros y apoyo en todo el pie', 'Las rodillas van hacia donde apuntan los pies', 'Baja como si te sentaras, con el pecho alto'],
+  goblet: ['Peso pegado al pecho, codos hacia abajo', 'Baja entre las piernas con el tronco erguido', 'Sube empujando el suelo con todo el pie'],
+  sumo: ['Pies abiertos y puntas hacia fuera', 'Las rodillas siguen a las puntas de los pies', 'Espalda recta: la pesa cuelga en vertical'],
+  bench: ['Escápulas juntas y hacia abajo, pies firmes en el suelo', 'Codos a unos 45°, no en cruz', 'Baja controlado al pecho y empuja sin despegar el culo del banco'],
+  incl: ['Banco a 30-45°', 'Codos un poco por debajo de los hombros', 'Baja hasta notar el pecho estirado y sube juntando las manos'],
+  pushup: ['Cuerpo en bloque: culo y abdomen apretados', 'Manos bajo los hombros, codos a unos 45°', 'Llega con el pecho, no con la cabeza'],
+  pu: ['Cuerpo recto de rodillas a cabeza', 'Manos bajo los hombros, codos a unos 45°', 'Llega con el pecho, no con la cabeza'],
+  ohp: ['Culo y abdomen apretados: no arquees la espalda', 'La barra sube recta, rozando la cara', 'Arriba, la cabeza queda entre los brazos'],
+  kbpress: ['Sale desde el hombro, antebrazo vertical', 'Muñeca recta, la pesa apoyada en el antebrazo', 'Arriba, el bíceps junto a la oreja'],
+  rdl: ['Rodillas un poco flexionadas y quietas', 'Lleva la cadera atrás: el peso roza las piernas', 'Espalda neutra; baja hasta notar la parte de atrás del muslo'],
+  dl: ['Barra sobre la mitad del pie, pegada a las espinillas', 'Espalda neutra y pecho alto antes de tirar', 'Empuja el suelo y termina apretando el culo, sin echarte atrás'],
+  gm: ['Barra en la parte alta de la espalda', 'Cadera atrás con las rodillas un poco flexionadas', 'Espalda neutra en todo el recorrido'],
+  bbrow: ['Tronco inclinado y quieto, espalda neutra', 'Tira con los codos hacia la cadera', 'Junta las escápulas arriba y baja controlado'],
+  invrow: ['Cuerpo recto de talones a cabeza', 'Lleva el pecho a la barra', 'Baja hasta estirar los brazos del todo'],
+  reneg: ['Pies separados para que la cadera no gire', 'El codo va hacia la cadera', 'La cadera no se mueve mientras remas'],
+  pull: ['Empieza colgado con los brazos estirados', 'Pecho a la barra, codos hacia los bolsillos', 'Baja despacio, sin dejarte caer'],
+  dips: ['Hombros lejos de las orejas', 'Baja hasta que los codos formen unos 90°', 'Tronco un poco inclinado hacia delante'],
+  dp: ['Silla firme y manos en el borde', 'Codos hacia atrás, no abiertos', 'Baja hasta unos 90° y sube sin bloquear de golpe'],
+  skull: ['Brazos verticales y codos quietos', 'Solo se mueve el antebrazo', 'Baja controlado hacia la frente'],
+  ohext: ['Codos hacia el techo y cerrados', 'Baja el peso por detrás de la cabeza', 'Estira los brazos sin arquear la espalda'],
+  curl: ['Codos pegados al cuerpo', 'Sube sin balancear el tronco', 'Baja despacio hasta estirar el brazo'],
+  lat: ['Codos un poco flexionados', 'Sube hasta la altura de los hombros, no más', 'Baja controlado, sin dejar caer el peso'],
+  facep: ['Tira hacia la cara con los codos altos', 'Las manos acaban a los lados de la cabeza', 'Junta las escápulas un segundo'],
+  calfdb: ['Sube todo lo alto que puedas', 'Pausa de un segundo arriba', 'Baja despacio hasta estirar el gemelo'],
+  swing: ['La fuerza sale de la cadera, no de los brazos', 'Espalda neutra: la pesa pasa entre las piernas', 'Arriba, culo apretado y cuerpo recto'],
+  hipth: ['Parte baja de las escápulas apoyada en el banco', 'Barbilla al pecho, mirada al frente', 'Arriba, tronco paralelo al suelo y culo apretado un segundo'],
+  br: ['Pies cerca del culo', 'Empuja con los talones', 'Arriba aprieta el culo sin arquear la zona lumbar'],
+  br1: ['Pie de apoyo cerca del culo', 'Empuja con el talón y la cadera nivelada', 'Arriba aprieta el culo sin arquear la zona lumbar'],
+  bulg: ['Pie de atrás apoyado; el peso, en la pierna de delante', 'Rodilla de delante en línea con el pie', 'Baja vertical con el tronco algo inclinado'],
+  lunge: ['Paso largo y tronco recto', 'La rodilla de atrás casi roza el suelo', 'Vuelve empujando con el talón de delante'],
+  stepdb: ['Todo el pie encima del escalón', 'Sube con la pierna de arriba, sin impulsarte con la de abajo', 'Baja controlado'],
+  plank: ['Codos bajo los hombros', 'Culo y abdomen apretados', 'Cuerpo en línea: la cadera no se hunde'],
+  sk: ['Codo bajo el hombro', 'Cadera alta', 'Cuerpo en línea de pies a cabeza'],
+  hollow: ['Zona lumbar pegada al suelo', 'Brazos y piernas largos', 'Si se despega la espalda, sube las piernas o dobla las rodillas'],
+  crunch: ['Las manos no tiran del cuello', 'Sube despegando los omóplatos', 'Suelta el aire al subir'],
+  mc: ['Manos bajo los hombros', 'Cadera baja y quieta', 'Rodilla al pecho, alternando'],
+  jj: ['Aterriza suave', 'Brazos estirados', 'Ritmo constante'],
+  burpee: ['Manos al suelo y salta atrás a plancha', 'En la plancha, cuerpo recto', 'Vuelve y salta estirándote arriba']
+};
+const gym3dCues = name => { const id = gym3dOf(name); return id ? GYM3D_CUES[id.split(':')[0]] || null : null; };
+let gym3dMod = null;
+function gym3dModal(name) {
+  const id = gym3dOf(name); if (!id) return;
+  openModal(`<h3 class="text-lg font-black leading-tight">${esc(name)}</h3>
+    <div class="man3d mt-3" id="gym3d"><span class="text-mute text-sm">Cargando animación…</span></div>
+    ${gym3dCues(name) ? `<div class="lbl mt-3">💡 Las 3 claves</div><ol class="cues">${gym3dCues(name).map(c => `<li>${esc(c)}</li>`).join('')}</ol><p class="text-[11px] text-mute mt-1">Léelas antes de empezar y cuida una en cada serie.</p>` : '<p class="text-[11px] text-mute mt-2 text-center">Muestra el movimiento básico. Para la técnica fina, mira el vídeo.</p>'}
+    <div class="grid grid-cols-2 gap-2 mt-3"><a class="btn-ghost text-center" href="${esc(videoUrl({ name }))}" target="_blank" rel="noopener">▶ YouTube</a><button class="btn-primary" data-close type="button">Cerrar</button></div>`);
+  (async () => { const el = $('#gym3d'); try { gym3dMod ||= await import('./gym3d.js'); if (el?.isConnected) gym3dMod.mount(el, id); } catch { if (el) el.innerHTML = '<span class="text-mute text-sm">No se pudo cargar la animación. Mira el vídeo.</span>'; } })();
+}
 /* Aviso fijo en Inicio cuando al acceso le quedan 3 días o menos (el toast se pierde fácil) */
 function planBannerHTML() {
   const me = access.me, left = me ? planDaysLeft(me) : null;
@@ -6828,6 +6907,7 @@ const actions = {
   adv: () => advGrid(),
   advOn: () => advActivate(),
   advInfo: () => advInfoModal(),
+  gym3d: b => { if (isAdminUser()) gym3dModal(b.dataset.n); },
   cdWatch: () => { keepCardioInputs(); state.settings.watchOpen = !state.settings.watchOpen; persist(); render(); },
   cdUseWatch: () => { const e = ui.cardio.est; if (!e?.wkcal) return; keepCardioInputs(); e.appKcal = e.appKcal ?? e.kcal; e.kcal = +e.wkcal; e.usedWatch = true; render(); toast('Puestas las kcal del reloj'); },
   cdUseApp: () => { const e = ui.cardio.est; if (!e?.usedWatch) return; keepCardioInputs(); e.kcal = e.appKcal; e.usedWatch = false; render(); },
