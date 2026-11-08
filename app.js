@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.79.2';
+const APP_VERSION = '4.80.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5040,7 +5040,8 @@ const CHANNEL_URL = 'https://t.me/fitnesteban'; // canal público: presentación
 const TG_PLAY_URL = 'https://play.google.com/store/apps/details?id=org.telegram.messenger', TG_IOS_URL = 'https://apps.apple.com/app/telegram-messenger/id686449807';
 const contactBtn = (txt = 'Contacto', cls = '') => `<a class="contact-btn ${cls}" href="${CONTACT_URL}" target="_blank" rel="noopener">${icon('send', 'w-4 h-4')}<span>${txt}</span></a>`;
 const EMAIL_NOTICE = `FITNESTEBAN guardará tu correo para enviarte la guía de la app y, si tú le escribes, resolverte dudas. Nadie más verá tu correo. La app sigue siendo privada. Puedes cambiar el correo en los Ajustes. Si quieres que lo borre, pídeselo a Esteban en «Contacto».`;
-async function googleEmail() {
+async function googleEmail() { return (await googleAuth()).email; }
+async function googleAuth() {
   if (!navigator.onLine) throw new Error('Sin conexión a internet');
   await loadGis();
   return new Promise((resolve, reject) => {
@@ -5051,7 +5052,7 @@ async function googleEmail() {
         try {
           const u = await (await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${r.access_token}` } })).json();
           if (!u.email) throw new Error('Google no ha dado el correo');
-          resolve(String(u.email).toLowerCase());
+          resolve({ email: String(u.email).toLowerCase(), token: r.access_token });
         } catch (e) { reject(e); }
       },
       error_callback: e => reject(new Error(e?.type === 'popup_closed' ? 'Ventana de Google cerrada' : e?.type === 'popup_failed_to_open' ? 'El móvil bloqueó la ventana de Google' : (e?.message || 'Error de Google')))
@@ -5075,9 +5076,9 @@ function installDate() {
 }
 async function emailSync() {
   try {
-    const st = state.settings, url = access.usageUrl, code = lsGet(ACCESS_KEY)?.code, m = st.email || '';
+    const st = state.settings, url = access.usageUrl, code = lsGet(ACCESS_KEY)?.code || lsGet(TRIAL_KEY)?.h, m = st.email || '';
     if (!url || !code || !access.ok || !navigator.onLine || !m || st.emailSent === m) return; // solo se envía un correo nuevo o cambiado; quitarlo de la app no lo borra de la hoja (lo dice el aviso)
-    const h = await codeHash(code);
+    const h = await myHash();
     await fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ h, v: APP_VERSION, m, i: installDate() }) });
     st.emailSent = m; persist();
   } catch { /* se reintenta al volver a abrir la app */ }
@@ -5105,7 +5106,7 @@ function maybeAskEmail(tries = 0) {
 }
 
 function onboarding() {
-  const d = { step: 0, ok: false, email: '', birth: '', name: '', sex: '', age: '', height: '', weight: '', activity: 'mid', goal: 'recomp', key: '', keyOk: false, testing: false };
+  const d = { step: 0, ok: false, email: state.settings.email || '', birth: '', name: '', sex: '', age: '', height: '', weight: '', activity: 'mid', goal: 'recomp', key: '', keyOk: false, testing: false };
   // lo rellenado se guarda al momento: si sales a crear la clave y el móvil cierra la app, sigues donde ibas
   const OB_KEY = 'fitnesteban_ob'; Object.assign(d, lsGet(OB_KEY) || {}, { testing: false });
   const save = () => lsSet(OB_KEY, { ...d, testing: false });
@@ -5120,7 +5121,7 @@ function onboarding() {
       <p>🩺 <b>No sustituye a un profesional.</b> Las cifras son orientativas: si tienes lesiones, embarazo o algún problema de salud, consulta antes.</p>
       <p>🛠️ <b>Es un proyecto vivo.</b> Irá mejorando, pero puede tener fallos o cambiar.</p>
       <p>📶 <b>Para mantener la app</b>, envía a Esteban solo el día de último uso, la versión instalada y un identificador del dispositivo (sin datos personales). Nada de tu dieta ni de tus entrenos.</p>
-      <p>🔑 <b>Tu código es solo tuyo:</b> funciona como mucho en 2 dispositivos.</p>
+      <p>${access.me?.trial ? `🎁 <b>Estás de prueba:</b> ${TRIAL_DAYS} días con todo incluido. Al terminar, pide tu código personal a Esteban y sigues con tus datos.` : '🔑 <b>Tu código es solo tuyo:</b> funciona como mucho en 2 dispositivos.'}</p>
       <p>✉️ <b>Tu correo</b> lo guarda Esteban para enviarte la guía de la app y, si tú le escribes, resolverte dudas.</p>
       <p class="text-mute">Todo, con detalle, en la <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.</p>
     </div>
@@ -5805,6 +5806,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.80.0', ['🎁 Prueba gratis de 15 días: quien no tiene código puede entrar con Google desde la pantalla de acceso. Una prueba por cuenta de Google y por instalación; al terminar, pide su código. Necesita el script v12 (Acceso → Reconfigurar).'], 'admin'],
   ['4.79.2', ['🕵️ El calendario de AD(GYM)VIENTO ya tiene nombre en clave: Operación Polvorón.'], 'quiet'],
   ['4.79.1', ['🎄 El anuncio del calendario ya no se puede cerrar por error.'], 'quiet'],
   ['4.79.0', ['🎄 Anuncio en Inicio: el Calendario de AD(GYM)VIENTO llega el 20 de noviembre (pulsa «Info» para ver cómo será).'], 'quiet'],
@@ -6454,7 +6456,7 @@ function planBannerHTML() {
   const me = access.me, left = me ? planDaysLeft(me) : null;
   if (left === null || left > 3 || left < 0) return '';
   const d = new Date(planOf(me).hasta + 'T12:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
-  return `<div class="plan-warn mb-3"><div class="text-[14px] font-extrabold">⏳ ${left === 0 ? 'Hoy es tu último día de acceso' : left === 1 ? 'Mañana es tu último día de acceso' : `Tu acceso termina el ${esc(d)}`}</div>
+  return `<div class="plan-warn mb-3"><div class="text-[14px] font-extrabold">⏳ ${me.trial ? (left === 0 ? 'Hoy es el último día de tu prueba' : left === 1 ? 'Mañana es el último día de tu prueba' : `Tu prueba gratis termina el ${esc(d)}`) : left === 0 ? 'Hoy es tu último día de acceso' : left === 1 ? 'Mañana es tu último día de acceso' : `Tu acceso termina el ${esc(d)}`}</div>
     <p class="text-[12px] mt-0.5 opacity-90">Después la app dejará de abrirse, pero tus datos no se borran: pide a Esteban que lo renueve y sigues donde lo dejaste.</p>
     ${contactBtn('Pedir renovación', 'mt-2')}</div>`;
 }
@@ -7511,6 +7513,45 @@ function planWarn(me) {
 const expiredMsg = x => x === 'offline' ? `Conéctate a internet para comprobar tu acceso.` : `Tu acceso a FITNESTEBAN ha caducado. Pide a Esteban que lo renueve.${contactBtn('Contacto', 'mx-auto mt-3')}`;
 function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* nada */ } }
+/* 🧪 PRUEBA GRATIS (15 días): se entra con Google desde la pantalla de acceso, sin código. La fecha de inicio la guarda el script
+   por cuenta de Google (reinstalar no la reinicia) y cada instalación solo puede tener una prueba. Al terminar, hace falta un código. */
+const TRIAL_KEY = 'fitnesteban_trial', TRIAL_DAYS = 15;
+function trialMe(t = lsGet(TRIAL_KEY)) { return t?.h && t.hasta ? { hash: t.h, admin: false, plan: 'prueba', hasta: t.hasta, trial: true } : null; }
+const trialEndMsg = () => `Tu prueba gratis de ${TRIAL_DAYS} días ha terminado. Pide tu código personal a Esteban y seguirás con todos tus datos.${contactBtn('Pedir mi código', 'mx-auto mt-3')}`;
+const trialDevMsg = r => r === 'device' ? `Este dispositivo ya ha usado su prueba gratis con otra cuenta de Google. Para seguir, pide tu código personal a Esteban.${contactBtn('Pedir mi código', 'mx-auto mt-3')}` : `Esa cuenta ya tiene su prueba abierta en ${DEVICE_LIMIT} dispositivos. Para seguir, pide tu código personal a Esteban.${contactBtn('Pedir mi código', 'mx-auto mt-3')}`;
+async function trialCall(tk = '') {
+  if (!access.usageUrl) await fetchAcl();
+  if (!access.usageUrl) throw new Error('No se puede comprobar la prueba ahora');
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000);
+  try {
+    const r = await fetch(`${access.usageUrl}?op=prueba&d=${encodeURIComponent(deviceId())}&l=${encodeURIComponent(deviceLabel())}${tk ? `&tk=${encodeURIComponent(tk)}` : ''}`, { signal: ctl.signal, cache: 'no-store' });
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+async function trialStart(btn) {
+  btn.disabled = true; const old = btn.innerHTML; btn.innerHTML = '<span class="spinner"></span> Conectando con Google…';
+  try {
+    const { email, token } = await googleAuth();
+    btn.innerHTML = '<span class="spinner"></span> Preparando tu prueba…';
+    const d = await trialCall(token);
+    if (!d?.ok) throw new Error(d?.error === 'google' ? 'Google no ha confirmado tu correo' : 'La prueba aún no está disponible. Inténtalo más tarde.');
+    if (d.h) lsSet(TRIAL_KEY, { h: d.h, hasta: d.hasta, m: email });
+    if (!d.allowed) { lockScreen('code', d.reason === 'exp' ? trialEndMsg() : trialDevMsg(d.reason)); return; }
+    Object.assign(state.settings, { email, usageOk: true }); persist();
+    unlock(trialMe()); toast(`¡Bienvenido! Tienes ${TRIAL_DAYS} días con todo incluido 👋`);
+    setTimeout(() => { usagePing(); setTimeout(emailSync, 2500); }, 1500);
+  } catch (e) { btn.disabled = false; btn.innerHTML = old; if (!/popup_closed|access_denied/i.test(e.message || '')) toast(e.message || 'No se pudo entrar con Google', 'error'); }
+}
+/* Al abrir (con conexión): el script dice si la prueba sigue viva. Sin conexión manda la fecha guardada. */
+async function trialRecheck() {
+  try {
+    const d = await trialCall();
+    if (!d?.ok || typeof d.allowed !== 'boolean') return true;
+    if (d.hasta) lsSet(TRIAL_KEY, { ...lsGet(TRIAL_KEY), hasta: d.hasta });
+    if (!d.allowed) { access.ok = false; closeModal(); lockScreen('code', d.reason === 'exp' ? trialEndMsg() : trialDevMsg(d.reason)); return false; }
+    access.me = trialMe(); return true;
+  } catch { return true; }
+}
 async function accessCheck(list) {
   const saved = lsGet(ACCESS_KEY);
   if (!saved?.code || !list) return null;
@@ -7555,9 +7596,16 @@ function lockScreen(mode, msg = '') {
   const logo = `<img src="icons/logo-128.png" alt="" class="w-20 h-20 rounded-full mx-auto" /><div class="mt-3 flex justify-center">${($('#homeBtn svg')?.outerHTML || '').replace('width="124.9"', 'width="200"').replace('height="14.4"', 'height="23"')}</div>`;
   if (mode === 'wait') { el.innerHTML = `<div class="lock-box text-center">${logo}<p class="text-sm text-mute mt-6"><span class="spinner"></span> Comprobando acceso…</p></div>`; return; }
   if (!msg && needGate()) { el.innerHTML = `<div class="lock-box"><div class="text-center">${logo}</div><div id="lockGate">${installGateHTML()}</div></div>`; return; }
+  const canTrial = !msg && !lsGet(TRIAL_KEY);
   el.innerHTML = `<div class="lock-box">
-    <div class="text-center">${logo}<h1 class="font-extrabold text-lg mt-5">Acceso privado</h1>
-    <div class="text-sm text-mute mt-1">${msg || 'Esta app es personal. Escribe el código que te ha dado Esteban.'}</div></div>
+    <div class="text-center">${logo}${canTrial ? '' : `<h1 class="font-extrabold text-lg mt-5">Acceso privado</h1>
+    <div class="text-sm text-mute mt-1">${msg || 'Esta app es personal. Escribe el código que te ha dado Esteban.'}</div>`}</div>
+    ${canTrial ? `<div class="trial-box mt-5"><div class="text-[11px] font-black tracking-widest text-cyan-300">🎁 PRUEBA GRATIS</div>
+      <div class="text-xl font-black leading-tight mt-0.5">${TRIAL_DAYS} días con todo incluido</div>
+      <p class="text-[13px] text-mute mt-1">Sin código y sin pagar nada. Entra con tu cuenta de Google.</p>
+      <button class="btn-google w-full mt-3" id="trialGo" type="button"><b class="g-g">G</b> Continuar con Google</button>
+      <p class="text-[11px] text-mute mt-2 leading-snug">Tu correo se guarda solo para que Esteban pueda enviarte la guía y ayudarte (<a class="underline" href="privacidad.html" target="_blank" rel="noopener">privacidad</a>). Una prueba por persona. Al terminar, pide tu código personal para seguir.</p></div>
+      <div class="lock-or"><span>¿Ya tienes código?</span></div>` : ''}
     <input class="field mt-5 text-center text-2xl font-black tracking-[.2em] uppercase" id="lockCode" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" />
     <button class="btn-primary w-full mt-3" id="lockGo" type="button">Entrar</button>
     <p class="text-[11px] text-mute text-center mt-4">Cada código es personal. Válido solo en 2 dispositivos.</p>
@@ -7580,8 +7628,9 @@ function lockScreen(mode, msg = '') {
     } catch { $('#lockGo').disabled = false; }
   };
   $('#lockGo').onclick = go;
+  if ($('#trialGo')) $('#trialGo').onclick = () => trialStart($('#trialGo'));
   $('#lockCode').onkeydown = e => { if (e.key === 'Enter') go(); };
-  setTimeout(() => $('#lockCode')?.focus(), 100);
+  if (!canTrial) setTimeout(() => $('#lockCode')?.focus(), 100);
 }
 function unlock(me) {
   access.me = me; access.ok = true;
@@ -7624,6 +7673,14 @@ async function accessBoot() {
   const cached = lsGet(ACL_KEY);
   if (cached?.list) { access.list = cached.list; access.usageUrl = cached.usageUrl || ''; }
   const meCached = await accessCheck(access.list);
+  const tr = !lsGet(ACCESS_KEY)?.code && trialMe();
+  if (tr) { // 🧪 de prueba (sin código)
+    const ex = planExpired(tr);
+    if (!ex) unlock(tr); else lockScreen('code', ex === 'offline' ? expiredMsg(ex) : trialEndMsg());
+    await fetchAcl();
+    if (navigator.onLine && await trialRecheck()) { const me = trialMe(), ex2 = planExpired(me); if (ex2 === true) { access.ok = false; closeModal(); lockScreen('code', trialEndMsg()); return; } if (!access.ok && !ex2) unlock(me); usagePing(); planWarn(me); advNotify(); }
+    return;
+  }
   if (meCached && !planExpired(meCached)) unlock(meCached); else lockScreen(access.list ? 'code' : 'wait', meCached ? expiredMsg(planExpired(meCached)) : '');
   const fresh = await fetchAcl();
   if (!fresh) { if (!access.ok && !access.list) lockScreen('code', 'No hay conexión para comprobar el acceso. Conéctate y vuelve a abrir la app.'); return; }
@@ -7633,7 +7690,7 @@ async function accessBoot() {
   if (me) { if (!access.ok) unlock(me); else access.me = me; usagePing(); deviceGuard(); planWarn(me); advNotify(); }
   else lockScreen('code', lsGet(ACCESS_KEY)?.code ? `Tu código ya no es válido. Pide uno nuevo a Esteban.${contactBtn('Contacto', 'mx-auto mt-3')}` : '');
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { const me = l && await accessCheck(l); if (me && planExpired(me)) { access.ok = false; closeModal(); lockScreen('code', expiredMsg(planExpired(me))); return; } if (me) access.me = me; usagePing(); deviceGuard(); if (l && !me) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', `Tu código ya no es válido. Pide uno nuevo a Esteban.${contactBtn('Contacto', 'mx-auto mt-3')}`); } }); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok && access.me?.trial) { const ex = planExpired(access.me); if (ex === true) { access.ok = false; closeModal(); lockScreen('code', trialEndMsg()); } return; } if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { const me = l && await accessCheck(l); if (me && planExpired(me)) { access.ok = false; closeModal(); lockScreen('code', expiredMsg(planExpired(me))); return; } if (me) access.me = me; usagePing(); deviceGuard(); if (l && !me) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', `Tu código ya no es válido. Pide uno nuevo a Esteban.${contactBtn('Contacto', 'mx-auto mt-3')}`); } }); });
 
 /* Gestión (solo administrador): crear el código de una persona y la línea para acceso.txt */
 function newCode() { const a = crypto.getRandomValues(new Uint8Array(8)); const s = [...a].map(x => CODE_ABC[x % CODE_ABC.length]).join(''); return s.slice(0, 4) + '-' + s.slice(4); }
@@ -7707,15 +7764,17 @@ async function secretEnc(text, pin) {
   return { s: b64e(salt), iv: b64e(iv), ct: b64e(ct) };
 }
 const secretDec = (e, pin) => codeDec(e, pin);
+/* Huella con la que este móvil aparece en la hoja: la de su código o, si está de prueba, la de su prueba */
+async function myHash() { const code = lsGet(ACCESS_KEY)?.code; return code ? codeHash(code) : (lsGet(TRIAL_KEY)?.h || ''); }
 async function usagePing() {
   try {
-    const url = access.usageUrl, code = lsGet(ACCESS_KEY)?.code;
+    const url = access.usageUrl, code = lsGet(ACCESS_KEY)?.code || lsGet(TRIAL_KEY)?.h;
     // una vez al día… y otra vez si cambia la versión (si no, la hoja se queda con la versión vieja hasta mañana)
     const mark = todayISO() + '|' + APP_VERSION;
     if (!url || !code || !access.ok || !navigator.onLine || lsGet(PING_KEY) === mark) return;
     // solo móviles que han visto la frase de las condiciones (instalados desde la 4.26) y el administrador
     if (!access.me?.admin && !state.settings.usageOk) return;
-    const h = await codeHash(code);
+    const h = await myHash();
     await fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ h, v: APP_VERSION, i: installDate() }) });
     lsSet(PING_KEY, mark);
   } catch { /* sin conexión: mañana se vuelve a intentar */ }
@@ -7730,7 +7789,7 @@ async function loadUsage() {
     const d = await r.json();
     if (!d.ok) throw new Error(d.error === 'clave' ? 'La clave del registro no coincide con la del script' : 'El registro no respondió bien');
     ui.usage = {}; for (const x of d.rows || []) ui.usage[String(x.h).toLowerCase()] = x;
-    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageVer = +d.ver || 0;
+    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageOld12 = !(d.ver >= 12); ui.usageVer = +d.ver || 0;
     // nombres puestos en otro dispositivo tuyo: se copian aquí si aquí no tienes uno
     let got = 0;
     for (const x of d.rows || []) { const h = String(x.h).toLowerCase(), nm = String(x.nm || '').trim(); if (nm && nm !== 'Sin nombre' && nm !== 'Yo (admin)' && !state.accessNames[h]) { state.accessNames[h] = nm.slice(0, 24); got++; } }
@@ -7750,11 +7809,17 @@ function usageLine(hash) {
   return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} de ${DEVICE_LIMIT} dispositivos`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="truncate text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${dv.p && !(access.list || []).some(x => x.hash === hash && x.anon) ? `<b class="text-white">${esc(dv.p)}</b> · ` : ''}${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}${dv.k ? ` · ${dv.k} día${dv.k === 1 ? '' : 's'} de uso` : ''}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 truncate">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
 }
 function usageScript(key) {
-  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 2; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos) · v11
+  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 2; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos; prueba gratis de 15 días con Google) · v12
 const READ_KEY = '${key}';
 const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
 const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre', 'correo', 'alta', 'dispositivos', 'bloqueos'];
 const LIMITE = 2;
+const DIAS_PRUEBA = 15;
+// 🧪 Pruebas gratis: una por cuenta de Google (el correo lo confirma Google) y una por instalación. Fechas de Google, no del móvil.
+function hex_(b) { return b.map(x => ((x + 256) % 256).toString(16).padStart(2, '0')).join(''); }
+function huellaPrueba_(m) { return hex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'fitnesteban-prueba|' + m, Utilities.Charset.UTF_8)).slice(0, 32); }
+function prueba_(h) { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('p_' + h) || 'null'); } catch (e) { return null; } }
+function sumaDias_(f, n) { const d = new Date(f + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return Utilities.formatDate(d, 'UTC', 'yyyy-MM-dd'); }
 function hoja_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sh = ss.getSheetByName('uso');
@@ -7823,10 +7888,11 @@ function doPost(e) {
       return salida_({ ok: true });
     }
     const h = String(b.h || '').toLowerCase(), v = String(b.v || '').slice(0, 12);
-    if (!/^[0-9a-f]{32}$/.test(h) || huellas_().indexOf(h) < 0) return salida_({ ok: false });
+    const pr = /^[0-9a-f]{32}$/.test(h) ? prueba_(h) : null;
+    if (!/^[0-9a-f]{32}$/.test(h) || (huellas_().indexOf(h) < 0 && !pr)) return salida_({ ok: false });
     const lock = LockService.getScriptLock(); lock.waitLock(10000);
     try {
-      const sh = hoja_(), hoy = fecha_(new Date()), datos = sh.getDataRange().getValues(), nom = nombres_()[h] || '';
+      const sh = hoja_(), hoy = fecha_(new Date()), datos = sh.getDataRange().getValues(), nom = nombres_()[h] || (pr ? '🧪 Prueba hasta ' + pr.hasta : '');
       let fila = -1; for (let i = 1; i < datos.length; i++) if (String(datos[i][0]) === h) { fila = i + 1; break; }
       // correo: solo si lo manda el propio usuario; un correo nuevo sustituye al anterior (vacío no borra)
       const m = typeof b.m === 'string' ? b.m.trim().toLowerCase().slice(0, 100) : null, mOk = m !== null && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(m);
@@ -7869,16 +7935,42 @@ function doGet_(e) {
       return salida_({ ok: true, allowed: ok, n: x.d.length });
     } finally { lock.releaseLock(); }
   }
+  // 🧪 prueba gratis: alta con Google (tk = token de Google) o comprobación diaria desde la misma instalación (sin tk)
+  if (q.op === 'prueba') {
+    const d = String(q.d || '').slice(0, 40), P = PropertiesService.getScriptProperties(), hoy = fecha_(new Date());
+    if (!d) return salida_({ ok: false });
+    let m = '';
+    if (q.tk) {
+      const r = UrlFetchApp.fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + q.tk }, muteHttpExceptions: true });
+      try { const u = JSON.parse(r.getContentText()); if (u.email && u.email_verified !== false) m = String(u.email).toLowerCase(); } catch (e) { m = ''; }
+      if (!m) return salida_({ ok: false, error: 'google' });
+    } else {
+      const hd = P.getProperty('pd_' + d), x0 = hd ? prueba_(hd) : null;
+      if (!x0) return salida_({ ok: false, error: 'sin_alta' });
+      m = x0.m;
+    }
+    const h = huellaPrueba_(m), lock = LockService.getScriptLock(); lock.waitLock(10000);
+    try {
+      const ya = P.getProperty('pd_' + d);
+      if (ya && ya !== h) return salida_({ ok: true, allowed: false, reason: 'device' });
+      let x = prueba_(h);
+      if (!x) x = { m: m, ini: hoy, hasta: sumaDias_(hoy, DIAS_PRUEBA - 1), d: [] };
+      if (x.d.indexOf(d) < 0) { if (x.d.length >= LIMITE) return salida_({ ok: true, allowed: false, reason: 'limite' }); x.d.push(d); }
+      P.setProperty('p_' + h, JSON.stringify(x)); P.setProperty('pd_' + d, h);
+      if (hoy > x.hasta) return salida_({ ok: true, allowed: false, reason: 'exp', h: h, hasta: x.hasta });
+      return salida_({ ok: true, allowed: true, h: h, hasta: x.hasta, m: m });
+    } finally { lock.releaseLock(); }
+  }
   // cuántas personas han abierto la app hoy (solo el número: sin nombres ni correos)
   if (q.op === 'hoy') {
     const c = CacheService.getScriptCache(); let n = c.get('hoy');
     if (n === null) { const hoy = fecha_(new Date()), adm = admins_(); n = String(hoja_().getDataRange().getValues().slice(1).filter(r => fecha_(r[1]) === hoy && adm.indexOf(String(r[0])) < 0).length); c.put('hoy', n, 60); }
-    return salida_({ ok: true, ver: 11, hoy: +n });
+    return salida_({ ok: true, ver: 12, hoy: +n });
   }
   if (q.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
   const datos = hoja_().getDataRange().getValues().slice(1);
   const dd = disp_();
-  return salida_({ ok: true, ver: 11, rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
+  return salida_({ ok: true, ver: 12, rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
 }`;
 }
 /* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
@@ -8148,7 +8240,7 @@ function accessSectionHTML() {
     ${gh ? '<p class="text-[11px] text-mute">Toca a una persona para ver su ficha: ✎ nombre · ⏳ plan · 👤/🙈 registrar u ocultar su nombre de perfil · 🔄 nuevo código · 🗑 quitar acceso. Nombres y códigos solo los ves tú (cifrados con tu PIN); en GitHub solo hay huellas.</p>' : ''}
     ${list.length ? '<button class="btn-ghost w-full" data-act="copyHashes" type="button">📋 Copiar huellas y nombres (para tu hoja)</button>' : ''}
     ${access.usageUrl && lsGet(USE_KEY)
-      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : 'actualizado ahora · nombres, correos, altas y quién usa cada dispositivo') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
+      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : ui.usageOld12 ? '<span class="text-amber-300">actualiza el script a la v12 (Reconfigurar → nueva versión) para activar la prueba gratis con Google</span>' : 'actualizado ahora · nombres, correos, altas y quién usa cada dispositivo') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
       : access.usageUrl ? `<button class="btn-ghost w-full" data-act="usageHere" type="button">📶 Ver quién usa la app en este dispositivo</button>`
       : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
     ${access.usageUrl && lsGet(USE_KEY) ? (lsGet(SHEET_KEY) && !ui.sheetEdit
