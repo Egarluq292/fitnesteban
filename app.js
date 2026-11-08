@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.78.0';
+const APP_VERSION = '4.78.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1187,6 +1187,7 @@ function renderTrainHome() {
   const inUse = [...own, ...libs].filter(x => x.ago !== null && !hid.has(x.key)).sort((a, b) => a.ago - b.ago);
   const notUsed = arr => arr.filter(x => x.ago === null || hid.has(x.key));
   const vis = arr => arr.filter(x => show || !hid.has(x.key));
+  const ppTop = state.sessions.length < 10 ? vis(notUsed(libs.filter(x => x.key === 'lib:primeros'))) : []; // PRIMEROS PASOS arriba (debajo de «En uso») solo para quien está empezando (< 10 sesiones)
   const nHid = [...own, ...libs].filter(x => hid.has(x.key)).length;
   const rs = retos ? RETO_IDS.filter(id => retoOf(id)).length : 0;
   const tc = todayCardHTML();
@@ -1198,10 +1199,11 @@ function renderTrainHome() {
     <button class="gal-btn" data-act="openBlock" data-key="cardio" type="button"><span class="text-xl">🔥</span><span><b>CARDIO</b><small>Correr, bici…</small></span></button>
   </div>
   ${inUse.length ? `<div class="gal-h"><span>En uso</span></div>${inUse.map(x => x.html()).join('')}` : ''}
+  ${ppTop.length ? `<div class="gal-h"><span>¿Empiezas de cero?</span></div>${ppTop.map(x => x.html()).join('')}` : ''}
   <div class="gal-h"><span>Tus bloques</span><button class="text-brand text-xs font-bold" data-act="newBlock" type="button">＋ Crear bloque</button></div>
   ${vis(notUsed(own)).map(x => x.html()).join('') || (own.length ? '' : '<p class="text-[12px] text-mute px-1 -mt-1 mb-2">Aún no has creado ninguno. Crea el tuyo o usa uno de los preparados: se guarda tu progreso en cada uno.</p>')}
   <div class="gal-h"><span>Bloques preparados</span></div>
-  ${vis(notUsed(libs)).map(x => x.html()).join('')}
+  ${vis(notUsed(libs)).filter(x => !ppTop.includes(x)).map(x => x.html()).join('')}
   ${nHid ? `<button class="w-full text-center text-[12px] text-mute underline py-3" data-act="toggleHidden" type="button">${show ? 'Esconder los bloques ocultos' : `Ver ${nHid === 1 ? '1 bloque oculto' : `${nHid} bloques ocultos`}`}</button>` : ''}`;
 }
 function openBlock(key) {
@@ -5803,6 +5805,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.78.1', ['🌱 PRIMEROS PASOS aparece arriba, debajo de «En uso», para quien lleva menos de 10 sesiones.'], 'quiet'],
   ['4.78.0', ['🌱 Nuevo bloque PRIMEROS PASOS, para quien empieza de cero: en casa, sin material (una silla y una mochila), con explicación en cada ejercicio.', '⭐ 3 fases que se desbloquean solas: 2 días por semana al principio y 3 después. Cada sesión suma una estrella y al completar una fase te lo celebra 🏅.']],
   ['4.77.0', ['🗓️ «Hoy te toca» ahora elige entre todos tus bloques en uso: el que va más atrasado esta semana y con los músculos recuperados (te dice por qué). Si ya has cumplido la semana, te lo dice.', '🎯 Cada bloque viene con sus veces por semana: las de su descripción (Brazos 1, PPT 3, Glúteo 2…) o, en los tuyos, sus días. Puedes cambiarlo en su ⋯ → «Nombre y veces por semana».']],
   ['4.76.1', ['📊 «Últimos 7 días» en Dieta: cada barra se rellena con los colores de proteína, grasas y carbohidratos según lo que aporta cada uno. Apagada = te quedas corto; viva = en tu objetivo; con tope rojo = te pasas.', 'Cardio: se explica por qué las kcal registradas (netas) son menos que las del reloj (brutas), y que con «Usar» puedes quedarte con las del reloj.']],
