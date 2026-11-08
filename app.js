@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.80.2';
+const APP_VERSION = '4.80.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5806,6 +5806,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.80.3', ['📤 «Compartir la app» envía ahora el enlace de la app, para probarla gratis 15 días.'], 'quiet'],
   ['4.80.2', ['🧪 Acceso: la lista «En prueba gratis» ya no desaparece al actualizar los nombres de la hoja.'], 'admin'],
   ['4.80.1', ['🧪 Acceso: nueva lista «En prueba gratis» con el correo, días de uso y días que le quedan a cada uno, y botón para darle su código personal.'], 'admin'],
   ['4.80.0', ['🎁 Prueba gratis de 15 días: quien no tiene código puede entrar con Google desde la pantalla de acceso. Una prueba por cuenta de Google y por instalación; al terminar, pide su código. Necesita el script v12 (Acceso → Reconfigurar).'], 'admin'],
@@ -6087,7 +6088,7 @@ const GUIDE = [
   ['ℹ️ La app', [
     '🔄 Se <b>actualiza sola</b> al abrirla o volver a ella. Después verás una vez las novedades; puedes volver a verlas desde esta guía. Tu versión, en Ajustes → Aplicación.',
     '✈️ El avión de papel de arriba abre Telegram para escribir a Esteban: dudas, fallos o ideas.',
-    '📤 «Compartir la app» (Ajustes y abajo en esta guía) envía el canal de Telegram de FITNESTEBAN a quien quieras, para conocerla y pedir su código.',
+    '📤 «Compartir la app» (Ajustes y abajo en esta guía) envía a quien quieras el enlace de la app: podrá probarla gratis 15 días entrando con su cuenta de Google.',
     '🔒 Qué datos usa la app y dónde se guardan: <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.'
   ]]
 ];
@@ -7199,9 +7200,9 @@ const actions = {
   installHelp: () => installHelpModal(),
   installHide: () => { lsSet(INSTALL_HIDE, Date.now() + 7 * 86400000); render(); },
   shareApp: async () => {
-    const text = `Te recomiendo FITNESTEBAN, una app para entrenar y llevar la dieta. Entra en el canal, échale un vistazo y pide tu código: ${CHANNEL_URL}\n\n¿No tienes Telegram? Descárgalo:\nAndroid: ${TG_PLAY_URL}\niPhone: ${TG_IOS_URL}`;
-    try { if (navigator.share) { await navigator.share({ title: 'FITNESTEBAN', text }); return; } } catch (e) { if (e?.name === 'AbortError') return; }
-    try { await navigator.clipboard.writeText(text); toast('Mensaje copiado: pégalo donde quieras'); } catch { toast(CHANNEL_URL); }
+    const url = 'https://egarluq292.github.io/fitnesteban/', text = `Te recomiendo FITNESTEBAN, una app para entrenar y llevar la dieta. Pruébala gratis ${TRIAL_DAYS} días: abre el enlace, instálala en tu móvil y entra con tu cuenta de Google.`;
+    try { if (navigator.share) { await navigator.share({ title: 'FITNESTEBAN', text, url }); return; } } catch (e) { if (e?.name === 'AbortError') return; }
+    try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Mensaje copiado: pégalo donde quieras'); } catch { toast(url); }
   },
   skipInstall: () => { lsSet(NOINSTALL_KEY, 1); lockScreen('code'); },
   copyAppLink: () => navigator.clipboard.writeText('https://egarluq292.github.io/fitnesteban/').then(() => toast('Enlace copiado: pégalo en Chrome o Safari')).catch(() => toast('Enlace: egarluq292.github.io/fitnesteban', 'warn')),
