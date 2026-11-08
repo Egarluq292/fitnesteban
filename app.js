@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.78.1';
+const APP_VERSION = '4.78.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5805,6 +5805,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.78.2', ['⏳ Si a tu acceso le quedan 3 días o menos, Inicio te lo recuerda con una tarjeta fija y un botón para pedir la renovación.'], 'quiet'],
   ['4.78.1', ['🌱 PRIMEROS PASOS aparece arriba, debajo de «En uso», para quien lleva menos de 10 sesiones.'], 'quiet'],
   ['4.78.0', ['🌱 Nuevo bloque PRIMEROS PASOS, para quien empieza de cero: en casa, sin material (una silla y una mochila), con explicación en cada ejercicio.', '⭐ 3 fases que se desbloquean solas: 2 días por semana al principio y 3 después. Cada sesión suma una estrella y al completar una fase te lo celebra 🏅.']],
   ['4.77.0', ['🗓️ «Hoy te toca» ahora elige entre todos tus bloques en uso: el que va más atrasado esta semana y con los músculos recuperados (te dice por qué). Si ya has cumplido la semana, te lo dice.', '🎯 Cada bloque viene con sus veces por semana: las de su descripción (Brazos 1, PPT 3, Glúteo 2…) o, en los tuyos, sus días. Puedes cambiarlo en su ⋯ → «Nombre y veces por semana».']],
@@ -6237,10 +6238,20 @@ function homeSub(v) {
   }
   return ['Pregunta a tu coach'];
 }
+/* Aviso fijo en Inicio cuando al acceso le quedan 3 días o menos (el toast se pierde fácil) */
+function planBannerHTML() {
+  const me = access.me, left = me ? planDaysLeft(me) : null;
+  if (left === null || left > 3 || left < 0) return '';
+  const d = new Date(planOf(me).hasta + 'T12:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+  return `<div class="plan-warn mb-3"><div class="text-[14px] font-extrabold">⏳ ${left === 0 ? 'Hoy es tu último día de acceso' : left === 1 ? 'Mañana es tu último día de acceso' : `Tu acceso termina el ${esc(d)}`}</div>
+    <p class="text-[12px] mt-0.5 opacity-90">Después la app dejará de abrirse, pero tus datos no se borran: pide a Esteban que lo renueve y sigues donde lo dejaste.</p>
+    ${contactBtn('Pedir renovación', 'mt-2')}</div>`;
+}
 function renderHome() {
   const name = profileOf()?.name || access.me?.name || '';
   const f = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   return `<div class="pb-3"><div class="text-mute text-sm">${esc(f.charAt(0).toUpperCase() + f.slice(1))}</div><h1 class="text-2xl font-black mt-0.5">Hola${name ? ', ' + esc(name.split(' ')[0]) : ''}</h1></div>
+  ${planBannerHTML()}
   <div id="homeCards" class="home-cards">${HOME_CARDS.map(c => `<button class="home-card" style="--c:${c.c};background-image:url(${c.img}.webp);background-position:${c.pos}" data-act="homeGo" data-v="${c.view}" type="button">
     <span class="home-shade"></span>
     <span class="home-txt">${c.view === 'train' && libNewList().length ? `<span class="home-pill">📚 ${libNewList().length === 1 ? '1 bloque nuevo' : libNewList().length + ' bloques nuevos'}</span>` : ''}<span class="block font-black text-[19px] leading-tight">${c.t}</span>${homeSub(c.view).filter(Boolean).slice(0, c.view === 'train' && libNewList().length ? 1 : 2).map((l, i) => `<span class="block text-[13px] ${i ? 'mt-0.5' : 'mt-1'} text-slate-300 truncate">${l}</span>`).join('')}</span>
@@ -7281,7 +7292,7 @@ function planDaysLeft(me) { const pl = planOf(me), t = netToday(); return pl && 
 function planWarn(me) {
   const left = planDaysLeft(me); if (left === null || left > 3 || left < 0) return;
   const k = 'planWarn_' + netToday(); if (lsGet(k)) return; lsSet(k, 1);
-  setTimeout(() => toast(left === 0 ? 'Tu acceso caduca hoy. Pide a Esteban que lo renueve.' : `Tu acceso caduca en ${left} día${left > 1 ? 's' : ''}. Pide a Esteban que lo renueve.`, 'warn'), 3000);
+  setTimeout(() => toast(left === 0 ? 'Hoy es tu último día de acceso. Pide a Esteban que lo renueve.' : left === 1 ? 'Mañana es tu último día de acceso. Pide a Esteban que lo renueve.' : `Te quedan ${left + 1} días de acceso. Pide a Esteban que lo renueve.`, 'warn'), 3000);
 }
 const expiredMsg = x => x === 'offline' ? `Conéctate a internet para comprobar tu acceso.` : `Tu acceso a FITNESTEBAN ha caducado. Pide a Esteban que lo renueve.${contactBtn('Contacto', 'mx-auto mt-3')}`;
 function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
