@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.79.0';
+const APP_VERSION = '4.79.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5805,6 +5805,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.79.1', ['🎄 El anuncio del calendario ya no se puede cerrar por error.'], 'quiet'],
   ['4.79.0', ['🎄 Anuncio en Inicio: el Calendario de AD(GYM)VIENTO llega el 20 de noviembre (pulsa «Info» para ver cómo será).'], 'quiet'],
   ['4.78.2', ['⏳ Si a tu acceso le quedan 3 días o menos, Inicio te lo recuerda con una tarjeta fija y un botón para pedir la renovación.'], 'quiet'],
   ['4.78.1', ['🌱 PRIMEROS PASOS aparece arriba, debajo de «En uso», para quien lleva menos de 10 sesiones.'], 'quiet'],
@@ -6330,12 +6331,11 @@ function advHomeHTML() {
     <span class="adv-go">›</span></button>`;
 }
 /* Anuncio previo (antes del lanzamiento): franja pequeña en Inicio con «Info» y ejemplos */
-const ADV_TEASE_KEY = 'fitnesteban_advtease';
 function advTeaserHTML() {
-  if (advYear() || lsGet(ADV_TEASE_KEY)) return '';
+  if (advYear()) return ''; // sin × para cerrarlo: así nadie lo pierde por un toque sin querer
   const t = advToday(); if (t < '2026-11-01' || t > '2026-11-30') return '';
   return `<div class="adv-tease mb-3"><button class="flex-1 min-w-0 text-left" data-act="advInfo" type="button"><span class="block text-[13px] font-extrabold leading-tight">🎄 Calendario de AD(GYM)VIENTO</span><span class="block text-[11.5px] opacity-80">Disponible el 20 de noviembre</span></button>
-    <button class="adv-tbtn" data-act="advInfo" type="button">Info</button><button class="text-white/50 px-1 text-lg leading-none" data-act="advTeaseX" aria-label="Ocultar" type="button">×</button></div>`;
+    <button class="adv-tbtn" data-act="advInfo" type="button">Info</button></div>`;
 }
 function advInfoModal() {
   const shots = [['adv-ej1', 'Una casilla cada día, del 1 al 24'], ['adv-ej2', 'Rutinas de 20 o 10 min en casa'], ['adv-ej3', 'Cada ejercicio, en 3D']];
@@ -6791,7 +6791,6 @@ const actions = {
   adv: () => advGrid(),
   advOn: () => advActivate(),
   advInfo: () => advInfoModal(),
-  advTeaseX: () => { lsSet(ADV_TEASE_KEY, 1); render(); },
   cdWatch: () => { keepCardioInputs(); state.settings.watchOpen = !state.settings.watchOpen; persist(); render(); },
   cdUseWatch: () => { const e = ui.cardio.est; if (!e?.wkcal) return; keepCardioInputs(); e.appKcal = e.appKcal ?? e.kcal; e.kcal = +e.wkcal; e.usedWatch = true; render(); toast('Puestas las kcal del reloj'); },
   cdUseApp: () => { const e = ui.cardio.est; if (!e?.usedWatch) return; keepCardioInputs(); e.kcal = e.appKcal; e.usedWatch = false; render(); },
