@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.80.3';
+const APP_VERSION = '4.81.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5806,6 +5806,8 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.81.1', ['📲 Si abres el enlace desde WhatsApp o Telegram y no te deja instalar, la pantalla te explica cómo abrirlo en Chrome o Safari.'], 'quiet'],
+  ['4.81.0', ['🔜 Nuevo «Próximamente»: al abrir la app (una vez al día) verás lo que está por llegar. Puedes pulsar «No volver a mostrar».'], 'quiet'],
   ['4.80.3', ['📤 «Compartir la app» envía ahora el enlace de la app, para probarla gratis 15 días.'], 'quiet'],
   ['4.80.2', ['🧪 Acceso: la lista «En prueba gratis» ya no desaparece al actualizar los nombres de la hoja.'], 'admin'],
   ['4.80.1', ['🧪 Acceso: nueva lista «En prueba gratis» con el correo, días de uso y días que le quedan a cada uno, y botón para darle su código personal.'], 'admin'],
@@ -6112,6 +6114,31 @@ const newsRowHTML = r => `<div class="mt-3 first:mt-0">
       <ul class="mt-1 space-y-1 text-sm ${r.internal ? 'text-mute' : 'text-slate-300'} list-disc pl-5">${r.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
     </div>`;
 /* Novedades: primero las nuevas (o las 4 últimas) y «Ver novedades anteriores» va ampliando de 8 en 8 hasta el principio */
+/* 🔜 PRÓXIMAMENTE: lo que está por llegar (se ve en Novedades). Cada línea desaparece sola al pasar su fecha «hasta». */
+const ROADMAP = [
+  { id: 'polvoron', icon: '🎄', title: 'Operación Polvorón', txt: 'El calendario de AD(GYM)VIENTO: 24 casillas con rutinas en casa y retos cortos, del 1 al 24 de diciembre.', when: '20 de noviembre', until: '2026-11-19' },
+  { id: '3d', icon: '🧍', title: 'Ejercicios en 3D', txt: 'Botón «3D» en los ejercicios de tus bloques: un maniquí que hace el movimiento y las 3 claves para hacerlo bien.', when: 'Muy pronto' }
+];
+const roadLive = () => { const t = netToday() || todayISO(); return ROADMAP.filter(r => !r.until || t <= r.until); };
+function roadmapHTML(R = roadLive()) {
+  if (!R.length) return '';
+  return `<div class="road mt-3"><div class="text-[11px] font-black tracking-widest text-amber-300">🔜 PRÓXIMAMENTE</div>
+    ${R.map(r => `<div class="flex gap-2.5 mt-2"><span class="text-xl leading-none">${r.icon}</span><div class="min-w-0"><div class="text-[13px] font-extrabold leading-tight">${esc(r.title)} <span class="road-when">${esc(r.when)}</span></div><p class="text-[12px] text-mute leading-snug mt-0.5">${esc(r.txt)}</p></div></div>`).join('')}</div>`;
+}
+/* Al abrir la app (una vez al día): ventana con lo que viene. «No volver a mostrar» la quita hasta que se anuncie algo nuevo. */
+const ROAD_KEY = 'fitnesteban_road';
+function roadNotify(retry = true) {
+  if (!access.ok || needsOnboarding(access.me)) return;
+  const seen = lsGet(ROAD_KEY) || {}, R = roadLive().filter(r => !(seen.no || []).includes(r.id));
+  if (!R.length || seen.day === todayISO()) return;
+  if ($('#modalRoot').classList.contains('open')) { if (retry) setTimeout(() => roadNotify(false), 9000); return; }
+  lsSet(ROAD_KEY, { ...seen, day: todayISO() });
+  openModal(`<div class="flex items-start gap-2"><div class="flex-1"><div class="text-[11px] font-black tracking-widest text-amber-300">🔜 PRÓXIMAMENTE EN FITNESTEBAN</div><h3 class="text-xl font-black leading-tight mt-0.5">Lo que está por llegar</h3></div><button class="iconbtn" data-close type="button" aria-label="Cerrar">✕</button></div>
+    ${roadmapHTML(R).replace('<div class="text-[11px] font-black tracking-widest text-amber-300">🔜 PRÓXIMAMENTE</div>', '')}
+    <button class="btn-primary w-full mt-2" data-close type="button">¡Genial!</button>
+    <button class="text-[12px] text-mute underline mt-3 mx-auto block" data-mact="no" type="button">No volver a mostrar</button>`,
+  { no: () => { lsSet(ROAD_KEY, { ...lsGet(ROAD_KEY), no: [...new Set([...(seen.no || []), ...R.map(r => r.id)])] }); closeModal(); toast('Vale, no te lo vuelvo a enseñar. Lo tienes en Novedades (?)'); } });
+}
 function openNews(fromVer) {
   const fresh = newsRows(fromVer), all = newsRows(null);
   let shown = fromVer ? fresh.length : Math.min(4, all.length);
@@ -6120,6 +6147,7 @@ function openNews(fromVer) {
   const html = () => `
     <div class="flex items-center gap-2"><span class="text-2xl">🎉</span><h3 class="modal-title">Novedades</h3><span class="text-xs text-mute ml-auto">v${APP_VERSION}</span></div>
     <div>${list().map(newsRowHTML).join('')}</div>
+    ${roadmapHTML()}
     ${shown < total() ? `<button class="w-full text-center text-sm text-brand font-bold py-2.5 rounded-xl border border-line bg-ink" data-mact="more" type="button">🕘 Ver novedades anteriores <span class="text-mute font-normal">(${total() - shown})</span></button>` : `<p class="text-[11px] text-mute text-center">Has llegado al principio del historial.</p>`}
     <button class="btn-primary w-full mt-1" data-close type="button">Entendido</button>`;
   openModal(html(), {
@@ -7362,7 +7390,7 @@ let deferredInstall = null;
 const INSTALL_HIDE = 'fitnesteban_install_hide';
 const UA = navigator.userAgent || '';
 const isIOS = () => /iphone|ipad|ipod/i.test(UA) || (/macintosh/i.test(UA) && navigator.maxTouchPoints > 1);
-const isInAppBrowser = () => /WhatsApp|FBAN|FBAV|FB_IAB|Instagram|Line\/|; wv\)/i.test(UA);
+const isInAppBrowser = () => /WhatsApp|FBAN|FBAV|FB_IAB|Instagram|Line\/|Telegram|GSA\/|; wv\)/i.test(UA) || (isIOS() && !/Safari\//i.test(UA));
 function installMode() {
   if (isStandalone()) return '';
   if (isInAppBrowser()) return 'inapp';
@@ -7408,8 +7436,16 @@ function installGateHTML() {
     <button class="btn-ghost w-full mt-3" data-act="copyAppLink" type="button">📋 Copiar el enlace</button>`;
   else if (m === 'prompt') body = `<button class="btn-primary w-full mt-2 text-lg py-4" data-act="install" type="button">📲 Instalar FITNESTEBAN</button>
     <p class="text-[13px] text-mute text-center mt-3">Después, ábrela desde el icono de tu pantalla de inicio y sigue allí.</p>`;
-  else if (m === 'ios') body = `<ol class="space-y-3 text-[15px]">${step(1, `Pulsa <b>Compartir</b> <span class="text-brand">${share}</span> (en la barra de Safari).`)}${step(2, 'Baja y elige <b>«Añadir a pantalla de inicio»</b>.')}${step(3, 'Pulsa <b>Añadir</b>.')}${step(4, 'Cierra Safari y abre <b>FITNESTEBAN</b> desde su icono.')}</ol>`;
+  else if (m === 'ios') body = `<ol class="space-y-3 text-[15px]">${step(1, `Pulsa <b>Compartir</b> <span class="text-brand">${share}</span> (en la barra de Safari).`)}${step(2, 'Baja y elige <b>«Añadir a pantalla de inicio»</b>.')}${step(3, 'Pulsa <b>Añadir</b>.')}${step(4, 'Cierra Safari y abre <b>FITNESTEBAN</b> desde su icono.')}</ol>
+    <div class="gate-help mt-5"><p class="text-[13px] font-bold">¿No te sale «Compartir» o «Añadir a pantalla de inicio»?</p>
+      <p class="text-[12px] text-mute mt-1">Lo has abierto desde otra app (WhatsApp, Telegram…). Ábrelo en Safari: pulsa la brújula 🧭 o <b>⋯ → Abrir en Safari</b>, o usa este botón.</p>
+      <a class="btn-primary w-full mt-3 block text-center" href="x-safari-${APP_URL}">Abrir en Safari</a>
+      <button class="btn-ghost w-full mt-2" data-act="copyAppLink" type="button">📋 Copiar el enlace para pegarlo en Safari</button></div>`;
   else body = `<ol class="space-y-3 text-[15px]">${step(1, 'Pulsa <b>⋮</b> arriba a la derecha de Chrome.')}${step(2, 'Elige <b>«Instalar aplicación»</b> o <b>«Añadir a pantalla de inicio»</b>.')}${step(3, 'Confirma con <b>Instalar</b>.')}${step(4, 'Abre <b>FITNESTEBAN</b> desde su icono.')}</ol>
+    <div class="gate-help mt-5"><p class="text-[13px] font-bold">¿No te sale «Instalar aplicación»?</p>
+      <p class="text-[12px] text-mute mt-1">Lo has abierto desde otra app (WhatsApp, Telegram…). Ábrelo en Chrome: pulsa <b>⋮ → Abrir en Chrome</b>, o usa este botón.</p>
+      <a class="btn-primary w-full mt-3 block text-center" href="intent://${APP_URL.replace('https://', '')}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(APP_URL)};end">Abrir en Chrome</a>
+      <button class="btn-ghost w-full mt-2" data-act="copyAppLink" type="button">📋 Copiar el enlace para pegarlo en Chrome</button></div>
     <p class="text-[12px] text-mute text-center mt-3">Si ya la tienes instalada, ábrela desde su icono.</p>`;
   return `<h1 class="font-extrabold text-xl mt-5 text-center">Primero, instálala</h1>
     <p class="text-sm text-mute mt-1 mb-5 text-center">Es un momento. Así la configuras <b class="text-white">una sola vez</b>, ya dentro de la app.</p>
@@ -7684,7 +7720,7 @@ async function accessBoot() {
     const ex = planExpired(tr);
     if (!ex) unlock(tr); else lockScreen('code', ex === 'offline' ? expiredMsg(ex) : trialEndMsg());
     await fetchAcl();
-    if (navigator.onLine && await trialRecheck()) { const me = trialMe(), ex2 = planExpired(me); if (ex2 === true) { access.ok = false; closeModal(); lockScreen('code', trialEndMsg()); return; } if (!access.ok && !ex2) unlock(me); usagePing(); planWarn(me); advNotify(); }
+    if (navigator.onLine && await trialRecheck()) { const me = trialMe(), ex2 = planExpired(me); if (ex2 === true) { access.ok = false; closeModal(); lockScreen('code', trialEndMsg()); return; } if (!access.ok && !ex2) unlock(me); usagePing(); planWarn(me); advNotify(); setTimeout(roadNotify, 2500); }
     return;
   }
   if (meCached && !planExpired(meCached)) unlock(meCached); else lockScreen(access.list ? 'code' : 'wait', meCached ? expiredMsg(planExpired(meCached)) : '');
@@ -7693,7 +7729,7 @@ async function accessBoot() {
   let me = await accessCheck(fresh);
   if (!me && lsGet(ACCESS_KEY)?.code) { const live = await fetchAclLive(); if (live) me = await accessCheck(live); }
   if (me && planExpired(me)) { access.ok = false; access.me = me; closeModal(); lockScreen('code', expiredMsg(planExpired(me))); return; }
-  if (me) { if (!access.ok) unlock(me); else access.me = me; usagePing(); deviceGuard(); planWarn(me); advNotify(); }
+  if (me) { if (!access.ok) unlock(me); else access.me = me; usagePing(); deviceGuard(); planWarn(me); advNotify(); setTimeout(roadNotify, 2500); }
   else lockScreen('code', lsGet(ACCESS_KEY)?.code ? `Tu código ya no es válido. Pide uno nuevo a Esteban.${contactBtn('Contacto', 'mx-auto mt-3')}` : '');
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok && access.me?.trial) { const ex = planExpired(access.me); if (ex === true) { access.ok = false; closeModal(); lockScreen('code', trialEndMsg()); } return; } if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { const me = l && await accessCheck(l); if (me && planExpired(me)) { access.ok = false; closeModal(); lockScreen('code', expiredMsg(planExpired(me))); return; } if (me) access.me = me; usagePing(); deviceGuard(); if (l && !me) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', `Tu código ya no es válido. Pide uno nuevo a Esteban.${contactBtn('Contacto', 'mx-auto mt-3')}`); } }); });
