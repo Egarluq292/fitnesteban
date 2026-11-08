@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.79.1';
+const APP_VERSION = '4.79.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5805,6 +5805,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.79.2', ['🕵️ El calendario de AD(GYM)VIENTO ya tiene nombre en clave: Operación Polvorón.'], 'quiet'],
   ['4.79.1', ['🎄 El anuncio del calendario ya no se puede cerrar por error.'], 'quiet'],
   ['4.79.0', ['🎄 Anuncio en Inicio: el Calendario de AD(GYM)VIENTO llega el 20 de noviembre (pulsa «Info» para ver cómo será).'], 'quiet'],
   ['4.78.2', ['⏳ Si a tu acceso le quedan 3 días o menos, Inicio te lo recuerda con una tarjeta fija y un botón para pedir la renovación.'], 'quiet'],
@@ -6246,6 +6247,7 @@ function homeSub(v) {
    quien empieza a mitad de diciembre puede hacer las que quiera.
    ========================================================================== */
 const ADV_LV = ['Suave', 'Medio', 'Fuerte'];
+const ADV_JOKES = ['Los polvorones de la despensa empiezan a ponerse nerviosos.', 'El turrón ha pedido refuerzos. No le van a servir.', 'Tu sofá ha preguntado por ti. Dile que en enero.', 'Ni Papá Noel entrena tan a menudo.', 'Si te cruzas con un mantecado, salúdalo de lejos.', 'El roscón de Reyes ya se ha enterado. Está preocupado.', 'Misión cumplida. Esta casilla se autodestruirá en… no, mejor no.'];
 // Ejercicios: nombre por nivel, consejo, segundos (t) o reps, y si tiene maniquí 3D (pose)
 const ADV_EX = {
   sq: { n: ['Sentadilla a una silla', 'Sentadilla libre', 'Sentadilla abrazando la mochila'], tip: 'Talones en el suelo, rodillas hacia fuera, espalda recta.', pose: ['sq0', 'sq', 'sqb'] },
@@ -6295,7 +6297,7 @@ const ADV_DAYS = {
   21: { ...advC('Talones', 'Haz {v} elevaciones de talones repartidas en el día.', [50, 100, 150], 'Lavándote los dientes cuentan.'), ...advM({ desc: 'Cocido ligero: garbanzos, pollo y verdura', kcal: 520, prot: 36, carbs: 52, fat: 16 }, { desc: 'Bocadillo pequeño de pavo y tomate', kcal: 310, prot: 20, carbs: 40, fat: 7 }) },
   22: advR('Gran final', 'La más completa del mes', [['sq', 12, 15, 15], ['pu', 10, 12, 12], ['rw', 12, 12, 12], ['lg', 8, 8, 10], ['sp', 10, 12, 12], ['pk', 20, 30, 45]]),
   23: { ...advC('A bailar', 'Baila {v} seguidas, como quieras.', ['1 canción', '2 canciones', '3 canciones'], 'Cuenta como entreno si acabas con calor.'), ...advM({ desc: 'Lubina al horno con patata y cebolla', kcal: 480, prot: 34, carbs: 36, fat: 20 }, { desc: 'Verduras a la plancha con jamón serrano', kcal: 230, prot: 16, carbs: 14, fat: 12 }) },
-  24: { ...advC('Nochebuena', 'Antes de la cena: {v} y un paseo de 15 minutos.', ['20 sentadillas', '40 sentadillas', '60 sentadillas'], '¡Lo has conseguido! Disfruta de la cena.'), ...advM({ desc: 'Comida ligera: crema de verduras y pechuga a la plancha', kcal: 380, prot: 34, carbs: 22, fat: 16 }, { desc: 'Cena de Nochebuena: disfrútala sin contar', kcal: 0, prot: 0, carbs: 0, fat: 0, skip: true }) }
+  24: { ...advC('Nochebuena', 'Antes de la cena: {v} y un paseo de 15 minutos.', ['20 sentadillas', '40 sentadillas', '60 sentadillas'], 'Misión cumplida, agente. Ahora sí: ese polvorón es tuyo.'), ...advM({ desc: 'Comida ligera: crema de verduras y pechuga a la plancha', kcal: 380, prot: 34, carbs: 22, fat: 16 }, { desc: 'Cena de Nochebuena: disfrútala sin contar', kcal: 0, prot: 0, carbs: 0, fat: 0, skip: true }) }
 };
 const ADV_READY = false; // ⚠️ se pone a true el día del lanzamiento (20 de noviembre); hasta entonces solo se ve el anuncio
 const ADV_KEY = 'fitnesteban_advdate'; // solo para pruebas: fecha simulada
@@ -6319,13 +6321,13 @@ function advHomeHTML() {
   const y = advYear(); if (!y) return '';
   const A = advSt(), open = advOpenDays();
   if (!A.on) return `<button class="adv-home mb-3" data-act="advOn" type="button"><span class="adv-snow"></span>
-    <span class="text-[11px] font-black tracking-widest text-red-200">NUEVO · 1 AL 24 DE DICIEMBRE</span>
+    <span class="text-[11px] font-black tracking-widest text-red-200">🕵️ OPERACIÓN POLVORÓN · 1-24 DIC</span>
     <span class="block font-black text-[19px] leading-tight mt-0.5">🎄 Calendario de AD(GYM)VIENTO</span>
     <span class="block text-[12px] text-white/80 mt-1">Cada día se abre una casilla: rutinas de 20 min en casa con una mochila y retos cortos. Tres niveles.</span>
-    <span class="adv-cta">Activarlo</span></button>`;
+    <span class="adv-cta">Unirme a la operación</span></button>`;
   const d = ADV_DAYS[open];
   return `<button class="adv-home adv-on mb-3" data-act="adv" type="button"><span class="adv-snow"></span>
-    <span class="text-[11px] font-black tracking-widest text-red-200">AD(GYM)VIENTO · ${advDoneN()} de 24 ✓</span>
+    <span class="text-[11px] font-black tracking-widest text-red-200">OPERACIÓN POLVORÓN · ${advDoneN()} de 24 ✓</span>
     <span class="block font-black text-[18px] leading-tight mt-0.5">${open ? `🎁 Día ${open}: ${esc(d.title)}` : '🎄 La primera casilla se abre el 1 de diciembre'}</span>
     ${open ? `<span class="block text-[12px] text-white/80 mt-0.5">${d.kind === 'r' ? 'Rutina en casa · 20 o 10 min' : 'Reto del día'}${A.done[open] ? ' · ✓ hecho' : ''}</span>` : ''}
     <span class="adv-go">›</span></button>`;
@@ -6334,26 +6336,26 @@ function advHomeHTML() {
 function advTeaserHTML() {
   if (advYear()) return ''; // sin × para cerrarlo: así nadie lo pierde por un toque sin querer
   const t = advToday(); if (t < '2026-11-01' || t > '2026-11-30') return '';
-  return `<div class="adv-tease mb-3"><button class="flex-1 min-w-0 text-left" data-act="advInfo" type="button"><span class="block text-[13px] font-extrabold leading-tight">🎄 Calendario de AD(GYM)VIENTO</span><span class="block text-[11.5px] opacity-80">Disponible el 20 de noviembre</span></button>
+  return `<div class="adv-tease mb-3"><button class="flex-1 min-w-0 text-left" data-act="advInfo" type="button"><span class="block text-[13px] font-extrabold leading-tight">🎄 Calendario de AD(GYM)VIENTO</span><span class="block text-[11.5px] opacity-80">Operación Polvorón · llega el 20 de noviembre</span></button>
     <button class="adv-tbtn" data-act="advInfo" type="button">Info</button></div>`;
 }
 function advInfoModal() {
   const shots = [['adv-ej1', 'Una casilla cada día, del 1 al 24'], ['adv-ej2', 'Rutinas de 20 o 10 min en casa'], ['adv-ej3', 'Cada ejercicio, en 3D']];
-  openModal(`<div class="text-[11px] font-black tracking-widest text-red-300">DISPONIBLE EL 20 DE NOVIEMBRE</div><h3 class="text-xl font-black leading-tight">🎄 Calendario de AD(GYM)VIENTO</h3>
-    <p class="text-[13px] text-mute mt-1">Del 1 al 24 de diciembre se abre una casilla cada día. Se activa si quieres y puedes empezar cuando quieras: las casillas pasadas siguen abiertas.</p>
+  openModal(`<div class="text-[11px] font-black tracking-widest text-red-300">🕵️ OPERACIÓN POLVORÓN · 20 DE NOVIEMBRE</div><h3 class="text-xl font-black leading-tight">🎄 Calendario de AD(GYM)VIENTO</h3>
+    <p class="text-[13px] text-mute mt-1">Misión: llegar a Nochebuena en forma y mirar a la bandeja de polvorones con la cabeza bien alta. Del 1 al 24 de diciembre se abre una casilla cada día. Te apuntas si quieres y cuando quieras: las casillas pasadas siguen abiertas.</p>
     <div class="adv-shots mt-3">${shots.map(([f, t]) => `<figure><img src="${f}.webp" alt="${esc(t)}" loading="lazy"><figcaption>${esc(t)}</figcaption></figure>`).join('')}</div>
     <div class="card p-3 mt-3 space-y-1.5 text-[13px]"><p>🏠 9 rutinas en casa con una mochila como peso (~20 min, o la versión de 10)</p><p>⚡ 15 retos cortos para el resto de días</p><p>🌱🔥💥 Tres niveles: eliges el tuyo y lo cambias cuando quieras</p><p>🧍 Cada ejercicio con su animación en 3D</p><p>🥗 En los días de reto, ideas para comer y cenar</p></div>
-    <button class="btn-primary w-full mt-4" data-close type="button">¡Me apunto el 20!</button>`);
+    <button class="btn-primary w-full mt-4" data-close type="button">¡Cuenta conmigo, agente!</button>`);
 }
 function advActivate() {
   const A = advSt();
-  openModal(`<div class="text-center"><div class="text-5xl">🎄</div><h3 class="text-xl font-black mt-2">Calendario de AD(GYM)VIENTO</h3>
-    <p class="text-sm text-mute mt-2">Del 1 al 24 de diciembre se abre una casilla cada día a las 00:00. Si empiezas tarde, las de días pasados siguen abiertas.</p></div>
+  openModal(`<div class="text-center"><div class="text-5xl">🎄</div><div class="text-[11px] font-black tracking-widest text-red-300 mt-2">🕵️ OPERACIÓN POLVORÓN</div><h3 class="text-xl font-black">Calendario de AD(GYM)VIENTO</h3>
+    <p class="text-sm text-mute mt-2">Tu misión, si decides aceptarla: del 1 al 24 de diciembre se abre una casilla cada día a las 00:00. Si empiezas tarde, las de días pasados siguen abiertas.</p></div>
     <div class="card p-3 mt-3 space-y-1.5 text-sm"><p>🏠 9 rutinas en casa con una mochila (~20 min, o la versión de 10)</p><p>⚡ 15 retos cortos para el resto de días</p><p>🥗 Ideas de comida y cena en los días de reto</p><p>🧍 Cada ejercicio con su animación 3D</p></div>
     <div class="lbl mt-4">Elige tu nivel (lo cambias cuando quieras)</div>
     <div class="grid grid-cols-3 gap-2">${ADV_LV.map((l, i) => `<button class="chip justify-center${A.lv === i + 1 ? ' chip-on' : ''}" data-mact="lv" data-i="${i + 1}" type="button">${l}</button>`).join('')}</div>
     <p class="text-[11px] text-mute mt-2">Suave: si empiezas de cero. Medio: si te mueves algo. Fuerte: si ya entrenas.</p>
-    <button class="btn-primary w-full mt-4" data-mact="go" type="button">Activar calendario</button>`,
+    <button class="btn-primary w-full mt-4" data-mact="go" type="button">Acepto la misión</button>`,
   { lv: (_, b) => { A.lv = +b.dataset.i; advActivate(); }, go: () => { A.on = true; persist(); closeModal(); advGrid(); } });
 }
 function advGrid() {
@@ -6363,11 +6365,11 @@ function advGrid() {
     return `<button class="adv-cell${isOpen ? ' open' : ''}${done ? ' done' : ''}${today ? ' today' : ''}${d.kind === 'r' ? ' rt' : ''}" ${isOpen ? `data-mact="day" data-n="${n}"` : 'disabled'} type="button">
       <span class="adv-n">${n}</span><span class="adv-i">${!isOpen ? '🔒' : done ? '✓' : d.kind === 'r' ? '🏠' : '⚡'}</span></button>`;
   }).join('');
-  openModal(`<div class="flex items-center justify-between"><h3 class="modal-title !mb-0">🎄 AD(GYM)VIENTO</h3><span class="text-sm font-black text-amber-300">${advDoneN()} de 24 ✓</span></div>
+  openModal(`<div class="flex items-center justify-between"><div><div class="text-[10px] font-black tracking-widest text-red-300">🕵️ OPERACIÓN POLVORÓN</div><h3 class="modal-title !mb-0">🎄 AD(GYM)VIENTO</h3></div><span class="text-sm font-black text-amber-300">${advDoneN()} de 24 ✓</span></div>
     <p class="text-[12px] text-mute mt-1">🏠 rutina · ⚡ reto · nivel <b class="text-white">${ADV_LV[A.lv - 1]}</b> <button class="text-cyan-300 font-bold" data-mact="lvl" type="button">cambiar</button></p>
     <div class="adv-grid mt-3">${cells}</div>
-    ${open < 24 ? `<p class="text-[11px] text-mute mt-3 text-center">${open ? `Mañana a las 00:00 se abre la casilla ${open + 1}.` : 'La primera casilla se abre el 1 de diciembre.'}</p>` : ''}
-    <button class="text-[11px] text-mute underline mt-3 mx-auto block" data-mact="off" type="button">Desactivar calendario</button>`,
+    ${open < 24 ? `<p class="text-[11px] text-mute mt-3 text-center">${open ? `Mañana a las 00:00 se abre la casilla ${open + 1}. Prohibido espiar.` : 'La primera casilla se abre el 1 de diciembre. Los polvorones ya están avisados.'}</p>` : ''}
+    <button class="text-[11px] text-mute underline mt-3 mx-auto block" data-mact="off" type="button">Abandonar la operación</button>`,
   { day: (_, b) => advDay(+b.dataset.n), lvl: () => advLevel(advGrid), off: () => { A.on = false; persist(); closeModal(); render(); } });
 }
 function advLevel(back) {
@@ -6413,7 +6415,7 @@ function advDone(n, short) {
   }
   persist();
   const k = advDoneN();
-  openModal(`<div class="text-center"><div class="pp-hero">🎁</div><h3 class="text-2xl font-black mt-3">¡Casilla ${n} hecha!</h3>
+  openModal(`<div class="text-center"><div class="pp-hero">🎁</div><h3 class="text-2xl font-black mt-3">¡Casilla ${n} hecha!</h3><p class="text-[13px] text-amber-200 mt-1 italic">${esc(ADV_JOKES[(n + k) % ADV_JOKES.length])}</p>
     <p class="text-sm text-mute mt-1">Llevas <b class="text-amber-300">${k} de 24</b>${d.kind === 'r' ? ` · apuntado en Cardio como Funcional (${short ? 10 : 20} min)` : ''}</p>
     <div class="adv-strip mt-4">${Array.from({ length: 24 }, (_, i) => `<i class="${A.done[i + 1] ? 'on' : ''}${i + 1 === n ? ' new' : ''}"></i>`).join('')}</div></div>
     <button class="btn-primary w-full mt-5" data-mact="g" type="button">Volver al calendario</button>`, { g: () => advGrid() });
@@ -6426,9 +6428,9 @@ function advNotify() {
   const k = 'advSeen_' + t; if (lsGet(k)) return; lsSet(k, 1);
   const d = ADV_DAYS[open];
   setTimeout(() => { if ($('#modalRoot').classList.contains('open')) return;
-    openModal(`<div class="text-center"><div class="pp-hero">🎁</div><div class="text-[11px] font-black tracking-widest text-red-300 mt-3">AD(GYM)VIENTO</div><h3 class="text-2xl font-black">Se ha abierto la casilla ${open}</h3>
+    openModal(`<div class="text-center"><div class="pp-hero">🎁</div><div class="text-[11px] font-black tracking-widest text-red-300 mt-3">🕵️ OPERACIÓN POLVORÓN</div><h3 class="text-2xl font-black">Agente, casilla ${open} abierta</h3>
       <p class="text-sm text-mute mt-1">${d.kind === 'r' ? '🏠 Rutina' : '⚡ Reto'}: ${esc(d.title)}</p></div>
-      <div class="grid grid-cols-2 gap-2 mt-5"><button class="btn-ghost" data-close type="button">Luego</button><button class="btn-primary" data-mact="go" type="button">Abrirla</button></div>`, { go: () => advDay(open) });
+      <div class="grid grid-cols-2 gap-2 mt-5"><button class="btn-ghost" data-close type="button">Luego</button><button class="btn-primary" data-mact="go" type="button">A por ella</button></div>`, { go: () => advDay(open) });
   }, 1200);
 }
 /* Ficha del ejercicio con el maniquí 3D (se carga solo al abrirla) */
