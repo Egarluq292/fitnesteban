@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.81.1';
+const APP_VERSION = '4.81.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -825,6 +825,7 @@ function closeModal() {
   root.classList.remove('open');
   document.body.classList.remove('overflow-hidden');
   modalHandlers = {};
+  if (ui.roadPending) { ui.roadPending = false; setTimeout(roadNotify, 700); } // «Próximamente» esperaba a que se cerrara otra ventana
 }
 $('#modalRoot').addEventListener('click', e => {
   if (e.target.closest('[data-close]')) return closeModal();
@@ -5806,6 +5807,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.81.2', ['🔜 «Próximamente» sale justo después de cerrar la ventana de novedades, en vez de perderse.'], 'quiet'],
   ['4.81.1', ['📲 Si abres el enlace desde WhatsApp o Telegram y no te deja instalar, la pantalla te explica cómo abrirlo en Chrome o Safari.'], 'quiet'],
   ['4.81.0', ['🔜 Nuevo «Próximamente»: al abrir la app (una vez al día) verás lo que está por llegar. Puedes pulsar «No volver a mostrar».'], 'quiet'],
   ['4.80.3', ['📤 «Compartir la app» envía ahora el enlace de la app, para probarla gratis 15 días.'], 'quiet'],
@@ -6127,11 +6129,11 @@ function roadmapHTML(R = roadLive()) {
 }
 /* Al abrir la app (una vez al día): ventana con lo que viene. «No volver a mostrar» la quita hasta que se anuncie algo nuevo. */
 const ROAD_KEY = 'fitnesteban_road';
-function roadNotify(retry = true) {
+function roadNotify() {
   if (!access.ok || needsOnboarding(access.me)) return;
   const seen = lsGet(ROAD_KEY) || {}, R = roadLive().filter(r => !(seen.no || []).includes(r.id));
   if (!R.length || seen.day === todayISO()) return;
-  if ($('#modalRoot').classList.contains('open')) { if (retry) setTimeout(() => roadNotify(false), 9000); return; }
+  if ($('#modalRoot').classList.contains('open')) { ui.roadPending = true; return; } // sale en cuanto se cierre la otra ventana
   lsSet(ROAD_KEY, { ...seen, day: todayISO() });
   openModal(`<div class="flex items-start gap-2"><div class="flex-1"><div class="text-[11px] font-black tracking-widest text-amber-300">🔜 PRÓXIMAMENTE EN FITNESTEBAN</div><h3 class="text-xl font-black leading-tight mt-0.5">Lo que está por llegar</h3></div><button class="iconbtn" data-close type="button" aria-label="Cerrar">✕</button></div>
     ${roadmapHTML(R).replace('<div class="text-[11px] font-black tracking-widest text-amber-300">🔜 PRÓXIMAMENTE</div>', '')}
