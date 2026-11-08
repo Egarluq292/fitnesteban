@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.80.0';
+const APP_VERSION = '4.80.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5806,6 +5806,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.80.1', ['🧪 Acceso: nueva lista «En prueba gratis» con el correo, días de uso y días que le quedan a cada uno, y botón para darle su código personal.'], 'admin'],
   ['4.80.0', ['🎁 Prueba gratis de 15 días: quien no tiene código puede entrar con Google desde la pantalla de acceso. Una prueba por cuenta de Google y por instalación; al terminar, pide su código. Necesita el script v12 (Acceso → Reconfigurar).'], 'admin'],
   ['4.79.2', ['🕵️ El calendario de AD(GYM)VIENTO ya tiene nombre en clave: Operación Polvorón.'], 'quiet'],
   ['4.79.1', ['🎄 El anuncio del calendario ya no se puede cerrar por error.'], 'quiet'],
@@ -7094,6 +7095,7 @@ const actions = {
   export: () => exportBackup(),
   editProfile: () => profileModal(),
   newAccess: () => newAccessModal(),
+  trialCode: b => newAccessModal(b.dataset.who || '', '1m'),
   openAccess: () => {
     if (state.settings.pinHash) return askPinOnly('🔑 Acceso', 'Escribe tu PIN para abrir esta sección.', pin => { ui.accessOpen = true; ui.accessPin = pin; ui.accessReveal = {}; ui.usage = null; ui.usageErr = ''; render(); loadUsage(); });
     let fails = 0;
@@ -8178,7 +8180,7 @@ function planPill(x) {
 function accFilterHTML(list) {
   const n = k => list.filter(x => accStatus(x) === k).length;
   const idle = list.filter(x => !x.admin && (() => { const u = ui.usage?.[x.hash]; return !u || daysBetween(u.last, todayISO()) > 7; })()).length;
-  const F = [['all', 'Todos', list.length], ['soon', 'Caducan pronto', n('soon')], ['exp', 'Caducados', n('exp')], ['idle', 'Sin usar +7 d', ui.usage ? idle : null], ['free', 'Free', n('free')]];
+  const F = [['all', 'Todos', list.length], ['soon', 'Caducan pronto', n('soon')], ['exp', 'Caducados', n('exp')], ['idle', 'Sin usar +7 d', ui.usage ? idle : null], ['free', 'Free', n('free')], ['trial', '🧪 En prueba', ui.usage ? trialRows().length : null]];
   return `<input class="field" id="accSearch" placeholder="🔎 Buscar por nombre o correo" autocomplete="off" value="${esc(ui.accQ || '')}" />
     <div class="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" data-noswipe>${F.filter(f => f[2] !== null).map(([k, l, c]) => `<button class="chip chip-sm shrink-0 ${(ui.accF || 'all') === k ? 'chip-on' : ''}" data-act="accF" data-k="${k}" type="button">${l} <span class="opacity-70">${c}</span></button>`).join('')}</div>`;
 }
@@ -8201,6 +8203,29 @@ async function loadActiveCount() {
     const d = await (await fetch(`${access.usageUrl}?op=hoy&t=${Date.now()}`, { cache: 'no-store' })).json();
     if (typeof d.hoy === 'number') { ui.hoyN = d.hoy; if (ui.view === 'settings') render(); }
   } catch { /* sin dato: no se muestra */ }
+}
+/* 🧪 Quien está de prueba gratis (filas de la hoja que no son de ningún código de acceso.txt) */
+function trialRows() {
+  if (!ui.usage) return [];
+  const known = new Set((access.list || []).map(x => x.hash));
+  return Object.values(ui.usage).filter(u => !known.has(String(u.h).toLowerCase()) && /prueba/i.test(u.nm || '')).map(u => ({ ...u, hasta: (String(u.nm).match(/\d{4}-\d{2}-\d{2}/) || [''])[0] }))
+    .sort((a, b) => (b.last || '').localeCompare(a.last || ''));
+}
+function trialRowsHTML() {
+  const T = trialRows(); if (!T.length) return '';
+  const show = !ui.accF || ui.accF === 'all' || ui.accF === 'trial', t = netToday() || todayISO();
+  return `<div class="lbl mt-2 acc-row-h" ${show ? '' : 'hidden'}>🧪 En prueba gratis · ${T.length}</div>` + T.map(u => {
+    const left = u.hasta ? daysBetween(t, u.hasta) : null, ago = u.last ? daysBetween(u.last, todayISO()) : null, open = ui.accOpenH === u.h;
+    const dot = ago === 0 ? 'u-today' : ago !== null && ago <= 7 ? 'u-week' : 'u-old', who = u.m || 'Sin correo';
+    const pill = left === null ? '' : left < 0 ? '<span class="text-rose-300">Terminada</span>' : `<span class="${left <= 3 ? 'text-amber-300' : 'text-cyan-300'}">Prueba · ${left === 0 ? 'hoy' : left + ' d'}</span>`;
+    return `<div class="acc-row ${open ? 'acc-open' : ''}" data-s="${esc(normTxt(who + ' prueba'))}" ${show ? '' : 'hidden'}>
+      <button class="w-full flex items-center gap-2 px-3 py-2.5 text-left" data-act="accRow" data-hash="${esc(u.h)}" type="button"><span class="u-dot ${dot}"></span>
+        <span class="flex-1 min-w-0"><span class="block font-semibold text-[13px] truncate ${ago === 0 ? 'text-emerald-300' : ''}">${esc(who)}</span><span class="block text-[11px] text-mute">${ago === 0 ? 'Activo hoy' : ago === null ? '' : `Último uso hace ${plural(ago, 'día', 'días')}`} · ${plural(u.days || 1, 'día', 'días')} de uso</span></span>
+        <span class="text-[11px] shrink-0">${pill}</span><span class="tri shrink-0 ${open ? 'rotate-180' : ''}"></span></button>
+      ${open ? `<div class="px-3 pb-2.5 pt-1 text-xs space-y-1.5"><p class="text-[11px] text-mute">Empezó el ${esc(fmtDateShort(u.first || ''))}${u.hasta ? ` · termina el ${esc(fmtDateShort(u.hasta))}` : ''}${u.v ? ` · v${esc(u.v)}` : ''}</p>
+        ${lsGet(GH_KEY) ? `<button class="btn-ghost w-full" data-act="trialCode" data-who="${esc(String(u.m || '').split('@')[0].slice(0, 24))}" type="button">🔑 Darle su código personal</button>` : ''}
+        <p class="text-[11px] text-mute">Cuando le des un código, lo escribe en la pantalla de acceso y sigue con todos sus datos.</p></div>` : ''}</div>`;
+  }).join('');
 }
 function accessSectionHTML() {
   if (!access.me?.admin) return '';
@@ -8228,14 +8253,14 @@ function accessSectionHTML() {
       const today = ago === 0, dotCls = !u ? 'u-none' : today ? 'u-today' : ago <= 7 ? 'u-week' : 'u-old';
       const vOld = u?.v && cmpVer(APP_VERSION, String(u.v)) > 0;
       const pill = x.admin ? '<span class="text-brand">admin</span>' : planPill(x);
-      const visF = (!ui.accF || ui.accF === 'all' || ui.accF === st || (ui.accF === 'idle' && !x.admin && (ago === null || ago > 7))) || (me && (!ui.accF || ui.accF === 'all'));
+      const visF = ui.accF === 'trial' ? false : (!ui.accF || ui.accF === 'all' || ui.accF === st || (ui.accF === 'idle' && !x.admin && (ago === null || ago > 7))) || (me && (!ui.accF || ui.accF === 'all'));
       return `<div class="acc-row ${open ? 'acc-open' : ''}" data-s="${esc(normTxt([accessWho(x), u?.m || '', x.hash.slice(-4)].join(' ')))}" ${visF ? '' : 'hidden'}>
         <button class="w-full flex items-center gap-2 px-3 py-2.5 text-left" data-act="accRow" data-hash="${esc(x.hash)}" type="button">
           <span class="u-dot ${dotCls}"></span>
           <span class="flex-1 min-w-0"><span class="block font-semibold text-[13px] truncate ${today ? 'text-emerald-300' : ''}">${accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`}${me ? ' <span class="text-mute">(tú)</span>' : ''}</span>${u?.m ? `<span class="block text-[11px] text-mute truncate">${esc(u.m)}</span>` : ''}${u?.v ? `<span class="block text-[10px] ${vOld ? 'text-amber-300' : 'text-mute'}">v${esc(u.v)}${vOld ? ' · antigua' : ''}${today ? '' : ` · ${ago === 1 ? 'ayer' : `hace ${ago} d`}`}</span>` : u ? '' : '<span class="block text-[10px] text-mute">sin abrir aún</span>'}</span>
           <span class="text-[11px] shrink-0">${pill}</span><span class="tri shrink-0 ${open ? 'rotate-180' : ''}"></span></button>
         ${open ? detail : ''}</div>`;
-    }).join('')}</div>
+    }).join('')}${trialRowsHTML()}</div>
     <p class="text-[12px] text-mute text-center hidden" id="accNone">Nadie coincide con la búsqueda.</p>
     ${gh ? '<p class="text-[11px] text-mute">Toca a una persona para ver su ficha: ✎ nombre · ⏳ plan · 👤/🙈 registrar u ocultar su nombre de perfil · 🔄 nuevo código · 🗑 quitar acceso. Nombres y códigos solo los ves tú (cifrados con tu PIN); en GitHub solo hay huellas.</p>' : ''}
     ${list.length ? '<button class="btn-ghost w-full" data-act="copyHashes" type="button">📋 Copiar huellas y nombres (para tu hoja)</button>' : ''}
@@ -8306,8 +8331,8 @@ function planModal(hash) {
     } })
   });
 }
-function newAccessModal() {
-  let k = 'prueba', who0 = '';
+function newAccessModal(who = '', plan = 'prueba') {
+  let k = plan, who0 = who;
   const html = () => `<h3 class="modal-title">Nuevo código de acceso</h3>
     <label class="lbl">¿Para quién es? (solo lo verás tú)<input class="field mt-1" name="who" maxlength="24" placeholder="Ej: Ana" value="${esc(who0)}" /></label>
     <div><div class="lbl mb-1.5">Plan</div>${planChips(k)}</div>
