@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.77.0';
+const APP_VERSION = '4.78.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -169,7 +169,70 @@ const KB_DAYS = [{
     mkEx('kb_row', '🦅 Espalda y grosor', 3, 10, 12, 2, 90, [['Gorilla row (remo alterno)', 'Apoyo firme, tira de los codos sin rotar el tronco.'], ['Remo a una mano con kettlebell', 'Codo hacia la cadera.'], ['Remo renegado', 'En plancha, sin girar la cadera.']])
   ]
 }];
+/* PRIMEROS PASOS: para quien empieza de cero. 3 fases; solo se ve la fase en la que estás y se sube sola al completar sus sesiones. */
+const ppEx = (id, block, sets, min, max, name, note, alts = [], timed = false) => ({ ...mkEx(id, block, sets, min, max, 1, timed ? 45 : 60, [[name, note], ...alts]), increment: 0, bw: true, ...(timed ? { timed: true } : {}) });
+const PP_GOAL = { 1: 6, 2: 9, 3: 9 }; // sesiones para pasar de fase
+const PP_SAFE = 'Si algo duele (dolor, no esfuerzo), para. Con lesión, embarazo o problema de salud, consulta antes.';
+const PP_DAYS = [
+  { id: 'pp1a', label: 'F1 · A', phase: 1, title: 'Fase 1 · Día A', subtitle: 'En casa · ' + PP_SAFE, exercises: [
+    ppEx('pp_sq1', '🦵 Piernas', 2, 8, 10, 'Sentadilla a una silla', 'Siéntate despacio, roza la silla y levántate empujando con los talones. Rodillas hacia fuera.'),
+    ppEx('pp_wpu', '💪 Pecho y brazos', 2, 8, 10, 'Flexiones en la pared', 'Manos a la altura del pecho. Cuerpo recto como una tabla: baja el pecho a la pared y empuja.'),
+    ppEx('pp_row1', '🦅 Espalda', 2, 10, 12, 'Remo con mochila', 'Mochila con libros. Inclínate con la espalda recta y lleva los codos atrás, pegados al cuerpo.'),
+    ppEx('pp_br1', '🍑 Glúteo', 2, 10, 12, 'Puente de glúteo', 'Tumbado boca arriba, pies apoyados. Sube la cadera apretando el culo, sin arquear la espalda.'),
+    ppEx('pp_pk1', '🧱 Abdomen', 2, 20, 30, 'Plancha con rodillas apoyadas', 'Codos bajo los hombros y la tripa apretada. Respira normal. Segundos.', [], true)
+  ] },
+  { id: 'pp1b', label: 'F1 · B', phase: 1, title: 'Fase 1 · Día B', subtitle: 'En casa · ' + PP_SAFE, exercises: [
+    ppEx('pp_lg1', '🦵 Piernas', 2, 6, 8, 'Zancada atrás con apoyo', 'Agárrate a una silla o a la pared. Paso atrás y baja controlado. Reps por pierna.'),
+    ppEx('pp_wpu', '💪 Pecho y brazos', 2, 8, 10, 'Flexiones en la pared', 'Un poco más lejos de la pared que el día A si te resultó fácil.'),
+    ppEx('pp_bd1', '🧱 Abdomen y espalda', 2, 6, 8, 'Bird dog', 'A cuatro patas, estira brazo y pierna contrarios sin mover la cadera. 2 segundos arriba. Reps por lado.'),
+    ppEx('pp_calf', '🦶 Gemelos', 2, 12, 15, 'Elevaciones de talones', 'De pie, agarrado a la pared. Sube de puntillas despacio y baja más despacio aún.'),
+    ppEx('pp_db1', '🧱 Abdomen', 2, 6, 8, 'Dead bug', 'Boca arriba, la zona lumbar pegada al suelo. Baja brazo y pierna contrarios despacio. Reps por lado.')
+  ] },
+  { id: 'pp2a', label: 'F2 · A', phase: 2, title: 'Fase 2 · Día A', subtitle: 'En casa · ' + PP_SAFE, exercises: [
+    ppEx('pp_sq2', '🦵 Piernas', 3, 10, 12, 'Sentadilla libre', 'Sin silla. Baja hasta donde mantengas la espalda recta y los talones en el suelo.'),
+    ppEx('pp_tpu', '💪 Pecho y brazos', 3, 8, 10, 'Flexiones con manos en la mesa', 'Mesa firme o encimera. Cuerpo recto, el pecho baja hasta el borde.'),
+    ppEx('pp_row1', '🦅 Espalda', 3, 10, 12, 'Remo con mochila', 'Si ya haces 12 fácil, mete más libros.'),
+    ppEx('pp_br2', '🍑 Glúteo', 3, 10, 12, 'Puente de glúteo con pausa', 'Aguanta 2 segundos arriba apretando el culo.'),
+    ppEx('pp_pk2', '🧱 Abdomen', 3, 20, 30, 'Plancha', 'Ya sin rodillas. Si se te hunde la cadera, apoya rodillas y sigue.', [], true)
+  ] },
+  { id: 'pp2b', label: 'F2 · B', phase: 2, title: 'Fase 2 · Día B', subtitle: 'En casa · ' + PP_SAFE, exercises: [
+    ppEx('pp_lg2', '🦵 Piernas', 3, 8, 10, 'Zancada atrás', 'Ya sin apoyo si puedes. Reps por pierna.'),
+    ppEx('pp_sp1', '💪 Hombros', 3, 10, 12, 'Press de hombros con mochila', 'Mochila agarrada por las asas a la altura del pecho; empuja hacia arriba sin arquear la espalda.'),
+    ppEx('pp_bd1', '🧱 Abdomen y espalda', 3, 8, 10, 'Bird dog', 'Reps por lado, despacio.'),
+    ppEx('pp_calf', '🦶 Gemelos', 3, 12, 15, 'Elevaciones de talones', 'Pausa de 1 segundo arriba.'),
+    ppEx('pp_db1', '🧱 Abdomen', 3, 8, 10, 'Dead bug', 'Reps por lado.')
+  ] },
+  { id: 'pp2c', label: 'F2 · C', phase: 2, title: 'Fase 2 · Día C', subtitle: 'En casa · ' + PP_SAFE, exercises: [
+    ppEx('pp_gb2', '🦵 Piernas', 3, 10, 12, 'Sentadilla abrazando la mochila', 'Mochila pegada al pecho, codos dentro de las rodillas.'),
+    ppEx('pp_tpu', '💪 Pecho y brazos', 3, 8, 10, 'Flexiones con manos en la mesa', 'Baja en 2 segundos.'),
+    ppEx('pp_row2', '🦅 Espalda', 3, 10, 12, 'Remo a una mano', 'Una mano apoyada en la silla, la otra lleva la mochila a la cadera. Reps por brazo.'),
+    ppEx('pp_br2', '🍑 Glúteo', 3, 10, 12, 'Puente de glúteo con pausa', '2 segundos arriba.'),
+    ppEx('pp_sk1', '🧱 Abdomen', 3, 15, 20, 'Plancha lateral con rodillas', 'Codo bajo el hombro, cadera alta. Segundos por lado.', [], true)
+  ] },
+  { id: 'pp3a', label: 'F3 · A', phase: 3, title: 'Fase 3 · Día A', subtitle: 'En casa · ' + PP_SAFE, exercises: [
+    ppEx('pp_gb2', '🦵 Piernas', 3, 12, 15, 'Sentadilla abrazando la mochila', 'Mochila más cargada que en la fase 2.'),
+    ppEx('pp_kpu', '💪 Pecho y brazos', 3, 6, 10, 'Flexiones con rodillas en el suelo', 'Cuerpo recto de rodillas a cabeza. Si no salen 6, vuelve a la mesa.'),
+    ppEx('pp_row1', '🦅 Espalda', 3, 12, 15, 'Remo con mochila', 'Aprieta las escápulas 1 segundo atrás.'),
+    ppEx('pp_br3', '🍑 Glúteo', 3, 8, 10, 'Puente de glúteo a una pierna', 'Una pierna estirada al aire. Reps por pierna.'),
+    ppEx('pp_pk2', '🧱 Abdomen', 3, 30, 40, 'Plancha', 'Segundos.', [], true)
+  ] },
+  { id: 'pp3b', label: 'F3 · B', phase: 3, title: 'Fase 3 · Día B', subtitle: 'En casa · ' + PP_SAFE, exercises: [
+    ppEx('pp_lg3', '🦵 Piernas', 3, 8, 10, 'Zancada atrás con mochila', 'Mochila a la espalda. Reps por pierna.'),
+    ppEx('pp_sp1', '💪 Hombros', 3, 10, 12, 'Press de hombros con mochila', 'Más libros si ya sale fácil.'),
+    ppEx('pp_sup', '🦅 Espalda baja', 3, 10, 12, 'Superman', 'Boca abajo, levanta brazos y piernas un palmo, 1 segundo arriba.'),
+    ppEx('pp_ws', '🦵 Piernas', 3, 30, 45, 'Sentadilla isométrica en la pared', 'Espalda en la pared, como sentado en una silla invisible. Segundos.', [], true),
+    ppEx('pp_db1', '🧱 Abdomen', 3, 10, 12, 'Dead bug', 'Reps por lado.')
+  ] },
+  { id: 'pp3c', label: 'F3 · C', phase: 3, title: 'Fase 3 · Día C', subtitle: 'En casa · ' + PP_SAFE, exercises: [
+    ppEx('pp_stp', '🦵 Piernas', 3, 8, 10, 'Subir a un escalón', 'Escalón o banco firme. Sube empujando con el talón, baja despacio. Reps por pierna.'),
+    ppEx('pp_kpu', '💪 Pecho y brazos', 3, 6, 10, 'Flexiones con rodillas en el suelo', 'Baja en 2 segundos.'),
+    ppEx('pp_row2', '🦅 Espalda', 3, 10, 12, 'Remo a una mano', 'Reps por brazo.'),
+    ppEx('pp_ht', '🍑 Glúteo', 3, 10, 12, 'Hip thrust en el sofá', 'Espalda alta apoyada en el sofá, sube la cadera hasta quedar recto.'),
+    ppEx('pp_sk2', '🧱 Abdomen', 3, 20, 30, 'Plancha lateral', 'Ya con los pies. Segundos por lado.', [], true)
+  ] }
+];
 const LIB_BLOCKS = [
+  { lib: 'primeros', name: 'PRIMEROS PASOS', icon: '', pp: true, desc: 'Para empezar desde cero, en casa y sin material (solo una silla y una mochila). 3 fases que se desbloquean solas: 2 días por semana al principio, 3 después. Cada sesión, una estrella.', days: () => PP_DAYS },
   { lib: 'kb', name: 'KETTLEBELL', perWeek: 2, icon: '🔔', desc: 'Potencia y quema-grasa con kettlebell: swing, goblet, clean & press, zancadas y remo. Ideal en casa.', days: () => KB_DAYS },
   { lib: 'ppt', name: 'PPT', perWeek: 3, icon: '', desc: 'Push / Pull / Torso en 3 días, con «peaje» de pierna al inicio de cada sesión.', days: () => PPT_DAYS },
   { lib: 'fullbody', name: 'FULL BODY', perWeek: 3, icon: '', desc: 'Cuerpo completo en 2 días alternos (A y B): básicos pesados y accesorios.', days: () => FULLBODY_DAYS }
@@ -302,8 +365,28 @@ function makeLibProg(lib) {
     return nd;
   });
   const np = { id: uid('p_'), name: L.name, icon: L.icon, lib: L.lib, type: 'strength', days };
+  if (L.pp) ppSetPhase(np, 1);
   state.plan.programs.push(np);
   return np;
+}
+const isPP = p => p?.lib === 'primeros';
+// Fase actual: solo sus días están en rotación (los de otras fases se ocultan en la lista de días)
+function ppSetPhase(p, n) {
+  p.ppPhase = n;
+  for (const d of p.days) if (d.phase) d.rotation = d.phase === n;
+}
+function ppInfo(p) {
+  const ph = p.ppPhase || 1, ids = new Set(p.days.filter(d => d.phase === ph).map(d => d.id)), all = new Set(p.days.map(d => d.id));
+  const ss = state.sessions.filter(s => all.has(s.dayId));
+  const done = ss.filter(s => ids.has(s.dayId)).length, goal = PP_GOAL[ph];
+  return { ph, done: Math.min(done, goal), goal, stars: ss.length, ready: done >= goal };
+}
+// Barra de fase + estrellas (tarjeta del bloque y cabecera del día)
+function ppBarHTML(p, big = false) {
+  const f = ppInfo(p);
+  return `<div class="pp-bar${big ? ' pp-big' : ''}"><div class="flex items-center justify-between gap-2"><span class="pp-ph">Fase ${f.ph} de 3</span><span class="pp-st">⭐ ${f.stars}</span></div>
+    <div class="pp-track">${Array.from({ length: f.goal }, (_, i) => `<i class="${i < f.done ? 'on' : ''}"></i>`).join('')}</div>
+    <div class="pp-l">${f.ph === 3 && f.ready ? '¡Bloque completado! Ya puedes pasar a FULL BODY o CALISTENIA EN CASA.' : `${f.done} de ${f.goal} sesiones · ${f.goal - f.done === 1 ? 'te queda 1 para' : `te quedan ${f.goal - f.done} para`} ${f.ph < 3 ? `la fase ${f.ph + 1}` : 'terminar'}`}</div></div>`;
 }
 function addLibBlock(lib) {
   const np = makeLibProg(lib); if (!np) return;
@@ -467,7 +550,8 @@ function normalizeDay(day) {
   return {
     id: day.id || uid('d_'), label: String(day.label || 'DÍA').slice(0, 10), rotation: day.rotation !== false,
     title: day.title || day.label || 'Día', subtitle: day.subtitle || '',
-    exercises: (day.exercises || []).map(normalizeExercise)
+    exercises: (day.exercises || []).map(normalizeExercise),
+    ...(day.phase >= 1 && day.phase <= 3 ? { phase: +day.phase } : {})
   };
 }
 function normalizePlan(plan) {
@@ -490,7 +574,7 @@ function normalizePlan(plan) {
   if (!programs.some(p => p.type === 'cardio')) programs.push(clone(DEFAULT_PLAN.programs.find(p => p.type === 'cardio')));
   if (!programs.some(p => p.type === 'retos')) programs.push(clone(DEFAULT_PLAN.programs.find(p => p.type === 'retos')));
   programs = programs.map(p => ({
-    id: p.id || uid('p_'), name: String(p.name || 'BLOQUE').slice(0, 30), icon: p.icon || '', lib: p.lib || (p.id === 'ppt' ? 'ppt' : p.id === 'fullbody' ? 'fullbody' : ''), ...(p.pubId ? { pubId: p.pubId } : {}), ...(p.perWeek >= 1 && p.perWeek <= 7 ? { perWeek: +p.perWeek } : {}),
+    id: p.id || uid('p_'), name: String(p.name || 'BLOQUE').slice(0, 30), icon: p.icon || '', lib: p.lib || (p.id === 'ppt' ? 'ppt' : p.id === 'fullbody' ? 'fullbody' : ''), ...(p.pubId ? { pubId: p.pubId } : {}), ...(p.ppPhase >= 1 && p.ppPhase <= 3 ? { ppPhase: +p.ppPhase } : {}), ...(p.perWeek >= 1 && p.perWeek <= 7 ? { perWeek: +p.perWeek } : {}),
     type: p.type === 'cardio' || p.type === 'retos' ? p.type : 'strength',
     days: p.type === 'cardio' || p.type === 'retos' ? [] : (p.days || []).map(normalizeDay)
   }));
@@ -807,7 +891,7 @@ function coachCore(e, exKey) {
   const hist = exHistory(exKey);
   const lastTop = hist.length ? topOf(hist[hist.length - 1].sets) : null;
   if (!lastTop) {
-    return { tone: 'new', title: 'Sesión de calibración', text: e.bw ? `Haz ${min}–${max} reps con tu peso dejando 1–2 en recámara; si te sobran, añade lastre. A partir de la próxima te digo qué hacer.` : `Busca un peso con el que hagas ${min}–${max} reps dejando 1–2 en recámara. A partir de la próxima te digo qué peso poner.`, weight: null, targets: fill(`${min}-${max}`), last: '' };
+    return { tone: 'new', title: 'Sesión de calibración', text: e.bw ? `Haz ${min}–${max} reps con tu peso dejando 1–2 en recámara; si te sobran, ${inc ? 'añade lastre' : 'hazlo más lento'}. A partir de la próxima te digo qué hacer.` : `Busca un peso con el que hagas ${min}–${max} reps dejando 1–2 en recámara. A partir de la próxima te digo qué peso poner.`, weight: null, targets: fill(`${min}-${max}`), last: '' };
   }
   const last = hist[hist.length - 1];
   const { t: topW, valid, work } = lastTop;
@@ -821,7 +905,7 @@ function coachCore(e, exKey) {
   }
   const allTop = work.length >= Math.min(n, valid.length) && work.every(s => s.r >= max);
   if (allTop) {
-    if (bw) return { tone: 'up', title: 'Tope de reps alcanzado', text: `${max}+ reps en todas las series con tu peso. Añade ${fmtKg(inc)} de lastre o pasa a una variante más dura.`, weight: inc, targets: fill(min), last: lastStr };
+    if (bw) return { tone: 'up', title: 'Tope de reps alcanzado', text: inc ? `${max}+ reps en todas las series con tu peso. Añade ${fmtKg(inc)} de lastre o pasa a una variante más dura.` : `${max}+ en todas las series. Ahora hazlo más lento (3 segundos al bajar) hasta que subas de fase.`, weight: inc, targets: fill(min), last: lastStr };
     const w = r2(topW + inc);
     return { tone: 'up', title: `Sube a ${K(w)}`, text: `Hiciste ${max} reps en todas las series con ${K(topW)}. Toca subir: ${K(w)} y objetivo ${min} reps.`, weight: w, targets: fill(min), last: lastStr };
   }
@@ -848,7 +932,7 @@ function coachCore(e, exKey) {
   if (below) {
     return { tone: 'hold', title: `Repite ${wTxt}`, text: `Alguna serie quedó por debajo de ${min} reps. Mismo peso y busca ${min} en todas; si vuelve a pasar, bajamos.`, weight: topW, targets, last: lastStr };
   }
-  return { tone: 'hold', title: `Mantén ${wTxt}`, text: `Objetivo hoy: +1 rep por serie (${targets.join(' / ')}). Cuando llegues a ${max} en todas, ${e.bw ? `añadimos ${fmtKg(inc)} de lastre` : `subimos ${fmtKg(inc)}`}.`, weight: topW, targets, last: lastStr };
+  return { tone: 'hold', title: `Mantén ${wTxt}`, text: `Objetivo hoy: +1 rep por serie (${targets.join(' / ')}). Cuando llegues a ${max} en todas, ${e.bw ? (inc ? `añadimos ${fmtKg(inc)} de lastre` : 'lo harás más lento') : `subimos ${fmtKg(inc)}`}.`, weight: topW, targets, last: lastStr };
 }
 
 const TONE = {
@@ -972,6 +1056,7 @@ function libCtaHTML() {
 /* ---------- 🎴 Tarjeta del bloque activo (foto difuminada teñida según el tipo de bloque) ---------- */
 /* Cada tipo de bloque tiene su foto; los que no encajan usan la genérica (en blanco y negro) teñida de cian */
 const BLOCK_LOOKS = [
+  { re: /primeros pasos|🌱/i, img: 'primeros', c: '#facc15', tag: 'Para empezar' },
   { re: /kettle|🔔/i, img: 'kb', c: '#fbbf24', tag: 'Kettlebell' },
   { re: /calist|casa|🤸|🏠/i, img: 'casa', c: '#34d399', tag: 'En casa' },
   { re: /braz|bícep|bicep|trícep|tricep|💪/i, img: 'brazos', c: '#a78bfa', tag: 'Brazos' },
@@ -1016,7 +1101,7 @@ function blockHeroHTML() {
     <div class="bh-body">
       <div class="flex items-center gap-2"><span class="bh-tag">Bloque activo · ${esc(L.tag)}</span>${week ? `<span class="bh-week">Semana ${week}</span>` : ''}</div>
       <div class="bh-name">${blockNameHTML(p.name, p.icon, 26)}</div>
-      <div class="bh-sub">${p.days.length} ${p.days.length === 1 ? 'día' : 'días'} · ${ss.length ? `${ss.length} ${ss.length === 1 ? 'sesión hecha' : 'sesiones hechas'}` : 'Aún sin estrenar'}${last ? ` · última ${ago === 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}` : ''}</div>
+      <div class="bh-sub">${isPP(p) ? `Fase ${p.ppPhase || 1} · ${plural(p.days.filter(d => d.rotation).length, 'día', 'días')}` : `${p.days.length} ${p.days.length === 1 ? 'día' : 'días'}`} · ${ss.length ? `${ss.length} ${ss.length === 1 ? 'sesión hecha' : 'sesiones hechas'}` : 'Aún sin estrenar'}${last ? ` · última ${ago === 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}` : ''}</div>
       <div class="bh-row">
         <div class="min-w-0"><div class="bh-l">${doneToday ? 'Hoy' : 'Te toca'}</div><div class="bh-v leading-tight">${doneToday ? 'Entrenado ✓ toca recuperar' : esc(nd ? (nd.title || nd.label) : '—')}</div></div>
         <div class="shrink-0 text-right"><div class="bh-l">Esta semana</div><div class="bh-dots">${dots}</div><div class="bh-l !normal-case !tracking-normal mt-0.5">${wk} de ${goal}</div></div>
@@ -1083,6 +1168,10 @@ function renderTrainHome() {
     const tag = `${isNew ? '<span class="bh-newpill">NUEVO</span>' : ''}${nm.includes(tg) ? '' : esc(look.tag)}`; // sin repetir el nombre («GLÚTEO · GLÚTEO»)
     const sub = `${nDays} ${nDays === 1 ? 'día' : 'días'} · ${nEx} ${nEx === 1 ? 'ejercicio' : 'ejercicios'}${st.n ? ` · última ${st.ago === 0 ? 'hoy' : st.ago === 1 ? 'ayer' : `hace ${st.ago} días`}` : ''}`;
     const goal = blockGoal(p);
+    if (isPP(p.lib ? p : L)) { // PRIMEROS PASOS: fase y estrellas en vez de días y puntos
+      const sb = p.days ? `En casa · ${blockGoal(p)} días por semana${st.n ? ` · última ${st.ago === 0 ? 'hoy' : st.ago === 1 ? 'ayer' : `hace ${st.ago} días`}` : ''}` : 'En casa · sin material · 3 fases';
+      return galleryCard({ key, name: p.name || L.name, icon: p.icon || L?.icon, look, sub: sb, tag, extra: p.days ? ppBarHTML(p) : '<div class="pp-bar"><div class="pp-l !mt-0">Si nunca has entrenado, empieza por aquí. Cada sesión suma una ⭐</div></div>', dim: hid.has(key), isNew });
+    }
     const mh = st.n && nd && st.ago <= 14 && nd.exercises.length ? todayMuscleHint(nd) : null; // mismo mapa que «Hoy te toca»: tus músculos cargados o recuperados
     const extra = st.n && nd && st.ago <= 14 ? `<div class="bh-next flex items-center gap-3">${mh ? `<span class="shrink-0 pointer-events-none bh-mus">${dayMuscleSVG(nd, 27)}</span>` : ''}<span class="min-w-0 flex-1"><span class="bh-l">Te toca</span> <b>${esc(nd.title || nd.label)}</b>${mh ? `<span class="block text-[11px] leading-snug mt-0.5">${mh.txt}</span>` : ''}</span>
       <span class="shrink-0 text-right"><span class="bh-dots !mt-0">${Array.from({ length: Math.max(goal, st.wk) }, (_, i) => `<i class="${i < st.wk ? 'on' : ''}"></i>`).join('')}</span><span class="bh-l !normal-case !tracking-normal">${st.wk} de ${goal} esta semana</span></span></div>` : '';
@@ -1168,7 +1257,8 @@ function renderTrain() {
   const today = todayISO();
   const lastSess = sortedSessions().filter(s => s.dayId === day.id).pop();
 
-  const chips = prog().days.map(dd => {
+  const pp = isPP(prog()) ? prog() : null;
+  const chips = prog().days.filter(dd => !pp || !dd.phase || dd.phase === (pp.ppPhase || 1)).map(dd => {
     const doneToday = state.sessions.some(s => s.dayId === dd.id && s.date === today);
     return `<button class="chip ${dd.id === day.id ? 'chip-on' : ''}" data-act="pickDay" data-day="${esc(dd.id)}" type="button">
       ${esc(dd.label)}${doneToday ? ' ✓' : (dd.id === next ? ' <span class="dot"></span>' : '')}
@@ -1186,6 +1276,7 @@ function renderTrain() {
   return `
   ${blockBackHTML()}
   ${renderDeloadCard()}
+  ${pp ? `<div class="card p-3 mb-2">${ppBarHTML(pp, true)}</div>` : ''}
   <div class="chips-row -mx-4 px-4">${chips}</div>
 
   <section class="card p-4 mt-3">
@@ -1285,7 +1376,7 @@ function renderExerciseCard(e, idx, day, d) {
       <div class="min-w-0">
         <div class="text-[11px] font-bold uppercase tracking-wider text-brand">${esc(e.block)}</div>
         <h3 class="font-extrabold text-[17px] leading-snug mt-0.5">${esc(variant.name)}</h3>
-        <div class="text-[11px] text-mute mt-1">${e.sets} × ${e.minReps}–${e.maxReps} ${e.timed ? 's ⏱' : 'reps'} · descanso ${e.rest}s · +${fmtNum(e.increment)} kg${e.bw ? ' de lastre · peso corporal' : ''}</div>
+        <div class="text-[11px] text-mute mt-1">${e.sets} × ${e.minReps}–${e.maxReps} ${e.timed ? 's ⏱' : 'reps'} · descanso ${e.rest}s ${e.increment ? ` · +${fmtNum(e.increment)} kg` : ''}${e.bw ? `${e.increment ? ' de lastre' : ''} · peso corporal` : ''}</div>
       </div>
       <div class="flex gap-1.5 shrink-0">
         <button class="iconbtn" data-act="skipEx" data-ex="${esc(e.id)}" type="button" aria-label="Hoy no hago este ejercicio">⏭</button>
@@ -1494,9 +1585,12 @@ function saveSession() {
   if (deloadActive()) session.deload = true;
   const mins = sessionMinutes(d);
   if (mins) session.durationMin = mins;
+  const ppP = isPP(prog()) ? prog() : null, ppPre = ppP && ppInfo(ppP);
   state.sessions = others;
   state.sessions.push(session);
   delete state.drafts[day.id];
+  const ppNow = ppP && ppInfo(ppP), ppUp = ppNow && ppNow.ready && !ppPre.ready ? ppNow.ph : 0; // fase completada justo ahora
+  if (ppUp && ppUp < 3) ppSetPhase(ppP, ppUp + 1);
   if (!persist()) return;
   setTimeout(silentDriveBackup, 1500);
   render();
@@ -1504,6 +1598,7 @@ function saveSession() {
   const rot = prog().days.filter(x => x.rotation && x.exercises.length);
   const ri = rot.findIndex(x => x.id === day.id);
   const nxt = ri >= 0 && rot.length > 1 ? rot[(ri + 1) % rot.length] : null;
+  if (ppP) return ppDoneModal(ppP, ppNow, ppUp, session, { mins, exs, nSets, nxt });
   openModal(`
     <div class="text-center">
       <div class="text-4xl">💪</div>
@@ -1525,6 +1620,45 @@ function saveSession() {
       <button class="btn-primary" data-close type="button">Hecho</button>
     </div>
   `, { card: () => openShareCard(session.id) });
+}
+
+/* PRIMEROS PASOS: celebración con estrellas al guardar y pantalla de nueva fase */
+function ppDoneModal(p, f, up, session, { mins, exs, nSets, nxt }) {
+  const stars = Array.from({ length: f.goal }, (_, i) => `<span class="${i < f.done - 1 ? 'on' : i === f.done - 1 ? 'on new' : ''}">⭐</span>`).join('');
+  const left = f.goal - f.done;
+  openModal(`
+    <div class="text-center">
+      <div class="pp-hero">⭐</div>
+      <h3 class="text-2xl font-black mt-3">¡Una estrella más!</h3>
+      <p class="text-sm text-mute mt-1">${esc(session.dayTitle)} · llevas <b class="text-amber-300">${plural(f.stars, 'estrella', 'estrellas')}</b></p>
+      <div class="pp-stars mt-3">${stars}</div>
+      <p class="text-xs text-mute mt-2">${up ? (up < 3 ? `¡Fase ${up} completada!` : '¡Has completado las 3 fases!') : `Fase ${f.ph}: ${f.done} de ${f.goal} · ${left === 1 ? 'te queda 1 sesión' : `te quedan ${left} sesiones`}`}</p>
+    </div>
+    <div class="grid grid-cols-${mins ? 3 : 2} gap-2 mt-4 text-center">
+      ${mins ? `<div class="stat"><div class="stat-v">${mins}</div><div class="stat-l">min</div></div>` : ''}
+      <div class="stat"><div class="stat-v">${exs.length}</div><div class="stat-l">ejercicios</div></div>
+      <div class="stat"><div class="stat-v">${nSets}</div><div class="stat-l">series</div></div>
+    </div>
+    ${!up && nxt ? `<p class="text-xs text-mute mt-3 text-center">Próxima sesión: <strong class="text-white">${esc(nxt.title)}</strong> · deja al menos un día de descanso</p>` : ''}
+    <div class="grid grid-cols-2 gap-2 mt-5">
+      <button class="btn-ghost" data-mact="card" type="button">📸 Tarjeta</button>
+      ${up ? '<button class="btn-primary" data-mact="up" type="button">🏅 Seguir</button>' : '<button class="btn-primary" data-close type="button">Hecho</button>'}
+    </div>`, { card: () => openShareCard(session.id), up: () => ppUpModal(p, up) });
+}
+function ppUpModal(p, up) {
+  const T = {
+    1: ['¡Fase 2 desbloqueada!', 'Has entrenado 6 veces: tu cuerpo ya se ha acostumbrado. Ahora toca un paso más.', ['3 días por semana en vez de 2', '3 series en lugar de 2', 'Sentadilla sin silla, flexiones en la mesa y plancha sin rodillas']],
+    2: ['¡Fase 3 desbloqueada!', '9 sesiones más. Ya no eres principiante del todo.', ['Flexiones de rodillas', 'Puente a una pierna, zancada con mochila y escalón', 'Planchas más largas']],
+    3: ['¡Has completado PRIMEROS PASOS!', 'Ya tienes la base: técnica, constancia y fuerza para dar el salto.', ['Sigue en casa con CALISTENIA EN CASA', 'O pasa al gimnasio con FULL BODY', 'Puedes seguir aquí todo lo que quieras']]
+  }[up];
+  openModal(`<div class="text-center">
+      <div class="pp-hero">${up < 3 ? '🏅' : '🏆'}</div>
+      <h3 class="text-2xl font-black mt-3">${T[0]}</h3>
+      <p class="text-sm text-mute mt-2">${T[1]}</p>
+    </div>
+    <div class="card p-3 mt-4 space-y-1.5">${T[2].map(x => `<p class="text-sm">✨ ${esc(x)}</p>`).join('')}</div>
+    <button class="btn-primary w-full mt-5" data-mact="go" type="button">${up < 3 ? `¡Vamos a por la fase ${up + 1}!` : 'Ver bloques'}</button>`,
+  { go: () => { closeModal(); if (up < 3) { ui.dayId = nextDayId(p); render(); window.scrollTo({ top: 0 }); } else { ui.trainHome = true; render(); window.scrollTo({ top: 0 }); } } });
 }
 
 /* ---------- Tarjeta para compartir (imagen 1080 × 1350) ---------- */
@@ -5669,6 +5803,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.78.0', ['🌱 Nuevo bloque PRIMEROS PASOS, para quien empieza de cero: en casa, sin material (una silla y una mochila), con explicación en cada ejercicio.', '⭐ 3 fases que se desbloquean solas: 2 días por semana al principio y 3 después. Cada sesión suma una estrella y al completar una fase te lo celebra 🏅.']],
   ['4.77.0', ['🗓️ «Hoy te toca» ahora elige entre todos tus bloques en uso: el que va más atrasado esta semana y con los músculos recuperados (te dice por qué). Si ya has cumplido la semana, te lo dice.', '🎯 Cada bloque viene con sus veces por semana: las de su descripción (Brazos 1, PPT 3, Glúteo 2…) o, en los tuyos, sus días. Puedes cambiarlo en su ⋯ → «Nombre y veces por semana».']],
   ['4.76.1', ['📊 «Últimos 7 días» en Dieta: cada barra se rellena con los colores de proteína, grasas y carbohidratos según lo que aporta cada uno. Apagada = te quedas corto; viva = en tu objetivo; con tope rojo = te pasas.', 'Cardio: se explica por qué las kcal registradas (netas) son menos que las del reloj (brutas), y que con «Usar» puedes quedarte con las del reloj.']],
   ['4.76.0', ['💪 Tarjetas de tus bloques en uso: cada una muestra los músculos que trabaja el día que te toca y si están aún cargados o ya recuperados.']],
@@ -5858,6 +5993,7 @@ const GUIDE = [
   ['🏋️ Entreno: bloques y días', [
     'Entreno muestra todos tus entrenos en <b>tarjetas</b>: arriba «Hoy te toca» (elige entre tus bloques en uso el que va más atrasado esta semana y con los músculos recuperados, y te dice por qué), luego <b>RETOS</b>, los botones <b>FREE</b> (ejercicios sueltos del día) y <b>CARDIO</b>, <b>tus bloques</b> y los <b>bloques preparados</b> (todos disponibles, sin tener que añadirlos). Toca una tarjeta para entrar; «‹ Bloques» o el botón Entreno de abajo te devuelven. Los bloques que has entrenado en las últimas 2 semanas suben a «<b>En uso</b>», con lo que te toca y cómo vas esta semana.',
     'El <b>⋯</b> de cada tarjeta permite <b>ocultar</b> un bloque que no uses (no se borra nada: «Ver bloques ocultos», al final, lo recupera) y <b>editarlo</b>. Al abrir o editar un bloque preparado se hace tu copia, con tu progreso: tus cambios se quedan en ella y el original no cambia. Si la borras, ese bloque deja de salirte (si te arrepientes, está en «Ver bloques ocultos»).',
+    '🌱 <b>PRIMEROS PASOS</b> es el bloque para empezar de cero, en casa y sin material. Solo ves los días de tu fase; al completar sus sesiones (6 en la fase 1, 9 en las demás) se desbloquea la siguiente. Cada sesión suma una ⭐. Si algo duele (dolor, no esfuerzo), para; con lesión o problema de salud, consulta antes.',
     'Dentro de un bloque eliges el <b>día</b>: el punto ● marca el que te toca según tu rotación; ✓ el que ya hiciste hoy.',
     '🎴 La <b>tarjeta del bloque activo</b> te dice qué día te toca, cuántas sesiones llevas (y en qué semana del bloque vas) y cuántas has hecho en los últimos 7 días (no de lunes a domingo). El objetivo son las veces por semana que indica el bloque (Brazos 1, PPT 3, Glúteo 2…) o, en los tuyos, sus días; puedes cambiarlo en su ⋯ → «Nombre y veces por semana». Cada tipo de bloque tiene su foto y su color.',
     'Cada bloque lleva su propia rotación: {{ROTACION}}',
