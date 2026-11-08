@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.78.2';
+const APP_VERSION = '4.79.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -696,7 +696,7 @@ let saveTimer = null;
 function hashStr(t) { let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0; return h; }
 function dataSig() {
   const retos = {}; for (const [k, r] of Object.entries(state.retos || {})) retos[k] = { level: r.level, best: r.best, history: r.history, tests: r.tests };
-  return hashStr(JSON.stringify([state.plan, state.sessions, state.meals, state.cardio, state.bodyMetrics, retos, state.reports, state.selectedVariants, state.habitLog, state.habitCount]));
+  return hashStr(JSON.stringify([state.plan, state.sessions, state.meals, state.cardio, state.bodyMetrics, retos, state.reports, state.selectedVariants, state.habitLog, state.habitCount, state.advent]));
 }
 function latestContentDate(st) {
   let d = '';
@@ -5805,6 +5805,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.79.0', ['🎄 Anuncio en Inicio: el Calendario de AD(GYM)VIENTO llega el 20 de noviembre (pulsa «Info» para ver cómo será).'], 'quiet'],
   ['4.78.2', ['⏳ Si a tu acceso le quedan 3 días o menos, Inicio te lo recuerda con una tarjeta fija y un botón para pedir la renovación.'], 'quiet'],
   ['4.78.1', ['🌱 PRIMEROS PASOS aparece arriba, debajo de «En uso», para quien lleva menos de 10 sesiones.'], 'quiet'],
   ['4.78.0', ['🌱 Nuevo bloque PRIMEROS PASOS, para quien empieza de cero: en casa, sin material (una silla y una mochila), con explicación en cada ejercicio.', '⭐ 3 fases que se desbloquean solas: 2 días por semana al principio y 3 después. Cada sesión suma una estrella y al completar una fase te lo celebra 🏅.']],
@@ -6238,6 +6239,214 @@ function homeSub(v) {
   }
   return ['Pregunta a tu coach'];
 }
+/* ==========================================================================
+   🎄 AD(GYM)VIENTO: 24 casillas del 1 al 24 de diciembre. Se activa a mano (Inicio).
+   Cada casilla se abre a las 00:00 (fecha de la red, hora de Madrid). Las pasadas siguen abiertas:
+   quien empieza a mitad de diciembre puede hacer las que quiera.
+   ========================================================================== */
+const ADV_LV = ['Suave', 'Medio', 'Fuerte'];
+// Ejercicios: nombre por nivel, consejo, segundos (t) o reps, y si tiene maniquí 3D (pose)
+const ADV_EX = {
+  sq: { n: ['Sentadilla a una silla', 'Sentadilla libre', 'Sentadilla abrazando la mochila'], tip: 'Talones en el suelo, rodillas hacia fuera, espalda recta.', pose: ['sq0', 'sq', 'sqb'] },
+  lg: { n: ['Zancada atrás con apoyo', 'Zancada atrás', 'Zancada atrás con mochila'], tip: 'Paso largo atrás y baja recto. Reps por pierna.', pose: ['lg', 'lg', 'lgb'] },
+  br: { n: ['Puente de glúteo', 'Puente de glúteo con pausa', 'Puente de glúteo a una pierna'], tip: 'Aprieta el culo arriba, sin arquear la espalda.', pose: ['br', 'br', 'br1'] },
+  pu: { n: ['Flexiones en la pared', 'Flexiones con manos en la mesa', 'Flexiones con rodillas'], tip: 'Cuerpo recto como una tabla. Baja en 2 segundos.', pose: ['pu0', 'pu1', 'pu'] },
+  rw: { n: ['Remo con mochila ligera', 'Remo con mochila cargada', 'Remo a una mano'], tip: 'Espalda recta e inclinada; lleva los codos atrás.', pose: ['rw', 'rw', 'rw1'] },
+  sp: { n: ['Press de hombros con mochila', 'Press de hombros con mochila', 'Press de hombros con mochila cargada'], tip: 'Mochila por las asas; empuja arriba sin arquear la espalda.', pose: 'sp' },
+  dl: { n: ['Peso muerto con mochila', 'Peso muerto con mochila', 'Peso muerto a una pierna con apoyo'], tip: 'Culo atrás, espalda recta, la mochila pegada a las piernas.', pose: ['dl', 'dl', 'dl1'] },
+  pk: { n: ['Plancha con rodillas', 'Plancha', 'Plancha'], tip: 'Codos bajo los hombros, tripa apretada, respira.', t: true, pose: ['pk0', 'pk', 'pk'] },
+  sk: { n: ['Plancha lateral con rodillas', 'Plancha lateral', 'Plancha lateral'], tip: 'Cadera alta. Segundos por lado.', t: true, pose: ['sk0', 'sk', 'sk'] },
+  db: { n: ['Dead bug', 'Dead bug', 'Dead bug lento'], tip: 'Zona lumbar pegada al suelo. Reps por lado.', pose: 'db' },
+  bd: { n: ['Bird dog', 'Bird dog', 'Bird dog con pausa de 3 s'], tip: 'Brazo y pierna contrarios, sin mover la cadera. Reps por lado.', pose: 'bd' },
+  su: { n: ['Superman', 'Superman', 'Superman con pausa'], tip: 'Boca abajo, levanta brazos y piernas un palmo.', pose: 'su' },
+  ca: { n: ['Elevación de talones', 'Elevación de talones', 'Elevación de talones a una pierna'], tip: 'Sube despacio y baja más despacio aún.', pose: 'ca' },
+  ws: { n: ['Sentadilla en la pared', 'Sentadilla en la pared', 'Sentadilla en la pared con mochila'], tip: 'Espalda en la pared, como sentado en una silla invisible.', t: true, pose: 'ws' },
+  mc: { n: ['Escaladores lentos con manos en la mesa', 'Escaladores lentos', 'Escaladores rápidos'], tip: 'Rodilla al pecho, alternando. Reps totales.', pose: ['mc0', 'mc', 'mc'] },
+  jj: { n: ['Pasos laterales abriendo brazos', 'Saltos de tijera', 'Saltos de tijera'], tip: 'Sin saltar en el nivel suave. Reps totales.', pose: ['jj0', 'jj', 'jj'] },
+  st: { n: ['Subir a un escalón', 'Subir a un escalón', 'Subir a un escalón con mochila'], tip: 'Empuja con el talón de arriba. Reps por pierna.', pose: 'st' },
+  dp: { n: ['Fondos en silla, pies cerca', 'Fondos en silla', 'Fondos en silla, piernas estiradas'], tip: 'Silla firme contra la pared. Codos hacia atrás.', pose: ['dp', 'dp', 'dp1'] }
+};
+// Rutinas: rondas por nivel (versión de 20 min; la de 10 hace la mitad, mínimo 1) y reps o segundos por nivel
+const advR = (title, sub, ex, rounds = [2, 3, 4]) => ({ kind: 'r', title, sub, rounds, ex: ex.map(([k, a, b, c]) => ({ k, v: [a, b, c] })) });
+const advC = (title, txt, v, tip) => ({ kind: 'c', title, txt, v, tip });
+const advM = (comida, cena) => ({ meals: [{ type: 'Comida', ...comida }, { type: 'Cena', ...cena }] });
+const ADV_DAYS = {
+  1: advR('Arranque', 'Cuerpo entero para empezar diciembre', [['sq', 10, 12, 15], ['pu', 8, 10, 10], ['rw', 10, 12, 12], ['br', 10, 12, 10], ['pk', 20, 30, 45]]),
+  2: { ...advC('Sentadillas repartidas', 'Haz {v} sentadillas a lo largo del día, en las tandas que quieras.', [30, 60, 100], 'Una tanda al levantarte, otra antes de comer…'), ...advM({ desc: 'Lentejas con verduras (plato de 350 g)', kcal: 420, prot: 24, carbs: 58, fat: 9 }, { desc: 'Tortilla francesa de 2 huevos con ensalada', kcal: 260, prot: 15, carbs: 6, fat: 19 }) },
+  3: { ...advC('Paseo largo', 'Sal a caminar {v} minutos seguidos a buen ritmo.', [20, 35, 50], 'Ritmo de llegar tarde: puedes hablar, pero no cantar.'), ...advM({ desc: 'Pollo a la plancha con arroz y pimientos', kcal: 520, prot: 42, carbs: 55, fat: 12 }, { desc: 'Crema de calabacín y 2 lonchas de pavo', kcal: 230, prot: 16, carbs: 14, fat: 11 }) },
+  4: advR('Piernas y glúteo', 'Para tener las piernas listas para las fiestas', [['sq', 12, 15, 15], ['lg', 6, 8, 10], ['br', 12, 12, 10], ['ca', 15, 20, 15], ['ws', 20, 30, 45]]),
+  5: { ...advC('Minutos de plancha', 'Suma {v} de plancha en total, en las tandas que necesites.', ['1 min', '2 min', '3 min'], 'Mejor 6 tandas de 20 s bien hechas que 1 mal hecha.'), ...advM({ desc: 'Garbanzos salteados con espinacas y huevo', kcal: 480, prot: 24, carbs: 50, fat: 18 }, { desc: 'Merluza al horno con patata pequeña', kcal: 330, prot: 30, carbs: 28, fat: 9 }) },
+  6: advR('Empuje', 'Pecho, hombros y brazos', [['pu', 10, 10, 12], ['sp', 10, 12, 12], ['dp', 8, 10, 10], ['pk', 20, 30, 45], ['db', 6, 8, 10]]),
+  7: { ...advC('Escaleras', 'Sube {v} pisos de escaleras en el día, aunque sea en varias veces.', ['3 pisos', '6 pisos', '10 pisos'], 'Sin escaleras cerca: 1 piso = 20 subidas a un escalón.'), ...advM({ desc: 'Ensalada de pasta con atún y tomate', kcal: 510, prot: 30, carbs: 62, fat: 14 }, { desc: 'Revuelto de champiñones y gambas', kcal: 280, prot: 26, carbs: 5, fat: 17 }) },
+  8: { ...advC('Flexiones repartidas', 'Haz {v} flexiones en el día, en la versión de tu nivel.', [20, 40, 60], 'Suave: en la pared · Medio: en la mesa · Fuerte: con rodillas.'), ...advM({ desc: 'Potaje de alubias con verduras', kcal: 450, prot: 22, carbs: 60, fat: 10 }, { desc: 'Yogur natural con fruta y un puñado de nueces', kcal: 250, prot: 10, carbs: 24, fat: 13 }) },
+  9: advR('Espalda fuerte', 'Postura recta para todo el mes', [['rw', 10, 12, 12], ['dl', 10, 12, 8], ['su', 8, 10, 10], ['bd', 6, 8, 8], ['sk', 15, 20, 30]]),
+  10: { ...advC('El muro', 'Suma {v} de sentadilla en la pared.', ['1 min', '2 min', '3 min'], 'Muslos lo más paralelos al suelo que aguantes.'), ...advM({ desc: 'Arroz con verduras y huevo a la plancha', kcal: 470, prot: 18, carbs: 66, fat: 14 }, { desc: 'Sardinas en lata con tomate y pan integral', kcal: 320, prot: 22, carbs: 24, fat: 14 }) },
+  11: advR('Cuerpo entero', 'Mitad de camino: todo el cuerpo', [['sq', 12, 15, 15], ['pu', 10, 10, 12], ['rw', 12, 12, 12], ['lg', 6, 8, 10], ['mc', 16, 20, 30]]),
+  12: { ...advC('Movilidad', 'Dedica {v} a mover cuello, hombros, cadera y tobillos, sin prisa.', ['5 min', '10 min', '15 min'], 'Círculos lentos de cada articulación, 10 por lado.'), ...advM({ desc: 'Salmón al horno con brócoli', kcal: 460, prot: 34, carbs: 10, fat: 31 }, { desc: 'Sopa de verduras con un huevo cocido', kcal: 200, prot: 11, carbs: 18, fat: 8 }) },
+  13: { ...advC('Puentes de glúteo', 'Haz {v} puentes de glúteo repartidos en el día.', [40, 80, 120], 'Aprieta 1 segundo arriba en cada uno.'), ...advM({ desc: 'Macarrones integrales con pollo y tomate', kcal: 560, prot: 38, carbs: 70, fat: 12 }, { desc: 'Pisto con huevo a la plancha', kcal: 290, prot: 13, carbs: 18, fat: 18 }) },
+  14: advR('Core', 'Tripa fuerte, espalda sin dolor', [['pk', 20, 30, 45], ['db', 6, 8, 10], ['bd', 6, 8, 8], ['sk', 15, 20, 30], ['mc', 16, 20, 30]]),
+  15: { ...advC('Escaladores', 'Suma {v} escaladores en el día (cuenta cada rodilla).', [60, 120, 200], 'Suave: con las manos en la mesa.'), ...advM({ desc: 'Ternera a la plancha con ensalada y pan', kcal: 520, prot: 40, carbs: 35, fat: 22 }, { desc: 'Queso fresco batido con fruta', kcal: 210, prot: 18, carbs: 26, fat: 3 }) },
+  16: advR('Mochila', 'Fuerza con la mochila cargada de libros', [['sq', 12, 15, 15], ['dl', 10, 12, 10], ['sp', 10, 12, 12], ['rw', 12, 12, 12], ['br', 12, 12, 10]]),
+  17: { ...advC('Paseo de después de cenar', 'Camina {v} minutos después de cenar.', [10, 20, 30], 'Ayuda a la digestión y a dormir mejor.'), ...advM({ desc: 'Lentejas con arroz', kcal: 450, prot: 22, carbs: 70, fat: 8 }, { desc: 'Tortilla de espinacas de 2 huevos', kcal: 240, prot: 15, carbs: 4, fat: 18 }) },
+  18: { ...advC('Abdomen tranquilo', 'Suma {v} repeticiones entre dead bug y bird dog.', [30, 50, 80], 'Despacio: la gracia es no mover la cadera.'), ...advM({ desc: 'Pescado blanco con arroz y verduras', kcal: 450, prot: 34, carbs: 52, fat: 10 }, { desc: 'Ensalada con atún, huevo y maíz', kcal: 340, prot: 26, carbs: 18, fat: 18 }) },
+  19: advR('Cardio en casa', 'Sube pulsaciones sin salir del salón', [['jj', 20, 30, 40], ['sq', 12, 15, 20], ['mc', 16, 20, 30], ['st', 8, 10, 12], ['pk', 20, 30, 45]]),
+  20: { ...advC('Saltos de tijera', 'Haz {v} saltos de tijera en el día.', [50, 100, 200], 'Suave: paso lateral sin saltar.'), ...advM({ desc: 'Pollo al curry suave con arroz', kcal: 540, prot: 40, carbs: 60, fat: 14 }, { desc: 'Crema de calabaza con queso fresco', kcal: 240, prot: 12, carbs: 22, fat: 11 }) },
+  21: { ...advC('Talones', 'Haz {v} elevaciones de talones repartidas en el día.', [50, 100, 150], 'Lavándote los dientes cuentan.'), ...advM({ desc: 'Cocido ligero: garbanzos, pollo y verdura', kcal: 520, prot: 36, carbs: 52, fat: 16 }, { desc: 'Bocadillo pequeño de pavo y tomate', kcal: 310, prot: 20, carbs: 40, fat: 7 }) },
+  22: advR('Gran final', 'La más completa del mes', [['sq', 12, 15, 15], ['pu', 10, 12, 12], ['rw', 12, 12, 12], ['lg', 8, 8, 10], ['sp', 10, 12, 12], ['pk', 20, 30, 45]]),
+  23: { ...advC('A bailar', 'Baila {v} seguidas, como quieras.', ['1 canción', '2 canciones', '3 canciones'], 'Cuenta como entreno si acabas con calor.'), ...advM({ desc: 'Lubina al horno con patata y cebolla', kcal: 480, prot: 34, carbs: 36, fat: 20 }, { desc: 'Verduras a la plancha con jamón serrano', kcal: 230, prot: 16, carbs: 14, fat: 12 }) },
+  24: { ...advC('Nochebuena', 'Antes de la cena: {v} y un paseo de 15 minutos.', ['20 sentadillas', '40 sentadillas', '60 sentadillas'], '¡Lo has conseguido! Disfruta de la cena.'), ...advM({ desc: 'Comida ligera: crema de verduras y pechuga a la plancha', kcal: 380, prot: 34, carbs: 22, fat: 16 }, { desc: 'Cena de Nochebuena: disfrútala sin contar', kcal: 0, prot: 0, carbs: 0, fat: 0, skip: true }) }
+};
+const ADV_READY = false; // ⚠️ se pone a true el día del lanzamiento (20 de noviembre); hasta entonces solo se ve el anuncio
+const ADV_KEY = 'fitnesteban_advdate'; // solo para pruebas: fecha simulada
+function advToday() { return lsGet(ADV_KEY) || netToday() || todayISO(); }
+// Temporada: del 24 de noviembre (anuncio) al 6 de enero (Reyes). Devuelve el año de ese diciembre o null.
+function advYear(t = advToday()) {
+  if (!ADV_READY && !lsGet(ADV_KEY)) return null;
+  const [y, m, d] = t.split('-').map(Number);
+  if ((m === 11 && d >= 20) || m === 12) return y;
+  if (m === 1 && d <= 6) return y - 1;
+  return null;
+}
+const advDayDate = (y, n) => `${y}-12-${String(n).padStart(2, '0')}`;
+function advOpenDays() { const y = advYear(), t = advToday(); if (!y) return 0; let n = 0; for (let i = 1; i <= 24; i++) if (t >= advDayDate(y, i)) n = i; return n; }
+function advSt() { const y = advYear(); if (!state.advent || state.advent.y !== y) state.advent = { y, on: false, lv: 1, done: {} }; return state.advent; }
+const advDoneN = () => Object.keys(advSt().done).length;
+const advExName = (k, lv) => ADV_EX[k].n[lv - 1];
+const advVal = (k, v) => ADV_EX[k].t ? `${v} s` : `${v}`;
+
+function advHomeHTML() {
+  const y = advYear(); if (!y) return '';
+  const A = advSt(), open = advOpenDays();
+  if (!A.on) return `<button class="adv-home mb-3" data-act="advOn" type="button"><span class="adv-snow"></span>
+    <span class="text-[11px] font-black tracking-widest text-red-200">NUEVO · 1 AL 24 DE DICIEMBRE</span>
+    <span class="block font-black text-[19px] leading-tight mt-0.5">🎄 Calendario de AD(GYM)VIENTO</span>
+    <span class="block text-[12px] text-white/80 mt-1">Cada día se abre una casilla: rutinas de 20 min en casa con una mochila y retos cortos. Tres niveles.</span>
+    <span class="adv-cta">Activarlo</span></button>`;
+  const d = ADV_DAYS[open];
+  return `<button class="adv-home adv-on mb-3" data-act="adv" type="button"><span class="adv-snow"></span>
+    <span class="text-[11px] font-black tracking-widest text-red-200">AD(GYM)VIENTO · ${advDoneN()} de 24 ✓</span>
+    <span class="block font-black text-[18px] leading-tight mt-0.5">${open ? `🎁 Día ${open}: ${esc(d.title)}` : '🎄 La primera casilla se abre el 1 de diciembre'}</span>
+    ${open ? `<span class="block text-[12px] text-white/80 mt-0.5">${d.kind === 'r' ? 'Rutina en casa · 20 o 10 min' : 'Reto del día'}${A.done[open] ? ' · ✓ hecho' : ''}</span>` : ''}
+    <span class="adv-go">›</span></button>`;
+}
+/* Anuncio previo (antes del lanzamiento): franja pequeña en Inicio con «Info» y ejemplos */
+const ADV_TEASE_KEY = 'fitnesteban_advtease';
+function advTeaserHTML() {
+  if (advYear() || lsGet(ADV_TEASE_KEY)) return '';
+  const t = advToday(); if (t < '2026-11-01' || t > '2026-11-30') return '';
+  return `<div class="adv-tease mb-3"><button class="flex-1 min-w-0 text-left" data-act="advInfo" type="button"><span class="block text-[13px] font-extrabold leading-tight">🎄 Calendario de AD(GYM)VIENTO</span><span class="block text-[11.5px] opacity-80">Disponible el 20 de noviembre</span></button>
+    <button class="adv-tbtn" data-act="advInfo" type="button">Info</button><button class="text-white/50 px-1 text-lg leading-none" data-act="advTeaseX" aria-label="Ocultar" type="button">×</button></div>`;
+}
+function advInfoModal() {
+  const shots = [['adv-ej1', 'Una casilla cada día, del 1 al 24'], ['adv-ej2', 'Rutinas de 20 o 10 min en casa'], ['adv-ej3', 'Cada ejercicio, en 3D']];
+  openModal(`<div class="text-[11px] font-black tracking-widest text-red-300">DISPONIBLE EL 20 DE NOVIEMBRE</div><h3 class="text-xl font-black leading-tight">🎄 Calendario de AD(GYM)VIENTO</h3>
+    <p class="text-[13px] text-mute mt-1">Del 1 al 24 de diciembre se abre una casilla cada día. Se activa si quieres y puedes empezar cuando quieras: las casillas pasadas siguen abiertas.</p>
+    <div class="adv-shots mt-3">${shots.map(([f, t]) => `<figure><img src="${f}.webp" alt="${esc(t)}" loading="lazy"><figcaption>${esc(t)}</figcaption></figure>`).join('')}</div>
+    <div class="card p-3 mt-3 space-y-1.5 text-[13px]"><p>🏠 9 rutinas en casa con una mochila como peso (~20 min, o la versión de 10)</p><p>⚡ 15 retos cortos para el resto de días</p><p>🌱🔥💥 Tres niveles: eliges el tuyo y lo cambias cuando quieras</p><p>🧍 Cada ejercicio con su animación en 3D</p><p>🥗 En los días de reto, ideas para comer y cenar</p></div>
+    <button class="btn-primary w-full mt-4" data-close type="button">¡Me apunto el 20!</button>`);
+}
+function advActivate() {
+  const A = advSt();
+  openModal(`<div class="text-center"><div class="text-5xl">🎄</div><h3 class="text-xl font-black mt-2">Calendario de AD(GYM)VIENTO</h3>
+    <p class="text-sm text-mute mt-2">Del 1 al 24 de diciembre se abre una casilla cada día a las 00:00. Si empiezas tarde, las de días pasados siguen abiertas.</p></div>
+    <div class="card p-3 mt-3 space-y-1.5 text-sm"><p>🏠 9 rutinas en casa con una mochila (~20 min, o la versión de 10)</p><p>⚡ 15 retos cortos para el resto de días</p><p>🥗 Ideas de comida y cena en los días de reto</p><p>🧍 Cada ejercicio con su animación 3D</p></div>
+    <div class="lbl mt-4">Elige tu nivel (lo cambias cuando quieras)</div>
+    <div class="grid grid-cols-3 gap-2">${ADV_LV.map((l, i) => `<button class="chip justify-center${A.lv === i + 1 ? ' chip-on' : ''}" data-mact="lv" data-i="${i + 1}" type="button">${l}</button>`).join('')}</div>
+    <p class="text-[11px] text-mute mt-2">Suave: si empiezas de cero. Medio: si te mueves algo. Fuerte: si ya entrenas.</p>
+    <button class="btn-primary w-full mt-4" data-mact="go" type="button">Activar calendario</button>`,
+  { lv: (_, b) => { A.lv = +b.dataset.i; advActivate(); }, go: () => { A.on = true; persist(); closeModal(); advGrid(); } });
+}
+function advGrid() {
+  const A = advSt(), open = advOpenDays(), y = advYear();
+  const cells = Array.from({ length: 24 }, (_, i) => {
+    const n = i + 1, d = ADV_DAYS[n], isOpen = n <= open, done = A.done[n], today = n === open && advToday() === advDayDate(y, n);
+    return `<button class="adv-cell${isOpen ? ' open' : ''}${done ? ' done' : ''}${today ? ' today' : ''}${d.kind === 'r' ? ' rt' : ''}" ${isOpen ? `data-mact="day" data-n="${n}"` : 'disabled'} type="button">
+      <span class="adv-n">${n}</span><span class="adv-i">${!isOpen ? '🔒' : done ? '✓' : d.kind === 'r' ? '🏠' : '⚡'}</span></button>`;
+  }).join('');
+  openModal(`<div class="flex items-center justify-between"><h3 class="modal-title !mb-0">🎄 AD(GYM)VIENTO</h3><span class="text-sm font-black text-amber-300">${advDoneN()} de 24 ✓</span></div>
+    <p class="text-[12px] text-mute mt-1">🏠 rutina · ⚡ reto · nivel <b class="text-white">${ADV_LV[A.lv - 1]}</b> <button class="text-cyan-300 font-bold" data-mact="lvl" type="button">cambiar</button></p>
+    <div class="adv-grid mt-3">${cells}</div>
+    ${open < 24 ? `<p class="text-[11px] text-mute mt-3 text-center">${open ? `Mañana a las 00:00 se abre la casilla ${open + 1}.` : 'La primera casilla se abre el 1 de diciembre.'}</p>` : ''}
+    <button class="text-[11px] text-mute underline mt-3 mx-auto block" data-mact="off" type="button">Desactivar calendario</button>`,
+  { day: (_, b) => advDay(+b.dataset.n), lvl: () => advLevel(advGrid), off: () => { A.on = false; persist(); closeModal(); render(); } });
+}
+function advLevel(back) {
+  const A = advSt();
+  openModal(`<h3 class="modal-title">Tu nivel</h3><div class="grid gap-2">${ADV_LV.map((l, i) => `<button class="btn-ghost${A.lv === i + 1 ? ' !border-cyan-400 !text-cyan-300' : ''}" data-mact="lv" data-i="${i + 1}" type="button">${['🌱', '🔥', '💥'][i]} ${l}</button>`).join('')}</div>`,
+  { lv: (_, b) => { A.lv = +b.dataset.i; persist(); back(); } });
+}
+function advDay(n, short = false) {
+  const A = advSt(), d = ADV_DAYS[n], lv = A.lv, done = A.done[n];
+  const lvBar = `<div class="grid grid-cols-3 gap-1.5 mt-3">${ADV_LV.map((l, i) => `<button class="chip justify-center !py-1.5${lv === i + 1 ? ' chip-on' : ''}" data-mact="lv" data-i="${i + 1}" type="button">${l}</button>`).join('')}</div>`;
+  let body;
+  if (d.kind === 'r') {
+    const rounds = short ? Math.max(1, Math.floor(d.rounds[lv - 1] / 2)) : d.rounds[lv - 1];
+    body = `${lvBar}
+      <div class="grid grid-cols-2 gap-1.5 mt-2"><button class="chip justify-center !py-1.5${!short ? ' chip-on' : ''}" data-mact="len" data-s="0" type="button">⏱️ 20 min</button><button class="chip justify-center !py-1.5${short ? ' chip-on' : ''}" data-mact="len" data-s="1" type="button">⚡ 10 min</button></div>
+      <p class="text-sm mt-3"><b>${rounds} ${rounds === 1 ? 'vuelta' : 'vueltas'}</b> al circuito. Descansa 1 minuto entre vueltas.</p>
+      <div class="mt-2 space-y-1.5">${d.ex.map(e => `<button class="adv-ex" data-mact="ex" data-k="${e.k}" type="button"><span class="adv-x">${ADV_EX[e.k].t ? '⏱️' : '×'}${esc(advVal(e.k, e.v[lv - 1]))}</span><span class="flex-1 min-w-0 text-left"><span class="block font-bold text-[14px] leading-tight">${esc(advExName(e.k, lv))}</span><span class="block text-[11px] text-mute leading-snug">${esc(ADV_EX[e.k].tip)}</span></span><span class="adv-play">▶</span></button>`).join('')}</div>`;
+  } else {
+    body = `${lvBar}<div class="card p-3 mt-3"><p class="text-[15px] font-bold">${esc(d.txt.replace('{v}', d.v[lv - 1]))}</p><p class="text-[12px] text-mute mt-1">💡 ${esc(d.tip)}</p></div>`;
+  }
+  const meals = d.meals ? `<div class="lbl mt-4">🥗 Ideas para hoy <span class="text-mute font-normal normal-case">· valores aproximados por ración</span></div>
+    ${d.meals.map((m, i) => `<div class="adv-meal"><div class="flex-1 min-w-0"><div class="text-[11px] text-mute font-bold">${m.type.toUpperCase()}</div><div class="text-[13px] font-bold leading-tight">${esc(m.desc)}</div>${m.skip ? '' : `<div class="text-[11px] text-mute mt-0.5">${m.kcal} kcal · P ${m.prot} g · C ${m.carbs} g · G ${m.fat} g</div>`}</div>${m.skip ? '' : `<button class="adv-add" data-mact="meal" data-i="${i}" type="button">＋ Dieta</button>`}</div>`).join('')}` : '';
+  openModal(`<div class="flex items-center gap-2"><button class="text-mute text-xl -ml-1 px-1" data-mact="back" type="button">‹</button><div class="flex-1 min-w-0"><div class="text-[11px] font-black tracking-widest text-red-300">DÍA ${n} · ${d.kind === 'r' ? 'RUTINA' : 'RETO'}</div><h3 class="text-xl font-black leading-tight">${esc(d.title)}</h3></div></div>
+    ${d.sub ? `<p class="text-[12px] text-mute mt-1">${esc(d.sub)}</p>` : ''}
+    ${body}${meals}
+    ${done ? `<div class="text-center text-emerald-300 font-bold mt-4">✓ Hecho${done === 's' ? ' (versión de 10 min)' : ''}</div><button class="text-[11px] text-mute underline mt-1 mx-auto block" data-mact="undo" type="button">Desmarcar</button>`
+    : `<button class="btn-primary w-full mt-4" data-mact="done" type="button">✓ ${d.kind === 'r' ? (short ? 'He hecho la de 10 min' : 'He hecho la rutina') : 'Reto conseguido'}</button>`}`,
+  {
+    back: () => advGrid(), lv: (_, b) => { A.lv = +b.dataset.i; persist(); advDay(n, short); }, len: (_, b) => advDay(n, b.dataset.s === '1'),
+    ex: (_, b) => advExModal(b.dataset.k, lv, () => advDay(n, short)),
+    meal: (_, b) => { const m = d.meals[+b.dataset.i]; addMeal(todayISO(), { type: m.type, desc: m.desc, kcal: m.kcal, prot: m.prot, carbs: m.carbs, fat: m.fat }); toast(`Añadido a ${m.type} de hoy ✓`); },
+    undo: () => { delete A.done[n]; if (A.ck?.[n]) { state.cardio = state.cardio.filter(c => c.id !== A.ck[n]); delete A.ck[n]; } persist(); advDay(n, short); },
+    done: () => advDone(n, short)
+  });
+}
+function advDone(n, short) {
+  const A = advSt(), d = ADV_DAYS[n];
+  A.done[n] = d.kind === 'r' ? (short ? 's' : 'f') : 'c';
+  if (d.kind === 'r') { // la rutina se apunta en Cardio como Funcional, con sus kcal
+    const min = short ? 10 : 20, ik = ['media-baja', 'media', 'media-alta'][A.lv - 1], kg = latestWeight() || 70, id = uid('k_');
+    state.cardio.push({ id, date: todayISO(), type: 'functional', minutes: min, intensity: ik, kcal: metKcal('functional', ik, min, kg), adv: n });
+    (A.ck ||= {})[n] = id;
+  }
+  persist();
+  const k = advDoneN();
+  openModal(`<div class="text-center"><div class="pp-hero">🎁</div><h3 class="text-2xl font-black mt-3">¡Casilla ${n} hecha!</h3>
+    <p class="text-sm text-mute mt-1">Llevas <b class="text-amber-300">${k} de 24</b>${d.kind === 'r' ? ` · apuntado en Cardio como Funcional (${short ? 10 : 20} min)` : ''}</p>
+    <div class="adv-strip mt-4">${Array.from({ length: 24 }, (_, i) => `<i class="${A.done[i + 1] ? 'on' : ''}${i + 1 === n ? ' new' : ''}"></i>`).join('')}</div></div>
+    <button class="btn-primary w-full mt-5" data-mact="g" type="button">Volver al calendario</button>`, { g: () => advGrid() });
+  render();
+}
+// «Notificación» dentro de la app: al abrirla, una vez al día, si hay casilla nueva
+function advNotify() {
+  const y = advYear(); if (!y || !state.advent?.on || state.advent.y !== y) return;
+  const t = advToday(), open = advOpenDays(); if (!open || t !== advDayDate(y, open)) return;
+  const k = 'advSeen_' + t; if (lsGet(k)) return; lsSet(k, 1);
+  const d = ADV_DAYS[open];
+  setTimeout(() => { if ($('#modalRoot').classList.contains('open')) return;
+    openModal(`<div class="text-center"><div class="pp-hero">🎁</div><div class="text-[11px] font-black tracking-widest text-red-300 mt-3">AD(GYM)VIENTO</div><h3 class="text-2xl font-black">Se ha abierto la casilla ${open}</h3>
+      <p class="text-sm text-mute mt-1">${d.kind === 'r' ? '🏠 Rutina' : '⚡ Reto'}: ${esc(d.title)}</p></div>
+      <div class="grid grid-cols-2 gap-2 mt-5"><button class="btn-ghost" data-close type="button">Luego</button><button class="btn-primary" data-mact="go" type="button">Abrirla</button></div>`, { go: () => advDay(open) });
+  }, 1200);
+}
+/* Ficha del ejercicio con el maniquí 3D (se carga solo al abrirla) */
+function advExModal(k, lv, back) {
+  const E = ADV_EX[k], name = advExName(k, lv);
+  openModal(`<div class="flex items-center gap-2"><button class="text-mute text-xl -ml-1 px-1" data-mact="back" type="button">‹</button><h3 class="text-lg font-black leading-tight flex-1">${esc(name)}</h3></div>
+    <div class="man3d mt-3" id="man3d"><span class="text-mute text-sm">Cargando animación…</span></div>
+    <p class="text-sm mt-3">${esc(E.tip)}</p>
+    <a class="btn-ghost w-full mt-3 flex items-center justify-center gap-2" href="${esc(videoUrl({ name }))}" target="_blank" rel="noopener">▶ Ver vídeos en YouTube</a>`,
+  { back: () => { man3dStop(); back(); } });
+  man3dShow($('#man3d'), Array.isArray(E.pose) ? E.pose[lv - 1] : E.pose, lv);
+}
+let man3dMod = null;
+async function man3dShow(el, pose, lv) {
+  try { man3dMod ||= await import('./man3d.js'); if (!el.isConnected) return; man3dMod.mount(el, pose, lv); }
+  catch { el.innerHTML = '<span class="text-mute text-sm">No se pudo cargar la animación. Mira el vídeo.</span>'; }
+}
+function man3dStop() { try { man3dMod?.stop(); } catch { /* nada */ } }
 /* Aviso fijo en Inicio cuando al acceso le quedan 3 días o menos (el toast se pierde fácil) */
 function planBannerHTML() {
   const me = access.me, left = me ? planDaysLeft(me) : null;
@@ -6251,7 +6460,7 @@ function renderHome() {
   const name = profileOf()?.name || access.me?.name || '';
   const f = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   return `<div class="pb-3"><div class="text-mute text-sm">${esc(f.charAt(0).toUpperCase() + f.slice(1))}</div><h1 class="text-2xl font-black mt-0.5">Hola${name ? ', ' + esc(name.split(' ')[0]) : ''}</h1></div>
-  ${planBannerHTML()}
+  ${planBannerHTML()}${advHomeHTML()}${advTeaserHTML()}
   <div id="homeCards" class="home-cards">${HOME_CARDS.map(c => `<button class="home-card" style="--c:${c.c};background-image:url(${c.img}.webp);background-position:${c.pos}" data-act="homeGo" data-v="${c.view}" type="button">
     <span class="home-shade"></span>
     <span class="home-txt">${c.view === 'train' && libNewList().length ? `<span class="home-pill">📚 ${libNewList().length === 1 ? '1 bloque nuevo' : libNewList().length + ' bloques nuevos'}</span>` : ''}<span class="block font-black text-[19px] leading-tight">${c.t}</span>${homeSub(c.view).filter(Boolean).slice(0, c.view === 'train' && libNewList().length ? 1 : 2).map((l, i) => `<span class="block text-[13px] ${i ? 'mt-0.5' : 'mt-1'} text-slate-300 truncate">${l}</span>`).join('')}</span>
@@ -6579,6 +6788,10 @@ const actions = {
   editProg: () => editProgModal(prog().id),
   editProgId: b => editProgModal(b.dataset.prog),
   homeGo: b => go(b.dataset.v),
+  adv: () => advGrid(),
+  advOn: () => advActivate(),
+  advInfo: () => advInfoModal(),
+  advTeaseX: () => { lsSet(ADV_TEASE_KEY, 1); render(); },
   cdWatch: () => { keepCardioInputs(); state.settings.watchOpen = !state.settings.watchOpen; persist(); render(); },
   cdUseWatch: () => { const e = ui.cardio.est; if (!e?.wkcal) return; keepCardioInputs(); e.appKcal = e.appKcal ?? e.kcal; e.kcal = +e.wkcal; e.usedWatch = true; render(); toast('Puestas las kcal del reloj'); },
   cdUseApp: () => { const e = ui.cardio.est; if (!e?.usedWatch) return; keepCardioInputs(); e.kcal = e.appKcal; e.usedWatch = false; render(); },
@@ -7416,7 +7629,7 @@ async function accessBoot() {
   let me = await accessCheck(fresh);
   if (!me && lsGet(ACCESS_KEY)?.code) { const live = await fetchAclLive(); if (live) me = await accessCheck(live); }
   if (me && planExpired(me)) { access.ok = false; access.me = me; closeModal(); lockScreen('code', expiredMsg(planExpired(me))); return; }
-  if (me) { if (!access.ok) unlock(me); else access.me = me; usagePing(); deviceGuard(); planWarn(me); }
+  if (me) { if (!access.ok) unlock(me); else access.me = me; usagePing(); deviceGuard(); planWarn(me); advNotify(); }
   else lockScreen('code', lsGet(ACCESS_KEY)?.code ? `Tu código ya no es válido. Pide uno nuevo a Esteban.${contactBtn('Contacto', 'mx-auto mt-3')}` : '');
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { const me = l && await accessCheck(l); if (me && planExpired(me)) { access.ok = false; closeModal(); lockScreen('code', expiredMsg(planExpired(me))); return; } if (me) access.me = me; usagePing(); deviceGuard(); if (l && !me) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', `Tu código ya no es válido. Pide uno nuevo a Esteban.${contactBtn('Contacto', 'mx-auto mt-3')}`); } }); });
