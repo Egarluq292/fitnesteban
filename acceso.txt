@@ -1,7 +1,7 @@
 # FITNESTEBAN · acceso (solo huellas)
 ccc18e1060ab6ae6faf05e419897df87 admin
 31c5e32e3329410590dfb13b5450fd04 anon
-f6042b9de27adad88fcccc20707affd2 plan=prueba hasta=2026-11-18
+f6042b9de27adad88fcccc20707affd2
 ca580cf6037b2f304dc46455723cff53 plan=prueba hasta=2026-11-11
 a2d909577dbb467b236923bffb0559ff plan=prueba hasta=2026-11-18
 94812483065340eb250d4b32a4bec072
