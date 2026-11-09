@@ -64,7 +64,7 @@ const P = {
   // 9 Elevaciones laterales
   lat: { a: { shAb: 8, el: 10 }, b: { shAb: 85, el: 15 }, db: true },
   // 10 Sentadilla búlgara con mancuernas
-  bulg: { pin: ['pelvis', 'p'], fix: ['anL', 'anR'], base: { hipR: -35, kneeR: 80, ankleR: 30, hipL: 30, kneeL: 0 }, a: { py: .8, spine: 6 }, b: { py: .5, spine: 14 }, foot: 'anR', db: true },
+  bulg: { pin: ['pelvis', 'p'], fix: ['anL', 'anR'], base: { hipR: -35, kneeR: 80, ankleR: 30, hipL: 30, kneeL: 0 }, a: { py: .8, spine: 6 }, b: { py: .6, spine: 12 }, foot: 'anR', flat: ['anL'], db: true },
   // ---- tanda 2 ----
   incl: { base: { rootX: -55, hip: 55, knee: 90 }, a: { sh: 90, el: 0, shAb: 8 }, b: { sh: 25, shAb: 30, el: 100 }, ground: ['anL', 'anR'], incline: true, db: true },
   lunge: { a: {}, b: { hipL: 85, kneeL: 85, hipR: -25, kneeR: 95, ankleR: 40, spine: 3 }, ground: ['anL', 'knR'], db: true },
@@ -162,6 +162,7 @@ function apply(p, ex) {
     for (const k of SIDES) { const sp = new T.Vector3(); B['sh' + k].getWorldPosition(sp); const tgt = sp.clone().add(new T.Vector3(sp.x, A.y, A.z).sub(sp).normalize().multiplyScalar(reach)); ikTo('hd' + k, tgt); }
   }
   if (FIX) for (const j of ex.fix || []) if (FIX[j]) ikTo(j, FIX[j]);
+  if (ex.flat) { const qr = new T.Quaternion(), qp = new T.Quaternion(); root.getWorldQuaternion(qr); for (const j of ex.flat) { B[j].parent.getWorldQuaternion(qp); B[j].quaternion.copy(qp.invert().multiply(qr)); B[j].updateMatrixWorld(true); } } // pie plano: ni punta ni talón se levantan
   if (ex.anchor && ex.Ls) { const A = anchorOf(ex); W.straps.forEach((m, i) => { const h = new T.Vector3(); B[i ? 'hdR' : 'hdL'].getWorldPosition(h); seg(m, h, new T.Vector3(h.x * .3, A.y, A.z)); }); }
   else if (ex.strap) { const A = new T.Vector3(...ex.strap); W.straps.forEach((m, i) => { const h = new T.Vector3(); B[i ? 'hdR' : 'hdL'].getWorldPosition(h); seg(m, h, A); }); } else W.straps.forEach(m => { m.visible = false; });
   if (ex.bag) {

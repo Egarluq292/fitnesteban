@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.87.2';
+const APP_VERSION = '4.87.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -6094,6 +6094,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.87.3', ['🧍 3D: sentadilla búlgara menos profunda y con el pie delantero siempre plano.'], 'admin'],
   ['4.87.2', ['👨‍🍳 «¿Qué como?»: cada idea tiene su receta paso a paso, y si la IA falla puedes reintentarlo con un toque.'], 'quiet'],
   ['4.87.1', ['🩹 «Algo me molesta»: más zonas (cadera, tobillo, cuello) y arriba las que más trabaja tu sesión de hoy. Corregido que la prensa o los gemelos contaran como hombro.'], 'quiet'],
   ['4.87.0', ['🍽️ «¿Qué como?» más sensato: reparte lo que te queda entre las comidas que te faltan (puedes elegir para cuál), propone platos normales para cada momento y, con la foto de la nevera, te dice qué ha visto para que lo corrijas si se equivoca. Y si no te convencen, «Otras ideas».']],
