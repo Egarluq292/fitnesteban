@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.87.4';
+const APP_VERSION = '4.87.5';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3566,12 +3566,14 @@ const QC_BASICS = [
   { desc: 'pan integral', g: 60, kcal: 150, prot: 6, carbs: 26, fat: 2, ing: ['60 g de pan integral'], r: 'c' },
   { desc: 'ensalada', u: 'con 1 cucharada de aceite', g: 210, kcal: 110, prot: 1, carbs: 4, fat: 10, ing: ['Lechuga, tomate y pepino', '1 cucharada de aceite de oliva'], r: 'v' },
   { desc: 'verduras a la plancha', g: 300, kcal: 90, prot: 4, carbs: 14, fat: 1, ing: ['300 g de verduras variadas'], r: 'v' },
-  { desc: 'Yogur proteico', u: '1 yogur', g: 120, kcal: 95, prot: 15, carbs: 7, fat: 0, ing: ['1 yogur proteico'], low: 'un yogur proteico', r: 'xd' },
-  { desc: 'Queso fresco batido 0 %', g: 250, kcal: 115, prot: 20, carbs: 9, fat: 0, ing: ['250 g de queso fresco batido 0 %'], r: 'x' },
+  { desc: 'Yogur proteico', u: '1 yogur', g: 120, kcal: 95, prot: 15, carbs: 7, fat: 0, ing: ['1 yogur proteico'], low: 'un yogur proteico', r: 'xdq' },
+  { desc: 'Queso fresco batido 0 %', g: 250, kcal: 115, prot: 20, carbs: 9, fat: 0, ing: ['250 g de queso fresco batido 0 %'], r: 'xq' },
   { desc: 'Pieza de fruta', u: '1 pieza', g: 150, low: 'una pieza de fruta', kcal: 80, prot: 1, carbs: 19, fat: 0, ing: ['1 pieza de fruta'], r: 'xd' },
   { desc: 'Tostada integral con pavo', u: '60 g de pan y 80 g de pavo', g: 140, kcal: 210, prot: 20, carbs: 27, fat: 3, ing: ['60 g de pan integral', '80 g de pavo en lonchas'], r: 'x' },
   { desc: 'Puñado de frutos secos', g: 25, kcal: 155, prot: 5, carbs: 4, fat: 14, ing: ['25 g de frutos secos'], r: 'x' },
-  { desc: 'Batido de proteína con agua', u: '1 cacito', g: 30, kcal: 120, prot: 24, carbs: 3, fat: 1, ing: ['1 cacito de proteína'], r: 'x' },
+  { desc: 'Pavo en lonchas', u: '4 lonchas', g: 80, kcal: 85, prot: 18, carbs: 1, fat: 1, ing: ['80 g de pavo en lonchas'], r: 'q' },
+  { desc: 'Claras a la plancha', u: 'con una pizca de sal y pimienta', g: 200, kcal: 100, prot: 22, carbs: 1, fat: 0, ing: ['200 g de claras'], r: 'q' },
+  { desc: 'Batido de proteína con agua', u: '1 cacito', g: 30, kcal: 120, prot: 24, carbs: 3, fat: 1, ing: ['1 cacito de proteína'], r: 'xq' },
   { desc: 'Tostada con tomate, aceite y jamón serrano', u: '60 g de pan y 40 g de jamón', g: 180, kcal: 300, prot: 18, carbs: 30, fat: 12, ing: ['60 g de pan', '1 tomate', '1 cucharadita de aceite', '40 g de jamón serrano'], r: 'b' },
   { desc: 'Café con leche y tostada con aceite', u: '200 ml de leche y 60 g de pan', g: 265, kcal: 280, prot: 10, carbs: 32, fat: 12, ing: ['200 ml de leche', '60 g de pan', '1 cucharadita de aceite'], r: 'b' },
   { desc: 'Avena con leche y plátano', u: '40 g de avena, 200 ml de leche y 1 plátano', g: 360, kcal: 350, prot: 15, carbs: 55, fat: 7, ing: ['40 g de copos de avena', '200 ml de leche', '1 plátano'], r: 'b' },
@@ -3583,12 +3585,15 @@ const qcSum = items => { const t = { kcal: 0, prot: 0, carbs: 0, fat: 0 }; for (
 const qcIngTxt = it => `${it.name}${it.uds ? ` (${it.uds})` : ''}: ${it.grams} g`;
 const QC_SLOTS = ['Desayuno', 'Comida', 'Puente', 'Cena'], QC_W = { Desayuno: 25, Comida: 35, Puente: 12, Cena: 28 };
 const qcDe = tp => `${tp === 'Puente' ? 'el' : 'la'} ${tp.toLowerCase()}`;
+// Ya llegaste a tus kcal (sin pasarte mucho) pero te falta proteína: ideas de mucha proteína y casi sin calorías
+const qcProtMode = L => L.kcal <= 60 && L.kcal >= -150 && L.prot >= 15;
 function qcLeft() {
   const st = state.settings, d = todayISO(), t = totalsOf(d);
   return { kcal: Math.round(st.targetKcal - t.kcal), prot: Math.round(st.targetProt - t.prot), carbs: Math.round((st.targetCarbs || 0) - t.carbs), fat: Math.round((st.targetFat || 0) - t.fat) };
 }
 /* Reparte lo que queda entre las comidas que faltan hoy (desde la de ahora), para no meterlo todo en una */
 function qcPlan(L = qcLeft()) {
+  if (qcProtMode(L)) { const i = QC_SLOTS.indexOf(guessMealType()), done = new Set(mealsOf(todayISO()).map(m => m.type)); const tp = QC_SLOTS.slice(Math.max(0, i)).find(x => !done.has(x)) || QC_SLOTS[Math.max(0, i)]; return [{ tp, kcal: 150, prot: Math.min(L.prot, 30), carbs: 5, fat: 3, protOnly: true }]; }
   const now = QC_SLOTS.indexOf(guessMealType()), done = new Set(mealsOf(todayISO()).map(m => m.type));
   let slots = QC_SLOTS.filter((tp, i) => i >= now && !(i > now && done.has(tp)));
   if (done.has(QC_SLOTS[now]) && slots.length > 1) slots = slots.slice(1); // la de ahora ya está apuntada: la siguiente
@@ -3600,6 +3605,8 @@ function qcPlan(L = qcLeft()) {
 }
 // sin IA: comidas con sentido (proteína + guarnición, o tentempié) de tus habituales y básicos, para lo que toca en esa comida
 function qcLocal(B, tp) {
+  if (B.protOnly) return QC_BASICS.filter(x => x.r.includes('q') && x.kcal <= 170).sort((a, b) => b.prot / b.kcal - a.prot / a.kcal).slice(0, 3)
+    .map(x => { const f = 100 / x.g, items = [{ name: x.desc, uds: x.u || '', grams: x.g, per100: { kcal: x.kcal * f, prot: x.prot * f, carbs: x.carbs * f, fat: x.fat * f } }]; return { nombre: x.desc, items, ...qcSum(items) }; });
   const snack = tp === 'Puente' || tp === 'Desayuno';
   const mine = mealGroups().filter(e => e.count >= 2 && num(e.last.kcal) > 0 && (e.byType[tp] || 0) >= 1).sort((a, b) => b.count - a.count).slice(0, 15)
     .map(e => [{ desc: e.last.desc, kcal: num(e.last.kcal), prot: num(e.last.prot), carbs: num(e.last.carbs), fat: num(e.last.fat), ing: [e.last.desc], its: (e.last.items || []).filter(it => it.grams > 0 && it.per100), mine: true }]);
@@ -3624,12 +3631,14 @@ function queComoModal(pick) {
   const L = qcLeft(), ia = !!state.settings.apiKey, plan = qcPlan(L), B = plan.find(x => x.tp === pick) || plan[0], tp = B.tp;
   const rest = plan.filter(x => x !== B);
   openModal(`<div class="text-[11px] font-black tracking-widest text-cyan-300">🍽️ ¿QUÉ COMO?</div>
-    <h3 class="text-xl font-black leading-tight">Te quedan ${L.kcal} kcal${L.prot > 0 ? ` · ${L.prot} g de proteína` : ''}</h3>
-    ${plan.length > 1 ? `<p class="text-[12px] text-mute mt-1">Repartido entre lo que te falta hoy. ¿Para qué comida?</p>
+    ${B.protOnly ? `<h3 class="text-xl font-black leading-tight">Te faltan ${L.prot} g de proteína</h3>
+    <p class="text-[12px] text-mute mt-1">Ya has llegado a tus kcal: ideas con mucha proteína y casi sin calorías (unas 150 kcal como mucho).</p>`
+    : `<h3 class="text-xl font-black leading-tight">Te quedan ${L.kcal} kcal${L.prot > 0 ? ` · ${L.prot} g de proteína` : ''}</h3>`}
+    ${B.protOnly ? '' : plan.length > 1 ? `<p class="text-[12px] text-mute mt-1">Repartido entre lo que te falta hoy. ¿Para qué comida?</p>
     <div class="flex flex-wrap gap-1.5 mt-2">${plan.map(x => `<button class="chip chip-sm ${x === B ? 'chip-on' : ''}" data-mact="pick" data-tp="${x.tp}" type="button">${x.tp} · ~${x.kcal} kcal</button>`).join('')}</div>`
       : `<p class="text-[12px] text-mute mt-1">Para ${qcDe(tp)}: es tu última comida de hoy.</p>`}
     <div class="grid gap-2 mt-4">
-      <button class="qc-opt" data-mact="close" type="button"><span class="text-2xl">🎯</span><span class="min-w-0"><b>Ideas para ${qcDe(tp)}</b><span>Unas ${B.kcal} kcal y ${B.prot} g de proteína${rest.length ? `, y aún te queda ${rest.map(x => qcDe(x.tp)).join(' y ')}` : ''}</span></span></button>
+      <button class="qc-opt" data-mact="close" type="button"><span class="text-2xl">🎯</span><span class="min-w-0"><b>${B.protOnly ? 'Ideas para completar la proteína' : `Ideas para ${qcDe(tp)}`}</b><span>${B.protOnly ? `Hasta ~${B.prot} g de proteína en unas 150 kcal` : `Unas ${B.kcal} kcal y ${B.prot} g de proteína`}${rest.length ? `, y aún te queda ${rest.map(x => qcDe(x.tp)).join(' y ')}` : ''}</span></span></button>
       <button class="qc-opt" data-mact="home" type="button"><span class="text-2xl">🏠</span><span class="min-w-0"><b>Con lo que tengo en casa</b><span>Escribe o dicta lo que tienes${ia ? '' : ' · necesita la clave de Gemini'}</span></span></button>
       <button class="qc-opt" data-mact="photo" type="button"><span class="text-2xl">📷</span><span class="min-w-0"><b>Foto de la nevera o la despensa</b><span>${ia ? 'Te propongo platos con lo que se ve' : 'Necesita la clave de Gemini (Ajustes)'}</span></span></button>
     </div>`, {
@@ -3669,7 +3678,7 @@ async function qcAsk(cx) {
 Para esta comida le corresponden unas ${B.kcal} kcal (±15 %), ${B.prot} g de proteína, ${B.carbs} g de hidratos y ${B.fat} g de grasa.${rest.length ? ` Después todavía tiene ${rest.map(x => `${qcDe(x.tp)} (~${x.kcal} kcal)`).join(' y ')}, así que no gastes en esta comida lo que es para luego.` : ' Es su última comida del día.'}
 ${img ? 'En la foto se ve su nevera o despensa: usa SOLO lo que se ve con claridad (más sal, aceite, especias y agua). Si algo no se distingue bien, no lo uses y ponlo en "dudas".' : have ? `Tiene en casa: ${have}. Usa SOLO eso (más sal, aceite, especias y agua).` : 'Usa ingredientes corrientes de supermercado español.'}
 ${prev.length ? `No repitas estas ideas: ${prev.join('; ')}.` : ''}
-${QC_RULES}
+${QC_RULES}${B.protOnly ? `\n- MODO PROTEÍNA: ya ha llegado a sus calorías de hoy y le faltan ${B.prot} g de proteína. Solo ideas de 150 kcal como mucho, con mucha proteína y casi sin grasa ni hidratos: lácteos desnatados o proteicos, claras, pavo, atún al natural, gambas, batido de proteína… Nada de pan, aceite, frutos secos ni dulces. Puede ser algo sencillo, sin cocinar.` : ''}
 Propón 3 opciones distintas, fáciles (menos de 20 minutos). Para cada ingrediente da su peso en gramos (en crudo si se cocina; si va por unidades, pon también las unidades) y sus valores por 100 g, realistas (tablas españolas). Incluye el aceite si se usa.
 Responde SOLO con JSON: {"opciones":[{"nombre":"…","items":[{"nombre":"Merluza","g":150,"uds":"","por100":{"kcal":0,"prot":0,"carbs":0,"fat":0}}],"pasos":"una frase"}],"veo":["alimento", "…"],"dudas":["lo que no distingues bien"],"nota":"una frase"}`;
   let r, err = null;
@@ -3697,7 +3706,7 @@ function qcShow(cx, ops, note, ia = false) {
   const { L, B, tp, img, have, veo = [], dudas = [] } = cx;
   ui._qc = ops; ui._qcLast = [cx, ops, note, ia];
   const seen = img ? veo.join(', ') : have;
-  openModal(`<div class="flex items-center gap-2"><button class="text-mute text-xl -ml-1 px-1" data-mact="back" type="button">‹</button><div class="min-w-0"><div class="text-[11px] font-black tracking-widest text-cyan-300">🍽️ IDEAS PARA ${esc(qcDe(tp).toUpperCase())}</div><h3 class="text-lg font-black leading-tight">Unas ${B.kcal} kcal · ${B.prot} g de proteína</h3><p class="text-[11px] text-mute">De las ${L.kcal} kcal que te quedan hoy</p></div></div>
+  openModal(`<div class="flex items-center gap-2"><button class="text-mute text-xl -ml-1 px-1" data-mact="back" type="button">‹</button><div class="min-w-0"><div class="text-[11px] font-black tracking-widest text-cyan-300">🍽️ IDEAS PARA ${esc(qcDe(tp).toUpperCase())}</div><h3 class="text-lg font-black leading-tight">${B.protOnly ? `Hasta ~${B.prot} g de proteína · máx. ${B.kcal} kcal` : `Unas ${B.kcal} kcal · ${B.prot} g de proteína`}</h3><p class="text-[11px] text-mute">${B.protOnly ? `Te faltan ${L.prot} g de proteína y ya has llegado a tus kcal` : `De las ${L.kcal} kcal que te quedan hoy`}</p></div></div>
     ${img && veo.length ? `<div class="qc-seen"><b>👀 He visto:</b> ${esc(veo.join(', '))}${dudas.length ? `<br><b>🤔 No lo distingo bien:</b> ${esc(dudas.join(', '))}` : ''}</div>` : ''}
     ${note ? `<p class="text-[12px] text-mute mt-2">${esc(note)}</p>` : ''}
     ${ops.length ? ops.map((o, i) => `<div class="qc-card"><div class="font-extrabold text-[15px] leading-tight">${esc(o.nombre)}${o.mine ? ' <span class="text-[10.5px] text-amber-300 font-bold">· de tus habituales</span>' : ''}</div>
@@ -3787,7 +3796,7 @@ function renderDiet() {
       <div class="d2-left"><div class="d2-left-l">${over ? 'Te has pasado' : 'Te quedan'}</div><div class="d2-left-v ${over ? 'text-rose-300' : MAC.kcal.text}">${Math.abs(leftK)}<span> kcal</span></div></div>
       <div class="d2-left"><div class="d2-left-l">${leftP > 0 ? 'Proteína que falta' : 'Proteína'}</div><div class="d2-left-v ${MAC.prot.text}">${leftP > 0 ? `${leftP}<span> g</span>` : '✓<span> cumplida</span>'}</div></div>
     </div>
-    ${isToday && leftK > 60 && mealsOf(date).length ? `<button class="qc-btn ${MAC.kcal.text}" data-act="queComo" type="button">¿Qué como?</button>` : `<p class="text-xs text-mute mt-2.5 leading-relaxed">${esc(hint)}</p>`}
+    ${isToday && mealsOf(date).length && (leftK > 60 || qcProtMode(qcLeft())) ? `<button class="qc-btn ${MAC.kcal.text}" data-act="queComo" type="button">¿Qué como?</button>` : `<p class="text-xs text-mute mt-2.5 leading-relaxed">${esc(hint)}</p>`}
     ${burned ? `<p class="text-[11px] mt-2 text-mute">${cardioK ? `🔥 Cardio <b class="${MAC.kcal.text}">−${cardioK}</b> · ` : ''}${gymK ? `🏋️ Gym <b class="${MAC.kcal.text}">−${gymK}</b> · ` : ''}Neto <b class="text-white">${Math.round(t.kcal - burned)}</b> kcal</p>` : ''}
   </section>
 
@@ -6109,6 +6118,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.87.5', ['🍽️ «¿Qué como?» también sale si ya has llegado a tus kcal pero te falta proteína: ideas con mucha proteína y casi sin calorías.'], 'quiet'],
   ['4.87.4', ['🍽️ «¿Qué como?»: cada idea trae sus ingredientes con gramos y, al añadirla, puedes ajustar la cantidad de cada uno antes de apuntarla.'], 'quiet'],
   ['4.87.3', ['🧍 3D: sentadilla búlgara menos profunda y con el pie delantero siempre plano.'], 'admin'],
   ['4.87.2', ['👨‍🍳 «¿Qué como?»: cada idea tiene su receta paso a paso, y si la IA falla puedes reintentarlo con un toque.'], 'quiet'],
