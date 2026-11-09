@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.87.0';
+const APP_VERSION = '4.87.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -2745,11 +2745,15 @@ const NP_SUB = { // por músculo, en orden de preferencia; si ya está en la ses
   obliques: [['Plancha lateral', 'Sobre el antebrazo, cadera alta.']]
 };
 const NP_ZONES = [
-  { k: 'rodilla', t: '🦵 Rodilla', m: ['quadriceps'], re: /sentadilla|zancada|prensa|búlgara|extensión de cuádriceps|step|salto|burpee|pistol/i },
-  { k: 'lumbar', t: '🔻 Zona lumbar', m: ['lower-back'], re: /peso muerto|rumano|swing|buenos días|remo con barra|good ?morning|hiperextensi|superman/i },
-  { k: 'hombro', t: '💪 Hombro', m: ['deltoids'], re: /press|banca|fondos|elevaci|flexion|pájaro|face ?pull|dominada|arnold|militar/i },
-  { k: 'codo', t: '✋ Codo o muñeca', m: ['biceps', 'triceps', 'forearm'], re: /curl|tríceps|triceps|francés|extensión de tríceps|fondos|martillo|zottman|antebrazo/i }
+  { k: 'rodilla', t: '🦵 Rodilla', m: ['quadriceps'], re: /sentadilla|zancada|prensa|búlgara|extensión de cuádriceps|curl femoral|step|salto|burpee|pistol/i },
+  { k: 'cadera', t: '🍑 Cadera', m: ['gluteal', 'adductors'], re: /hip thrust|puente|sentadilla|zancada|búlgara|peso muerto|rumano|abducci|aducci|patada|step|swing/i },
+  { k: 'tobillo', t: '🦶 Tobillo', m: ['calves', 'tibialis'], re: /sentadilla|zancada|búlgara|salto|burpee|gemelo|step|comba|pistol/i },
+  { k: 'lumbar', t: '🔻 Zona lumbar', m: ['lower-back'], re: /peso muerto|rumano|swing|buenos días|remo con barra|good ?morning|hiperextensi|superman|sentadilla trasera|\bremo\b|de pie|con barra|militar|granjero/i },
+  { k: 'hombro', t: '💪 Hombro', m: ['deltoids'], re: /\bpress\b|banca|fondos|elevaciones|elevación lateral|elevación frontal|flexion|pájaro|face ?pull|dominada|arnold|militar/i },
+  { k: 'cuello', t: '🧣 Cuello o cervicales', m: ['trapezius'], re: /encogimiento|remo al cuello|press militar|granjero/i },
+  { k: 'codo', t: '✋ Codo o muñeca', m: ['biceps', 'triceps', 'forearm'], re: /curl(?! femoral)|tríceps|triceps|francés|fondos|martillo|zottman|antebrazo|flexion/i }
 ];
+const npHits = (day, z) => day.exercises.filter(e => z.re.test(variantOf(e).variant.name) || npPrim(e).some(m => z.m.includes(m))).map(e => e.id);
 function npPrim(e) { return Object.entries(musclesOf(variantOf(e).variant.name)).filter(([, w]) => w === 1).map(([m]) => m); }
 function npCut(day, mins) { // quita primero los aislamientos y luego desde el final; deja al menos 2
   const d = draftOf(day.id), ex = day.exercises.filter(e => !skippedToday(d).includes(e.id));
@@ -2798,7 +2802,7 @@ function npList(rows) { return `<div class="np-list">${rows.map(r => `<div class
 function noPuedoModal() {
   const tp = todayPick(); if (!tp?.day) return;
   const pr = tp.pr, day = tp.day, est = estimateMinutes(day, draftOf(day.id));
-  const head = sub => `<div class="flex items-center gap-2"><button class="text-mute text-xl -ml-1 px-1" data-mact="back" type="button">‹</button><div class="min-w-0"><div class="text-[11px] font-black tracking-widest text-brand">${esc(day.label)} · ${esc(pr.name)}</div><h3 class="modal-title !mb-0">${sub}</h3></div></div>`;
+  const head = sub => `<div class="flex items-center gap-2"><button class="text-mute text-xl -ml-1 px-1" data-mact="back" type="button">‹</button><div class="min-w-0"><div class="text-[11px] font-black tracking-widest text-brand">${esc(day.label)}${libKey(day.label) === libKey(pr.name) ? '' : ` · ${esc(pr.name)}`}</div><h3 class="modal-title !mb-0">${sub}</h3></div></div>`;
   const back = () => noPuedoModal();
   const time = () => {
     const opts = [20, 30, 45].filter(m => m < est && npCut(day, m).est <= m); // solo tiempos que de verdad se pueden cumplir
@@ -2823,14 +2827,18 @@ function noPuedoModal() {
       <button class="btn-primary w-full mt-3" data-mact="ok" type="button">Entrenar así</button>
       <p class="text-[11px] text-mute text-center mt-2">Solo cambia hoy: mañana vuelven tus ejercicios de siempre.</p>`, { back, ok: () => { npApply(pr, day, { skip: off.map(r => r.e.id), swaps: sw }); toast('Sesión sin material ✓'); } });
   };
+  const zOn = NP_ZONES.filter(z => npHits(day, z).length), zOff = NP_ZONES.filter(z => !zOn.includes(z)); // primero las que carga la sesión de hoy
   const hurt = () => openModal(`${head('🩹 ¿Qué te molesta?')}
-      <div class="grid grid-cols-2 gap-2 mt-1">${NP_ZONES.map(z => `<button class="btn-ghost !py-3 text-sm font-bold" data-mact="z" data-k="${z.k}" type="button">${z.t}</button>`).join('')}</div>
+      ${zOn.length ? `<p class="text-[12px] text-mute">Lo que más trabaja tu sesión de hoy:</p>
+      <div class="grid grid-cols-2 gap-2 mt-1">${zOn.map(z => `<button class="btn-ghost !py-3 text-sm font-bold" data-mact="z" data-k="${z.k}" type="button">${z.t}</button>`).join('')}</div>` : ''}
+      ${zOff.length ? `<p class="text-[12px] text-mute mt-3">${zOn.length ? 'Otras zonas:' : '¿Dónde te molesta?'}</p>
+      <div class="grid grid-cols-2 gap-2 mt-1">${zOff.map(z => `<button class="btn-ghost !py-2.5 text-sm font-semibold opacity-80" data-mact="z" data-k="${z.k}" type="button">${z.t}</button>`).join('')}</div>` : ''}
       <p class="np-warn">Si es un dolor fuerte, hay hinchazón o va a más, hoy no entrenes esa zona y consúltalo con un profesional.</p>`, {
     back, z: (_, b) => {
       const z = NP_ZONES.find(x => x.k === b.dataset.k);
-      const hits = day.exercises.filter(e => { const n = variantOf(e).variant.name; return z.re.test(n) || npPrim(e).some(m => z.m.includes(m)); }).map(e => e.id);
+      const hits = npHits(day, z);
       const left = day.exercises.length - hits.length;
-      openModal(`${head(`🩹 Cuidando ${z.t.replace(/^\S+\s/, '').toLowerCase()}`)}
+      openModal(`${head(`🩹 Cuidando ${z.k === 'cuello' ? 'el cuello' : z.k === 'codo' ? 'codo y muñeca' : z.k === 'lumbar' ? 'la zona lumbar' : `${['cadera', 'rodilla'].includes(z.k) ? 'la' : 'el'} ${z.k}`}`)}
         ${npList(day.exercises.map(e => ({ name: variantOf(e).variant.name, off: hits.includes(e.id) })))}
         ${!hits.length ? '<p class="text-[12px] text-mute mt-2">Nada de hoy carga esa zona de forma directa. Entrena con cuidado y para si notas dolor.</p>' : left < 2 ? '<p class="text-[12px] text-amber-200 mt-2">Casi todo lo de hoy carga esa zona: mejor descansa o haz otro día de tu bloque.</p>' : ''}
         ${hits.length && left ? `<button class="btn-primary w-full mt-3" data-mact="ok" type="button">${hits.length === 1 ? 'Entrenar sin ese ejercicio' : `Entrenar sin esos ${hits.length} ejercicios`}</button>` : ''}
@@ -6075,6 +6083,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.87.1', ['🩹 «Algo me molesta»: más zonas (cadera, tobillo, cuello) y arriba las que más trabaja tu sesión de hoy. Corregido que la prensa o los gemelos contaran como hombro.'], 'quiet'],
   ['4.87.0', ['🍽️ «¿Qué como?» más sensato: reparte lo que te queda entre las comidas que te faltan (puedes elegir para cuál), propone platos normales para cada momento y, con la foto de la nevera, te dice qué ha visto para que lo corrijas si se equivoca. Y si no te convencen, «Otras ideas».']],
   ['4.86.0', ['🎁 Periodo de prueba: los nuevos pasan a 7 días; los ya empezados conservan sus 15. ⏳ Planes: Prueba (7 días), 1, 3 y 6 meses, Free y «Otro» para dar los días que quieras. Ya no se habla de «gratis» en ningún sitio. Necesita el script v13 (Acceso → Reconfigurar → nueva versión).'], 'admin'],
   ['4.85.1', ['🍽️ Corregido: «Ideas para el puente» en «¿Qué como?».'], 'quiet'],
@@ -6307,7 +6316,7 @@ const GUIDE = [
   ]],
   ['📝 Registrar una sesión', [
     'Abre «Registrar series» en cada ejercicio. El peso sugerido ya viene puesto; apunta las reps y pulsa ✓: arranca el descanso de ese ejercicio (vibra y pita al acabar; en ⏱ puedes «🔊 Probar el pitido»). En iPhone no pita con el modo silencio ni con la pantalla bloqueada.',
-    '🤔 <b>¿Y si hoy no puedo?</b> (bajo «HOY TE TOCA»): si vas justo de tiempo, recorta la sesión a 20, 30 o 45 min quitando primero los accesorios; si estás fuera o sin material, cambia cada ejercicio por uno con tu peso corporal para los mismos músculos (solo ese día); si algo te molesta (rodilla, lumbar, hombro, codo o muñeca), quita lo que carga esa zona. Lo quitado se recupera con «Deshacer».',
+    '🤔 <b>¿Y si hoy no puedo?</b> (bajo «HOY TE TOCA»): si vas justo de tiempo, recorta la sesión a 20, 30 o 45 min quitando primero los accesorios; si estás fuera o sin material, cambia cada ejercicio por uno con tu peso corporal para los mismos músculos (solo ese día); si algo te molesta, elige la zona (arriba salen las que más carga la sesión de ese día) y quita lo que la carga. Lo quitado se recupera con «Deshacer».',
     'Todo se guarda solo mientras escribes: puedes cerrar la app a mitad de sesión.',
     '🤸 <b>Peso corporal</b>: en dominadas, flexiones, fondos… el campo de peso es el <b>lastre</b>: vacío = solo tu peso (PC). Actívalo en el ✎ del ejercicio con «Con peso corporal».',
     '⏱ <b>Ejercicios por tiempo</b> (plancha, hollow hold…): ▶ cronometra la serie y apunta los segundos solos.',
