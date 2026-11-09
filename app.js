@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.85.1';
+const APP_VERSION = '4.86.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5339,7 +5339,7 @@ function onboarding() {
       <p>🩺 <b>No sustituye a un profesional.</b> Las cifras son orientativas: si tienes lesiones, embarazo o algún problema de salud, consulta antes.</p>
       <p>🛠️ <b>Es un proyecto vivo.</b> Irá mejorando, pero puede tener fallos o cambiar.</p>
       <p>📶 <b>Para mantener la app</b>, envía a Esteban solo el día de último uso, la versión instalada y un identificador del dispositivo (sin datos personales). Nada de tu dieta ni de tus entrenos.</p>
-      <p>${access.me?.trial ? `🎁 <b>Estás de prueba:</b> ${TRIAL_DAYS} días con todo incluido. Al terminar, pide tu código personal a Esteban y sigues con tus datos.` : '🔑 <b>Tu código es solo tuyo:</b> funciona como mucho en 2 dispositivos.'}</p>
+      <p>${access.me?.trial ? `🔓 <b>Estás de prueba:</b> ${(n => n > 1 ? `te quedan ${n} días` : n === 1 ? 'hoy es tu último día' : 'tu prueba ha terminado')(trialLeft())} con todo incluido. Al terminar, pide tu código de acceso a Esteban y sigues con tus datos.` : '🔑 <b>Tu código es solo tuyo:</b> funciona como mucho en 2 dispositivos.'}</p>
       <p>✉️ <b>Tu correo</b> lo guarda Esteban para enviarte la guía de la app y, si tú le escribes, resolverte dudas.</p>
       <p class="text-mute">Todo, con detalle, en la <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.</p>
     </div>
@@ -6024,6 +6024,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.86.0', ['🎁 Periodo de prueba: los nuevos pasan a 7 días; los ya empezados conservan sus 15. ⏳ Planes: Prueba (7 días), 1, 3 y 6 meses, Free y «Otro» para dar los días que quieras. Ya no se habla de «gratis» en ningún sitio. Necesita el script v13 (Acceso → Reconfigurar → nueva versión).'], 'admin'],
   ['4.85.1', ['🍽️ Corregido: «Ideas para el puente» en «¿Qué como?».'], 'quiet'],
   ['4.85.0', ['🤔 Nuevo en Entreno: «¿Y si hoy no puedo?», debajo de «Hoy te toca». Si vas justo de tiempo, recorta la sesión; si estás fuera o sin material, la cambia a ejercicios con tu peso corporal; y si algo te molesta, quita lo que carga esa zona. Mejor adaptarlo que saltártelo.', '🍽️ El botón «¿Qué como?» ahora es más discreto.']],
   ['4.84.1', ['🍽️ Botón «¿Qué como?» más visible y micrófono para dictar lo que tienes en casa.'], 'quiet'],
@@ -6038,10 +6039,10 @@ const CHANGELOG = [
   ['4.81.2', ['🔜 «Próximamente» sale justo después de cerrar la ventana de novedades, en vez de perderse.'], 'quiet'],
   ['4.81.1', ['📲 Si abres el enlace desde WhatsApp o Telegram y no te deja instalar, la pantalla te explica cómo abrirlo en Chrome o Safari.'], 'quiet'],
   ['4.81.0', ['🔜 Nuevo «Próximamente»: al abrir la app (una vez al día) verás lo que está por llegar. Puedes pulsar «No volver a mostrar».'], 'quiet'],
-  ['4.80.3', ['📤 «Compartir la app» envía ahora el enlace de la app, para probarla gratis 15 días.'], 'quiet'],
-  ['4.80.2', ['🧪 Acceso: la lista «En prueba gratis» ya no desaparece al actualizar los nombres de la hoja.'], 'admin'],
-  ['4.80.1', ['🧪 Acceso: nueva lista «En prueba gratis» con el correo, días de uso y días que le quedan a cada uno, y botón para darle su código personal.'], 'admin'],
-  ['4.80.0', ['🎁 Prueba gratis de 15 días: quien no tiene código puede entrar con Google desde la pantalla de acceso. Una prueba por cuenta de Google y por instalación; al terminar, pide su código. Necesita el script v12 (Acceso → Reconfigurar).'], 'admin'],
+  ['4.80.3', ['📤 «Compartir la app» envía ahora el enlace de la app, para probarla 15 días.'], 'quiet'],
+  ['4.80.2', ['🧪 Acceso: la lista «En periodo de prueba» ya no desaparece al actualizar los nombres de la hoja.'], 'admin'],
+  ['4.80.1', ['🧪 Acceso: nueva lista «En periodo de prueba» con el correo, días de uso y días que le quedan a cada uno, y botón para darle su código personal.'], 'admin'],
+  ['4.80.0', ['🎁 Periodo de prueba de 15 días: quien no tiene código puede entrar con Google desde la pantalla de acceso. Una prueba por cuenta de Google y por instalación; al terminar, pide su código. Necesita el script v12 (Acceso → Reconfigurar).'], 'admin'],
   ['4.79.2', ['🕵️ El calendario de AD(GYM)VIENTO ya tiene nombre en clave: Operación Polvorón.'], 'quiet'],
   ['4.79.1', ['🎄 El anuncio del calendario ya no se puede cerrar por error.'], 'quiet'],
   ['4.79.0', ['🎄 Anuncio en Inicio: el Calendario de AD(GYM)VIENTO llega el 20 de noviembre (pulsa «Info» para ver cómo será).'], 'quiet'],
@@ -6322,7 +6323,7 @@ const GUIDE = [
   ['ℹ️ La app', [
     '🔄 Se <b>actualiza sola</b> al abrirla o volver a ella. Después verás una vez las novedades; puedes volver a verlas desde esta guía. Tu versión, en Ajustes → Aplicación.',
     '✈️ El avión de papel de arriba abre Telegram para escribir a Esteban: dudas, fallos o ideas.',
-    '📤 «Compartir la app» (Ajustes y abajo en esta guía) envía a quien quieras el enlace de la app: podrá probarla gratis 15 días entrando con su cuenta de Google.',
+    '📤 «Compartir la app» (Ajustes y abajo en esta guía) envía a quien quieras el enlace de la app: podrá probarla 7 días entrando con su cuenta de Google.',
     '🔒 Qué datos usa la app y dónde se guardan: <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.'
   ]]
 ];
@@ -6823,7 +6824,7 @@ function planBannerHTML() {
   const me = access.me, left = me ? planDaysLeft(me) : null;
   if (left === null || left > 3 || left < 0) return '';
   const d = new Date(planOf(me).hasta + 'T12:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
-  return `<div class="plan-warn mb-3"><div class="text-[14px] font-extrabold">⏳ ${me.trial ? (left === 0 ? 'Hoy es el último día de tu prueba' : left === 1 ? 'Mañana es el último día de tu prueba' : `Tu prueba gratis termina el ${esc(d)}`) : left === 0 ? 'Hoy es tu último día de acceso' : left === 1 ? 'Mañana es tu último día de acceso' : `Tu acceso termina el ${esc(d)}`}</div>
+  return `<div class="plan-warn mb-3"><div class="text-[14px] font-extrabold">⏳ ${me.trial ? (left === 0 ? 'Hoy es el último día de tu prueba' : left === 1 ? 'Mañana es el último día de tu prueba' : `Tu periodo de prueba termina el ${esc(d)}`) : left === 0 ? 'Hoy es tu último día de acceso' : left === 1 ? 'Mañana es tu último día de acceso' : `Tu acceso termina el ${esc(d)}`}</div>
     <p class="text-[12px] mt-0.5 opacity-90">Después la app dejará de abrirse, pero tus datos no se borran: pide a Esteban que lo renueve y sigues donde lo dejaste.</p>
     ${contactBtn('Pedir renovación', 'mt-2')}</div>`;
 }
@@ -7575,7 +7576,7 @@ const actions = {
   installHelp: () => installHelpModal(),
   installHide: () => { lsSet(INSTALL_HIDE, Date.now() + 7 * 86400000); render(); },
   shareApp: async () => {
-    const url = 'https://egarluq292.github.io/fitnesteban/', text = `Te recomiendo FITNESTEBAN, una app para entrenar y llevar la dieta. Pruébala gratis ${TRIAL_DAYS} días: abre el enlace, instálala en tu móvil y entra con tu cuenta de Google.`;
+    const url = 'https://egarluq292.github.io/fitnesteban/', text = `Te recomiendo FITNESTEBAN, una app para entrenar y llevar la dieta. Puedes probarla ${TRIAL_DAYS} días: abre el enlace, instálala en tu móvil y entra con tu cuenta de Google.`;
     try { if (navigator.share) { await navigator.share({ title: 'FITNESTEBAN', text, url }); return; } } catch (e) { if (e?.name === 'AbortError') return; }
     try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Mensaje copiado: pégalo donde quieras'); } catch { toast(url); }
   },
@@ -7878,7 +7879,8 @@ const access = { list: null, me: null, ok: false, usageUrl: '' };
 /* ⏳ Planes con caducidad. La fecha que manda es la de la red (cabecera Date del servidor), nunca el reloj del móvil:
    se guarda la última hora de la red y, sin conexión, solo se suma el tiempo que avance el reloj (si lo atrasan, el tiempo se congela).
    Además, un código con caducidad necesita comprobarse con conexión al menos cada OFFLINE_MAX aperturas. */
-const PLANS = { prueba: ['Prueba', 10], '1m': ['1 mes', 30], '3m': ['3 meses', 90], '12m': ['12 meses', 365], free: ['Free', 0] };
+const PLANS = { prueba: ['Prueba', 7], '1m': ['1 mes', 30], '3m': ['3 meses', 90], '6m': ['6 meses', 180], free: ['Free', 0] };
+const PLANS_OLD = { '12m': ['12 meses', 365] }; // ya no se ofrecen, pero los códigos que los tienen siguen mostrando su nombre
 const NET_KEY = 'fitnesteban_net', OFFLINE_MAX = 15;
 function netMark(r) { const d = Date.parse(r?.headers?.get('date') || ''); if (d > 0) { lsSet(NET_KEY, { s: d, d: Date.now(), off: 0 }); return true; } return false; }
 function netNow() { const n = lsGet(NET_KEY); if (!n?.s) return null; return n.s + Math.max(0, Date.now() - n.d); }
@@ -7900,12 +7902,13 @@ function planWarn(me) {
 const expiredMsg = x => x === 'offline' ? `Conéctate a internet para comprobar tu acceso.` : `Tu acceso a FITNESTEBAN ha caducado. Pide a Esteban que lo renueve.${contactBtn('Contacto', 'mx-auto mt-3')}`;
 function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* nada */ } }
-/* 🧪 PRUEBA GRATIS (15 días): se entra con Google desde la pantalla de acceso, sin código. La fecha de inicio la guarda el script
+/* 🧪 PERIODO DE PRUEBA (7 días; los de 15 ya empezadas se respetan): se entra con Google desde la pantalla de acceso, sin código. La fecha de inicio la guarda el script
    por cuenta de Google (reinstalar no la reinicia) y cada instalación solo puede tener una prueba. Al terminar, hace falta un código. */
-const TRIAL_KEY = 'fitnesteban_trial', TRIAL_DAYS = 15;
+const TRIAL_KEY = 'fitnesteban_trial', TRIAL_DAYS = 7; // las pruebas ya empezadas conservan su fecha de fin (la guarda el script)
+const trialLeft = () => { const h = access.me?.hasta || lsGet(TRIAL_KEY)?.hasta; return h ? Math.max(0, daysBetween(todayISO(), fecha10(h)) + 1) : TRIAL_DAYS; };
 function trialMe(t = lsGet(TRIAL_KEY)) { return t?.h && t.hasta ? { hash: t.h, admin: false, plan: 'prueba', hasta: t.hasta, trial: true } : null; }
-const trialEndMsg = () => `Tu prueba gratis de ${TRIAL_DAYS} días ha terminado. Pide tu código personal a Esteban y seguirás con todos tus datos.${contactBtn('Pedir mi código', 'mx-auto mt-3')}`;
-const trialDevMsg = r => r === 'device' ? `Este dispositivo ya ha usado su prueba gratis con otra cuenta de Google. Para seguir, pide tu código personal a Esteban.${contactBtn('Pedir mi código', 'mx-auto mt-3')}` : `Esa cuenta ya tiene su prueba abierta en ${DEVICE_LIMIT} dispositivos. Para seguir, pide tu código personal a Esteban.${contactBtn('Pedir mi código', 'mx-auto mt-3')}`;
+const trialEndMsg = () => `Tu periodo de prueba ha terminado. Pide tu código de acceso a Esteban y seguirás con todos tus datos.${contactBtn('Pedir mi código', 'mx-auto mt-3')}`;
+const trialDevMsg = r => r === 'device' ? `Este dispositivo ya ha usado su periodo de prueba con otra cuenta de Google. Para seguir, pide tu código de acceso a Esteban.${contactBtn('Pedir mi código', 'mx-auto mt-3')}` : `Esa cuenta ya tiene su periodo de prueba abierto en ${DEVICE_LIMIT} dispositivos. Para seguir, pide tu código de acceso a Esteban.${contactBtn('Pedir mi código', 'mx-auto mt-3')}`;
 async function trialHashOf(m) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('fitnesteban-prueba|' + m)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('').slice(0, 32); }
 const fecha10 = x => String(x || '').slice(0, 10);
 async function trialCall(tk = '') {
@@ -7927,7 +7930,7 @@ async function trialStart(btn) {
     if (d.h) lsSet(TRIAL_KEY, { h: d.h, hasta: d.hasta, m: email });
     if (!d.allowed) { lockScreen('code', d.reason === 'exp' ? trialEndMsg() : trialDevMsg(d.reason)); return; }
     Object.assign(state.settings, { email, usageOk: true }); persist();
-    unlock(trialMe()); toast(`¡Bienvenido! Tienes ${TRIAL_DAYS} días con todo incluido 👋`);
+    unlock(trialMe()); { const n = trialLeft(); toast(`¡Bienvenido! Tienes ${n} ${n === 1 ? 'día' : 'días'} con todo incluido 👋`); }
     setTimeout(() => { usagePing(); setTimeout(emailSync, 2500); }, 1500);
   } catch (e) { btn.disabled = false; btn.innerHTML = old; if (!/popup_closed|access_denied/i.test(e.message || '')) toast(e.message || 'No se pudo entrar con Google', 'error'); }
 }
@@ -7989,11 +7992,11 @@ function lockScreen(mode, msg = '') {
   el.innerHTML = `<div class="lock-box">
     <div class="text-center">${logo}${canTrial ? '' : `<h1 class="font-extrabold text-lg mt-5">Acceso privado</h1>
     <div class="text-sm text-mute mt-1">${msg || 'Esta app es personal. Escribe el código que te ha dado Esteban.'}</div>`}</div>
-    ${canTrial ? `<div class="trial-box mt-5"><div class="text-[11px] font-black tracking-widest text-cyan-300">🎁 PRUEBA GRATIS</div>
+    ${canTrial ? `<div class="trial-box mt-5"><div class="text-[11px] font-black tracking-widest text-cyan-300">🔓 PERIODO DE PRUEBA</div>
       <div class="text-xl font-black leading-tight mt-0.5">${TRIAL_DAYS} días con todo incluido</div>
-      <p class="text-[13px] text-mute mt-1">Sin código y sin pagar nada. Entra con tu cuenta de Google.</p>
+      <p class="text-[13px] text-mute mt-1">Sin código: entra con tu cuenta de Google.</p>
       <button class="btn-google w-full mt-3" id="trialGo" type="button"><b class="g-g">G</b> Continuar con Google</button>
-      <p class="text-[11px] text-mute mt-2 leading-snug">Tu correo se guarda solo para que Esteban pueda enviarte la guía y ayudarte (<a class="underline" href="privacidad.html" target="_blank" rel="noopener">privacidad</a>). Una prueba por persona. Al terminar, pide tu código personal para seguir.</p></div>
+      <p class="text-[11px] text-mute mt-2 leading-snug">Tu correo se guarda solo para que Esteban pueda enviarte la guía y ayudarte (<a class="underline" href="privacidad.html" target="_blank" rel="noopener">privacidad</a>). Una prueba por persona. Al terminar, pide tu código de acceso a Esteban para seguir.</p></div>
       <div class="lock-or"><span>¿Ya tienes código?</span></div>` : ''}
     <input class="field mt-5 text-center text-2xl font-black tracking-[.2em] uppercase" id="lockCode" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" />
     <button class="btn-primary w-full mt-3" id="lockGo" type="button">Entrar</button>
@@ -8178,9 +8181,9 @@ async function loadUsage() {
     const d = await r.json();
     if (!d.ok) throw new Error(d.error === 'clave' ? 'La clave del registro no coincide con la del script' : 'El registro no respondió bien');
     ui.usage = {}; for (const x of d.rows || []) ui.usage[String(x.h).toLowerCase()] = x;
-    ui.trialH = {}; // 🧪 filas de prueba gratis: su huella es la del correo (así no dependen de la columna «nombre»)
+    ui.trialH = {}; // 🧪 filas del periodo de prueba: su huella es la del correo (así no dependen de la columna «nombre»)
     for (const x of d.rows || []) { const m = String(x.m || '').trim().toLowerCase(), h = String(x.h).toLowerCase(); if (m && !(access.list || []).some(y => y.hash === h) && await trialHashOf(m) === h) ui.trialH[h] = (String(x.nm || '').match(/\d{4}-\d{2}-\d{2}/) || [''])[0] || (x.first ? addDays(fecha10(x.first), TRIAL_DAYS - 1) : ''); }
-    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageOld12 = !(d.ver >= 12); ui.usageVer = +d.ver || 0;
+    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageOld12 = !(d.ver >= 12); ui.usageOld13 = !(d.ver >= 13); ui.usageVer = +d.ver || 0;
     // nombres puestos en otro dispositivo tuyo: se copian aquí si aquí no tienes uno
     let got = 0;
     for (const x of d.rows || []) { const h = String(x.h).toLowerCase(), nm = String(x.nm || '').trim(); if (nm && nm !== 'Sin nombre' && nm !== 'Yo (admin)' && !state.accessNames[h]) { state.accessNames[h] = nm.slice(0, 24); got++; } }
@@ -8200,13 +8203,13 @@ function usageLine(hash) {
   return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} de ${DEVICE_LIMIT} dispositivos`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="truncate text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${dv.p && !(access.list || []).some(x => x.hash === hash && x.anon) ? `<b class="text-white">${esc(dv.p)}</b> · ` : ''}${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}${dv.k ? ` · ${dv.k} día${dv.k === 1 ? '' : 's'} de uso` : ''}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 truncate">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
 }
 function usageScript(key) {
-  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 2; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos; prueba gratis de 15 días con Google) · v12
+  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 2; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos; periodo de prueba de 7 días con Google) · v13
 const READ_KEY = '${key}';
 const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
 const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre', 'correo', 'alta', 'dispositivos', 'bloqueos'];
 const LIMITE = 2;
-const DIAS_PRUEBA = 15;
-// 🧪 Pruebas gratis: una por cuenta de Google (el correo lo confirma Google) y una por instalación. Fechas de Google, no del móvil.
+const DIAS_PRUEBA = 7;
+// 🧪 Periodos de prueba: uno por cuenta de Google (el correo lo confirma Google) y una por instalación. Fechas de Google, no del móvil.
 function hex_(b) { return b.map(x => ((x + 256) % 256).toString(16).padStart(2, '0')).join(''); }
 function huellaPrueba_(m) { return hex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'fitnesteban-prueba|' + m, Utilities.Charset.UTF_8)).slice(0, 32); }
 function prueba_(h) { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('p_' + h) || 'null'); } catch (e) { return null; } }
@@ -8326,7 +8329,7 @@ function doGet_(e) {
       return salida_({ ok: true, allowed: ok, n: x.d.length });
     } finally { lock.releaseLock(); }
   }
-  // 🧪 prueba gratis: alta con Google (tk = token de Google) o comprobación diaria desde la misma instalación (sin tk)
+  // 🧪 periodo de prueba: alta con Google (tk = token de Google) o comprobación diaria desde la misma instalación (sin tk)
   if (q.op === 'prueba') {
     const d = String(q.d || '').slice(0, 40), P = PropertiesService.getScriptProperties(), hoy = fecha_(new Date());
     if (!d) return salida_({ ok: false });
@@ -8356,12 +8359,12 @@ function doGet_(e) {
   if (q.op === 'hoy') {
     const c = CacheService.getScriptCache(); let n = c.get('hoy');
     if (n === null) { const hoy = fecha_(new Date()), adm = admins_(); n = String(hoja_().getDataRange().getValues().slice(1).filter(r => fecha_(r[1]) === hoy && adm.indexOf(String(r[0])) < 0).length); c.put('hoy', n, 60); }
-    return salida_({ ok: true, ver: 12, hoy: +n });
+    return salida_({ ok: true, ver: 13, hoy: +n });
   }
   if (q.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
   const datos = hoja_().getDataRange().getValues().slice(1);
   const dd = disp_();
-  return salida_({ ok: true, ver: 12, rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
+  return salida_({ ok: true, ver: 13, rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
 }`;
 }
 /* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
@@ -8565,7 +8568,7 @@ function planPill(x) {
   const st = accStatus(x), t = netToday(), left = x.hasta && t ? daysBetween(t, x.hasta) : null;
   if (st === 'free') return '<span class="text-emerald-300">Free</span>';
   if (st === 'exp') return '<span class="text-rose-300">Caducado</span>';
-  return `<span class="${st === 'soon' ? 'text-amber-300' : 'text-slate-300'}">${esc(PLANS[x.plan]?.[0] || 'Plan')} · ${left === 0 ? 'hoy' : left + ' d'}</span>`;
+  return `<span class="${st === 'soon' ? 'text-amber-300' : 'text-slate-300'}">${esc(planName(x.plan))} · ${left === 0 ? 'hoy' : left + ' d'}</span>`;
 }
 function accFilterHTML(list) {
   const n = k => list.filter(x => accStatus(x) === k).length;
@@ -8594,7 +8597,7 @@ async function loadActiveCount() {
     if (typeof d.hoy === 'number') { ui.hoyN = d.hoy; if (ui.view === 'settings') render(); }
   } catch { /* sin dato: no se muestra */ }
 }
-/* 🧪 Quien está de prueba gratis (filas de la hoja que no son de ningún código de acceso.txt) */
+/* 🧪 Quien está en periodo de prueba (filas de la hoja que no son de ningún código de acceso.txt) */
 function trialRows() {
   if (!ui.usage) return [];
   const T = ui.trialH || {};
@@ -8604,7 +8607,7 @@ function trialRows() {
 function trialRowsHTML() {
   const T = trialRows(); if (!T.length) return '';
   const show = !ui.accF || ui.accF === 'all' || ui.accF === 'trial', t = netToday() || todayISO();
-  return `<div class="lbl mt-2 acc-row-h" ${show ? '' : 'hidden'}>🧪 En prueba gratis · ${T.length}</div>` + T.map(u => {
+  return `<div class="lbl mt-2 acc-row-h" ${show ? '' : 'hidden'}>🧪 En periodo de prueba · ${T.length}</div>` + T.map(u => {
     const left = u.hasta ? daysBetween(t, u.hasta) : null, ago = u.last ? daysBetween(u.last, todayISO()) : null, open = ui.accOpenH === u.h;
     const dot = ago === 0 ? 'u-today' : ago !== null && ago <= 7 ? 'u-week' : 'u-old', who = u.m || 'Sin correo';
     const pill = left === null ? '' : left < 0 ? '<span class="text-rose-300">Terminada</span>' : `<span class="${left <= 3 ? 'text-amber-300' : 'text-cyan-300'}">Prueba · ${left === 0 ? 'hoy' : left + ' d'}</span>`;
@@ -8655,7 +8658,7 @@ function accessSectionHTML() {
     ${gh ? '<p class="text-[11px] text-mute">Toca a una persona para ver su ficha: ✎ nombre · ⏳ plan · 🧪 acceso anticipado a las novedades · 👤/🙈 registrar u ocultar su nombre de perfil · 🔄 nuevo código · 🗑 quitar acceso. Nombres y códigos solo los ves tú (cifrados con tu PIN); en GitHub solo hay huellas.</p>' : ''}
     ${list.length ? '<button class="btn-ghost w-full" data-act="copyHashes" type="button">📋 Copiar huellas y nombres (para tu hoja)</button>' : ''}
     ${access.usageUrl && lsGet(USE_KEY)
-      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : ui.usageOld12 ? '<span class="text-amber-300">actualiza el script a la v12 (Reconfigurar → nueva versión) para activar la prueba gratis con Google</span>' : 'actualizado ahora · nombres, correos, altas y quién usa cada dispositivo') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
+      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : ui.usageOld12 ? '<span class="text-amber-300">actualiza el script a la v12 (Reconfigurar → nueva versión) para activar el periodo de prueba con Google</span>' : ui.usageOld13 ? '<span class="text-amber-300">actualiza el script a la v13 (Reconfigurar → nueva versión): las pruebas nuevas pasan a 7 días</span>' : 'actualizado ahora · nombres, correos, altas y quién usa cada dispositivo') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
       : access.usageUrl ? `<button class="btn-ghost w-full" data-act="usageHere" type="button">📶 Ver quién usa la app en este dispositivo</button>`
       : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
     ${access.usageUrl && lsGet(USE_KEY) ? (lsGet(SHEET_KEY) && !ui.sheetEdit
@@ -8691,51 +8694,57 @@ function ghConnectModal() {
   });
 }
 /* Línea de acceso.txt con el plan: la fecha se calcula con la hora de la red */
+const planDaysOf = k => (PLANS[k] || PLANS_OLD[k]) ? (PLANS[k] || PLANS_OLD[k])[1] : +(/^d(\d+)$/.exec(k || '')?.[1] || 0);
+const planName = k => PLANS[k]?.[0] || PLANS_OLD[k]?.[0] || (/^d\d+$/.test(k || '') ? `${k.slice(1)} días` : 'Plan');
+const planCustomHTML = (k, nd) => k === 'custom' ? `<label class="lbl">¿Cuántos días?<input class="field mt-1 text-center text-xl font-black" name="pdays" type="number" inputmode="numeric" min="1" max="730" value="${nd}" /></label>` : '';
+const planResolve = (k, root) => k === 'custom' ? 'd' + clamp(Math.round(+mval(root, 'pdays') || 0), 1, 730) : k;
 function planTokens(k) {
-  const days = PLANS[k]?.[1]; if (!days) return [];
+  const days = planDaysOf(k); if (!days) return [];
   const base = netNow() || Date.now();
   return ['plan=' + k, 'hasta=' + new Date(base + days * 86400000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' })];
 }
-const planChips = (cur, act = 'plan') => `<div class="flex flex-wrap justify-center gap-1.5">${Object.entries(PLANS).map(([k, [l, d]]) => `<button class="chip flex-col justify-center leading-tight py-2 ${cur === k ? 'chip-on' : ''}" style="width:calc(33.333% - 4px)" data-mact="${act}" data-k="${k}" type="button"><span class="whitespace-nowrap">${l}</span><span class="text-[10px] opacity-70 font-semibold">${d ? d + ' días' : 'sin límite'}</span></button>`).join('')}</div>`;
+const planChips = (cur, act = 'plan') => `<div class="flex flex-wrap justify-center gap-1.5">${Object.entries(PLANS).map(([k, [l, d]]) => `<button class="chip flex-col justify-center leading-tight py-2 ${cur === k ? 'chip-on' : ''}" style="width:calc(33.333% - 4px)" data-mact="${act}" data-k="${k}" type="button"><span class="whitespace-nowrap">${l}</span><span class="text-[10px] opacity-70 font-semibold">${d ? d + ' días' : 'sin límite'}</span></button>`).join('')}<button class="chip flex-col justify-center leading-tight py-2 ${cur === 'custom' ? 'chip-on' : ''}" style="width:calc(33.333% - 4px)" data-mact="${act}" data-k="custom" type="button"><span class="whitespace-nowrap">Otro</span><span class="text-[10px] opacity-70 font-semibold">tú eliges</span></button></div>`;
 function planLabel(x) {
   if (x.admin) return '';
   if (!x.hasta) return '<span class="text-emerald-300">Free · sin caducidad</span>';
-  const t = netToday(), left = t ? daysBetween(t, x.hasta) : null, name = PLANS[x.plan]?.[0] || 'Plan';
+  const t = netToday(), left = t ? daysBetween(t, x.hasta) : null, name = planName(x.plan);
   return left !== null && left < 0 ? `<span class="text-rose-300">${esc(name)} · caducó el ${esc(fmtDateShort(x.hasta))}</span>`
     : `<span class="${left !== null && left <= 3 ? 'text-amber-300' : 'text-slate-300'}">${esc(name)} · hasta el ${esc(fmtDateShort(x.hasta))}${left !== null ? ` (${left === 0 ? 'hoy' : left + ' d'})` : ''}</span>`;
 }
 function planModal(hash) {
   const x = (access.list || []).find(y => y.hash === hash); if (!x) return;
   const who = state.accessNames[hash] || 'Sin nombre';
-  let k = x.hasta ? (x.plan || '1m') : 'free';
+  let k = x.hasta ? (x.plan || '1m') : 'free', nd = 15;
+  if (!PLANS[k]) { nd = planDaysOf(k) || 15; k = 'custom'; }
   const html = () => `<h3 class="modal-title">⏳ Plan de ${esc(who)}</h3>
     <p class="text-xs">Ahora: ${planLabel(x)}</p>
-    ${planChips(k)}
+    ${planChips(k)}${planCustomHTML(k, nd)}
     <p class="text-[11px] text-mute">El nuevo plan cuenta desde hoy (fecha de la red). «Free» no caduca. Si estaba caducado, vuelve a entrar solo al abrir la app.</p>
     <button class="btn-primary w-full" data-mact="go" type="button">Guardar plan</button>`;
   openModal(html(), {
-    plan: (root, b) => { k = b.dataset.k; root.querySelector('.modal-sheet').innerHTML = html(); },
-    go: () => askPin({ title: `Plan de ${esc(who)}: ${PLANS[k][0]}`, text: 'Tu PIN abre la llave de GitHub para guardar el plan.', onPin: async pin => {
-      await ghEditAcl(pin, lines => lines.map(l => l.trim().toLowerCase().startsWith(hash) ? [l.trim().split(/\s+/)[0], ...l.trim().split(/\s+/).slice(1).filter(t => !/^(plan|hasta)=/i.test(t)), ...planTokens(k)].join(' ') : l), 'Acceso: plan ' + k);
-      ui.accessPin = pin; closeModal(); render(); toast(`Plan guardado: ${PLANS[k][0]} ✓`);
-    } })
+    plan: (root, b) => { if (k === 'custom') nd = +mval(root, 'pdays') || nd; k = b.dataset.k; root.querySelector('.modal-sheet').innerHTML = html(); },
+    go: root => { const k2 = planResolve(k, root); askPin({ title: `Plan de ${esc(who)}: ${esc(planName(k2))}`, text: 'Tu PIN abre la llave de GitHub para guardar el plan.', onPin: async pin => {
+      await ghEditAcl(pin, lines => lines.map(l => l.trim().toLowerCase().startsWith(hash) ? [l.trim().split(/\s+/)[0], ...l.trim().split(/\s+/).slice(1).filter(t => !/^(plan|hasta)=/i.test(t)), ...planTokens(k2)].join(' ') : l), 'Acceso: plan ' + k2);
+      ui.accessPin = pin; closeModal(); render(); toast(`Plan guardado: ${planName(k2)} ✓`);
+    } }); }
   });
 }
 function newAccessModal(who = '', plan = 'prueba') {
-  let k = plan, who0 = who;
+  let k = plan, who0 = who, nd = 15;
   const html = () => `<h3 class="modal-title">Nuevo código de acceso</h3>
     <label class="lbl">¿Para quién es? (solo lo verás tú)<input class="field mt-1" name="who" maxlength="24" placeholder="Ej: Ana" value="${esc(who0)}" /></label>
-    <div><div class="lbl mb-1.5">Plan</div>${planChips(k)}</div>
-    <p class="text-[11px] text-mute">${PLANS[k][1] ? `Caducará el ${esc(fmtDateShort(planTokens(k)[1].slice(6)))}. Podrás cambiarlo con ⏳.` : 'Sin caducidad.'}</p>
+    <div><div class="lbl mb-1.5">Plan</div>${planChips(k)}</div>${planCustomHTML(k, nd)}
+    <p class="text-[11px] text-mute">${k === 'custom' ? 'Cuenta desde hoy (fecha de la red). Podrás cambiarlo con ⏳.' : PLANS[k][1] ? `Caducará el ${esc(fmtDateShort(planTokens(k)[1].slice(6)))}. Podrás cambiarlo con ⏳.` : 'Sin caducidad.'}</p>
     <button class="btn-primary w-full" data-mact="next" type="button">Continuar</button>`;
   openModal(html(), {
     autofocus: true,
-    plan: (root, b) => { who0 = mval(root, 'who'); k = b.dataset.k; root.querySelector('.modal-sheet').innerHTML = html(); },
+    plan: (root, b) => { who0 = mval(root, 'who'); if (k === 'custom') nd = +mval(root, 'pdays') || nd; k = b.dataset.k; root.querySelector('.modal-sheet').innerHTML = html(); },
     next: root => {
       const who = mval(root, 'who').trim().replace(/\s+/g, ' '); if (!who) return toast('Pon un nombre', 'warn');
+      const kk = planResolve(k, root);
       askPin({ title: `Crear código para ${esc(who)}`, text: 'Tu PIN abre la llave de GitHub para añadir el código a la lista.', onPin: async pin => {
         const code = newCode(), hash = await codeHash(code);
-        await ghEditAcl(pin, lines => [...lines.filter(l => l.trim()), [hash, ...planTokens(k)].join(' ')], 'Acceso: nuevo código (' + k + ')');
+        await ghEditAcl(pin, lines => [...lines.filter(l => l.trim()), [hash, ...planTokens(kk)].join(' ')], 'Acceso: nuevo código (' + kk + ')');
         state.accessNames[hash] = who; await saveAccessCode(hash, code, pin); ui.accessPin = pin; persist(); render(); syncUsageNames();
         codeShareModal(`Código para ${esc(who)}`, who, code);
       } });
