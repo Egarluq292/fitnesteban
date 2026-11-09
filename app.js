@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.87.1';
+const APP_VERSION = '4.87.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3666,10 +3666,13 @@ ${prev.length ? `No repitas estas ideas: ${prev.join('; ')}.` : ''}
 ${QC_RULES}
 Propón 3 opciones distintas, fáciles (menos de 20 minutos), con cantidades en gramos o unidades y valores aproximados y realistas.
 Responde SOLO con JSON: {"opciones":[{"nombre":"…","ingredientes":["150 g de …"],"pasos":"una frase","kcal":0,"prot":0,"carbs":0,"fat":0}],"veo":["alimento", "…"],"dudas":["lo que no distingues bien"],"nota":"una frase"}`;
-  let r;
-  try { r = parseJSONLoose(await callGemini(img ? [{ text: prompt }, { inlineData: { mimeType: 'image/jpeg', data: img.split(',')[1] } }] : [{ text: prompt }], { timeout: 45000, temperature: .5 })); }
-  catch (err) { return openModal(`<div class="text-center text-4xl">😕</div><h3 class="modal-title text-center">No he podido pensarlo</h3><p class="text-sm text-mute text-center">${esc(err.message || 'Error de conexión')}</p>
-    <button class="btn-primary w-full mt-3" data-mact="loc" type="button">Ver ideas sin IA</button><button class="btn-ghost w-full mt-2" data-close type="button">Cerrar</button>`, { loc: () => qcShow(cx, qcLocal(B, tp), 'Con tus comidas habituales y alimentos básicos (sin IA).') }); }
+  let r, err = null;
+  for (let t = 0; t < 2; t++) { // un segundo intento automático: muchas veces a la segunda sale bien
+    try { r = parseJSONLoose(await callGemini(img ? [{ text: prompt }, { inlineData: { mimeType: 'image/jpeg', data: img.split(',')[1] } }] : [{ text: prompt }], { timeout: 45000, temperature: .5 })); if ((r?.opciones || []).length) { err = null; break; } err = new Error('La IA no ha devuelto ideas'); }
+    catch (e) { err = e; if (e.quota || /límite/i.test(e.message || '')) break; }
+  }
+  if (err) return openModal(`<div class="text-center text-4xl">😕</div><h3 class="modal-title text-center">No he podido pensarlo</h3><p class="text-sm text-mute text-center">${esc(err.message || 'Error de conexión')}</p>
+    <button class="btn-primary w-full mt-3" data-mact="again" type="button">🔄 Reintentar</button><button class="btn-ghost w-full mt-2" data-mact="loc" type="button">Ver ideas sin IA</button><button class="btn-ghost w-full mt-2" data-close type="button">Cerrar</button>`, { again: () => qcAsk(cx), loc: () => qcShow(cx, qcLocal(B, tp), 'Con tus comidas habituales y alimentos básicos (sin IA).') });
   const list = v => (Array.isArray(v) ? v : String(v || '').split(/[,;\n]/)).map(x => String(x).trim()).filter(Boolean).slice(0, 25);
   const ops = (r?.opciones || []).slice(0, 3).map(o => ({ nombre: String(o.nombre || 'Opción').slice(0, 80), ingredientes: (o.ingredientes || []).map(x => String(x).slice(0, 60)).slice(0, 10), pasos: String(o.pasos || '').slice(0, 180), kcal: Math.round(num(o.kcal)), prot: Math.round(num(o.prot)), carbs: Math.round(num(o.carbs)), fat: Math.round(num(o.fat)) }));
   const veo = img ? list(r?.veo) : [], dudas = img ? list(r?.dudas) : [];
@@ -3677,7 +3680,7 @@ Responde SOLO con JSON: {"opciones":[{"nombre":"…","ingredientes":["150 g de �
 }
 function qcShow(cx, ops, note, ia = false) {
   const { L, B, tp, img, have, veo = [], dudas = [] } = cx;
-  ui._qc = ops;
+  ui._qc = ops; ui._qcLast = [cx, ops, note, ia];
   const seen = img ? veo.join(', ') : have;
   openModal(`<div class="flex items-center gap-2"><button class="text-mute text-xl -ml-1 px-1" data-mact="back" type="button">‹</button><div class="min-w-0"><div class="text-[11px] font-black tracking-widest text-cyan-300">🍽️ IDEAS PARA ${esc(qcDe(tp).toUpperCase())}</div><h3 class="text-lg font-black leading-tight">Unas ${B.kcal} kcal · ${B.prot} g de proteína</h3><p class="text-[11px] text-mute">De las ${L.kcal} kcal que te quedan hoy</p></div></div>
     ${img && veo.length ? `<div class="qc-seen"><b>👀 He visto:</b> ${esc(veo.join(', '))}${dudas.length ? `<br><b>🤔 No lo distingo bien:</b> ${esc(dudas.join(', '))}` : ''}</div>` : ''}
@@ -3685,12 +3688,15 @@ function qcShow(cx, ops, note, ia = false) {
     ${ops.length ? ops.map((o, i) => `<div class="qc-card"><div class="font-extrabold text-[15px] leading-tight">${esc(o.nombre)}${o.mine ? ' <span class="text-[10.5px] text-amber-300 font-bold">· de tus habituales</span>' : ''}</div>
       <div class="text-[11px] font-mono mt-1">${macroLine({ kcal: o.kcal, prot: o.prot, carbs: o.carbs, fat: o.fat })}</div>
       ${o.ingredientes.length > 1 || ia ? `<ul class="qc-ing">${o.ingredientes.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}${o.pasos ? `<p class="text-[12px] text-mute mt-1">${esc(o.pasos)}</p>` : ''}
-      <div class="grid grid-cols-2 gap-2 mt-2.5"><button class="btn-primary !py-2 text-sm" data-mact="add" data-i="${i}" type="button">＋ Añadir</button><button class="btn-ghost !py-2 text-sm" data-mact="copy" data-i="${i}" type="button">📋 Ingredientes</button></div></div>`).join('')
+      <div class="grid grid-cols-3 gap-2 mt-2.5"><button class="btn-primary !py-2 !px-1 text-sm" data-mact="add" data-i="${i}" type="button">＋ Añadir</button>${ia ? `<button class="btn-ghost !py-2 !px-1 text-sm" data-mact="rec" data-i="${i}" type="button">👨‍🍳 Receta</button>` : ''}<button class="btn-ghost !py-2 !px-1 text-sm ${ia ? '' : 'col-span-2'}" data-mact="copy" data-i="${i}" type="button">📋 Lista</button></div></div>`).join('')
     : '<p class="text-sm text-mute mt-3">No encuentro ninguna comida que encaje. Prueba con «Con lo que tengo en casa».</p>'}
     ${ia ? `<div class="grid ${seen ? 'grid-cols-2' : ''} gap-2 mt-3">${seen ? `<button class="btn-ghost !py-2 text-sm" data-mact="fix" type="button">✏️ ${img ? '¿He visto algo mal?' : 'Cambiar lo que tengo'}</button>` : ''}<button class="btn-ghost !py-2 text-sm" data-mact="more" type="button">🔄 Otras ideas</button></div>` : ''}
     <p class="text-[11px] text-mute mt-3 text-center">Valores aproximados. Ajusta las cantidades al añadirlo si hace falta.</p>`, {
     back: () => queComoModal(tp),
     more: () => qcAsk(cx),
+    rec: (_, b) => { const o = ui._qc[+b.dataset.i]; const add = () => { addMeal(todayISO(), { type: tp, desc: o.nombre, kcal: o.kcal, prot: o.prot, carbs: o.carbs, fat: o.fat }); closeModal(); render(); toast(`Añadido a ${tp} ✓`); };
+      o.ml = o.ml || { title: o.nombre, type: tp, ingList: o.ingredientes, macros: { kcal: o.kcal, prot: o.prot, carbs: o.carbs, fat: o.fat } };
+      recipeView(o.ml, { back: () => qcShow(...ui._qcLast), backLabel: '‹ Ideas', toDiet: add, note: 'Son las cantidades de esta idea: si las cambias, cambian los macros.' }); },
     fix: () => qcHome({ ...cx, img: null }, seen, img ? '✏️ Corrige lo que he visto' : '🏠 ¿Qué tienes en casa?'),
     add: (_, b) => { const o = ui._qc[+b.dataset.i]; addMeal(todayISO(), { type: tp, desc: o.nombre, kcal: o.kcal, prot: o.prot, carbs: o.carbs, fat: o.fat }); closeModal(); render(); toast(`Añadido a ${tp} ✓`); },
     copy: async (_, b) => { const o = ui._qc[+b.dataset.i], txt = `🛒 ${o.nombre}\n` + o.ingredientes.map(x => `- ${x}`).join('\n'); try { await navigator.clipboard.writeText(txt); toast('Ingredientes copiados: pégalos en WhatsApp o en tus notas'); } catch { toast('No se pudo copiar', 'error'); } }
@@ -6006,7 +6012,7 @@ $('#chatBtn')?.addEventListener('click', () => openChat());
 /* 👨‍🍳 Receta paso a paso de un plato propuesto por el Coach. Los ingredientes y gramos son SIEMPRE los del plato
    (lo que se apunta en Dieta); Gemini solo añade condimentos sin calorías relevantes, utensilios y pasos. */
 async function fetchRecipe(ml, wish = '', chatMsgs = []) {
-  const ing = ml.items.map(it => `${it.name}: ${it.grams} g`).join('; ');
+  const ing = ml.items ? ml.items.map(it => `${it.name}: ${it.grams} g`).join('; ') : (ml.ingList || []).join('; ');
   const said = chatMsgs.filter(m => m.role === 'user').slice(-6).map(m => m.text.slice(0, 200)).join(' | ');
   const prompt = `Eres cocinero y nutricionista en España. Escribe la receta para 1 persona de «${ml.title}» usando EXACTAMENTE estos ingredientes y cantidades (ya pesados, no cambies ni añadas gramos): ${ing}.
 Reglas:
@@ -6023,8 +6029,12 @@ Devuelve SOLO este JSON: {"titulo":"…","tiempo_min":n,"dificultad":"Fácil|Med
 }
 function recipeSheet(mi, oi) {
   const ml = ui.chat?.msgs[mi]?.meals?.[oi]; if (!ml) return;
+  recipeView(ml, { back: () => openChat(true), backLabel: '‹ Chat', toDiet: () => mealFromChat(ml), save: () => saveChatConv(ui.chat), msgs: ui.chat.msgs, note: 'Son las cantidades del plato del Coach: si las cambias, cambian los macros.' });
+}
+/* La misma hoja de receta para los platos del Coach (con gramos exactos) y los de «¿Qué como?» (ingredientes en texto) */
+function recipeView(ml, o) {
   const st = { busy: !ml.recipe, err: '', wish: '' };
-  const tot = k => Math.round(ml.items.reduce((a, it) => a + it.per100[k] * it.grams / 100, 0));
+  const tot = k => ml.items ? Math.round(ml.items.reduce((a, it) => a + it.per100[k] * it.grams / 100, 0)) : Math.round(num(ml.macros?.[k]));
   const body = () => {
     const rc = ml.recipe;
     const head = `<div class="flex flex-wrap gap-1.5 text-[11px] font-bold">
@@ -6035,9 +6045,10 @@ function recipeSheet(mi, oi) {
         ${rc?.mins ? `<span class="rounded-full px-2.5 py-1 text-slate-300 bg-panel border border-line">⏱ ${rc.mins} min</span>` : ''}${rc?.level ? `<span class="rounded-full px-2.5 py-1 text-slate-300 bg-panel border border-line">${esc(rc.level)}</span>` : ''}
       </div>`;
     const ingr = `<div class="card p-3"><div class="text-[11px] font-bold uppercase tracking-wider text-brand mb-1.5">🥘 Ingredientes · 1 ración</div>
-        ${ml.items.map(it => `<div class="flex justify-between gap-3 py-1 text-sm border-b border-line/60 last:border-0"><span>${esc(it.name)}</span><span class="font-mono text-slate-300 shrink-0">${it.grams} g</span></div>`).join('')}
+        ${ml.items ? ml.items.map(it => `<div class="flex justify-between gap-3 py-1 text-sm border-b border-line/60 last:border-0"><span>${esc(it.name)}</span><span class="font-mono text-slate-300 shrink-0">${it.grams} g</span></div>`).join('')
+          : (ml.ingList || []).map(x => `<div class="py-1 text-sm border-b border-line/60 last:border-0">${esc(x)}</div>`).join('')}
         ${rc?.extras?.length ? `<div class="text-[12px] text-mute mt-2">🧂 Al gusto: ${rc.extras.map(esc).join(' · ')}</div>` : ''}
-        <p class="text-[10px] text-mute mt-1.5">Son las cantidades del plato del Coach: si las cambias, cambian los macros.</p></div>`;
+        <p class="text-[10px] text-mute mt-1.5">${esc(o.note)}</p></div>`;
     if (st.busy) return head + ingr + '<div class="card p-4 text-center text-sm text-mute"><div class="chat-typing inline-flex"><span></span><span></span><span></span></div><div class="mt-2">Preparando la receta…</div></div>';
     if (!rc) return head + ingr + `<div class="card p-4 text-center text-sm text-rose-300">${esc(st.err || 'No se pudo preparar la receta.')}<br><button class="btn-ghost mt-3" data-mact="again" type="button">Reintentar</button></div>`;
     return head + ingr + `
@@ -6054,23 +6065,23 @@ function recipeSheet(mi, oi) {
   const paint = () => { const b = $('#recipeBody'); if (b) b.innerHTML = body(); };
   const load = async () => {
     st.busy = true; st.err = ''; paint();
-    try { ml.recipe = await fetchRecipe(ml, st.wish, ui.chat.msgs); if (st.wish) ml.recipe.wish = st.wish; saveChatConv(ui.chat); }
+    try { ml.recipe = await fetchRecipe(ml, st.wish, o.msgs || []); if (st.wish) ml.recipe.wish = st.wish; o.save?.(); }
     catch (e) { st.err = 'No he podido preparar la receta: ' + e.message; }
     st.busy = false; paint();
   };
   openModal(`
     <div class="cal-head flex items-center gap-2 pb-3">
-      <button class="w-8 h-8 rounded-full border border-line text-mute shrink-0" data-mact="back" type="button" aria-label="Volver al chat">‹</button>
+      <button class="w-8 h-8 rounded-full border border-line text-mute shrink-0" data-mact="back" type="button" aria-label="Volver">‹</button>
       <div class="min-w-0 flex-1"><div class="text-[11px] font-bold uppercase tracking-wider text-brand">👨‍🍳 Receta${ml.type ? ' · ' + esc(ml.type) : ''}</div><h3 class="modal-title leading-tight truncate">${esc(ml.recipe?.title || ml.title)}</h3></div>
     </div>
     <div id="recipeBody" class="cal-body space-y-3">${body()}</div>
     <div class="cal-foot grid grid-cols-2 gap-2">
-      <button class="btn-ghost" data-mact="back" type="button">‹ Chat</button>
+      <button class="btn-ghost" data-mact="back" type="button">${o.backLabel}</button>
       <button class="btn-primary" data-mact="toDiet" type="button">🍽️ Apuntar en Dieta</button>
     </div>`, {
     sheetClass: 'sheet-fixed',
-    back: () => openChat(true),
-    toDiet: () => mealFromChat(ml),
+    back: o.back,
+    toDiet: o.toDiet,
     again: () => load(),
     redo: () => { st.wish = ($('#recipeWish')?.value || '').trim(); load(); }
   });
@@ -6083,6 +6094,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.87.2', ['👨‍🍳 «¿Qué como?»: cada idea tiene su receta paso a paso, y si la IA falla puedes reintentarlo con un toque.'], 'quiet'],
   ['4.87.1', ['🩹 «Algo me molesta»: más zonas (cadera, tobillo, cuello) y arriba las que más trabaja tu sesión de hoy. Corregido que la prensa o los gemelos contaran como hombro.'], 'quiet'],
   ['4.87.0', ['🍽️ «¿Qué como?» más sensato: reparte lo que te queda entre las comidas que te faltan (puedes elegir para cuál), propone platos normales para cada momento y, con la foto de la nevera, te dice qué ha visto para que lo corrijas si se equivoca. Y si no te convencen, «Otras ideas».']],
   ['4.86.0', ['🎁 Periodo de prueba: los nuevos pasan a 7 días; los ya empezados conservan sus 15. ⏳ Planes: Prueba (7 días), 1, 3 y 6 meses, Free y «Otro» para dar los días que quieras. Ya no se habla de «gratis» en ningún sitio. Necesita el script v13 (Acceso → Reconfigurar → nueva versión).'], 'admin'],
