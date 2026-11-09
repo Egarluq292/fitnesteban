@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.82.1';
+const APP_VERSION = '4.82.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5807,6 +5807,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.82.2', ['🧍 3D (solo tú): face pull y remo en TRX, remo con toalla y remo invertido, colgados boca arriba con los pies fijos; el cuerpo gira hacia el agarre y los codos van pegados.'], 'admin'],
   ['4.82.1', ['🧍 3D corregido (solo tú): curl martillo con agarre neutro, curl concentrado e inclinado sentados, remo a una mano con apoyo, remo con pecho en banco a 35°, press cerrado, rumano con más flexión de rodillas, swing con piernas abiertas, búlgara y fondos con los pies fijos, puente e hip thrust a una pierna, face pull y remos con TRX y toalla, zancada con kettlebell al pecho, gorilla row alterno, peso muerto a una pierna y burpee.'], 'admin'],
   ['4.82.0', ['🧍 Prueba solo para ti: botón «3D» en los ejercicios de los bloques, con el maniquí y las 3 claves. El resto de usuarios aún no lo ve.'], 'admin'],
   ['4.81.2', ['🔜 «Próximamente» sale justo después de cerrar la ventana de novedades, en vez de perderse.'], 'quiet'],
@@ -6531,7 +6532,7 @@ const GYM3D_CUES = {
   dl: ['Barra sobre la mitad del pie, pegada a las espinillas', 'Espalda neutra y pecho alto antes de tirar', 'Empuja el suelo y termina apretando el culo, sin echarte atrás'],
   gm: ['Barra en la parte alta de la espalda', 'Cadera atrás con las rodillas un poco flexionadas', 'Espalda neutra en todo el recorrido'],
   bbrow: ['Tronco inclinado y quieto, espalda neutra', 'Tira con los codos hacia la cadera', 'Junta las escápulas arriba y baja controlado'],
-  invrow: ['Cuerpo recto de talones a cabeza', 'Lleva el pecho a la barra', 'Baja hasta estirar los brazos del todo'],
+  invrow: ['Cuerpo recto de talones a cabeza; los talones no se mueven', 'Lleva el pecho a la barra con los codos pegados al cuerpo', 'Baja hasta estirar los brazos del todo'],
   reneg: ['Pies separados para que la cadera no gire', 'El codo va hacia la cadera', 'La cadera no se mueve mientras remas'],
   pull: ['Empieza colgado con los brazos estirados', 'Pecho a la barra, codos hacia los bolsillos', 'Baja despacio, sin dejarte caer'],
   dips: ['Hombros lejos de las orejas', 'Baja hasta que los codos formen unos 90°', 'Tronco un poco inclinado hacia delante'],
@@ -6562,9 +6563,9 @@ const GYM3D_CUES = {
   curlinc: ['Sentado en un banco inclinado, espalda apoyada', 'Los brazos cuelgan por detrás del tronco', 'Sube sin despegar los codos del cuerpo'],
   curlconc: ['Sentado, el codo apoyado en la cara interna del muslo', 'Sube el peso sin mover el brazo', 'Baja despacio hasta estirar del todo'],
   hipth1: ['Escápulas en el banco y un pie bien apoyado', 'La otra pierna estirada, en línea con el cuerpo', 'Sube la cadera hasta quedar recto y aprieta el culo'],
-  trxfp: ['Cuerpo recto e inclinado hacia atrás, pies fijos', 'Tira llevando las manos a las orejas, codos altos', 'Baja controlado hasta estirar los brazos'],
+  trxfp: ['Colgado boca arriba, cuerpo recto y pies fijos', 'Tira con los codos pegados al cuerpo: el cuerpo sube hacia el agarre', 'Baja controlado hasta estirar los brazos'],
   trxrow: ['Cuerpo recto e inclinado hacia atrás, pies fijos', 'Tira con los codos pegados al cuerpo hasta llevar el pecho a las manos', 'Baja controlado hasta estirar los brazos'],
-  towel: ['Agárrate a la toalla con el cuerpo inclinado hacia atrás', 'Tira con los codos pegados al cuerpo', 'Pies fijos: solo se mueve el cuerpo'],
+  towel: ['Colgado de la toalla, cuerpo recto inclinado hacia atrás', 'Tira con los codos pegados al cuerpo', 'Pies fijos: el cuerpo gira hacia la puerta'],
   lungekb: ['Kettlebell delante del pecho con las dos manos', 'Paso largo y tronco recto', 'Vuelve empujando con el talón de delante'],
   gorilla: ['Piernas abiertas y cadera atrás, espalda neutra', 'Rema con una mano y luego con la otra', 'La mancuerna que no rema se queda apoyada abajo'],
   sldl: ['Empieza de pie con las dos piernas', 'Al bajar el tronco, una pierna sube recta hacia atrás', 'Sube a la vez: el tronco arriba, la pierna abajo'],

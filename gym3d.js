@@ -92,7 +92,7 @@ const P = {
     { rootX: 50, hip: 120, knee: 130, ankle: -20, sh: 50, dy: 0 },
     { rootX: 0, hip: 0, knee: 0, sh: 175, dy: .25 }
   ], ground: ['anL', 'anR', 'hdL', 'hdR'] },
-  invrow: { cam: [3.9, 1.4, .7], pin: ['anL', 'auto'], fix: ['hdL', 'hdR'], fixBar: true, base: { neck: 5, shAb: 10 }, a: { rootX: -62, sh: 90, el: 0 }, b: { rootX: -40, sh: 90, el: 0 } },
+  invrow: { cam: [4, 1.2, .5], pin: ['anL', 'auto'], base: { hip: 0, knee: 0, neck: 10, shAb: 6, ankle: 10 }, anchor: [.85, -1.25], rel: true, rxMax: -45, a: { reach: .53 }, b: { reach: .2 }, pinA: -75 },
   kbpress: { a: { shR: 35, elR: 140, shAbR: 10, shL: 0 }, b: { shR: 175, elR: 0, shAbR: 8 }, kb: 'R', cam: [3.9, 1.6, .95] },
   // ---- sin material (del calendario) ----
   sq: { a: { sh: 0 }, b: { hip: 100, knee: 110, ankle: -10, spine: 35, sh: 90, hipAb: 10 } },
@@ -111,9 +111,9 @@ const P = {
   curlinc: { pin: ['pelvis', [0, .55, 0]], fix: ['anL', 'anR'], base: { rootX: -55, hip: 35, knee: 90, shAb: 6, sh: -55 }, a: { el: 0 }, b: { el: 135 }, db: true, incline: 'back' },
   curlconc: { pin: ['pelvis', [0, .5, 0]], fix: ['anL', 'anR'], base: { rootX: 35, hip: 125, knee: 90, hipAb: 22, neck: -15, shL: 70, elL: 25, shAbL: 10, shR: 38, shAbR: -10 }, a: { elR: 0 }, b: { elR: 130 }, db: 'R', seat: true },
   hipth1: { pin: ['neck', 'auto'], fix: ['anL'], base: { sh: 20, shAb: 40, el: 70, hipR: 0, kneeR: 0 }, a: { rootX: -62, hipL: 52, kneeL: 100 }, b: { rootX: -90, hipL: 0, kneeL: 92 }, ground: ['anL', 'anR'], bench: [1.2, .42, .35, 0, -.62] },
-  trxfp: { cam: [4.2, 1.6, 1], pin: ['anL', 'auto'], base: { hip: 0, knee: 0, neck: 12 }, a: { rootX: -38, sh: 140, shAb: 10, el: 0 }, b: { rootX: -18, sh: 125, shAb: 70, el: 115 }, strap: [0, 2.35, .95] },
-  towel: { cam: [4, 1.4, .8], pin: ['anL', 'auto'], base: { hip: 0, knee: 0, neck: 8 }, a: { rootX: -35, sh: 95, shAb: 8, el: 0 }, b: { rootX: -15, sh: 20, shAb: 8, el: 110 }, strap: [0, 1.0, .85] },
-  trxrow: { cam: [4.2, 1.6, 1], pin: ['anL', 'auto'], base: { hip: 0, knee: 0, neck: 8 }, a: { rootX: -40, sh: 120, shAb: 8, el: 0 }, b: { rootX: -18, sh: 35, shAb: 8, el: 110 }, strap: [0, 2.35, .95] },
+  trxfp: { cam: [4.4, 1.5, 1], pin: ['anL', 'auto'], base: { hip: 0, knee: 0, neck: 10, shAb: 6, ankle: 10 }, anchor: [2.4, .9], Ls: 1.7, a: { reach: .53 }, b: { reach: .14 }, pinA: -60 },
+  towel: { cam: [4.2, 1.3, .7], pin: ['anL', 'auto'], base: { hip: 0, knee: 0, neck: 10, shAb: 6, ankle: 10 }, anchor: [1.0, .95], Ls: .55, a: { reach: .53 }, b: { reach: .18 }, pinA: -50 },
+  trxrow: { cam: [4.4, 1.5, 1], pin: ['anL', 'auto'], base: { hip: 0, knee: 0, neck: 10, shAb: 6, ankle: 10 }, anchor: [2.4, .9], Ls: 1.7, a: { reach: .53 }, b: { reach: .1 }, pinA: -60 },
   lungekb: { base: { sh: 15, el: 125, shAb: 22 }, a: {}, b: { hipL: 85, kneeL: 85, hipR: -25, kneeR: 95, ankleR: 40, spine: 3 }, ground: ['anL', 'knR'], kb: true },
   gorilla: { base: { hipAb: 16, rootX: 62, hip: 70, knee: 40, ankle: -10, neck: -20, sh: 62, el: 0 }, k: [{}, { shR: 0, elR: 100 }, {}, { shL: 0, elL: 100 }], db: true },
   sldl: { a: { rootX: 0, hip: 0, knee: 5, sh: 0, neck: 0 }, b: { rootX: 80, hipL: 80, kneeL: 15, hipR: 0, kneeR: 0, sh: 80, neck: -15 }, ground: ['anL'], db: true }
@@ -130,6 +130,8 @@ function ikTo(j, tgt) {
   if (leg) { joint.rotation.x = -(th + be); B['kn' + k].rotation.x = q; } else { joint.rotation.x = -(th - be); B['el' + k].rotation.x = -q; }
   joint.updateMatrixWorld(true);
 }
+// punto de agarre: fijo, o relativo a los pies (ex.rel) para que el cuerpo llegue
+const anchorOf = ex => { const A = new T.Vector3(0, ex.anchor[0], ex.anchor[1]); return ex.rel && FIX?.pin ? A.add(new T.Vector3(0, FIX.pin.y, FIX.pin.z)) : A; };
 function seg(m, a, b) { const mid = a.clone().add(b).multiplyScalar(.5), len = a.distanceTo(b); m.position.copy(mid); m.scale.set(1, len, 1); m.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), b.clone().sub(a).normalize()); m.visible = true; }
 function apply(p, ex) {
   const { root, B, bag } = W;
@@ -150,8 +152,18 @@ function apply(p, ex) {
   if (!hang) root.position.y = -mn + (ex.lift ?? .06) + (ex.toes ? Math.sin(Math.abs(p.ankle || 0) * d) * .17 : 0);
   root.position.y += (p.dy || 0);
   root.updateMatrixWorld(true);
+  if (ex.anchor && FIX?.pin) { // colgado de un punto fijo (barra, TRX, toalla): los pies hacen de bisagra y el cuerpo gira hacia el agarre
+    const A = anchorOf(ex), reach = p.reach ?? .53, want = (ex.Ls || 0) + reach, pj = ex.pin[0];
+    const place = rx => { root.rotation.x = rx; root.position.set(0, 0, 0); root.updateMatrixWorld(true); B[pj].getWorldPosition(v); root.position.add(FIX.pin.clone().sub(v)); root.updateMatrixWorld(true);
+      const s1 = new T.Vector3(), s2 = new T.Vector3(); B.shL.getWorldPosition(s1); B.shR.getWorldPosition(s2); return s1.add(s2).multiplyScalar(.5).distanceTo(A); };
+    let lo = -88 * d, hi = (ex.rxMax ?? -4) * d;
+    for (let i = 0; i < 22; i++) { const mid = (lo + hi) / 2; if (place(mid) > want) lo = mid; else hi = mid; }
+    place((lo + hi) / 2);
+    for (const k of SIDES) { const sp = new T.Vector3(); B['sh' + k].getWorldPosition(sp); const tgt = sp.clone().add(new T.Vector3(sp.x, A.y, A.z).sub(sp).normalize().multiplyScalar(reach)); ikTo('hd' + k, tgt); }
+  }
   if (FIX) for (const j of ex.fix || []) if (FIX[j]) ikTo(j, FIX[j]);
-  if (ex.strap) { const A = new T.Vector3(...ex.strap); W.straps.forEach((m, i) => { const h = new T.Vector3(); B[i ? 'hdR' : 'hdL'].getWorldPosition(h); seg(m, h, A); }); } else W.straps.forEach(m => { m.visible = false; });
+  if (ex.anchor && ex.Ls) { const A = anchorOf(ex); W.straps.forEach((m, i) => { const h = new T.Vector3(); B[i ? 'hdR' : 'hdL'].getWorldPosition(h); seg(m, h, new T.Vector3(h.x * .3, A.y, A.z)); }); }
+  else if (ex.strap) { const A = new T.Vector3(...ex.strap); W.straps.forEach((m, i) => { const h = new T.Vector3(); B[i ? 'hdR' : 'hdL'].getWorldPosition(h); seg(m, h, A); }); } else W.straps.forEach(m => { m.visible = false; });
   if (ex.bag) {
     const a = new T.Vector3(), b = new T.Vector3();
     if (ex.bag === 'chest') { B.spine.getWorldPosition(a); bag.position.set(a.x, a.y + .3, a.z + .2); bag.rotation.set(root.rotation.x, 0, 0); }
@@ -184,6 +196,7 @@ function props(ex, pA) {
   if (ex.seat) { apply(pA, ex); const a = new T.Vector3(); B.pelvis.getWorldPosition(a); box(.45, a.y - .1, .45, a.x, (a.y - .1) / 2, a.z - .05); }
   if (ex.restL) { apply(pA, ex); const a = new T.Vector3(); B.hdL.getWorldPosition(a); box(.4, a.y - .04, .45, a.x, (a.y - .04) / 2, a.z); }
   if (ex.fixBar && FIX?.hdL) { const pb = new T.Mesh(new T.CylinderGeometry(.02, .02, 1.2, 16), new T.MeshStandardMaterial({ color: 0x9ca3af, metalness: .8, roughness: .3 })); pb.rotation.z = Math.PI / 2; pb.position.copy(FIX.hdL.clone().add(FIX.hdR).multiplyScalar(.5)); pb.position.y += .02; prop.add(pb); for (const x of [-.6, .6]) box(.05, pb.position.y, .05, x, pb.position.y / 2, pb.position.z); }
+  if (ex.anchor) { const AP = anchorOf(ex); if (ex.Ls) { const ank = new T.Mesh(new T.SphereGeometry(.045, 12, 10), m); ank.position.copy(AP); prop.add(ank); } else { const pb = new T.Mesh(new T.CylinderGeometry(.02, .02, 1.2, 16), new T.MeshStandardMaterial({ color: 0x9ca3af, metalness: .8, roughness: .3 })); pb.rotation.z = Math.PI / 2; pb.position.copy(AP); prop.add(pb); box(1.2, .04, .7, 0, AP.y + .04, AP.z - .25); for (const x of [-.55, .55]) box(.05, AP.y, .05, x, AP.y / 2, AP.z); } }
   if (ex.strap) { const ank = new T.Mesh(new T.SphereGeometry(.04, 12, 10), m); ank.position.set(...ex.strap); prop.add(ank); }
   if (ex.incline) { apply(pA, ex); const a = new T.Vector3(), b = new T.Vector3(); B.pelvis.getWorldPosition(a); B.neck.getWorldPosition(b); const mid = a.clone().add(b).multiplyScalar(.5), dir = b.clone().sub(a), len = dir.length() + .25;
     const bk = new T.Mesh(new T.BoxGeometry(.4, len, .08), m); bk.position.copy(mid).add(new T.Vector3(0, 0, ex.incline === 'front' ? .15 : -.13).applyAxisAngle(new T.Vector3(1, 0, 0), Math.atan2(dir.z, dir.y))); bk.rotation.x = Math.atan2(dir.z, dir.y); prop.add(bk);
@@ -224,7 +237,7 @@ export function mount(el, id, lv = 1) {
   FIX = null;
   if (ex.fix || ex.pin?.[1] === 'auto') { // posiciones fijas tomadas de la pose inicial
     const save = ex.pin; if (ex.pin?.[1] === 'auto') ex.pin = null;
-    apply(poseAt(0), ex); ex.pin = save; FIX = {};
+    apply(ex.pinA != null ? { ...poseAt(0), rootX: ex.pinA } : poseAt(0), ex); ex.pin = save; FIX = {};
     for (const j of [...(ex.fix || []), ...(ex.pin?.[1] === 'auto' ? [ex.pin[0]] : [])]) { const v = new T.Vector3(); W.B[j].getWorldPosition(v); FIX[j] = v; }
     if (ex.pin?.[1] === 'auto') FIX.pin = FIX[ex.pin[0]];
   }
