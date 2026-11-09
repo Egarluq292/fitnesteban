@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.82.2';
+const APP_VERSION = '4.82.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5807,6 +5807,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.82.3', ['🧍 3D (solo tú): plancha lateral inmóvil sobre el antebrazo, puente de glúteo con la espalda apoyada, step-up con el pie fijo en el banco y búlgara bajando hasta 90°.'], 'admin'],
   ['4.82.2', ['🧍 3D (solo tú): face pull y remo en TRX, remo con toalla y remo invertido, colgados boca arriba con los pies fijos; el cuerpo gira hacia el agarre y los codos van pegados.'], 'admin'],
   ['4.82.1', ['🧍 3D corregido (solo tú): curl martillo con agarre neutro, curl concentrado e inclinado sentados, remo a una mano con apoyo, remo con pecho en banco a 35°, press cerrado, rumano con más flexión de rodillas, swing con piernas abiertas, búlgara y fondos con los pies fijos, puente e hip thrust a una pierna, face pull y remos con TRX y toalla, zancada con kettlebell al pecho, gorilla row alterno, peso muerto a una pierna y burpee.'], 'admin'],
   ['4.82.0', ['🧍 Prueba solo para ti: botón «3D» en los ejercicios de los bloques, con el maniquí y las 3 claves. El resto de usuarios aún no lo ve.'], 'admin'],

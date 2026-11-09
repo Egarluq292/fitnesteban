@@ -64,7 +64,7 @@ const P = {
   // 9 Elevaciones laterales
   lat: { a: { shAb: 8, el: 10 }, b: { shAb: 85, el: 15 }, db: true },
   // 10 Sentadilla búlgara con mancuernas
-  bulg: { pin: ['pelvis', 'p'], fix: ['anL', 'anR'], base: { hipR: -35, kneeR: 80, ankleR: 30, hipL: 12, kneeL: 15 }, a: { py: .9, spine: 6 }, b: { py: .6, spine: 12 }, foot: 'anR', db: true },
+  bulg: { pin: ['pelvis', 'p'], fix: ['anL', 'anR'], base: { hipR: -35, kneeR: 80, ankleR: 30, hipL: 30, kneeL: 0 }, a: { py: .8, spine: 6 }, b: { py: .5, spine: 14 }, foot: 'anR', db: true },
   // ---- tanda 2 ----
   incl: { base: { rootX: -55, hip: 55, knee: 90 }, a: { sh: 90, el: 0, shAb: 8 }, b: { sh: 25, shAb: 30, el: 100 }, ground: ['anL', 'anR'], incline: true, db: true },
   lunge: { a: {}, b: { hipL: 85, kneeL: 85, hipR: -25, kneeR: 95, ankleR: 40, spine: 3 }, ground: ['anL', 'knR'], db: true },
@@ -79,7 +79,7 @@ const P = {
   // ---- tanda 3 ----
   dl: { a: { rootX: 48, hip: 85, knee: 75, ankle: -15, sh: 48, neck: -25 }, b: { rootX: 0, hip: 0, knee: 0, sh: 0, neck: 0 }, bar: 'hands' },
   sumo: { ang: -.75, base: { hipAb: 32, sh: 0, el: 0 }, a: {}, b: { hip: 90, knee: 105, ankle: -10, spine: 22 }, db: 'one', dbRot: true },
-  stepdb: { cam: [3.9, 1.6, .9], a: { hipL: 75, kneeL: 85, hipR: 0, kneeR: 0 }, b: { hipL: 0, kneeL: 0, hipR: 25, kneeR: 50 }, ground: ['anL'], lift: .26, step: true, db: true },
+  stepdb: { cam: [4, 1.6, .9], ang: .5, pin: ['pelvis', 'p'], fix: ['anL'], foot: 'anL', base: { hipL: 62, kneeL: 78, ankleL: 0 }, a: { py: .92, pz: -.18, spine: 14, hipR: 0, kneeR: 0 }, b: { py: 1.18, pz: .02, spine: 2, hipR: 25, kneeR: 70 }, db: true },
   gm: { base: { shAb: 75, sh: 20, el: 150 }, a: {}, b: { rootX: 70, hip: 75, knee: 15, neck: -20 }, bar: 'back' },
   reneg: { base: { rootX: 76, hip: 0, knee: 0, ankle: -50, neck: -10, sh: 78, shAb: 8, el: 0, hipAb: 8 }, a: {}, b: { shR: 5, elR: 100, shAbR: 15 }, ground: ['hdL', 'anL', 'anR'], lift: .05, db: true },
   plank: { base: { rootX: 80, sh: 90, el: 90, neck: -10, ankle: -60 }, a: {}, b: { rootX: 82 }, ground: ['elL', 'elR', 'anL', 'anR'], lift: .05 },
@@ -96,9 +96,9 @@ const P = {
   kbpress: { a: { shR: 35, elR: 140, shAbR: 10, shL: 0 }, b: { shR: 175, elR: 0, shAbR: 8 }, kb: 'R', cam: [3.9, 1.6, .95] },
   // ---- sin material (del calendario) ----
   sq: { a: { sh: 0 }, b: { hip: 100, knee: 110, ankle: -10, spine: 35, sh: 90, hipAb: 10 } },
-  br: { base: { rootX: -90, sh: 0, shAb: 15, hip: 40, knee: 100, ankle: 10 }, a: { hip: 40 }, b: { hip: -5 }, ground: ['anL', 'anR', 'neck'], lift: .14 },
+  br: { pin: ['neck', 'auto'], fix: ['anL', 'anR'], base: { sh: 0, shAb: 15, hip: 40, knee: 100, ankle: 10 }, a: { rootX: -92 }, b: { rootX: -118 }, ground: ['anL', 'anR', 'neck'], lift: .14 },
   br1: { pin: ['neck', 'auto'], fix: ['anL'], base: { sh: 0, shAb: 15, hipL: 40, kneeL: 100, ankleL: 10, kneeR: 0 }, a: { rootX: -92, hipR: 20 }, b: { rootX: -118, hipR: -26 }, ground: ['anL', 'neck'], lift: .14 },
-  sk: { base: { rootZ: 70, shAbL: -20, elL: 90, shL: 90, shAbR: 20 }, a: {}, b: { rootZ: 76 }, ground: ['elL', 'anL'], lift: .05 },
+  sk: { ang: .2, base: { rootZ: 72, shAbL: -78, shL: 0, elL: 90, shR: 0, shAbR: 6, elR: 0, neck: 0 }, a: {}, b: {}, ground: ['elL', 'hdL', 'anL'], lift: .05 },
   mc: { base: { rootX: 70, sh: 70, neck: -12 }, a: { hipL: 80, kneeL: 100, hipR: 0, kneeR: 0 }, b: { hipR: 80, kneeR: 100, hipL: 0, kneeL: 0 }, ground: ['hdL', 'hdR', 'anL', 'anR'], lift: .05 },
   jj: { a: { shAb: 10, hipAb: 3 }, b: { shAb: 165, hipAb: 18 } },
   dp: { pin: ['pelvis', 'p'], fix: ['hdL', 'hdR', 'anL', 'anR'], base: { hip: 85, knee: 80, sh: -35, el: 0 }, a: { py: .47, pz: .05 }, b: { py: .24, pz: .05 }, hands: 'chair' },
