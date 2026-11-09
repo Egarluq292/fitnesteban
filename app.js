@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.84.0';
+const APP_VERSION = '4.84.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3477,8 +3477,8 @@ function queComoModal() {
 }
 function qcHome(L, tp) {
   openModal(`<h3 class="modal-title">🏠 ¿Qué tienes en casa?</h3>
-    <textarea class="field" id="qcHave" rows="4" placeholder="Por ejemplo: huevos, atún, arroz, calabacín, tomate, queso fresco…">${esc(lsGet('fitnesteban_qchave') || '')}</textarea>
-    <p class="text-[11px] text-mute mt-1">Puedes dictarlo con el micrófono del teclado.</p>
+    <div class="relative">${micBtn('#qcHave', 'mic-in')}<textarea class="field" ${SpeechRec ? 'style="padding-right:52px" ' : ''}id="qcHave" rows="4" placeholder="Por ejemplo: huevos, atún, arroz, calabacín, tomate, queso fresco…">${esc(lsGet('fitnesteban_qchave') || '')}</textarea></div>
+    <p class="text-[11px] text-mute mt-1">${SpeechRec ? 'Toca 🎤 y dilo en voz alta. ' : ''}También puedes dictarlo con el micrófono del teclado.</p>
     <button class="btn-primary w-full mt-3" data-mact="go" type="button">Proponme platos</button>`,
   { go: () => { const v = ($('#qcHave')?.value || '').trim(); if (!v) return toast('Escribe al menos un alimento', 'warn'); lsSet('fitnesteban_qchave', v); qcAsk(L, tp, v); } });
 }
@@ -3586,7 +3586,7 @@ function renderDiet() {
       <div class="d2-left"><div class="d2-left-l">${over ? 'Te has pasado' : 'Te quedan'}</div><div class="d2-left-v ${over ? 'text-rose-300' : MAC.kcal.text}">${Math.abs(leftK)}<span> kcal</span></div></div>
       <div class="d2-left"><div class="d2-left-l">${leftP > 0 ? 'Proteína que falta' : 'Proteína'}</div><div class="d2-left-v ${MAC.prot.text}">${leftP > 0 ? `${leftP}<span> g</span>` : '✓<span> cumplida</span>'}</div></div>
     </div>
-    ${isToday && leftK > 60 && mealsOf(date).length ? '<button class="qc-btn" data-act="queComo" type="button">🍽️ ¿Qué como? Ideas para lo que te queda</button>' : `<p class="text-xs text-mute mt-2.5 leading-relaxed">${esc(hint)}</p>`}
+    ${isToday && leftK > 60 && mealsOf(date).length ? `<button class="qc-btn ${MAC.kcal.text}" data-act="queComo" type="button">¿Qué como?</button>` : `<p class="text-xs text-mute mt-2.5 leading-relaxed">${esc(hint)}</p>`}
     ${burned ? `<p class="text-[11px] mt-2 text-mute">${cardioK ? `🔥 Cardio <b class="${MAC.kcal.text}">−${cardioK}</b> · ` : ''}${gymK ? `🏋️ Gym <b class="${MAC.kcal.text}">−${gymK}</b> · ` : ''}Neto <b class="text-white">${Math.round(t.kcal - burned)}</b> kcal</p>` : ''}
   </section>
 
@@ -5903,6 +5903,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.84.1', ['🍽️ Botón «¿Qué como?» más visible y micrófono para dictar lo que tienes en casa.'], 'quiet'],
   ['4.84.0', ['🍽️ Nuevo «¿Qué como?» en Dieta: ideas que encajan en lo que te queda hoy, con lo que tienes en casa o con una foto de tu nevera.', '📋 Cada idea se añade con un toque, y puedes copiar sus ingredientes para la lista de la compra.']],
   ['4.83.0', ['🧪 Acceso: botón para dar acceso anticipado a las novedades (ahora, los ejercicios en 3D) a quien elijas.'], 'admin'],
   ['4.82.5', ['🧍 3D (solo tú): plancha lateral apoyada en el antebrazo y el codo.'], 'admin'],
