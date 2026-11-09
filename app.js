@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.82.0';
+const APP_VERSION = '4.82.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5807,6 +5807,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.82.1', ['🧍 3D corregido (solo tú): curl martillo con agarre neutro, curl concentrado e inclinado sentados, remo a una mano con apoyo, remo con pecho en banco a 35°, press cerrado, rumano con más flexión de rodillas, swing con piernas abiertas, búlgara y fondos con los pies fijos, puente e hip thrust a una pierna, face pull y remos con TRX y toalla, zancada con kettlebell al pecho, gorilla row alterno, peso muerto a una pierna y burpee.'], 'admin'],
   ['4.82.0', ['🧍 Prueba solo para ti: botón «3D» en los ejercicios de los bloques, con el maniquí y las 3 claves. El resto de usuarios aún no lo ve.'], 'admin'],
   ['4.81.2', ['🔜 «Próximamente» sale justo después de cerrar la ventana de novedades, en vez de perderse.'], 'quiet'],
   ['4.81.1', ['📲 Si abres el enlace desde WhatsApp o Telegram y no te deja instalar, la pantalla te explica cómo abrirlo en Chrome o Safari.'], 'quiet'],
@@ -6489,23 +6490,26 @@ function man3dStop() { try { man3dMod?.stop(); } catch { /* nada */ } }
    Máquinas, poleas y superseries («+»): sin animación (se quedan con YouTube). El material sale del nombre. */
 const GYM3D_MAP = [
   [/m[aá]quina|polea|prensa|smith|multipower|jal[oó]n|contractora|cable|pec ?deck|hack|extensi[oó]n de cu[aá]driceps|curl femoral|curl n[oó]rdico|\+|gemelos sentado|pica|sissy|thruster|hiperextensi|patada|p[aá]jaro|apertura|abducci|aducci|paseo lateral|clean/i, null],
+  [/martillo/i, 'curlh'], [/curl concentrado/i, 'curlconc'], [/curl (en banco )?inclinado|curl inclinado/i, 'curlinc'],
+  [/gorilla/i, 'gorilla'], [/toalla/i, 'towel'], [/remo invertido en trx/i, 'trxrow'], [/face ?pull|trx/i, 'trxfp'], [/remo (a una mano|con mancuerna a una mano)/i, 'dbrow1'], [/remo con (2|dos) mancuernas/i, 'csrow'],
+  [/press cerrado/i, 'benchc'], [/peso muerto (rumano )?a una pierna/i, 'sldl'], [/hip thrust a una pierna/i, 'hipth1'], [/zancadas?.*kettlebell/i, 'lungekb'],
   [/burpee/i, 'burpee'], [/hollow/i, 'hollow'], [/crunch/i, 'crunch'], [/plancha lateral/i, 'sk'], [/plancha/i, 'plank'],
   [/mountain|escalador/i, 'mc'], [/jumping|tijera/i, 'jj'],
   [/renegad/i, 'reneg'], [/remo invertido/i, 'invrow'], [/dominada/i, 'pull'], [/fondos en paralelas/i, 'dips'], [/fondos/i, 'dp'],
   [/press franc[eé]s/i, 'skull'], [/extensi[oó]n.*cabeza/i, 'ohext'],
-  [/face ?pull/i, 'facep'], [/elevaci(o|ó)n(es)? lateral/i, 'lat'], [/gemelo|talones/i, 'calfdb'],
+ [/elevaci(o|ó)n(es)? lateral/i, 'lat'], [/gemelo|talones/i, 'calfdb'],
   [/swing/i, 'swing'], [/(press|push press).*kettlebell/i, 'kbpress'],
   [/press (de )?banca|press en suelo|press cerrado/i, 'bench'], [/press inclinado/i, 'incl'],
   [/press (militar|arnold)|push press/i, 'ohp'],
   [/flexiones con rodillas/i, 'pu'], [/flexiones/i, 'pushup'],
-  [/buenos d[ií]as sin/i, null], [/rumano|peso muerto a una pierna/i, 'rdl'], [/buenos d[ií]as/i, 'gm'], [/peso muerto/i, 'dl'],
+  [/buenos d[ií]as sin/i, null], [/rumano/i, 'rdl'], [/buenos d[ií]as/i, 'gm'], [/peso muerto/i, 'dl'],
   [/puente de gl[uú]teo a una pierna/i, 'br1'], [/puente de gl[uú]teo con barra|hip thrust/i, 'hipth'], [/puente de gl[uú]teo/i, 'br'],
   [/b[uú]lgara/i, 'bulg'], [/step.?up/i, 'stepdb'], [/zancada/i, 'lunge'],
   [/sentadilla sumo/i, 'sumo'], [/goblet|sentadilla.*(mancuerna|kettlebell)/i, 'goblet'], [/sentadilla (trasera|frontal|con barra|con peso)/i, 'sqbar'], [/^sentadilla( con salto)?$/i, 'sq'],
   [/remo/i, 'bbrow'], [/curl/i, 'curl']
 ];
 const GYM3D_EQ = n => /mancuerna/i.test(n) ? 'db' : /kettlebell/i.test(n) ? 'kb' : /barra|\bez\b|\bz\b/i.test(n) ? 'bar' : /toalla|banda|trx|mesa/i.test(n) ? 'none' : '';
-const GYM3D_DEF = { bench: 'bar', incl: 'db', ohp: 'bar', rdl: 'bar', dl: 'bar', bbrow: 'bar', curl: 'db', hipth: 'bar', skull: 'bar', lunge: 'db', calfdb: 'db', stepdb: 'db', bulg: 'db', sumo: 'db', goblet: 'db', gm: 'bar', sqbar: 'bar', ohext: 'db' };
+const GYM3D_DEF = { benchc: 'bar', csrow: 'db', curlh: 'db', curlinc: 'db', curlconc: 'db', sldl: 'db', gorilla: 'db', lungekb: 'kb', dbrow1: 'db', bench: 'bar', incl: 'db', ohp: 'bar', rdl: 'bar', dl: 'bar', bbrow: 'bar', curl: 'db', hipth: 'bar', skull: 'bar', lunge: 'db', calfdb: 'db', stepdb: 'db', bulg: 'db', sumo: 'db', goblet: 'db', gm: 'bar', sqbar: 'bar', ohext: 'db' };
 function gym3dOf(name) {
   for (const [re, id] of GYM3D_MAP) if (re.test(name || '')) { if (!id) return null; const eq = GYM3D_EQ(name); return eq && eq !== GYM3D_DEF[id] && GYM3D_DEF[id] ? `${id}:${eq}` : id; }
   return null;
@@ -6551,6 +6555,19 @@ const GYM3D_CUES = {
   crunch: ['Las manos no tiran del cuello', 'Sube despegando los omóplatos', 'Suelta el aire al subir'],
   mc: ['Manos bajo los hombros', 'Cadera baja y quieta', 'Rodilla al pecho, alternando'],
   jj: ['Aterriza suave', 'Brazos estirados', 'Ritmo constante'],
+  curlh: ['Agarre neutro: las palmas se miran, como sujetando un martillo', 'Codos pegados al cuerpo', 'Sube sin balancear y baja despacio'],
+  dbrow1: ['Mano y rodilla del mismo lado apoyadas en el banco', 'El codo va hacia el bolsillo, no hacia arriba', 'Abajo, deja que el hombro se estire'],
+  csrow: ['Pecho apoyado en el banco inclinado a unos 35°', 'Tira con los codos hacia atrás', 'Junta las escápulas arriba y baja controlado'],
+  benchc: ['Manos a la anchura de los hombros o algo menos', 'Codos pegados al cuerpo al bajar', 'Baja a la parte baja del pecho y empuja'],
+  curlinc: ['Sentado en un banco inclinado, espalda apoyada', 'Los brazos cuelgan por detrás del tronco', 'Sube sin despegar los codos del cuerpo'],
+  curlconc: ['Sentado, el codo apoyado en la cara interna del muslo', 'Sube el peso sin mover el brazo', 'Baja despacio hasta estirar del todo'],
+  hipth1: ['Escápulas en el banco y un pie bien apoyado', 'La otra pierna estirada, en línea con el cuerpo', 'Sube la cadera hasta quedar recto y aprieta el culo'],
+  trxfp: ['Cuerpo recto e inclinado hacia atrás, pies fijos', 'Tira llevando las manos a las orejas, codos altos', 'Baja controlado hasta estirar los brazos'],
+  trxrow: ['Cuerpo recto e inclinado hacia atrás, pies fijos', 'Tira con los codos pegados al cuerpo hasta llevar el pecho a las manos', 'Baja controlado hasta estirar los brazos'],
+  towel: ['Agárrate a la toalla con el cuerpo inclinado hacia atrás', 'Tira con los codos pegados al cuerpo', 'Pies fijos: solo se mueve el cuerpo'],
+  lungekb: ['Kettlebell delante del pecho con las dos manos', 'Paso largo y tronco recto', 'Vuelve empujando con el talón de delante'],
+  gorilla: ['Piernas abiertas y cadera atrás, espalda neutra', 'Rema con una mano y luego con la otra', 'La mancuerna que no rema se queda apoyada abajo'],
+  sldl: ['Empieza de pie con las dos piernas', 'Al bajar el tronco, una pierna sube recta hacia atrás', 'Sube a la vez: el tronco arriba, la pierna abajo'],
   burpee: ['Manos al suelo y salta atrás a plancha', 'En la plancha, cuerpo recto', 'Vuelve y salta estirándote arriba']
 };
 const gym3dCues = name => { const id = gym3dOf(name); return id ? GYM3D_CUES[id.split(':')[0]] || null : null; };
