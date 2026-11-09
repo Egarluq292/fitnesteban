@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.82.5';
+const APP_VERSION = '4.83.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -1389,7 +1389,7 @@ function renderExerciseCard(e, idx, day, d) {
     </div>
     <div class="flex items-center justify-between gap-3 mt-2">
       <p class="text-xs text-mute italic min-w-0">${esc(variant.note)}</p>
-      <span class="flex gap-1.5 shrink-0">${isAdminUser() && gym3dOf(variant.name) ? `<button class="btn-3d" data-act="gym3d" data-n="${esc(variant.name)}" type="button" aria-label="Ver el movimiento en 3D">🧍 3D</button>` : ''}<a class="btn-video" href="${esc(videoUrl(variant))}" target="_blank" rel="noopener noreferrer" aria-label="Ver técnica en YouTube">▶ Técnica${variant.video ? '' : ' 🔎'}</a></span>
+      <span class="flex gap-1.5 shrink-0">${canBeta() && gym3dOf(variant.name) ? `<button class="btn-3d" data-act="gym3d" data-n="${esc(variant.name)}" type="button" aria-label="Ver el movimiento en 3D">🧍 3D</button>` : ''}<a class="btn-video" href="${esc(videoUrl(variant))}" target="_blank" rel="noopener noreferrer" aria-label="Ver técnica en YouTube">▶ Técnica${variant.video ? '' : ' 🔎'}</a></span>
     </div>
     <div class="coach ${tone.cls} mt-3">
       <div class="font-bold text-sm">${tone.icon} ${esc(c.title)}</div>
@@ -5807,6 +5807,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.83.0', ['🧪 Acceso: botón para dar acceso anticipado a las novedades (ahora, los ejercicios en 3D) a quien elijas.'], 'admin'],
   ['4.82.5', ['🧍 3D (solo tú): plancha lateral apoyada en el antebrazo y el codo.'], 'admin'],
   ['4.82.4', ['🧍 3D (solo tú): plancha lateral sobre el brazo estirado, con la otra mano en la cadera, como en tu foto.'], 'admin'],
   ['4.82.3', ['🧍 3D (solo tú): plancha lateral inmóvil sobre el antebrazo, puente de glúteo con la espalda apoyada, step-up con el pie fijo en el banco y búlgara bajando hasta 90°.'], 'admin'],
@@ -6132,6 +6133,15 @@ function roadmapHTML(R = roadLive()) {
   if (!R.length) return '';
   return `<div class="road mt-3"><div class="text-[11px] font-black tracking-widest text-amber-300">🔜 PRÓXIMAMENTE</div>
     ${R.map(r => `<div class="flex gap-2.5 mt-2"><span class="text-xl leading-none">${r.icon}</span><div class="min-w-0"><div class="text-[13px] font-extrabold leading-tight">${esc(r.title)} <span class="road-when">${esc(r.when)}</span></div><p class="text-[12px] text-mute leading-snug mt-0.5">${esc(r.txt)}</p></div></div>`).join('')}</div>`;
+}
+/* 🧪 Aviso (una vez) a quien recibe acceso anticipado */
+function betaWelcome() {
+  if (!access.me?.beta || isAdminUser() || lsGet('fitnesteban_beta') || $('#modalRoot').classList.contains('open')) return;
+  lsSet('fitnesteban_beta', 1);
+  openModal(`<div class="text-center"><div class="text-5xl">🧪</div><h3 class="text-xl font-black mt-2">Tienes acceso anticipado</h3>
+    <p class="text-sm text-mute mt-2">Esteban te deja probar antes que nadie lo que está preparando. Ahora mismo: los <b class="text-white">ejercicios en 3D</b>. Entra en un bloque y pulsa «🧍 3D» en un ejercicio.</p>
+    <p class="text-[12px] text-mute mt-2">Aún está en pruebas. Si ves algo raro, díselo a Esteban.</p></div>
+    <div class="grid gap-2 mt-4">${contactBtn('Contarle algo a Esteban', 'w-full justify-center')}<button class="btn-primary" data-close type="button">¡A probarlo!</button></div>`);
 }
 /* Al abrir la app (una vez al día): ventana con lo que viene. «No volver a mostrar» la quita hasta que se anuncie algo nuevo. */
 const ROAD_KEY = 'fitnesteban_road';
@@ -6575,6 +6585,7 @@ const GYM3D_CUES = {
   burpee: ['Manos al suelo y salta atrás a plancha', 'En la plancha, cuerpo recto', 'Vuelve y salta estirándote arriba']
 };
 const gym3dCues = name => { const id = gym3dOf(name); return id ? GYM3D_CUES[id.split(':')[0]] || null : null; };
+const canBeta = () => isAdminUser() || !!access.me?.beta; // 🧪 administrador y quien tenga «beta» en su código
 let gym3dMod = null;
 function gym3dModal(name) {
   const id = gym3dOf(name); if (!id) return;
@@ -6928,7 +6939,7 @@ const actions = {
   adv: () => advGrid(),
   advOn: () => advActivate(),
   advInfo: () => advInfoModal(),
-  gym3d: b => { if (isAdminUser()) gym3dModal(b.dataset.n); },
+  gym3d: b => { if (canBeta()) gym3dModal(b.dataset.n); },
   cdWatch: () => { keepCardioInputs(); state.settings.watchOpen = !state.settings.watchOpen; persist(); render(); },
   cdUseWatch: () => { const e = ui.cardio.est; if (!e?.wkcal) return; keepCardioInputs(); e.appKcal = e.appKcal ?? e.kcal; e.kcal = +e.wkcal; e.usedWatch = true; render(); toast('Puestas las kcal del reloj'); },
   cdUseApp: () => { const e = ui.cardio.est; if (!e?.usedWatch) return; keepCardioInputs(); e.kcal = e.appKcal; e.usedWatch = false; render(); },
@@ -7285,6 +7296,14 @@ const actions = {
   delAccess: b => delAccess(b.dataset.hash),
   ghConnect: () => ghConnectModal(),
   ghDisconnect: () => { if (!confirm('¿Desconectar GitHub? Se borra la llave guardada en este móvil.')) return; try { localStorage.removeItem(GH_KEY); } catch { /* nada */ } render(); toast('GitHub desconectado'); },
+  betaAccess: b => {
+    const hash = b.dataset.hash, x = (access.list || []).find(y => y.hash === hash); if (!x) return;
+    const who = esc(state.accessNames[hash] || 'esta persona'), on = !x.beta;
+    askPin({ title: on ? `🧪 Dar a ${who} acceso anticipado` : `Quitar a ${who} el acceso anticipado`, text: on ? 'Verá antes que nadie lo que aún estás probando (ahora, los ejercicios en 3D). Le llegará la próxima vez que abra la app con conexión.' : 'Dejará de ver lo que aún estás probando.', onPin: async pin => {
+      await ghEditAcl(pin, lines => lines.map(l => { const t = l.trim().split(/\s+/); return t[0]?.toLowerCase() === hash ? [...t.filter(w => w.toLowerCase() !== 'beta'), ...(on ? ['beta'] : [])].join(' ') : l; }), on ? 'Acceso: acceso anticipado' : 'Acceso: sin acceso anticipado');
+      ui.accessPin = pin; closeModal(); render(); toast(on ? 'Acceso anticipado activado ✓' : 'Acceso anticipado quitado ✓');
+    } });
+  },
   anonAccess: b => {
     const hash = b.dataset.hash, x = (access.list || []).find(y => y.hash === hash); if (!x) return;
     const who = esc(state.accessNames[hash] || 'esta persona'), on = !x.anon;
@@ -7626,8 +7645,8 @@ function parseAcl(text) {
   return String(text).split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')).map(l => {
     const p = l.split(/\s+/), admin = p.slice(1).some(t => t.toLowerCase() === 'admin');
     const hasta = (p.find(t => /^hasta=\d{4}-\d{2}-\d{2}$/i.test(t)) || '').slice(6), plan = (p.find(t => /^plan=\w+$/i.test(t)) || '').slice(5).toLowerCase();
-    const anon = p.slice(1).some(t => t.toLowerCase() === 'anon');
-    return { hash: p[0].toLowerCase(), admin, ...(hasta ? { hasta } : {}), ...(plan ? { plan } : {}), ...(anon ? { anon } : {}) };
+    const anon = p.slice(1).some(t => t.toLowerCase() === 'anon'), beta = p.slice(1).some(t => t.toLowerCase() === 'beta');
+    return { hash: p[0].toLowerCase(), admin, ...(hasta ? { hasta } : {}), ...(plan ? { plan } : {}), ...(anon ? { anon } : {}), ...(beta ? { beta } : {}) };
   }).filter(x => /^[0-9a-f]{32}$/.test(x.hash));
 }
 const access = { list: null, me: null, ok: false, usageUrl: '' };
@@ -7832,7 +7851,7 @@ async function accessBoot() {
   let me = await accessCheck(fresh);
   if (!me && lsGet(ACCESS_KEY)?.code) { const live = await fetchAclLive(); if (live) me = await accessCheck(live); }
   if (me && planExpired(me)) { access.ok = false; access.me = me; closeModal(); lockScreen('code', expiredMsg(planExpired(me))); return; }
-  if (me) { if (!access.ok) unlock(me); else access.me = me; usagePing(); deviceGuard(); planWarn(me); advNotify(); setTimeout(roadNotify, 2500); }
+  if (me) { if (!access.ok) unlock(me); else access.me = me; usagePing(); deviceGuard(); planWarn(me); advNotify(); setTimeout(betaWelcome, 2000); setTimeout(roadNotify, 2500); }
   else lockScreen('code', lsGet(ACCESS_KEY)?.code ? `Tu código ya no es válido. Pide uno nuevo a Esteban.${contactBtn('Contacto', 'mx-auto mt-3')}` : '');
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && access.ok && access.me?.trial) { const ex = planExpired(access.me); if (ex === true) { access.ok = false; closeModal(); lockScreen('code', trialEndMsg()); } return; } if (document.visibilityState === 'visible' && access.ok) fetchAcl().then(async l => { const me = l && await accessCheck(l); if (me && planExpired(me)) { access.ok = false; closeModal(); lockScreen('code', expiredMsg(planExpired(me))); return; } if (me) access.me = me; usagePing(); deviceGuard(); if (l && !me) { const live = await fetchAclLive(); if (!live || await accessCheck(live)) return; access.ok = false; lockScreen('code', `Tu código ya no es válido. Pide uno nuevo a Esteban.${contactBtn('Contacto', 'mx-auto mt-3')}`); } }); });
@@ -8391,8 +8410,8 @@ function accessSectionHTML() {
            <span class="flex gap-1.5"><button class="iconbtn iconbtn-sm" data-act="showCode" data-hash="${esc(x.hash)}" type="button" aria-label="Ver código">${shown ? '🙈' : '👁'}</button><button class="iconbtn iconbtn-sm" data-act="copyCode" data-hash="${esc(x.hash)}" type="button" aria-label="Copiar código">📋</button></span>`
         : `<span class="text-amber-300 text-[11px]">Código no guardado (creado antes de la 4.24). Si lo necesita, dale uno nuevo con 🔄.</span>`;
       const detail = `<div class="px-3 pb-2.5 pt-1 text-xs space-y-1.5">
-      <div class="flex items-center justify-between gap-2"><span class="min-w-0 text-[11px]">${x.admin ? '<span class="text-brand">Administrador · sin límite</span>' : `⏳ ${planLabel(x)}`}${x.anon ? '<span class="block text-mute">🙈 Su nombre de perfil no se registra</span>' : ''}</span>
-      <span class="flex items-center gap-1.5 shrink-0"><button class="iconbtn iconbtn-sm" data-act="nameAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Poner nombre">✎</button>${gh && !x.admin ? `<button class="iconbtn iconbtn-sm" data-act="planAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Plan">⏳</button>` : ''}${gh && !x.admin ? `<button class="iconbtn iconbtn-sm" data-act="anonAccess" data-hash="${esc(x.hash)}" type="button" aria-label="${x.anon ? 'Volver a mostrar su nombre de perfil' : 'Ocultar su nombre de perfil'}">${x.anon ? '🙈' : '👤'}</button>` : ''}${gh ? `<button class="iconbtn iconbtn-sm" data-act="regenAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Nuevo código">🔄</button>` : ''}${me || !gh ? '' : `<button class="iconbtn iconbtn-sm text-rose-300" data-act="delAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Quitar acceso">🗑</button>`}</span></div>
+      <div class="flex items-center justify-between gap-2"><span class="min-w-0 text-[11px]">${x.admin ? '<span class="text-brand">Administrador · sin límite</span>' : `⏳ ${planLabel(x)}`}${x.anon ? '<span class="block text-mute">🙈 Su nombre de perfil no se registra</span>' : ''}${x.beta ? '<span class="block text-cyan-300">🧪 Prueba las novedades antes que nadie</span>' : ''}</span>
+      <span class="flex items-center gap-1.5 shrink-0"><button class="iconbtn iconbtn-sm" data-act="nameAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Poner nombre">✎</button>${gh && !x.admin ? `<button class="iconbtn iconbtn-sm" data-act="planAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Plan">⏳</button>` : ''}${gh && !x.admin ? `<button class="iconbtn iconbtn-sm${x.beta ? ' iconbtn-on' : ''}" data-act="betaAccess" data-hash="${esc(x.hash)}" type="button" aria-label="${x.beta ? 'Quitar el acceso anticipado' : 'Dar acceso anticipado a las novedades'}">🧪</button>` : ''}${gh && !x.admin ? `<button class="iconbtn iconbtn-sm" data-act="anonAccess" data-hash="${esc(x.hash)}" type="button" aria-label="${x.anon ? 'Volver a mostrar su nombre de perfil' : 'Ocultar su nombre de perfil'}">${x.anon ? '🙈' : '👤'}</button>` : ''}${gh ? `<button class="iconbtn iconbtn-sm" data-act="regenAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Nuevo código">🔄</button>` : ''}${me || !gh ? '' : `<button class="iconbtn iconbtn-sm text-rose-300" data-act="delAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Quitar acceso">🗑</button>`}</span></div>
       <div class="flex items-center justify-between gap-2 min-h-[28px]">${codeLine}</div>${usageLine(x.hash)}</div>`;
       const open = ui.accOpenH === x.hash, st = accStatus(x), u = ui.usage?.[x.hash];
       const ago = u ? daysBetween(u.last, todayISO()) : null;
@@ -8408,7 +8427,7 @@ function accessSectionHTML() {
         ${open ? detail : ''}</div>`;
     }).join('')}${trialRowsHTML()}</div>
     <p class="text-[12px] text-mute text-center hidden" id="accNone">Nadie coincide con la búsqueda.</p>
-    ${gh ? '<p class="text-[11px] text-mute">Toca a una persona para ver su ficha: ✎ nombre · ⏳ plan · 👤/🙈 registrar u ocultar su nombre de perfil · 🔄 nuevo código · 🗑 quitar acceso. Nombres y códigos solo los ves tú (cifrados con tu PIN); en GitHub solo hay huellas.</p>' : ''}
+    ${gh ? '<p class="text-[11px] text-mute">Toca a una persona para ver su ficha: ✎ nombre · ⏳ plan · 🧪 acceso anticipado a las novedades · 👤/🙈 registrar u ocultar su nombre de perfil · 🔄 nuevo código · 🗑 quitar acceso. Nombres y códigos solo los ves tú (cifrados con tu PIN); en GitHub solo hay huellas.</p>' : ''}
     ${list.length ? '<button class="btn-ghost w-full" data-act="copyHashes" type="button">📋 Copiar huellas y nombres (para tu hoja)</button>' : ''}
     ${access.usageUrl && lsGet(USE_KEY)
       ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : ui.usageOld12 ? '<span class="text-amber-300">actualiza el script a la v12 (Reconfigurar → nueva versión) para activar la prueba gratis con Google</span>' : 'actualizado ahora · nombres, correos, altas y quién usa cada dispositivo') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
