@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.85.0';
+const APP_VERSION = '4.85.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3587,7 +3587,7 @@ function queComoModal() {
     <h3 class="text-xl font-black leading-tight">Te quedan ${L.kcal} kcal</h3>
     <p class="text-[13px] text-mute mt-0.5">${L.prot > 0 ? `Proteína: ${L.prot} g` : 'Proteína cumplida ✓'} · Carbohidratos: ${Math.max(0, L.carbs)} g · Grasas: ${Math.max(0, L.fat)} g</p>
     <div class="grid gap-2 mt-4">
-      <button class="qc-opt" data-mact="close" type="button"><span class="text-2xl">🎯</span><span class="min-w-0"><b>Cerrar el día</b><span>Ideas para la ${esc(tp.toLowerCase())} que encajan en lo que te queda</span></span></button>
+      <button class="qc-opt" data-mact="close" type="button"><span class="text-2xl">🎯</span><span class="min-w-0"><b>Cerrar el día</b><span>Ideas para ${tp === 'Puente' ? 'el' : 'la'} ${esc(tp.toLowerCase())} que encajan en lo que te queda</span></span></button>
       <button class="qc-opt" data-mact="home" type="button"><span class="text-2xl">🏠</span><span class="min-w-0"><b>Con lo que tengo en casa</b><span>Escribe o dicta lo que tienes${ia ? '' : ' · necesita la clave de Gemini'}</span></span></button>
       <button class="qc-opt" data-mact="photo" type="button"><span class="text-2xl">📷</span><span class="min-w-0"><b>Foto de la nevera o la despensa</b><span>${ia ? 'Te propongo platos con lo que se ve' : 'Necesita la clave de Gemini (Ajustes)'}</span></span></button>
     </div>`, {
@@ -3624,7 +3624,7 @@ Responde SOLO con JSON: {"opciones":[{"nombre":"…","ingredientes":["150 g de �
 }
 function qcShow(L, tp, ops, note, ia = false) {
   ui._qc = ops;
-  openModal(`<div class="flex items-center gap-2"><button class="text-mute text-xl -ml-1 px-1" data-mact="back" type="button">‹</button><div class="min-w-0"><div class="text-[11px] font-black tracking-widest text-cyan-300">🍽️ IDEAS PARA LA ${esc(tp.toUpperCase())}</div><h3 class="text-lg font-black leading-tight">Te quedan ${L.kcal} kcal${L.prot > 0 ? ` · ${L.prot} g de proteína` : ''}</h3></div></div>
+  openModal(`<div class="flex items-center gap-2"><button class="text-mute text-xl -ml-1 px-1" data-mact="back" type="button">‹</button><div class="min-w-0"><div class="text-[11px] font-black tracking-widest text-cyan-300">🍽️ IDEAS PARA ${tp === 'Puente' ? 'EL' : 'LA'} ${esc(tp.toUpperCase())}</div><h3 class="text-lg font-black leading-tight">Te quedan ${L.kcal} kcal${L.prot > 0 ? ` · ${L.prot} g de proteína` : ''}</h3></div></div>
     ${note ? `<p class="text-[12px] text-mute mt-1">${esc(note)}</p>` : ''}
     ${ops.length ? ops.map((o, i) => `<div class="qc-card"><div class="font-extrabold text-[15px] leading-tight">${esc(o.nombre)}${o.mine ? ' <span class="text-[10.5px] text-amber-300 font-bold">· de tus habituales</span>' : ''}</div>
       <div class="text-[11px] font-mono mt-1">${macroLine({ kcal: o.kcal, prot: o.prot, carbs: o.carbs, fat: o.fat })}</div>
@@ -6024,6 +6024,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.85.1', ['🍽️ Corregido: «Ideas para el puente» en «¿Qué como?».'], 'quiet'],
   ['4.85.0', ['🤔 Nuevo en Entreno: «¿Y si hoy no puedo?», debajo de «Hoy te toca». Si vas justo de tiempo, recorta la sesión; si estás fuera o sin material, la cambia a ejercicios con tu peso corporal; y si algo te molesta, quita lo que carga esa zona. Mejor adaptarlo que saltártelo.', '🍽️ El botón «¿Qué como?» ahora es más discreto.']],
   ['4.84.1', ['🍽️ Botón «¿Qué como?» más visible y micrófono para dictar lo que tienes en casa.'], 'quiet'],
   ['4.84.0', ['🍽️ Nuevo «¿Qué como?» en Dieta: ideas que encajan en lo que te queda hoy, con lo que tienes en casa o con una foto de tu nevera.', '📋 Cada idea se añade con un toque, y puedes copiar sus ingredientes para la lista de la compra.']],
