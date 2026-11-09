@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.82.3';
+const APP_VERSION = '4.82.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -5807,6 +5807,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.82.4', ['🧍 3D (solo tú): plancha lateral sobre el brazo estirado, con la otra mano en la cadera, como en tu foto.'], 'admin'],
   ['4.82.3', ['🧍 3D (solo tú): plancha lateral inmóvil sobre el antebrazo, puente de glúteo con la espalda apoyada, step-up con el pie fijo en el banco y búlgara bajando hasta 90°.'], 'admin'],
   ['4.82.2', ['🧍 3D (solo tú): face pull y remo en TRX, remo con toalla y remo invertido, colgados boca arriba con los pies fijos; el cuerpo gira hacia el agarre y los codos van pegados.'], 'admin'],
   ['4.82.1', ['🧍 3D corregido (solo tú): curl martillo con agarre neutro, curl concentrado e inclinado sentados, remo a una mano con apoyo, remo con pecho en banco a 35°, press cerrado, rumano con más flexión de rodillas, swing con piernas abiertas, búlgara y fondos con los pies fijos, puente e hip thrust a una pierna, face pull y remos con TRX y toalla, zancada con kettlebell al pecho, gorilla row alterno, peso muerto a una pierna y burpee.'], 'admin'],
@@ -6552,7 +6553,7 @@ const GYM3D_CUES = {
   lunge: ['Paso largo y tronco recto', 'La rodilla de atrás casi roza el suelo', 'Vuelve empujando con el talón de delante'],
   stepdb: ['Todo el pie encima del escalón', 'Sube con la pierna de arriba, sin impulsarte con la de abajo', 'Baja controlado'],
   plank: ['Codos bajo los hombros', 'Culo y abdomen apretados', 'Cuerpo en línea: la cadera no se hunde'],
-  sk: ['Codo bajo el hombro', 'Cadera alta', 'Cuerpo en línea de pies a cabeza'],
+  sk: ['Mano bajo el hombro y brazo estirado', 'Cadera alta: cuerpo en línea de pies a cabeza', 'Quieto: la otra mano descansa sobre la cadera'],
   hollow: ['Zona lumbar pegada al suelo', 'Brazos y piernas largos', 'Si se despega la espalda, sube las piernas o dobla las rodillas'],
   crunch: ['Las manos no tiran del cuello', 'Sube despegando los omóplatos', 'Suelta el aire al subir'],
   mc: ['Manos bajo los hombros', 'Cadera baja y quieta', 'Rodilla al pecho, alternando'],

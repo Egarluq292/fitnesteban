@@ -98,7 +98,7 @@ const P = {
   sq: { a: { sh: 0 }, b: { hip: 100, knee: 110, ankle: -10, spine: 35, sh: 90, hipAb: 10 } },
   br: { pin: ['neck', 'auto'], fix: ['anL', 'anR'], base: { sh: 0, shAb: 15, hip: 40, knee: 100, ankle: 10 }, a: { rootX: -92 }, b: { rootX: -118 }, ground: ['anL', 'anR', 'neck'], lift: .14 },
   br1: { pin: ['neck', 'auto'], fix: ['anL'], base: { sh: 0, shAb: 15, hipL: 40, kneeL: 100, ankleL: 10, kneeR: 0 }, a: { rootX: -92, hipR: 20 }, b: { rootX: -118, hipR: -26 }, ground: ['anL', 'neck'], lift: .14 },
-  sk: { ang: .2, base: { rootZ: 72, shAbL: -78, shL: 0, elL: 90, shR: 0, shAbR: 6, elR: 0, neck: 0 }, a: {}, b: {}, ground: ['elL', 'hdL', 'anL'], lift: .05 },
+  sk: { ang: -.9, base: { rootZ: -66, shAbL: 88, shL: 0, elL: 0, shR: 4, shAbR: 12, elR: 28, neck: 0 }, a: {}, b: {}, ground: ['hdL', 'anL'], lift: .05 },
   mc: { base: { rootX: 70, sh: 70, neck: -12 }, a: { hipL: 80, kneeL: 100, hipR: 0, kneeR: 0 }, b: { hipR: 80, kneeR: 100, hipL: 0, kneeL: 0 }, ground: ['hdL', 'hdR', 'anL', 'anR'], lift: .05 },
   jj: { a: { shAb: 10, hipAb: 3 }, b: { shAb: 165, hipAb: 18 } },
   dp: { pin: ['pelvis', 'p'], fix: ['hdL', 'hdR', 'anL', 'anR'], base: { hip: 85, knee: 80, sh: -35, el: 0 }, a: { py: .47, pz: .05 }, b: { py: .24, pz: .05 }, hands: 'chair' },
