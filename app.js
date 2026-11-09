@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.83.0';
+const APP_VERSION = '4.84.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
@@ -3420,6 +3420,102 @@ function openCalendar() {
   openModal(renderCalendar(), { ...handlers, sheetClass: 'sheet-fixed' });
 }
 
+/* ==========================================================================
+   🍽️ ¿QUÉ COMO? Ideas que encajan en lo que te queda hoy: sin IA (tus comidas y alimentos básicos)
+   o con IA (cerrar el día, con lo que tienes en casa, o con una foto de la nevera o la despensa).
+   ========================================================================== */
+const QC_BASICS = [
+  { desc: 'Pechuga de pollo a la plancha (150 g)', kcal: 165, prot: 35, carbs: 0, fat: 3, ing: ['150 g de pechuga de pollo'] },
+  { desc: 'Pavo en lonchas (100 g)', kcal: 105, prot: 22, carbs: 1, fat: 2, ing: ['100 g de pavo en lonchas'] },
+  { desc: 'Claras de huevo (200 g)', kcal: 100, prot: 22, carbs: 1, fat: 0, ing: ['200 g de claras'] },
+  { desc: 'Atún al natural (2 latas)', kcal: 150, prot: 33, carbs: 0, fat: 2, ing: ['2 latas de atún al natural'] },
+  { desc: 'Queso fresco batido 0 % (250 g)', kcal: 115, prot: 20, carbs: 9, fat: 0, ing: ['250 g de queso fresco batido 0 %'] },
+  { desc: 'Yogur proteico', kcal: 95, prot: 15, carbs: 7, fat: 0, ing: ['1 yogur proteico'] },
+  { desc: 'Batido de proteína con agua', kcal: 120, prot: 24, carbs: 3, fat: 1, ing: ['1 cacito de proteína'] },
+  { desc: 'Merluza al horno (200 g)', kcal: 170, prot: 34, carbs: 0, fat: 3, ing: ['200 g de merluza'] },
+  { desc: 'Salmón a la plancha (150 g)', kcal: 300, prot: 30, carbs: 0, fat: 20, ing: ['150 g de salmón'] },
+  { desc: 'Tortilla de 2 huevos y 100 g de claras', kcal: 200, prot: 23, carbs: 1, fat: 10, ing: ['2 huevos', '100 g de claras'] },
+  { desc: 'Arroz cocido (150 g)', kcal: 195, prot: 4, carbs: 42, fat: 0, ing: ['50 g de arroz (en crudo)'] },
+  { desc: 'Patata cocida (200 g)', kcal: 155, prot: 4, carbs: 34, fat: 0, ing: ['200 g de patata'] },
+  { desc: 'Pan integral (60 g)', kcal: 150, prot: 6, carbs: 26, fat: 2, ing: ['60 g de pan integral'] },
+  { desc: 'Ensalada verde con 1 cucharada de aceite', kcal: 110, prot: 1, carbs: 4, fat: 10, ing: ['Lechuga, tomate y pepino', '1 cucharada de aceite de oliva'] },
+  { desc: 'Verduras a la plancha (300 g)', kcal: 90, prot: 4, carbs: 14, fat: 1, ing: ['300 g de verduras variadas'] },
+  { desc: 'Fruta (1 pieza)', kcal: 80, prot: 1, carbs: 19, fat: 0, ing: ['1 pieza de fruta'] },
+  { desc: 'Puñado de frutos secos (25 g)', kcal: 155, prot: 5, carbs: 4, fat: 14, ing: ['25 g de frutos secos'] }
+];
+function qcLeft() {
+  const st = state.settings, d = todayISO(), t = totalsOf(d);
+  return { kcal: Math.round(st.targetKcal - t.kcal), prot: Math.round(st.targetProt - t.prot), carbs: Math.round((st.targetCarbs || 0) - t.carbs), fat: Math.round((st.targetFat || 0) - t.fat) };
+}
+// sin IA: combinaciones de 1-3 cosas (tus comidas habituales + básicos) que más se acercan a lo que te queda sin pasarse
+function qcLocal(L) {
+  const mine = mealGroups().filter(e => e.count >= 2 && num(e.last.kcal) > 0).sort((a, b) => b.count - a.count).slice(0, 25)
+    .map(e => ({ desc: e.last.desc, kcal: num(e.last.kcal), prot: num(e.last.prot), carbs: num(e.last.carbs), fat: num(e.last.fat), ing: [e.last.desc], mine: true }));
+  const pool = [...mine, ...QC_BASICS], P = Math.max(0, L.prot), K = L.kcal;
+  const score = items => { const k = items.reduce((a, x) => a + x.kcal, 0), pr = items.reduce((a, x) => a + x.prot, 0);
+    if (k > K * 1.05 || k < K * .45) return -1e9; return -Math.abs(P - pr) * 3 - Math.abs(K * .9 - k) / 10 + items.filter(x => x.mine).length * 8; };
+  const combos = [];
+  for (let i = 0; i < pool.length; i++) { combos.push([pool[i]]); for (let j = i + 1; j < pool.length; j++) { combos.push([pool[i], pool[j]]); for (let k = j + 1; k < pool.length; k++) combos.push([pool[i], pool[j], pool[k]]); } }
+  const best = combos.map(c => ({ c, sc: score(c) })).filter(x => x.sc > -1e9).sort((a, b) => b.sc - a.sc), out = [], used = new Set();
+  for (const { c } of best) { const key = c[0].desc; if (used.has(key)) continue; used.add(key); out.push(c); if (out.length === 3) break; }
+  return out.map(c => ({ nombre: c.map(x => x.desc).join(' + '), ingredientes: c.flatMap(x => x.ing), kcal: c.reduce((a, x) => a + x.kcal, 0), prot: c.reduce((a, x) => a + x.prot, 0), carbs: c.reduce((a, x) => a + x.carbs, 0), fat: c.reduce((a, x) => a + x.fat, 0), mine: c.some(x => x.mine) }));
+}
+function queComoModal() {
+  const L = qcLeft(), ia = !!state.settings.apiKey, tp = guessMealType();
+  openModal(`<div class="text-[11px] font-black tracking-widest text-cyan-300">🍽️ ¿QUÉ COMO?</div>
+    <h3 class="text-xl font-black leading-tight">Te quedan ${L.kcal} kcal</h3>
+    <p class="text-[13px] text-mute mt-0.5">${L.prot > 0 ? `Proteína: ${L.prot} g` : 'Proteína cumplida ✓'} · Carbohidratos: ${Math.max(0, L.carbs)} g · Grasas: ${Math.max(0, L.fat)} g</p>
+    <div class="grid gap-2 mt-4">
+      <button class="qc-opt" data-mact="close" type="button"><span class="text-2xl">🎯</span><span class="min-w-0"><b>Cerrar el día</b><span>Ideas para la ${esc(tp.toLowerCase())} que encajan en lo que te queda</span></span></button>
+      <button class="qc-opt" data-mact="home" type="button"><span class="text-2xl">🏠</span><span class="min-w-0"><b>Con lo que tengo en casa</b><span>Escribe o dicta lo que tienes${ia ? '' : ' · necesita la clave de Gemini'}</span></span></button>
+      <button class="qc-opt" data-mact="photo" type="button"><span class="text-2xl">📷</span><span class="min-w-0"><b>Foto de la nevera o la despensa</b><span>${ia ? 'Te propongo platos con lo que se ve' : 'Necesita la clave de Gemini (Ajustes)'}</span></span></button>
+    </div>`, {
+    close: () => ia ? qcAsk(L, tp, '') : qcShow(L, tp, qcLocal(L), 'Con tus comidas habituales y alimentos básicos (sin IA).'),
+    home: () => { if (!ia) return toast('Añade tu clave de Gemini en Ajustes para usar esta opción', 'warn'); qcHome(L, tp); },
+    photo: () => { if (!ia) return toast('Añade tu clave de Gemini en Ajustes para usar esta opción', 'warn'); ui.qc = { L, tp }; qcFile.click(); }
+  });
+}
+function qcHome(L, tp) {
+  openModal(`<h3 class="modal-title">🏠 ¿Qué tienes en casa?</h3>
+    <textarea class="field" id="qcHave" rows="4" placeholder="Por ejemplo: huevos, atún, arroz, calabacín, tomate, queso fresco…">${esc(lsGet('fitnesteban_qchave') || '')}</textarea>
+    <p class="text-[11px] text-mute mt-1">Puedes dictarlo con el micrófono del teclado.</p>
+    <button class="btn-primary w-full mt-3" data-mact="go" type="button">Proponme platos</button>`,
+  { go: () => { const v = ($('#qcHave')?.value || '').trim(); if (!v) return toast('Escribe al menos un alimento', 'warn'); lsSet('fitnesteban_qchave', v); qcAsk(L, tp, v); } });
+}
+const qcFile = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*', hidden: true });
+qcFile.setAttribute('capture', 'environment'); document.body.appendChild(qcFile);
+qcFile.addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f || !ui.qc) return;
+  const img = await compressImage(f, 1200); qcAsk(ui.qc.L, ui.qc.tp, '', img);
+});
+async function qcAsk(L, tp, have, img = null) {
+  openModal(`<div class="text-center py-6"><span class="spinner" style="width:34px;height:34px;border-width:3px;border-color:rgba(34,211,238,.25);border-top-color:#22d3ee"></span><h3 class="modal-title mt-3">${img ? 'Mirando lo que tienes…' : 'Pensando en tu comida…'}</h3><p class="text-sm text-mute">Unos segundos.</p></div>`);
+  const prompt = `Eres un dietista práctico de España. A esta persona le quedan hoy ${L.kcal} kcal, ${Math.max(0, L.prot)} g de proteína, ${Math.max(0, L.carbs)} g de carbohidratos y ${Math.max(0, L.fat)} g de grasa. Es la hora de: ${tp}.
+${img ? 'En la foto se ve su nevera o despensa: usa SOLO lo que se ve con claridad (más sal, aceite y especias). Si algo no se distingue, no lo uses.' : have ? `Tiene en casa: ${have}. Usa SOLO eso (más sal, aceite y especias).` : 'Propón comidas sencillas con ingredientes de supermercado español.'}
+Propón 3 opciones distintas y fáciles (menos de 20 minutos), con cantidades en gramos o unidades, que se acerquen a lo que le queda sin pasarse de las kcal y priorizando la proteína. Valores aproximados y realistas.
+Responde SOLO con JSON: {"opciones":[{"nombre":"…","ingredientes":["150 g de …"],"pasos":"una frase","kcal":0,"prot":0,"carbs":0,"fat":0}],"veo":"si hay foto: lista corta de lo que ves","nota":"una frase"}`;
+  let r;
+  try { r = parseJSONLoose(await callGemini(img ? [{ text: prompt }, { inlineData: { mimeType: 'image/jpeg', data: img.split(',')[1] } }] : [{ text: prompt }], { timeout: 45000, temperature: .6 })); }
+  catch (err) { return openModal(`<div class="text-center text-4xl">😕</div><h3 class="modal-title text-center">No he podido pensarlo</h3><p class="text-sm text-mute text-center">${esc(err.message || 'Error de conexión')}</p>
+    <button class="btn-primary w-full mt-3" data-mact="loc" type="button">Ver ideas sin IA</button><button class="btn-ghost w-full mt-2" data-close type="button">Cerrar</button>`, { loc: () => qcShow(L, tp, qcLocal(L), 'Con tus comidas habituales y alimentos básicos (sin IA).') }); }
+  const ops = (r?.opciones || []).slice(0, 3).map(o => ({ nombre: String(o.nombre || 'Opción').slice(0, 70), ingredientes: (o.ingredientes || []).map(x => String(x).slice(0, 60)).slice(0, 10), pasos: String(o.pasos || '').slice(0, 160), kcal: Math.round(num(o.kcal)), prot: Math.round(num(o.prot)), carbs: Math.round(num(o.carbs)), fat: Math.round(num(o.fat)) }));
+  qcShow(L, tp, ops, img && r?.veo ? `Veo: ${String(r.veo).slice(0, 140)}` : String(r?.nota || '').slice(0, 160), true);
+}
+function qcShow(L, tp, ops, note, ia = false) {
+  ui._qc = ops;
+  openModal(`<div class="flex items-center gap-2"><button class="text-mute text-xl -ml-1 px-1" data-mact="back" type="button">‹</button><div class="min-w-0"><div class="text-[11px] font-black tracking-widest text-cyan-300">🍽️ IDEAS PARA LA ${esc(tp.toUpperCase())}</div><h3 class="text-lg font-black leading-tight">Te quedan ${L.kcal} kcal${L.prot > 0 ? ` · ${L.prot} g de proteína` : ''}</h3></div></div>
+    ${note ? `<p class="text-[12px] text-mute mt-1">${esc(note)}</p>` : ''}
+    ${ops.length ? ops.map((o, i) => `<div class="qc-card"><div class="font-extrabold text-[15px] leading-tight">${esc(o.nombre)}${o.mine ? ' <span class="text-[10.5px] text-amber-300 font-bold">· de tus habituales</span>' : ''}</div>
+      <div class="text-[11px] font-mono mt-1">${macroLine({ kcal: o.kcal, prot: o.prot, carbs: o.carbs, fat: o.fat })}</div>
+      ${o.ingredientes.length > 1 || ia ? `<ul class="qc-ing">${o.ingredientes.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}${o.pasos ? `<p class="text-[12px] text-mute mt-1">${esc(o.pasos)}</p>` : ''}
+      <div class="grid grid-cols-2 gap-2 mt-2.5"><button class="btn-primary !py-2 text-sm" data-mact="add" data-i="${i}" type="button">＋ Añadir a ${esc(tp)}</button><button class="btn-ghost !py-2 text-sm" data-mact="copy" data-i="${i}" type="button">📋 Ingredientes</button></div></div>`).join('')
+    : '<p class="text-sm text-mute mt-3">No encuentro ninguna combinación que encaje. Prueba con «Con lo que tengo en casa».</p>'}
+    <p class="text-[11px] text-mute mt-3 text-center">Valores aproximados. Ajusta las cantidades al añadirlo si hace falta.</p>`, {
+    back: () => queComoModal(),
+    add: (_, b) => { const o = ui._qc[+b.dataset.i]; addMeal(todayISO(), { type: tp, desc: o.nombre, kcal: o.kcal, prot: o.prot, carbs: o.carbs, fat: o.fat }); closeModal(); render(); toast(`Añadido a ${tp} ✓`); },
+    copy: async (_, b) => { const o = ui._qc[+b.dataset.i], txt = `🛒 ${o.nombre}\n` + o.ingredientes.map(x => `- ${x}`).join('\n'); try { await navigator.clipboard.writeText(txt); toast('Ingredientes copiados: pégalos en WhatsApp o en tus notas'); } catch { toast('No se pudo copiar', 'error'); } }
+  });
+}
 function renderDiet() {
   const date = ui.dietDate;
   const isToday = date === todayISO();
@@ -3490,7 +3586,7 @@ function renderDiet() {
       <div class="d2-left"><div class="d2-left-l">${over ? 'Te has pasado' : 'Te quedan'}</div><div class="d2-left-v ${over ? 'text-rose-300' : MAC.kcal.text}">${Math.abs(leftK)}<span> kcal</span></div></div>
       <div class="d2-left"><div class="d2-left-l">${leftP > 0 ? 'Proteína que falta' : 'Proteína'}</div><div class="d2-left-v ${MAC.prot.text}">${leftP > 0 ? `${leftP}<span> g</span>` : '✓<span> cumplida</span>'}</div></div>
     </div>
-    <p class="text-xs text-mute mt-2.5 leading-relaxed">${esc(hint)}</p>
+    ${isToday && leftK > 60 && mealsOf(date).length ? '<button class="qc-btn" data-act="queComo" type="button">🍽️ ¿Qué como? Ideas para lo que te queda</button>' : `<p class="text-xs text-mute mt-2.5 leading-relaxed">${esc(hint)}</p>`}
     ${burned ? `<p class="text-[11px] mt-2 text-mute">${cardioK ? `🔥 Cardio <b class="${MAC.kcal.text}">−${cardioK}</b> · ` : ''}${gymK ? `🏋️ Gym <b class="${MAC.kcal.text}">−${gymK}</b> · ` : ''}Neto <b class="text-white">${Math.round(t.kcal - burned)}</b> kcal</p>` : ''}
   </section>
 
@@ -5807,6 +5903,7 @@ function recipeSheet(mi, oi) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.84.0', ['🍽️ Nuevo «¿Qué como?» en Dieta: ideas que encajan en lo que te queda hoy, con lo que tienes en casa o con una foto de tu nevera.', '📋 Cada idea se añade con un toque, y puedes copiar sus ingredientes para la lista de la compra.']],
   ['4.83.0', ['🧪 Acceso: botón para dar acceso anticipado a las novedades (ahora, los ejercicios en 3D) a quien elijas.'], 'admin'],
   ['4.82.5', ['🧍 3D (solo tú): plancha lateral apoyada en el antebrazo y el codo.'], 'admin'],
   ['4.82.4', ['🧍 3D (solo tú): plancha lateral sobre el brazo estirado, con la otra mano en la cadera, como en tu foto.'], 'admin'],
@@ -6059,6 +6156,7 @@ const GUIDE = [
     'El cardio aparece en Dieta (quemado y balance neto), pero <b>no amplía</b> lo que te queda por comer: tu objetivo es siempre el de Ajustes. Los cálculos de ejercicio (y los relojes) tienden a pasarse, y así el déficit es más fiable.'
   ]],
   ['🥗 Dieta y raciones', [
+    '🍽️ <b>¿Qué como?</b> (debajo de lo que te queda) te da ideas que encajan en tus kcal y proteína de hoy: para cerrar el día, con lo que tienes en casa o con una foto de la nevera. Cada idea se añade con un toque y puedes copiar sus ingredientes para la compra. Con la clave de Gemini las ideas son mucho mejores.',
     'En «Hoy has comido» cada comida (Desayuno, Comida, Puente, Cena) sale <b>plegada</b> con sus kcal, proteína, carbohidratos y grasas; despliégala con la flechita ▶ o tocando su nombre. Su <b>＋</b> abre el panel para añadir. Si esa comida está vacía y ayer la registraste, «↻ Repetir el de ayer» la copia con un toque.',
     'Foto (cámara o galería) y/o descripción. Lo que escribas <b>manda</b>: «200 g de pollo» fija esa cantidad. Con 🎤 puedes dictarla en vez de escribirla.',
     '🏷️ <b>Código</b>: escanea el código de barras de un envase y se añade con los valores de su etiqueta (Open Food Facts). Si no aparece, haz una foto de la tabla nutricional y la IA la lee; la próxima vez saldrá directo.',
@@ -6940,6 +7038,7 @@ const actions = {
   advOn: () => advActivate(),
   advInfo: () => advInfoModal(),
   gym3d: b => { if (canBeta()) gym3dModal(b.dataset.n); },
+  queComo: () => queComoModal(),
   cdWatch: () => { keepCardioInputs(); state.settings.watchOpen = !state.settings.watchOpen; persist(); render(); },
   cdUseWatch: () => { const e = ui.cardio.est; if (!e?.wkcal) return; keepCardioInputs(); e.appKcal = e.appKcal ?? e.kcal; e.kcal = +e.wkcal; e.usedWatch = true; render(); toast('Puestas las kcal del reloj'); },
   cdUseApp: () => { const e = ui.cardio.est; if (!e?.usedWatch) return; keepCardioInputs(); e.kcal = e.appKcal; e.usedWatch = false; render(); },
