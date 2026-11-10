@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.88.5';
+const APP_VERSION = '4.88.6';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6214,6 +6214,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.88.6', ['🔗 «Copiar enlace» de la pantalla de instalación también usa fitnesteban.app.'], 'quiet'],
   ['4.88.5', ['🔗 «Compartir la app» y los mensajes con código envían ya el enlace corto fitnesteban.app.'], 'admin'],
   ['4.88.4', ['📅 En el calendario, los días con entreno tienen «🏋️ Ver entreno»; y «Ver todo el historial» te lleva directo al historial de Progreso.'], 'quiet'],
   ['4.88.3', ['📅 Corregido: «Ver comidas de este día» desde el calendario de Entreno ahora lleva a Dieta.'], 'quiet'],
@@ -7789,7 +7790,7 @@ const actions = {
     try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Mensaje copiado: pégalo donde quieras'); } catch { toast(url); }
   },
   skipInstall: () => { lsSet(NOINSTALL_KEY, 1); lockScreen('code'); },
-  copyAppLink: () => navigator.clipboard.writeText('https://egarluq292.github.io/fitnesteban/').then(() => toast('Enlace copiado: pégalo en Chrome o Safari')).catch(() => toast('Enlace: egarluq292.github.io/fitnesteban', 'warn')),
+  copyAppLink: () => navigator.clipboard.writeText('https://fitnesteban.app').then(() => toast('Enlace copiado: pégalo en Chrome o Safari')).catch(() => toast('Enlace: fitnesteban.app', 'warn')),
   checkUpdate: async () => {
     checkRemoteVersion(true);
     if (!swReg) return toast('El modo app solo funciona desde una web https', 'warn');
