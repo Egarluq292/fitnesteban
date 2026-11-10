@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.88.4';
+const APP_VERSION = '4.88.5';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6214,6 +6214,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.88.5', ['🔗 «Compartir la app» y los mensajes con código envían ya el enlace corto fitnesteban.app.'], 'admin'],
   ['4.88.4', ['📅 En el calendario, los días con entreno tienen «🏋️ Ver entreno»; y «Ver todo el historial» te lleva directo al historial de Progreso.'], 'quiet'],
   ['4.88.3', ['📅 Corregido: «Ver comidas de este día» desde el calendario de Entreno ahora lleva a Dieta.'], 'quiet'],
   ['4.88.2', ['📅 Debajo de tu semana en Entreno, los entrenos y horas que llevas este mes.'], 'quiet'],
@@ -7783,7 +7784,7 @@ const actions = {
   installHelp: () => installHelpModal(),
   installHide: () => { lsSet(INSTALL_HIDE, Date.now() + 7 * 86400000); render(); },
   shareApp: async () => {
-    const url = 'https://egarluq292.github.io/fitnesteban/', text = `Te recomiendo FITNESTEBAN, una app para entrenar y llevar la dieta. Puedes probarla ${TRIAL_DAYS} días: abre el enlace, instálala en tu móvil y entra con tu cuenta de Google.`;
+    const url = 'https://fitnesteban.app', text = `Te recomiendo FITNESTEBAN, una app para entrenar y llevar la dieta. Puedes probarla ${TRIAL_DAYS} días: abre el enlace, instálala en tu móvil y entra con tu cuenta de Google.`;
     try { if (navigator.share) { await navigator.share({ title: 'FITNESTEBAN', text, url }); return; } } catch (e) { if (e?.name === 'AbortError') return; }
     try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Mensaje copiado: pégalo donde quieras'); } catch { toast(url); }
   },
@@ -8654,7 +8655,7 @@ async function usageSetupModal() {
 }
 
 function codeShareModal(title, who, code, warn = '') {
-  const msg = `Hola${who ? ' ' + who : ''}, tu código de FITNESTEBAN es ${fmtCode(code)}\nEs personal. Válido solo en 2 dispositivos.\nhttps://egarluq292.github.io/fitnesteban/`;
+  const msg = `Hola${who ? ' ' + who : ''}, tu código de FITNESTEBAN es ${fmtCode(code)}\nEs personal. Válido solo en 2 dispositivos.\nhttps://fitnesteban.app`;
   openModal(`<h3 class="modal-title">${title}</h3>${warn}
     <div class="text-center py-1"><div class="text-[11px] text-mute mb-1">${warn ? 'Nuevo código' : 'Código'}</div><div class="font-mono text-3xl font-black tracking-[.2em] text-brand">${fmtCode(code)}</div></div>
     <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="copy" type="button">📋 Copiar</button><a class="btn-ghost block text-center" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">💬 WhatsApp</a></div>
