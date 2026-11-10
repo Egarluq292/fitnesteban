@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.88.6';
+const APP_VERSION = '4.88.7';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4333,7 +4333,7 @@ function parseJSONLoose(text) {
 }
 
 /* Gemini con reintentos: si el modelo está saturado (alta demanda) reintenta y, si sigue, prueba modelos alternativos */
-const GEMINI_FALLBACKS = ['gemini-flash-latest', 'gemini-3-flash-preview', 'gemini-2.5-flash'];
+const GEMINI_FALLBACKS = ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.5-flash-lite', 'gemini-3-flash-preview', 'gemini-2.5-flash'];
 const geminiWait = ms => new Promise(r => setTimeout(r, ms));
 function geminiErr(status, data) {
   const msg = data?.error?.message || '', st = data?.error?.status || '';
@@ -4345,7 +4345,7 @@ function geminiErr(status, data) {
 }
 function geminiSpanish(e) {
   if (e.busy) return new Error('Gemini está saturado ahora mismo (mucha demanda en Google). Prueba en unos minutos o introduce los macros a mano.');
-  if (e.noModel) return new Error('Google ha retirado el modelo de IA que usaba la app. Cierra la app del todo, ábrela para que se actualice y vuelve a probar.');
+  if (e.noModel) return new Error(`Ningún modelo de IA de Google responde con tu clave ahora mismo. Cierra la app del todo, ábrela para que se actualice y vuelve a probar. Si sigue igual, manda una captura a Esteban.${e.status ? ` (código ${e.status})` : ''}`);
   if (e.quota) return new Error('Has llegado al límite gratuito de Gemini por ahora. Prueba más tarde o introduce los macros a mano.');
   if (e.status === 400 && /api key|API_KEY/i.test(e.message)) return new Error('La clave de Gemini no es válida (Ajustes → IA).');
   if (e.status === 403) return new Error('La clave de Gemini no tiene permiso o el proyecto tiene la facturación en un estado que lo impide.');
@@ -4374,17 +4374,18 @@ async function callGemini(parts, { json = true, timeout = 45000, contents = null
   const body = JSON.stringify({ contents: contents || [{ parts }], ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), generationConfig: json ? { responseMimeType: 'application/json', temperature } : { temperature } });
   const main = s.model || DEFAULT_MODEL;
   const models = only || [...new Set([main, DEFAULT_MODEL, ...GEMINI_FALLBACKS])];
-  let last = null;
+  let last = null, useful = null, mainGone = false; // useful: el primer error que no sea «modelo no disponible» (p. ej. cuota), que explica mejor qué pasa
+  if (!only && s.modelFound && !models.includes(s.modelFound)) models.splice(1, 0, s.modelFound);
   for (let mi = 0; mi < models.length; mi++) {
     const tries = mi === 0 ? 2 : 1;
     for (let attempt = 0; attempt < tries; attempt++) {
       try {
         const text = await geminiOnce(models[mi], body, timeout);
-        if (mi > 0 && !only && last?.noModel && s.model !== models[mi]) { s.model = models[mi]; persist(); } // el modelo guardado ya no existe: se queda el que funciona
+        if (mi > 0 && !only && mainGone && s.model !== models[mi]) { s.model = models[mi]; persist(); } // el modelo guardado ya no existe: se queda el que funciona
         else if (mi > 0) toast(`Gemini principal saturado: respondió ${models[mi]}`, 'warn');
         return text;
       } catch (e) {
-        last = e;
+        last = e; if (!e.noModel && !useful) useful = e; if (mi === 0 && e.noModel) mainGone = true;
         if (e.noModel) break;                       // ese modelo no existe/no vale: siguiente
         if (e.quota && !e.busy) break;              // cuota de ese modelo agotada: probar otro modelo
         if (!e.busy) throw geminiSpanish(e);        // error de verdad (clave, petición…): no insistir
@@ -4392,7 +4393,21 @@ async function callGemini(parts, { json = true, timeout = 45000, contents = null
       }
     }
   }
-  throw geminiSpanish(last || new Error('Error desconocido de la IA'));
+  if (!only && !useful && last?.noModel && !callGemini._looked) { // todos «no disponibles»: buscar uno que sí lo esté en la lista de Google
+    callGemini._looked = true;
+    try { const m = await geminiDiscover(models); if (m) { const text = await geminiOnce(m, body, timeout); s.model = s.modelFound = m; persist(); return text; } }
+    catch (e) { if (!e.noModel) useful = e; } finally { setTimeout(() => { callGemini._looked = false; }, 60000); }
+  }
+  throw geminiSpanish(useful || last || new Error('Error desconocido de la IA'));
+}
+async function geminiDiscover(skip) { // el modelo Flash más nuevo que la clave puede usar
+  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': state.settings.apiKey } });
+  const d = await r.json().catch(() => ({})); if (!r.ok) return null;
+  const ver = n => (/gemini-(\d+(?:\.\d+)?)/.exec(n) || [])[1] * 1 || 0;
+  const ok = (d.models || []).map(m => String(m.name || '').replace(/^models\//, ''))
+    .filter(n => /^gemini-[\d.]+-flash/.test(n) && !/image|tts|audio|live|embed|thinking-exp|exp-/.test(n) && !skip.includes(n))
+    .sort((a, b) => (ver(b) - ver(a)) || (/lite/.test(a) - /lite/.test(b)) || (/preview/.test(a) - /preview/.test(b)));
+  return ok[0] || null;
 }
 
 async function analyzeMeal() {
@@ -6009,7 +6024,7 @@ function micStop() {
 /* ✍️ El dictado llega sin puntuación. Al terminar: mayúscula y signo final al momento y, con clave de IA,
    Gemini pone comas, puntos y ¿? sin tocar ninguna palabra (si cambiara alguna, se descarta su versión). */
 /* La puntuación usa los modelos «Lite»: tienen su propia cuota diaria, así no gasta la del modelo de las fotos y el Coach */
-const MIC_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite', DEFAULT_MODEL];
+const MIC_MODELS = ['gemini-3.5-flash-lite', 'gemini-flash-lite-latest', 'gemini-2.5-flash-lite', DEFAULT_MODEL];
 const MIC_Q = /^(qué|que|cómo|como|cuánt|cuant|cuál|cual|dónde|donde|cuándo|cuando|quién|quien|por qué|porque|puedo|podría|podria|puedes|debo|debería|deberia|me recomiendas|me puedes|es mejor|vale la pena|hay )/i;
 const micWords = t => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9ñ ]+/g, ' ').split(/\s+/).filter(Boolean).join(' ');
 function micRules(txt, startCap, ask) {
@@ -6214,6 +6229,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.88.7', ['🤖 La IA prueba más modelos de Google y, si todos fallan, busca sola uno disponible para tu clave.'], 'quiet'],
   ['4.88.6', ['🔗 «Copiar enlace» de la pantalla de instalación también usa fitnesteban.app.'], 'quiet'],
   ['4.88.5', ['🔗 «Compartir la app» y los mensajes con código envían ya el enlace corto fitnesteban.app.'], 'admin'],
   ['4.88.4', ['📅 En el calendario, los días con entreno tienen «🏋️ Ver entreno»; y «Ver todo el historial» te lleva directo al historial de Progreso.'], 'quiet'],
