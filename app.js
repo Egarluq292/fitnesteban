@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.88.2';
+const APP_VERSION = '4.88.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -3627,7 +3627,7 @@ function openCalendar(sel = ui.dietDate) {
     },
     calCard: (r, b) => openShareCard(b.dataset.id),
     calReto: (r, b) => openRetoCard(b.dataset.reto, b.dataset.at),
-    calGo: () => { ui.editing = null; ui.aiResult = null; ui.dietDate = ui.calSel; ui._animRings = true; closeModal(); render(); window.scrollTo({ top: 0 }); }
+    calGo: () => { ui.editing = null; ui.aiResult = null; ui.dietDate = ui.calSel; ui.view = 'diet'; ui.accessOpen = false; ui._animRings = true; closeModal(); render(); window.scrollTo({ top: 0 }); }
   };
   openModal(renderCalendar(), { ...handlers, sheetClass: 'sheet-fixed' });
 }
@@ -6206,6 +6206,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.88.3', ['📅 Corregido: «Ver comidas de este día» desde el calendario de Entreno ahora lleva a Dieta.'], 'quiet'],
   ['4.88.2', ['📅 Debajo de tu semana en Entreno, los entrenos y horas que llevas este mes.'], 'quiet'],
   ['4.88.1', ['📅 En «Esta semana», al tocar un día se abre el calendario justo en ese día.'], 'quiet'],
   ['4.88.0', ['✅ Entreno: arriba ves lo que has hecho hoy (fuerza, retos y cardio) y, al tocarlo, cada ejercicio con sus series. Debajo, tu semana de un vistazo: tócala para abrir el calendario.', '📚 Todos los bloques (los tuyos y los preparados) están ahora dentro de la tarjeta «Bloques»: Entreno queda mucho más corto.', '📈 Progreso más limpio: peso, cintura y fuerza por ejercicio se despliegan al tocarlos.']],
