@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.88.0';
+const APP_VERSION = '4.88.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -2756,9 +2756,9 @@ function trainWeekHTML() {
   const ne = days.reduce((a, d) => { const t = trainToday(d); return a + t.gym.length + t.ret.length + t.car.length; }, 0); // entrenos (fuerza, retos y cardio)
   // días con algo hecho (fuerza, retos o cardio), de lunes a domingo; sin «de X» para no chocar con el contador de cada bloque
   const cal = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/><path d="M7.5 13.5h2M11 13.5h2M14.5 13.5h2M7.5 17h2M11 17h2"/></svg>';
-  return `<button class="week-strip w-full text-left" data-act="openCal" type="button" aria-label="Abrir calendario">
-    <span class="flex items-center gap-2"><span class="flex-1 text-[12.5px] text-mute">Esta semana ${ne ? `llevas <b class="text-emerald-300">${ne} ${ne === 1 ? 'entreno' : 'entrenos'}</b>` : '<b class="text-slate-300">aún no has entrenado</b>'}</span><span class="text-brand shrink-0">${cal}</span></span>
-    <span class="flex justify-between mt-1.5">${days.map((d, i) => `<span class="ws-d ${did(d) ? 'on' : ''} ${d === T ? 'now' : ''}">${'LMXJVSD'[i]}</span>`).join('')}</span></button>`;
+  return `<div class="week-strip">
+    <button class="flex items-center gap-2 w-full text-left" data-act="openCalDay" data-d="${T}" type="button" aria-label="Abrir calendario"><span class="flex-1 text-[12.5px] text-mute">Esta semana ${ne ? `llevas <b class="text-emerald-300">${ne} ${ne === 1 ? 'entreno' : 'entrenos'}</b>` : '<b class="text-slate-300">aún no has entrenado</b>'}</span><span class="text-brand shrink-0">${cal}</span></button>
+    <span class="flex justify-between mt-1.5">${days.map((d, i) => d > T ? `<span class="ws-d">${'LMXJVSD'[i]}</span>` : `<button class="ws-d ${did(d) ? 'on' : ''} ${d === T ? 'now' : ''}" data-act="openCalDay" data-d="${d}" type="button" aria-label="Ver el ${fmtDate(d)}">${'LMXJVSD'[i]}</button>`).join('')}</span></div>`;
 }
 function trainTodayModal() {
   const { gym, ret, car } = trainToday(), T0 = todayISO(), before = new Set(sortedSessions().filter(x => x.date < T0).flatMap(x => x.exercises.map(e => e.name)));
@@ -3585,9 +3585,9 @@ function calSlideMonth(dir) {
     inn.onfinish = () => { calAnimating = false; };
   };
 }
-function openCalendar() {
-  ui.calSel = ui.dietDate;
-  ui.calMonth = ui.dietDate.slice(0, 8) + '01';
+function openCalendar(sel = ui.dietDate) {
+  ui.calSel = sel;
+  ui.calMonth = sel.slice(0, 8) + '01';
   const shift = n => {
     if (calAnimating) return;
     const d = parseISO(ui.calMonth);
@@ -6191,6 +6191,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.88.1', ['📅 En «Esta semana», al tocar un día se abre el calendario justo en ese día.'], 'quiet'],
   ['4.88.0', ['✅ Entreno: arriba ves lo que has hecho hoy (fuerza, retos y cardio) y, al tocarlo, cada ejercicio con sus series. Debajo, tu semana de un vistazo: tócala para abrir el calendario.', '📚 Todos los bloques (los tuyos y los preparados) están ahora dentro de la tarjeta «Bloques»: Entreno queda mucho más corto.', '📈 Progreso más limpio: peso, cintura y fuerza por ejercicio se despliegan al tocarlos.']],
   ['4.87.6', ['🤖 La IA pasa a Gemini 3.8 Flash: Google ha retirado los modelos anteriores para las claves nuevas.'], 'quiet'],
   ['4.87.5', ['🍽️ «¿Qué como?» también sale si ya has llegado a tus kcal pero te falta proteína: ideas con mucha proteína y casi sin calorías.'], 'quiet'],
@@ -6430,7 +6431,7 @@ const GUIDE = [
   ]],
   ['📝 Registrar una sesión', [
     'Abre «Registrar series» en cada ejercicio. El peso sugerido ya viene puesto; apunta las reps y pulsa ✓: arranca el descanso de ese ejercicio (vibra y pita al acabar; en ⏱ puedes «🔊 Probar el pitido»). En iPhone no pita con el modo silencio ni con la pantalla bloqueada.',
-    '✅ <b>Hoy has hecho</b>: cuando entrenas, arriba de Entreno ves lo que llevas hoy (fuerza, retos y cardio); tócalo para ver cada ejercicio con sus series. Debajo, «Esta semana llevas…»: tócalo para abrir el calendario.',
+    '✅ <b>Hoy has hecho</b>: cuando entrenas, arriba de Entreno ves lo que llevas hoy (fuerza, retos y cardio); tócalo para ver cada ejercicio con sus series. Debajo, «Esta semana llevas…»: toca un día para verlo en el calendario.',
     '📚 <b>Bloques</b>: los que usas salen en «En uso»; el resto (los tuyos y los preparados) están dentro de la tarjeta «Bloques», con ⋯ para editarlos u ocultarlos.',
     '🤔 <b>¿Y si hoy no puedo?</b> (bajo «HOY TE TOCA»): si vas justo de tiempo, recorta la sesión a 20, 30 o 45 min quitando primero los accesorios; si estás fuera o sin material, cambia cada ejercicio por uno con tu peso corporal para los mismos músculos (solo ese día); si algo te molesta, elige la zona (arriba salen las que más carga la sesión de ese día) y quita lo que la carga. Lo quitado se recupera con «Deshacer».',
     'Todo se guarda solo mientras escribes: puedes cerrar la app a mitad de sesión.',
@@ -7504,6 +7505,7 @@ const actions = {
   openCal: () => openCalendar(),
   noPuedo: () => noPuedoModal(),
   trainToday: () => trainTodayModal(),
+  openCalDay: b => openCalendar(b.dataset.d),
   blocksBack: () => { ui.blocksAll = false; render(); window.scrollTo({ top: 0 }); },
   goToday: b => { state.plan.active = b.dataset.prog; ui.dayId = b.dataset.day; ui.retoId = null; ui.trainHome = false; persist(); render(); window.scrollTo({ top: 0 }); },
   openBlock: b => openBlock(b.dataset.key),
