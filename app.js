@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.88.3';
+const APP_VERSION = '4.88.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -2775,10 +2775,14 @@ function trainWeekHTML() {
     <button class="flex items-center gap-2 w-full text-left" data-act="openCalDay" data-d="${T}" type="button" aria-label="Abrir calendario"><span class="flex-1 text-[12.5px] text-mute">Esta semana ${ne ? `llevas <b class="text-emerald-300">${ne} ${ne === 1 ? 'entreno' : 'entrenos'}</b>` : '<b class="text-slate-300">aún no has entrenado</b>'}</span><span class="text-brand shrink-0">${cal}</span></button>
     <span class="flex justify-between mt-1.5">${days.map((d, i) => d > T ? `<span class="ws-d">${'LMXJVSD'[i]}</span>` : `<button class="ws-d ${did(d) ? 'on' : ''} ${d === T ? 'now' : ''}" data-act="openCalDay" data-d="${d}" type="button" aria-label="Ver el ${fmtDate(d)}">${'LMXJVSD'[i]}</button>`).join('')}</span>${trainMonthLine(T)}</div>`;
 }
-function trainTodayModal() {
-  const { gym, ret, car } = trainToday(), T0 = todayISO(), before = new Set(sortedSessions().filter(x => x.date < T0).flatMap(x => x.exercises.map(e => e.name)));
+function goHistory() { // baja hasta «Historial de sesiones» de Progreso (espera a que se pinte y se asiente la pantalla)
+  let n = 0; const go = () => { const el = document.querySelector('[data-open-key="history"]'); if (el) { const y = el.getBoundingClientRect().top + window.scrollY - 70; window.scrollTo({ top: y }); } if (++n < 4) setTimeout(go, 120); };
+  requestAnimationFrame(go);
+}
+function trainTodayModal(T0 = todayISO(), fromCal = false) {
+  const { gym, ret, car } = trainToday(T0), before = new Set(sortedSessions().filter(x => x.date < T0).flatMap(x => x.exercises.map(e => e.name)));
   const rec = new Set(personalRecords().filter(r => r.lastPR === T0 && before.has(r.name)).map(r => r.name)); // récord solo si ya lo habías hecho antes
-  openModal(`<h3 class="modal-title">✅ Hoy has hecho</h3>
+  openModal(`<h3 class="modal-title">${T0 === todayISO() ? '✅ Hoy has hecho' : `🏋️ ${esc((t => t.charAt(0).toUpperCase() + t.slice(1))(fmtDate(T0)))}`}</h3>
     ${gym.map(x => { const g = gymKcalInfo(x); return `<div class="card-in">
       <div class="flex justify-between items-baseline gap-2"><b class="text-[15px]">🏋️ ${esc(x.dayTitle || 'Sesión')}</b><span class="text-[11px] text-mute shrink-0">${x.durationMin ? `${x.durationMin} min` : ''}${g ? ` · <span class="${MAC.kcal.text}">~${g.kcal} kcal</span>` : ''}</span></div>
       <div class="mt-1.5 space-y-1 text-[12.5px]">${x.exercises.map(e => `<div><b>${esc(e.name)}${rec.has(e.name) ? ' <span class="text-amber-300">🏅 récord</span>' : ''}:</b> <span class="font-mono text-mute">${e.sets.map(st => setStr(st, isBwEx(e.exId), isTimedEx(e))).join(', ')}</span></div>`).join('')}</div>
@@ -2787,9 +2791,11 @@ function trainTodayModal() {
       <button class="text-[12px] underline text-brand mt-2" data-mact="card" data-id="${esc(x.id)}" type="button">📸 Tarjeta para compartir</button></div>`; }).join('')}
     ${ret.map(x => `<div class="card-in"><b>🏆 ${x.h.test ? 'Test de máximo' : 'Reto'} ${esc(x.r.name)}</b>${x.h.test ? '' : ` <span class="text-[11px] text-mute">· nivel ${x.h.level}</span>`}<div class="font-mono text-[12.5px] text-mute mt-1">${retoLine(x)}</div></div>`).join('')}
     ${car.map(c => `<div class="card-in"><b>${ctOf(c).icon} ${esc(ctOf(c).label)}</b> <span class="text-[12.5px] text-mute">· ${c.minutes} min${c.km ? ` · ${fmtNum(c.km)} km` : ''}${c.kcal ? ` · <span class="${MAC.kcal.text}">~${Math.round(c.kcal)} kcal</span>` : ''}</span></div>`).join('')}
-    <button class="btn-ghost w-full mt-3" data-mact="hist" type="button">📚 Ver todo el historial</button>`, {
+    ${fromCal ? '<button class="btn-ghost w-full mt-3" data-mact="cal" type="button">‹ Volver al calendario</button>' : ''}
+    <button class="btn-ghost w-full mt-${fromCal ? 2 : 3}" data-mact="hist" type="button">📚 Ver todo el historial</button>`, {
+    cal: () => openCalendar(T0),
     card: (_, b) => { closeModal(); openShareCard(b.dataset.id); },
-    hist: () => { closeModal(); openKeys.history = true; ui.view = 'progress'; render(); setTimeout(() => document.querySelector('[data-open-key="history"]')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 80); }
+    hist: () => { closeModal(); openKeys.history = true; ui.view = 'progress'; ui.accessOpen = false; render(); goHistory(); }
   });
 }
 function todayCardHTML() {
@@ -3573,7 +3579,8 @@ function renderCalDetail(date) {
       <div class="text-[11px] font-bold uppercase tracking-wider text-brand">🔥 Cardio</div>
       ${act.cardio.length ? act.cardio.map(c => `<div class="text-xs mt-0.5">${esc(cardioType(c.type).icon)} ${esc(cardioType(c.type).label)} · ${c.minutes} min · ${esc((INTENSITIES.find(i => i[0] === c.intensity) || ['', c.intensity])[1])} · <span class="text-amber-300">${c.kcal} kcal</span></div>`).join('') : '<div class="text-xs text-mute mt-0.5">Sin cardio.</div>'}
     </div>
-    <button class="btn-primary w-full py-2.5" data-mact="calGo" type="button">🍽️ Ver comidas de este día</button>
+    ${act.sessions.length || act.retos.length || act.cardio.length ? `<div class="grid grid-cols-2 gap-2"><button class="btn-primary w-full py-2.5 !px-2 text-sm" data-mact="calGo" type="button">🍽️ Ver comidas</button><button class="btn-primary w-full py-2.5 !px-2 text-sm" data-mact="calTrain" type="button">🏋️ Ver entreno</button></div>`
+      : '<button class="btn-primary w-full py-2.5" data-mact="calGo" type="button">🍽️ Ver comidas de este día</button>'}
   </div>`;
 }
 const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -3627,6 +3634,7 @@ function openCalendar(sel = ui.dietDate) {
     },
     calCard: (r, b) => openShareCard(b.dataset.id),
     calReto: (r, b) => openRetoCard(b.dataset.reto, b.dataset.at),
+    calTrain: () => trainTodayModal(ui.calSel, true),
     calGo: () => { ui.editing = null; ui.aiResult = null; ui.dietDate = ui.calSel; ui.view = 'diet'; ui.accessOpen = false; ui._animRings = true; closeModal(); render(); window.scrollTo({ top: 0 }); }
   };
   openModal(renderCalendar(), { ...handlers, sheetClass: 'sheet-fixed' });
@@ -6206,6 +6214,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.88.4', ['📅 En el calendario, los días con entreno tienen «🏋️ Ver entreno»; y «Ver todo el historial» te lleva directo al historial de Progreso.'], 'quiet'],
   ['4.88.3', ['📅 Corregido: «Ver comidas de este día» desde el calendario de Entreno ahora lleva a Dieta.'], 'quiet'],
   ['4.88.2', ['📅 Debajo de tu semana en Entreno, los entrenos y horas que llevas este mes.'], 'quiet'],
   ['4.88.1', ['📅 En «Esta semana», al tocar un día se abre el calendario justo en ese día.'], 'quiet'],
