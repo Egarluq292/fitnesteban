@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.88.7';
+const APP_VERSION = '4.89.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6229,6 +6229,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.89.0', ['✨ La pantalla de acceso y las tarjetas para compartir estrenan la F del logo, con su corredor.']],
   ['4.88.7', ['🤖 La IA prueba más modelos de Google y, si todos fallan, busca sola uno disponible para tu clave.'], 'quiet'],
   ['4.88.6', ['🔗 «Copiar enlace» de la pantalla de instalación también usa fitnesteban.app.'], 'quiet'],
   ['4.88.5', ['🔗 «Compartir la app» y los mensajes con código envían ya el enlace corto fitnesteban.app.'], 'admin'],
@@ -8210,7 +8211,7 @@ function lockScreen(mode, msg = '') {
   let el = $('#lockScreen');
   if (!el) { el = document.createElement('div'); el.id = 'lockScreen'; el.className = 'lock-screen'; document.body.appendChild(el); }
   document.body.classList.add('overflow-hidden');
-  const logo = `<img src="icons/logo-128.png" alt="" class="w-20 h-20 rounded-full mx-auto" /><div class="mt-3 flex justify-center">${($('#homeBtn svg')?.outerHTML || '').replace('width="124.9"', 'width="200"').replace('height="14.4"', 'height="23"')}</div>`;
+  const logo = `<img src="icons/logo-128.png" alt="" class="w-20 h-20 rounded-full mx-auto" /><div class="mt-3 flex justify-center"><img src="icons/marca.svg" alt="FITNESTEBAN" width="207" height="23" style="width:207px;height:auto" /></div>`;
   if (mode === 'wait') { el.innerHTML = `<div class="lock-box text-center">${logo}<p class="text-sm text-mute mt-6"><span class="spinner"></span> Comprobando acceso…</p></div>`; return; }
   if (!msg && needGate()) { el.innerHTML = `<div class="lock-box"><div class="text-center">${logo}</div><div id="lockGate">${installGateHTML()}</div></div>`; return; }
   const canTrial = !msg && !lsGet(TRIAL_KEY);
