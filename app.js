@@ -4,10 +4,10 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.87.5';
+const APP_VERSION = '4.87.6';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
-const DEFAULT_MODEL = 'gemini-3-flash-preview';
+const DEFAULT_MODEL = 'gemini-3.8-flash';
 const MEAL_TYPES = ['Desayuno', 'Comida', 'Puente', 'Cena', 'Otro'];
 const DEFAULT_HABITS = [
   'Finisher bici estática: 15 min continuo / HIIT',
@@ -4242,18 +4242,19 @@ function parseJSONLoose(text) {
 }
 
 /* Gemini con reintentos: si el modelo está saturado (alta demanda) reintenta y, si sigue, prueba modelos alternativos */
-const GEMINI_FALLBACKS = ['gemini-flash-latest', 'gemini-2.5-flash'];
+const GEMINI_FALLBACKS = ['gemini-flash-latest', 'gemini-3-flash-preview', 'gemini-2.5-flash'];
 const geminiWait = ms => new Promise(r => setTimeout(r, ms));
 function geminiErr(status, data) {
   const msg = data?.error?.message || '', st = data?.error?.status || '';
   const e = new Error(msg || `Error HTTP ${status}`); e.status = status;
   e.busy = status === 503 || status === 500 || status === 504 || /high demand|overloaded|unavailable/i.test(msg);
   e.quota = status === 429 || st === 'RESOURCE_EXHAUSTED';
-  e.noModel = status === 404 || /not found|is not supported/i.test(msg);
+  e.noModel = status === 404 || /not found|is not supported|no longer available|update your code/i.test(msg);
   return e;
 }
 function geminiSpanish(e) {
   if (e.busy) return new Error('Gemini está saturado ahora mismo (mucha demanda en Google). Prueba en unos minutos o introduce los macros a mano.');
+  if (e.noModel) return new Error('Google ha retirado el modelo de IA que usaba la app. Cierra la app del todo, ábrela para que se actualice y vuelve a probar.');
   if (e.quota) return new Error('Has llegado al límite gratuito de Gemini por ahora. Prueba más tarde o introduce los macros a mano.');
   if (e.status === 400 && /api key|API_KEY/i.test(e.message)) return new Error('La clave de Gemini no es válida (Ajustes → IA).');
   if (e.status === 403) return new Error('La clave de Gemini no tiene permiso o el proyecto tiene la facturación en un estado que lo impide.');
@@ -4281,14 +4282,15 @@ async function callGemini(parts, { json = true, timeout = 45000, contents = null
   if (!navigator.onLine) throw new Error('Sin conexión a internet.');
   const body = JSON.stringify({ contents: contents || [{ parts }], ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), generationConfig: json ? { responseMimeType: 'application/json', temperature } : { temperature } });
   const main = s.model || DEFAULT_MODEL;
-  const models = only || [main, ...GEMINI_FALLBACKS.filter(m => m !== main)];
+  const models = only || [...new Set([main, DEFAULT_MODEL, ...GEMINI_FALLBACKS])];
   let last = null;
   for (let mi = 0; mi < models.length; mi++) {
     const tries = mi === 0 ? 2 : 1;
     for (let attempt = 0; attempt < tries; attempt++) {
       try {
         const text = await geminiOnce(models[mi], body, timeout);
-        if (mi > 0) toast(`Gemini principal saturado: respondió ${models[mi]}`, 'warn');
+        if (mi > 0 && !only && last?.noModel && s.model !== models[mi]) { s.model = models[mi]; persist(); } // el modelo guardado ya no existe: se queda el que funciona
+        else if (mi > 0) toast(`Gemini principal saturado: respondió ${models[mi]}`, 'warn');
         return text;
       } catch (e) {
         last = e;
@@ -5913,7 +5915,7 @@ function micStop() {
 /* ✍️ El dictado llega sin puntuación. Al terminar: mayúscula y signo final al momento y, con clave de IA,
    Gemini pone comas, puntos y ¿? sin tocar ninguna palabra (si cambiara alguna, se descarta su versión). */
 /* La puntuación usa los modelos «Lite»: tienen su propia cuota diaria, así no gasta la del modelo de las fotos y el Coach */
-const MIC_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite'];
+const MIC_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite', DEFAULT_MODEL];
 const MIC_Q = /^(qué|que|cómo|como|cuánt|cuant|cuál|cual|dónde|donde|cuándo|cuando|quién|quien|por qué|porque|puedo|podría|podria|puedes|debo|debería|deberia|me recomiendas|me puedes|es mejor|vale la pena|hay )/i;
 const micWords = t => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9ñ ]+/g, ' ').split(/\s+/).filter(Boolean).join(' ');
 function micRules(txt, startCap, ask) {
@@ -6118,6 +6120,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.87.6', ['🤖 La IA pasa a Gemini 3.8 Flash: Google ha retirado los modelos anteriores para las claves nuevas.'], 'quiet'],
   ['4.87.5', ['🍽️ «¿Qué como?» también sale si ya has llegado a tus kcal pero te falta proteína: ideas con mucha proteína y casi sin calorías.'], 'quiet'],
   ['4.87.4', ['🍽️ «¿Qué como?»: cada idea trae sus ingredientes con gramos y, al añadirla, puedes ajustar la cantidad de cada uno antes de apuntarla.'], 'quiet'],
   ['4.87.3', ['🧍 3D: sentadilla búlgara menos profunda y con el pie delantero siempre plano.'], 'admin'],
