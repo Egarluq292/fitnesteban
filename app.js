@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.93.1';
+const APP_VERSION = '4.94.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -1691,6 +1691,7 @@ function ppUpModal(p, up) {
 
 /* ---------- Tarjeta para compartir (imagen 1080 × 1350) ---------- */
 const MOTTOS = {
+  cardio: ['Cada kilómetro cuenta.', 'Corazón fuerte, cabeza despejada.', 'Hoy has sumado minutos que nadie te quita.', 'Moverse también es entrenar.', 'Ritmo constante, resultados constantes.', 'El sofá puede esperar.', 'Un poco de cardio, mucha cabeza despejada.', 'Hoy has ido más lejos que ayer.'],
   pr: ['Nuevo récord. A por el siguiente.', 'Hoy has movido más que nunca.', 'Tu techo de ayer es tu suelo de hoy.', 'Más fuerte que la semana pasada. Eso es progresar.', 'Los números no mienten: estás mejorando.', 'Lo que antes pesaba, hoy se queda corto.', 'Récord en el bolsillo. Recupera y repite.'],
   up: ['Un nivel más. Paso a paso se llega lejos.', 'Lo que hoy cuesta, mañana es tu calentamiento.', 'Nivel superado. El siguiente te espera.', 'Hoy has hecho lo que hace un mes no podías.'],
   test: ['Ahora ya sabes de lo que eres capaz.', 'Tu marca de hoy es el punto de partida.', 'Ese número es tuyo. Vamos a superarlo.', 'Medirse es el primer paso para mejorar.', 'Lo has dado todo. Eso también es entrenar.', 'Hoy sabes dónde estás. Mañana, más lejos.'],
@@ -1729,7 +1730,7 @@ function fitFont(ctx, txt, style, size, maxW, F, x, y) {
 }
 async function drawCardPhoto(ctx, W, look) {
   if (!look) return;
-  let img; try { img = await loadImg(`blk-${look.img}.webp`); } catch { return; }
+  let img; try { img = await loadImg(look.src || `blk-${look.img}.webp`); } catch { return; }
   const H0 = 820, sc = Math.max(W / img.naturalWidth, H0 / img.naturalHeight);
   const dw = img.naturalWidth * sc, dh = img.naturalHeight * sc;
   // difuminado barato: se pinta pequeña y se amplía
@@ -1851,6 +1852,51 @@ async function buildRetoCard(id, h) {
   ctx.fillStyle = '#00d2df'; fitFont(ctx, pickMotto(h.test ? 'test' : h.completed && h.feel !== 'hard' ? 'up' : 'gen', `r:${id}:${h.at}`), 'italic 700', 40, W - 140, F, 70, 1275);
   ctx.fillStyle = '#4b5b63'; ctx.font = `700 28px ${F}`; ctx.textAlign = 'right'; ctx.fillText('#FITNESTEBAN', W - 70, H - 40); ctx.textAlign = 'left';
   return new Promise(res => c.toBlob(res, 'image/png'));
+}
+/* Tarjeta de una actividad de cardio (bici, caminata, funcional, natación… también las leídas de Strava o del reloj) */
+// foto de fondo por familia de actividad (cdx-*.webp); si falta, la tarjeta sale sin foto
+const CARDIO_PHOTO = { bike: 'bici', spin: 'bici', mtb: 'bici', walk: 'pie', run: 'pie', hike: 'pie', stairs: 'pie', swim: 'agua', elliptical: 'maquina', row: 'maquina', functional: 'funcional', rope: 'funcional', dance: 'funcional', padel: 'deporte', football: 'deporte' };
+async function buildCardioCard(x) {
+  const T = cardioType(x.type), W = 1080, H = 1350, F = 'system-ui, Roboto, "Segoe UI", sans-serif', A = '#fb923c';
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#05080a'; ctx.fillRect(0, 0, W, H);
+  const glow = ctx.createRadialGradient(W * 0.85, H * 0.08, 20, W * 0.85, H * 0.08, W * 0.9);
+  glow.addColorStop(0, 'rgba(251,146,60,0.22)'); glow.addColorStop(1, 'rgba(251,146,60,0)');
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+  await drawCardPhoto(ctx, W, { src: `cdx-${CARDIO_PHOTO[x.type] || 'funcional'}.webp`, c: A });
+  try { const logo = await loadImg('icons/logo-512.png'); ctx.save(); ctx.beginPath(); ctx.arc(140, 150, 70, 0, Math.PI * 2); ctx.clip(); ctx.drawImage(logo, 70, 80, 140, 140); ctx.restore(); } catch { /* sin logo */ }
+  try { const img = await loadImg('icons/marca.svg'); const mh = Math.round(600 * img.naturalHeight / img.naturalWidth); ctx.drawImage(img, 240, 154 - mh / 2, 600, mh); } catch { ctx.fillStyle = '#fff'; ctx.font = `italic 900 60px ${F}`; ctx.fillText('FITNESTEBAN', 240, 175); }
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = A; ctx.font = `800 34px ${F}`; ctx.fillText('🔥 CARDIO COMPLETADO', 70, 340);
+  const title = String(T.label || 'Cardio').toUpperCase(); let fs = 150; ctx.font = `italic 900 ${fs}px ${F}`;
+  while (ctx.measureText(title).width > W - 140 && fs > 70) { fs -= 6; ctx.font = `italic 900 ${fs}px ${F}`; }
+  ctx.fillStyle = '#ffffff'; ctx.fillText(title, 64, 490);
+  ctx.fillStyle = '#8a9ba5'; ctx.font = `500 36px ${F}`;
+  const inten = (INTENSITIES.find(i => i[0] === x.intensity) || ['', ''])[1];
+  ctx.fillText(`${T.icon || '🔥'} ${inten ? `Intensidad ${inten.toLowerCase()}` : 'Actividad'}`, 70, 550);
+  ctx.fillText(parseISO(x.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }), 70, 600);
+  const sp = watchSpeed(x), tiles = [[`${x.minutes}`, 'minutos'], [`${x.kcal}`, 'kcal netas']];
+  if (x.km > 0) tiles.push([`${fmtNum(x.km)} km`, 'distancia']);
+  if (x.m > 0) tiles.push([`${fmtNum(x.m)} m`, 'distancia']);
+  if (sp) tiles.push([sp.replace(' /100 m', ''), sp.includes('/100') ? 'ritmo /100 m' : 'media']);
+  if (x.gain > 0) tiles.push([`${x.gain} m`, 'desnivel']);
+  if (x.hr > 0) tiles.push([`${x.hr}`, 'pulsaciones medias']);
+  if (tiles.length < 4) tiles.push([`${(state.cardio || []).filter(y => y.date > addDays(x.date, -7) && y.date <= x.date).reduce((a, y) => a + (+y.minutes || 0), 0)}`, 'min de cardio en 7 días']);
+  if (tiles.length < 4) tiles.push([`${(state.cardio || []).filter(y => y.date.slice(0, 7) === x.date.slice(0, 7)).length}`, 'sesiones este mes']);
+  tiles.slice(0, 4).forEach(([v, l], i) => {
+    const tx = 70 + (i % 2) * 480, ty = 660 + Math.floor(i / 2) * 230;
+    roundRect(ctx, tx, ty, 460, 205, 36); ctx.fillStyle = '#0c1317'; ctx.fill(); ctx.strokeStyle = '#1c2a31'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = i === 0 ? A : '#ffffff'; fitFont(ctx, v, '900', 88, 380, F, tx + 40, ty + 120);
+    ctx.fillStyle = '#8a9ba5'; ctx.font = `600 32px ${F}`; ctx.fillText(l, tx + 40, ty + 170);
+  });
+  ctx.fillStyle = '#00d2df'; fitFont(ctx, pickMotto('cardio', `c:${x.id}`), 'italic 700', 40, W - 140, F, 70, 1240);
+  ctx.fillStyle = '#4b5b63'; ctx.font = `700 28px ${F}`; ctx.textAlign = 'right'; ctx.fillText('#FITNESTEBAN', W - 70, H - 40); ctx.textAlign = 'left';
+  return new Promise(res => c.toBlob(res, 'image/png'));
+}
+function openCardioCard(id) {
+  const x = (state.cardio || []).find(y => y.id === id); if (!x) return;
+  return showCard(() => buildCardioCard(x), `fitnesteban_${x.type}_${x.date}.png`);
 }
 function openRetoCard(id, at) {
   const st = retoOf(id); if (!st) return;
@@ -3200,6 +3246,7 @@ function renderCardio() {
           ${watchLine(x) ? `<div class="text-[11px] text-slate-300">${esc(watchLine(x))}</div>` : ''}
           <div class="text-[11px] text-mute">${esc(fmtDate(x.date))} · <span class="text-amber-300">${x.kcal} kcal netas</span>${x.ai ? ' · IA' : ''}${x.wkcal ? ` · ⌚ ${x.wkcal} del reloj` : ''}</div>
         </div>
+        <button class="iconbtn iconbtn-sm" data-act="cdCard" data-id="${esc(x.id)}" type="button" aria-label="Tarjeta para compartir">📸</button>
         <button class="iconbtn iconbtn-sm" data-act="cdDel" data-id="${esc(x.id)}" type="button" aria-label="Borrar">✕</button>
       </div>`).join('') || '<p class="text-sm text-mute">Aún no has registrado cardio.</p>'}
     </div>
@@ -6345,6 +6392,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.94.0', ['🔥 Tarjeta para compartir tu cardio: bici, correr, natación, funcional, pádel… (también las que registras con la captura de Strava o del reloj). Sale al registrar y con el botón 📸 de cada actividad, también en vídeo.']],
   ['4.93.1', ['🎬 Tarjeta en vídeo para redes: al compartir un entreno o un reto, pulsa «Vídeo para redes» y tendrás tu tarjeta con el logo de FITNESTEBAN al final, lista para WhatsApp, Instagram o TikTok.']],
   ['4.93.0', ['🎬 (Solo admin, en pruebas) Tarjeta de entreno en vídeo para redes: la tarjeta y, al final, el logo F/S abriéndose con «fitnesteban.app».'], 'admin'],
   ['4.92.1', ['⏱️ Descanso: con la cuenta atrás en marcha la app ya no se recarga sola para actualizarse (aunque estés fuera de la app), así no se pierden los pitidos.'], 'quiet'],
@@ -7525,11 +7573,15 @@ const actions = {
     const c = ui.cardio;
     const k = Math.round(num($('#cdKcal').value) ?? -1);
     if (!(k >= 0 && k <= 5000)) return toast('Revisa las calorías', 'warn');
-    state.cardio.push({ id: uid('k_'), date: c.date, type: c.type, minutes: parseInt(c.minutes, 10), intensity: c.est?.ik || c.intensity, kcal: k, ai: !!c.est?.ai, ...watchVals(c) });
+    const nid = uid('k_');
+    state.cardio.push({ id: nid, date: c.date, type: c.type, minutes: parseInt(c.minutes, 10), intensity: c.est?.ik || c.intensity, kcal: k, ai: !!c.est?.ai, ...watchVals(c) });
     persist();
     c.est = null; c.minutes = ''; c.desc = ''; for (const f of ['km', 'm', 'gain', 'hr', 'wkcal']) c[f] = '';
-    render(); toast(`Cardio registrado: ${k} kcal ✓`);
+    render();
+    openModal(`<div class="text-center"><div class="text-4xl">🔥</div><h3 class="modal-title mt-1">Cardio registrado</h3><p class="text-sm text-mute mt-1">${k} kcal netas, sumadas a Dieta.</p></div>
+      <div class="grid grid-cols-2 gap-2 mt-3"><button class="btn-ghost" data-mact="card" type="button">📸 Tarjeta</button><button class="btn-primary" data-close type="button">Hecho</button></div>`, { card: () => openCardioCard(nid) });
   },
+  cdCard: b => openCardioCard(b.dataset.id),
   cdDel: b => { if (!confirm('¿Borrar este registro de cardio?')) return; state.cardio = state.cardio.filter(x => x.id !== b.dataset.id); persist(); render(); },
   addDay: () => editDayModal(null),
   addDayProg: b => editDayModal(null, b.dataset.prog),
