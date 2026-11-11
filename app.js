@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.89.1';
+const APP_VERSION = '4.90.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -605,6 +605,7 @@ function normalize(s) {
     out.settings.blockOrder415 = true;
   }
   if (!out.accessNames || typeof out.accessNames !== 'object' || Array.isArray(out.accessNames)) out.accessNames = {};
+  if (!out.accessPays || typeof out.accessPays !== 'object' || Array.isArray(out.accessPays)) out.accessPays = {};
   if (!out.accessCodes || typeof out.accessCodes !== 'object' || Array.isArray(out.accessCodes)) out.accessCodes = {};
   if (!out.retos || typeof out.retos !== 'object' || Array.isArray(out.retos)) out.retos = {};
   for (const k of Object.keys(out.retos)) { const r = out.retos[k]; if (!r || !Array.isArray(r.history)) { delete out.retos[k]; continue; } if (!Array.isArray(r.tests)) r.tests = []; }
@@ -6229,6 +6230,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.90.0', ['💶 Acceso: modalidades Individual y DÚO con sus precios, renovación sumando los días que quedan, último pago en cada ficha, «Recordar renovación» por WhatsApp y resumen de ingresos del mes y del año.'], 'admin'],
   ['4.89.1', ['🖼️ Las tarjetas para compartir vuelven a la F de siempre.'], 'quiet'],
   ['4.89.0', ['✨ La pantalla de acceso estrena la F del logo, con su corredor.']],
   ['4.88.7', ['🤖 La IA prueba más modelos de Google y, si todos fallan, busca sola uno disponible para tu clave.'], 'quiet'],
@@ -7740,6 +7742,7 @@ const actions = {
   copyCode: async b => { const c = await accessCodeOf(b.dataset.hash); if (c) navigator.clipboard.writeText(fmtCode(c)).then(() => toast('Código copiado')).catch(() => toast('Cópialo a mano: ' + fmtCode(c), 'warn')); },
   regenAccess: b => regenAccess(b.dataset.hash),
   planAccess: b => planModal(b.dataset.hash),
+  renewMsg: b => renewMsgModal(b.dataset.hash),
   setTheme: b => { try { localStorage.setItem(THEME_KEY, b.dataset.k); } catch { /* nada */ } applyTheme(); render(); },
   retoCard: b => openRetoCard(b.dataset.reto, b.dataset.at),
   libNewSee: () => { libMarkSeen(); go('train'); ui.trainHome = true; render(); },
@@ -8098,8 +8101,8 @@ function parseAcl(text) {
   return String(text).split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')).map(l => {
     const p = l.split(/\s+/), admin = p.slice(1).some(t => t.toLowerCase() === 'admin');
     const hasta = (p.find(t => /^hasta=\d{4}-\d{2}-\d{2}$/i.test(t)) || '').slice(6), plan = (p.find(t => /^plan=\w+$/i.test(t)) || '').slice(5).toLowerCase();
-    const anon = p.slice(1).some(t => t.toLowerCase() === 'anon'), beta = p.slice(1).some(t => t.toLowerCase() === 'beta');
-    return { hash: p[0].toLowerCase(), admin, ...(hasta ? { hasta } : {}), ...(plan ? { plan } : {}), ...(anon ? { anon } : {}), ...(beta ? { beta } : {}) };
+    const anon = p.slice(1).some(t => t.toLowerCase() === 'anon'), beta = p.slice(1).some(t => t.toLowerCase() === 'beta'), duo = (p.find(t => /^duo=[a-z0-9]{4,10}$/i.test(t)) || '').slice(4).toLowerCase();
+    return { hash: p[0].toLowerCase(), admin, ...(hasta ? { hasta } : {}), ...(plan ? { plan } : {}), ...(anon ? { anon } : {}), ...(beta ? { beta } : {}), ...(duo ? { duo } : {}) };
   }).filter(x => /^[0-9a-f]{32}$/.test(x.hash));
 }
 const access = { list: null, me: null, ok: false, usageUrl: '' };
@@ -8793,9 +8796,10 @@ function accSorted(list) {
 }
 function planPill(x) {
   const st = accStatus(x), t = netToday(), left = x.hasta && t ? daysBetween(t, x.hasta) : null;
-  if (st === 'free') return '<span class="text-emerald-300">Free</span>';
-  if (st === 'exp') return '<span class="text-rose-300">Caducado</span>';
-  return `<span class="${st === 'soon' ? 'text-amber-300' : 'text-slate-300'}">${esc(planName(x.plan))} · ${left === 0 ? 'hoy' : left + ' d'}</span>`;
+  const d = x.duo ? '<span class="text-cyan-300">DÚO</span> · ' : '';
+  if (st === 'free') return `${d}<span class="text-emerald-300">Free</span>`;
+  if (st === 'exp') return `${d}<span class="text-rose-300">Caducado</span>`;
+  return `${d}<span class="${st === 'soon' ? 'text-amber-300' : 'text-slate-300'}">${esc(planName(x.plan))} · ${left === 0 ? 'hoy' : left + ' d'}</span>`;
 }
 function accFilterHTML(list) {
   const n = k => list.filter(x => accStatus(x) === k).length;
@@ -8857,6 +8861,7 @@ function accessSectionHTML() {
   return `<section class="card p-4 mt-3 space-y-3">
     <button class="w-full flex items-center justify-between" data-act="closeAccess" type="button"><span class="flex items-center gap-2.5"><h3 class="section-title">🔑 Acceso</h3>${activeChip()}</span><span class="flex items-center gap-2 text-[11px] text-emerald-300">🔓 Abierto<span class="tri rotate-180"></span></span></button>
     <p class="text-[12px] text-slate-300">${list.length} ${list.length === 1 ? 'persona' : 'personas'}${(() => { const so = list.filter(x => accStatus(x) === 'soon').length, ex = list.filter(x => accStatus(x) === 'exp').length; return (so ? ` · <span class="text-amber-300">${so} caduca${so > 1 ? 'n' : ''} pronto</span>` : '') + (ex ? ` · <span class="text-rose-300">${ex} caducado${ex > 1 ? 's' : ''}</span>` : ''); })()}</p>
+    ${(() => { const p = paysSummary(); return p.ano ? `<p class="text-[12px] text-slate-300">💶 Este mes: <b class="text-white">${eur(p.mes)}</b> · Este año: <b class="text-white">${eur(p.ano)}</b> <span class="text-mute">(solo en este móvil)</span></p>` : ''; })()}
     ${accFilterHTML(list)}
     <div class="space-y-1.5" id="accRows">${accSorted(list).map(x => {
       const me = x.hash === access.me.hash, has = me ? !!lsGet(ACCESS_KEY)?.code : !!state.accessCodes?.[x.hash], shown = ui.accessReveal?.[x.hash];
@@ -8867,7 +8872,7 @@ function accessSectionHTML() {
       const detail = `<div class="px-3 pb-2.5 pt-1 text-xs space-y-1.5">
       <div class="flex items-center justify-between gap-2"><span class="min-w-0 text-[11px]">${x.admin ? '<span class="text-brand">Administrador · sin límite</span>' : `⏳ ${planLabel(x)}`}${x.anon ? '<span class="block text-mute">🙈 Su nombre de perfil no se registra</span>' : ''}${x.beta ? '<span class="block text-cyan-300">🧪 Prueba las novedades antes que nadie</span>' : ''}</span>
       <span class="flex items-center gap-1.5 shrink-0"><button class="iconbtn iconbtn-sm" data-act="nameAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Poner nombre">✎</button>${gh && !x.admin ? `<button class="iconbtn iconbtn-sm" data-act="planAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Plan">⏳</button>` : ''}${gh && !x.admin ? `<button class="iconbtn iconbtn-sm${x.beta ? ' iconbtn-on' : ''}" data-act="betaAccess" data-hash="${esc(x.hash)}" type="button" aria-label="${x.beta ? 'Quitar el acceso anticipado' : 'Dar acceso anticipado a las novedades'}">🧪</button>` : ''}${gh && !x.admin ? `<button class="iconbtn iconbtn-sm" data-act="anonAccess" data-hash="${esc(x.hash)}" type="button" aria-label="${x.anon ? 'Volver a mostrar su nombre de perfil' : 'Ocultar su nombre de perfil'}">${x.anon ? '🙈' : '👤'}</button>` : ''}${gh ? `<button class="iconbtn iconbtn-sm" data-act="regenAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Nuevo código">🔄</button>` : ''}${me || !gh ? '' : `<button class="iconbtn iconbtn-sm text-rose-300" data-act="delAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Quitar acceso">🗑</button>`}</span></div>
-      <div class="flex items-center justify-between gap-2 min-h-[28px]">${codeLine}</div>${usageLine(x.hash)}</div>`;
+      <div class="flex items-center justify-between gap-2 min-h-[28px]">${codeLine}</div>${usageLine(x.hash)}${payInfoHTML(x)}</div>`;
       const open = ui.accOpenH === x.hash, st = accStatus(x), u = ui.usage?.[x.hash];
       const ago = u ? daysBetween(u.last, todayISO()) : null;
       const today = ago === 0, dotCls = !u ? 'u-none' : today ? 'u-today' : ago <= 7 ? 'u-week' : 'u-old';
@@ -8920,14 +8925,28 @@ function ghConnectModal() {
     }
   });
 }
+/* 💶 Tarifas (solo las ves tú; los pagos se apuntan en este móvil, nunca en acceso.txt, que es público) */
+const PRICES = { ind: { '1m': 14.90, '3m': 37.90, '6m': 59.90 }, duo: { '1m': 23.90, '3m': 62.90, '6m': 95.90 } };
+const eur = n => `${(Math.round(n * 100) / 100).toFixed(2).replace('.', ',')} €`;
+const isPaidPlan = k => !!PRICES.ind[k];
+const duoMate = x => x?.duo ? (access.list || []).find(y => y.duo === x.duo && y.hash !== x.hash) : null;
+function addPay(hash, k, mod, price) { state.accessPays = state.accessPays || {}; (state.accessPays[hash] = state.accessPays[hash] || []).push({ d: todayISO(), k, mod, eur: price }); persist(); }
+function lastPay(hash) { const a = state.accessPays?.[hash] || []; return a[a.length - 1] || null; }
+function paysSummary() {
+  const T = todayISO(), m = T.slice(0, 7), y = T.slice(0, 4); let mes = 0, ano = 0;
+  for (const arr of Object.values(state.accessPays || {})) for (const p of arr) { if (p.d.slice(0, 4) === y) ano += p.eur; if (p.d.slice(0, 7) === m) mes += p.eur; }
+  return { mes, ano };
+}
+const modChips = mod => `<div class="grid grid-cols-2 gap-1.5">${[['ind', '👤 Individual'], ['duo', '👥 DÚO']].map(([v, l]) => `<button class="chip justify-center py-2 ${mod === v ? 'chip-on' : ''}" data-mact="mod" data-v="${v}" type="button">${l}</button>`).join('')}</div>`;
+const priceLine = (k, mod) => isPaidPlan(k) ? `<div class="flex items-center justify-between rounded-xl px-3 py-2 bg-white/5 text-[13px]"><span class="text-mute">${mod === 'duo' ? 'DÚO · 2 cuentas' : 'Individual'} · ${esc(planName(k))}</span><b class="text-brand">${eur(PRICES[mod][k])}</b></div>` : '';
 /* Línea de acceso.txt con el plan: la fecha se calcula con la hora de la red */
 const planDaysOf = k => (PLANS[k] || PLANS_OLD[k]) ? (PLANS[k] || PLANS_OLD[k])[1] : +(/^d(\d+)$/.exec(k || '')?.[1] || 0);
 const planName = k => PLANS[k]?.[0] || PLANS_OLD[k]?.[0] || (/^d\d+$/.test(k || '') ? `${k.slice(1)} días` : 'Plan');
 const planCustomHTML = (k, nd) => k === 'custom' ? `<label class="lbl">¿Cuántos días?<input class="field mt-1 text-center text-xl font-black" name="pdays" type="number" inputmode="numeric" min="1" max="730" value="${nd}" /></label>` : '';
 const planResolve = (k, root) => k === 'custom' ? 'd' + clamp(Math.round(+mval(root, 'pdays') || 0), 1, 730) : k;
-function planTokens(k) {
+function planTokens(k, from = '') { // from (aaaa-mm-dd): renovar sumando a lo que le queda
   const days = planDaysOf(k); if (!days) return [];
-  const base = netNow() || Date.now();
+  const now = netNow() || Date.now(), f = from ? new Date(from + 'T12:00:00+01:00').getTime() : 0, base = Math.max(now, f);
   return ['plan=' + k, 'hasta=' + new Date(base + days * 86400000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' })];
 }
 const planChips = (cur, act = 'plan') => `<div class="flex flex-wrap justify-center gap-1.5">${Object.entries(PLANS).map(([k, [l, d]]) => `<button class="chip flex-col justify-center leading-tight py-2 ${cur === k ? 'chip-on' : ''}" style="width:calc(33.333% - 4px)" data-mact="${act}" data-k="${k}" type="button"><span class="whitespace-nowrap">${l}</span><span class="text-[10px] opacity-70 font-semibold">${d ? d + ' días' : 'sin límite'}</span></button>`).join('')}<button class="chip flex-col justify-center leading-tight py-2 ${cur === 'custom' ? 'chip-on' : ''}" style="width:calc(33.333% - 4px)" data-mact="${act}" data-k="custom" type="button"><span class="whitespace-nowrap">Otro</span><span class="text-[10px] opacity-70 font-semibold">tú eliges</span></button></div>`;
@@ -8938,44 +8957,93 @@ function planLabel(x) {
   return left !== null && left < 0 ? `<span class="text-rose-300">${esc(name)} · caducó el ${esc(fmtDateShort(x.hasta))}</span>`
     : `<span class="${left !== null && left <= 3 ? 'text-amber-300' : 'text-slate-300'}">${esc(name)} · hasta el ${esc(fmtDateShort(x.hasta))}${left !== null ? ` (${left === 0 ? 'hoy' : left + ' d'})` : ''}</span>`;
 }
+function payInfoHTML(x) { // en la ficha: modalidad, último pago y botón para recordar la renovación
+  if (x.admin) return '';
+  const mate = duoMate(x), lp = lastPay(x.hash) || (mate ? lastPay(mate.hash) : null), T = netToday() || todayISO();
+  const near = x.hasta && daysBetween(T, x.hasta) <= 7;
+  return `${mate ? `<div class="text-[11px] text-cyan-300">👥 DÚO con ${esc(state.accessNames[mate.hash] || 'sin nombre')}</div>` : ''}
+    ${lp ? `<div class="text-[11px] text-mute">💶 Último pago: ${eur(lp.eur)} · ${esc(planName(lp.k))}${lp.mod === 'duo' ? ' DÚO' : ''} · ${esc(fmtDateShort(lp.d))}</div>` : ''}
+    ${x.hasta ? `<button class="text-[12px] underline ${near ? 'text-amber-300' : 'text-brand'}" data-act="renewMsg" data-hash="${esc(x.hash)}" type="button">💬 Recordar renovación</button>` : ''}`;
+}
 function planModal(hash) {
   const x = (access.list || []).find(y => y.hash === hash); if (!x) return;
-  const who = state.accessNames[hash] || 'Sin nombre';
-  let k = x.hasta ? (x.plan || '1m') : 'free', nd = 15;
+  const mate = duoMate(x), who = state.accessNames[hash] || 'Sin nombre', whoM = mate ? (state.accessNames[mate.hash] || 'su pareja de DÚO') : '';
+  let k = x.hasta ? (x.plan || '1m') : 'free', nd = 15, sum = true;
   if (!PLANS[k]) { nd = planDaysOf(k) || 15; k = 'custom'; }
-  const html = () => `<h3 class="modal-title">⏳ Plan de ${esc(who)}</h3>
+  const mod = mate ? 'duo' : 'ind', T = netToday() || todayISO(), alive = x.hasta && x.hasta >= T;
+  const html = () => {
+    const kk = k === 'custom' ? 'd' + nd : k, end = planDaysOf(kk) ? planTokens(kk, sum && alive ? x.hasta : '')[1].slice(6) : '';
+    return `<h3 class="modal-title">⏳ Renovar o cambiar · ${esc(who)}</h3>
+    ${mate ? `<p class="text-[12px] text-cyan-300 -mt-1">👥 DÚO con ${esc(whoM)}: se renuevan los dos a la vez.</p>` : ''}
     <p class="text-xs">Ahora: ${planLabel(x)}</p>
     ${planChips(k)}${planCustomHTML(k, nd)}
-    <p class="text-[11px] text-mute">El nuevo plan cuenta desde hoy (fecha de la red). «Free» no caduca. Si estaba caducado, vuelve a entrar solo al abrir la app.</p>
-    <button class="btn-primary w-full" data-mact="go" type="button">Guardar plan</button>`;
+    ${priceLine(k, mod)}
+    ${alive && planDaysOf(kk) ? `<label class="flex items-center gap-2 text-[13px]"><input type="checkbox" data-mact="sum" ${sum ? 'checked' : ''}/> Sumar a los días que le quedan</label>` : ''}
+    <p class="text-[11px] text-mute">${k === 'free' ? '«Free» no caduca.' : end ? `Nueva fecha de fin: <b class="text-white">${esc(fmtDateShort(end))}</b>.` : 'Cuenta desde hoy.'} Si estaba caducado, vuelve a entrar solo al abrir la app.</p>
+    <button class="btn-primary w-full" data-mact="go" type="button">${isPaidPlan(k) ? `Renovar · ${eur(PRICES[mod][k])}` : 'Guardar plan'}</button>`; };
   openModal(html(), {
     plan: (root, b) => { if (k === 'custom') nd = +mval(root, 'pdays') || nd; k = b.dataset.k; root.querySelector('.modal-sheet').innerHTML = html(); },
-    go: root => { const k2 = planResolve(k, root); askPin({ title: `Plan de ${esc(who)}: ${esc(planName(k2))}`, text: 'Tu PIN abre la llave de GitHub para guardar el plan.', onPin: async pin => {
-      await ghEditAcl(pin, lines => lines.map(l => l.trim().toLowerCase().startsWith(hash) ? [l.trim().split(/\s+/)[0], ...l.trim().split(/\s+/).slice(1).filter(t => !/^(plan|hasta)=/i.test(t)), ...planTokens(k2)].join(' ') : l), 'Acceso: plan ' + k2);
-      ui.accessPin = pin; closeModal(); render(); toast(`Plan guardado: ${planName(k2)} ✓`);
-    } }); }
+    sum: (root, b) => { sum = b.checked; root.querySelector('.modal-sheet').innerHTML = html(); },
+    go: root => { const k2 = planResolve(k, root), toks = planTokens(k2, sum && alive ? x.hasta : ''), hs = [hash, ...(mate ? [mate.hash] : [])];
+      askPin({ title: `${esc(who)}${mate ? ` y ${esc(whoM)}` : ''}: ${esc(planName(k2))}`, text: 'Tu PIN abre la llave de GitHub para guardar el plan.', onPin: async pin => {
+        await ghEditAcl(pin, lines => lines.map(l => hs.some(h => l.trim().toLowerCase().startsWith(h)) ? [l.trim().split(/\s+/)[0], ...l.trim().split(/\s+/).slice(1).filter(t => !/^(plan|hasta)=/i.test(t)), ...toks].join(' ') : l), 'Acceso: plan ' + k2);
+        if (isPaidPlan(k2)) addPay(hash, k2, mod, PRICES[mod][k2]);
+        ui.accessPin = pin; closeModal(); render(); toast(`Plan guardado: ${planName(k2)} ✓`);
+      } }); }
   });
 }
 function newAccessModal(who = '', plan = 'prueba') {
-  let k = plan, who0 = who, nd = 15;
+  let k = plan, who0 = who, who2 = '', nd = 15, mod = 'ind';
   const html = () => `<h3 class="modal-title">Nuevo código de acceso</h3>
-    <label class="lbl">¿Para quién es? (solo lo verás tú)<input class="field mt-1" name="who" maxlength="24" placeholder="Ej: Ana" value="${esc(who0)}" /></label>
     <div><div class="lbl mb-1.5">Plan</div>${planChips(k)}</div>${planCustomHTML(k, nd)}
-    <p class="text-[11px] text-mute">${k === 'custom' ? 'Cuenta desde hoy (fecha de la red). Podrás cambiarlo con ⏳.' : PLANS[k][1] ? `Caducará el ${esc(fmtDateShort(planTokens(k)[1].slice(6)))}. Podrás cambiarlo con ⏳.` : 'Sin caducidad.'}</p>
+    ${isPaidPlan(k) ? `<div><div class="lbl mb-1.5">Modalidad</div>${modChips(mod)}</div>` : ''}
+    <label class="lbl">${mod === 'duo' && isPaidPlan(k) ? 'Primera persona' : '¿Para quién es?'} (solo lo verás tú)<input class="field mt-1" name="who" maxlength="24" placeholder="Ej: Ana" value="${esc(who0)}" /></label>
+    ${mod === 'duo' && isPaidPlan(k) ? `<label class="lbl">Segunda persona<input class="field mt-1" name="who2" maxlength="24" placeholder="Ej: Luis" value="${esc(who2)}" /></label>` : ''}
+    ${priceLine(k, isPaidPlan(k) ? mod : 'ind')}
+    <p class="text-[11px] text-mute">${k === 'custom' ? 'Cuenta desde hoy (fecha de la red). Podrás cambiarlo con ⏳.' : PLANS[k][1] ? `Caducará el ${esc(fmtDateShort(planTokens(k)[1].slice(6)))}. Podrás renovarlo con ⏳.` : 'Sin caducidad.'}${mod === 'duo' && isPaidPlan(k) ? ' Son dos códigos independientes que caducan y se renuevan juntos.' : ''}</p>
     <button class="btn-primary w-full" data-mact="next" type="button">Continuar</button>`;
+  const keep = root => { who0 = mval(root, 'who'); who2 = root.querySelector('[name=who2]') ? mval(root, 'who2') : who2; if (k === 'custom') nd = +mval(root, 'pdays') || nd; };
   openModal(html(), {
     autofocus: true,
-    plan: (root, b) => { who0 = mval(root, 'who'); if (k === 'custom') nd = +mval(root, 'pdays') || nd; k = b.dataset.k; root.querySelector('.modal-sheet').innerHTML = html(); },
+    plan: (root, b) => { keep(root); k = b.dataset.k; root.querySelector('.modal-sheet').innerHTML = html(); },
+    mod: (root, b) => { keep(root); mod = b.dataset.v; root.querySelector('.modal-sheet').innerHTML = html(); },
     next: root => {
-      const who = mval(root, 'who').trim().replace(/\s+/g, ' '); if (!who) return toast('Pon un nombre', 'warn');
+      keep(root);
+      const clean = v => v.trim().replace(/\s+/g, ' '), w1 = clean(who0), duo = mod === 'duo' && isPaidPlan(k), w2 = clean(who2);
+      if (!w1 || (duo && !w2)) return toast(duo ? 'Pon el nombre de las dos personas' : 'Pon un nombre', 'warn');
       const kk = planResolve(k, root);
-      askPin({ title: `Crear código para ${esc(who)}`, text: 'Tu PIN abre la llave de GitHub para añadir el código a la lista.', onPin: async pin => {
-        const code = newCode(), hash = await codeHash(code);
-        await ghEditAcl(pin, lines => [...lines.filter(l => l.trim()), [hash, ...planTokens(kk)].join(' ')], 'Acceso: nuevo código (' + kk + ')');
-        state.accessNames[hash] = who; await saveAccessCode(hash, code, pin); ui.accessPin = pin; persist(); render(); syncUsageNames();
-        codeShareModal(`Código para ${esc(who)}`, who, code);
+      askPin({ title: duo ? `DÚO para ${esc(w1)} y ${esc(w2)}` : `Crear código para ${esc(w1)}`, text: 'Tu PIN abre la llave de GitHub para añadir el código a la lista.', onPin: async pin => {
+        const did = duo ? Math.random().toString(36).slice(2, 8) : '', toks = [...planTokens(kk), ...(duo ? ['duo=' + did] : [])];
+        const people = duo ? [w1, w2] : [w1], made = [];
+        for (const w of people) { const code = newCode(); made.push({ w, code, hash: await codeHash(code) }); }
+        await ghEditAcl(pin, lines => [...lines.filter(l => l.trim()), ...made.map(m => [m.hash, ...toks].join(' '))], `Acceso: nuevo código${duo ? ' DÚO' : ''} (${kk})`);
+        for (const m of made) { state.accessNames[m.hash] = m.w; await saveAccessCode(m.hash, m.code, pin); }
+        if (isPaidPlan(kk)) addPay(made[0].hash, kk, duo ? 'duo' : 'ind', PRICES[duo ? 'duo' : 'ind'][kk]);
+        ui.accessPin = pin; persist(); render(); syncUsageNames();
+        if (duo) duoShareModal(made); else codeShareModal(`Código para ${esc(w1)}`, w1, made[0].code);
       } });
     }
+  });
+}
+function duoShareModal(made) {
+  const msg = `Hola ${made[0].w} y ${made[1].w}, aquí tenéis vuestros códigos de FITNESTEBAN DÚO:\n${made.map(m => `${m.w}: ${fmtCode(m.code)}`).join('\n')}\nCada código es personal y vale en 2 dispositivos.\nhttps://fitnesteban.app`;
+  openModal(`<h3 class="modal-title">👥 DÚO creado</h3>
+    ${made.map(m => `<div class="text-center py-1"><div class="text-[11px] text-mute mb-1">${esc(m.w)}</div><div class="font-mono text-3xl font-black tracking-[.2em] text-brand">${fmtCode(m.code)}</div></div>`).join('')}
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="copy" type="button">📋 Copiar mensaje</button><a class="btn-ghost block text-center" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">💬 WhatsApp</a></div>
+    <button class="btn-primary w-full" data-close type="button">Hecho</button>
+    <p class="text-[11px] text-mute text-center">Ya funcionan. Quedan guardados (cifrados con tu PIN) en tu lista de Acceso.</p>`, {
+    copy: () => navigator.clipboard.writeText(msg).then(() => toast('Mensaje copiado')).catch(() => toast('Cópialo a mano', 'warn'))
+  });
+}
+function renewMsgModal(hash) {
+  const x = (access.list || []).find(y => y.hash === hash); if (!x) return;
+  const mate = duoMate(x), w = state.accessNames[hash] || '', wm = mate ? state.accessNames[mate.hash] || '' : '', P = PRICES[mate ? 'duo' : 'ind'];
+  const T = netToday() || todayISO(), past = x.hasta && x.hasta < T;
+  const msg = `Hola${w ? ' ' + w : ''}${wm ? ` y ${wm}` : ''} 👋 ${mate ? 'Vuestro acceso DÚO' : 'Tu acceso'} a FITNESTEBAN ${past ? 'terminó' : 'termina'} el ${fmtDateShort(x.hasta)}.\nPara renovarlo${mate ? ' (las dos cuentas)' : ''}:\n· 1 mes: ${eur(P['1m'])}\n· 3 meses: ${eur(P['3m'])}\n· 6 meses: ${eur(P['6m'])}\nDime cuál prefieres y lo renuevo sin perder nada de lo que ${mate ? 'tenéis' : 'tienes'} guardado.`;
+  openModal(`<h3 class="modal-title">💬 Recordar renovación</h3>
+    <pre style="white-space:pre-wrap;overflow-wrap:anywhere;font-family:inherit;background:rgba(255,255,255,.05)" class="text-[13px] leading-snug rounded-xl bg-white/5 p-3 font-sans">${esc(msg)}</pre>
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="copy" type="button">📋 Copiar</button><a class="btn-ghost block text-center" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">💬 WhatsApp</a></div>`, {
+    copy: () => navigator.clipboard.writeText(msg).then(() => toast('Mensaje copiado')).catch(() => toast('Cópialo a mano', 'warn'))
   });
 }
 function delAccess(hash) {
