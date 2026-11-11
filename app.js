@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.92.1';
+const APP_VERSION = '4.93.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -1858,6 +1858,55 @@ function openRetoCard(id, at) {
   if (!h) return;
   return showCard(() => buildRetoCard(id, h), `fitnesteban_reto_${id}_${h.date}.png`);
 }
+/* 🎬 Vídeo para redes: la tarjeta 3 s (con un zoom suave) y, para cerrar, el logo F/S abriéndose con «fitnesteban.app».
+   Se graba en el propio móvil (en tiempo real, sin librerías). El vídeo del logo (~100 KB) solo se descarga al pulsar. */
+const cardVideoMime = () => { try { return window.MediaRecorder && HTMLCanvasElement.prototype.captureStream ? ['video/mp4;codecs=avc1.42E01E', 'video/mp4'].find(m => MediaRecorder.isTypeSupported(m)) || '' : ''; } catch { return ''; } };
+async function buildCardVideo(blob, onProg) {
+  const mime = cardVideoMime(); if (!mime) throw new Error('Este navegador no puede crear vídeos');
+  const img = await createImageBitmap(blob), W = 720, H = 900;
+  const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'auto'; v.src = 'outro-logo.mp4';
+  await new Promise((ok, ko) => { v.oncanplaythrough = ok; v.onerror = () => ko(new Error('Sin conexión: no se pudo cargar la animación')); v.load(); setTimeout(() => ko(new Error('La animación tarda demasiado en cargar')), 15000); });
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const ctx = c.getContext('2d');
+  const CARD = 3, FADE = .45, VD = v.duration || 4.8, TOTAL = CARD + VD;
+  const drawCard = (t, a = 1) => { const z = 1 + .035 * Math.min(1, t / CARD), w = W * z, h = H * z; ctx.globalAlpha = a; ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h); ctx.globalAlpha = 1; };
+  const drawLogo = () => { ctx.fillStyle = '#010b0f'; ctx.fillRect(0, 0, W, H); ctx.drawImage(v, 0, (H - W) / 2, W, W);
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#000'); g.addColorStop(.2, 'rgba(0,0,0,0)'); g.addColorStop(.8, 'rgba(0,0,0,0)'); g.addColorStop(1, '#000'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); };
+  drawCard(0);
+  const stream = c.captureStream(30), rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 3500000 }), chunks = [];
+  rec.ondataavailable = e => { if (e.data?.size) chunks.push(e.data); };
+  const done = new Promise(ok => { rec.onstop = ok; });
+  rec.start(250); const t0 = performance.now(); let started = false;
+  await new Promise(ok => { const step = () => {
+    const t = (performance.now() - t0) / 1000;
+    if (t < CARD) drawCard(t);
+    else { if (!started) { started = true; v.currentTime = 0; v.play().catch(() => null); } drawLogo(); if (t < CARD + FADE) drawCard(CARD, 1 - (t - CARD) / FADE); }
+    onProg?.(Math.min(1, t / TOTAL));
+    if (t >= TOTAL || (started && v.ended)) return ok(); requestAnimationFrame(step); };
+  requestAnimationFrame(step); });
+  await new Promise(r => setTimeout(r, 150)); rec.stop(); await done; stream.getTracks().forEach(tr => tr.stop());
+  return new Blob(chunks, { type: mime.split(';')[0] });
+}
+function showCardVideo(blob, name, back) {
+  const vname = name.replace(/\.png$/i, '.mp4');
+  openModal(`<h3 class="modal-title">🎬 Creando tu vídeo…</h3><div class="h-2 rounded-full bg-white/10 overflow-hidden"><div id="cvBar" class="h-full bg-brand" style="width:0%"></div></div>
+    <p class="text-[12px] text-mute">Tarda lo que dura el vídeo (unos 8 segundos). No salgas de la app.</p>`, {});
+  buildCardVideo(blob, p => { const b = $('#cvBar'); if (b) b.style.width = `${Math.round(p * 100)}%`; }).then(vb => {
+    const url = URL.createObjectURL(vb);
+    openModal(`<h3 class="modal-title">🎬 Tu vídeo</h3>
+      <video src="${url}" class="w-full rounded-2xl border border-line" autoplay muted loop playsinline controls></video>
+      <div class="grid grid-cols-2 gap-2">
+        <button class="btn-ghost" data-mact="dl" type="button">⬇️ Guardar</button>
+        <button class="btn-primary" data-mact="share" type="button">📤 Compartir</button>
+      </div>
+      <button class="btn-ghost w-full" data-mact="back" type="button">‹ Volver a la imagen</button>`, {
+      dl: () => { const a = document.createElement('a'); a.href = url; a.download = vname; document.body.appendChild(a); a.click(); a.remove(); toast('Vídeo guardado ✓'); },
+      share: async () => { const file = new File([vb], vname, { type: vb.type });
+        if (navigator.canShare?.({ files: [file] }) && navigator.share) { try { await navigator.share({ files: [file] }); } catch (e) { if (e.name !== 'AbortError') toast('No se pudo compartir: ' + e.message, 'warn'); } }
+        else { modalHandlers.dl?.(); toast('Este navegador no permite compartir: vídeo guardado', 'warn'); } },
+      back
+    });
+  }).catch(e => { toast(e.message || 'No se pudo crear el vídeo', 'error'); back(); });
+}
 async function showCard(build, name) {
   openModal('<div class="text-center text-sm text-mute py-10"><span class="spinner"></span> Creando tarjeta…</div>');
   let blob;
@@ -1870,8 +1919,10 @@ async function showCard(build, name) {
       <button class="btn-ghost" data-mact="dl" type="button">⬇️ Guardar</button>
       <button class="btn-primary" data-mact="share" type="button">📤 Compartir</button>
     </div>
+    ${access.me?.admin && cardVideoMime() ? '<button class="btn-ghost w-full" data-mact="video" type="button">🎬 Vídeo para redes (con el logo)</button>' : ''}
     <button class="btn-ghost w-full" data-close type="button">Cerrar</button>
   `, {
+    video: () => showCardVideo(blob, name, () => showCard(async () => blob, name)),
     dl: () => { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); toast('Imagen guardada ✓'); },
     share: async () => {
       const file = new File([blob], name, { type: 'image/png' });
@@ -6294,6 +6345,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.93.0', ['🎬 (Solo admin, en pruebas) Tarjeta de entreno en vídeo para redes: la tarjeta y, al final, el logo F/S abriéndose con «fitnesteban.app».'], 'admin'],
   ['4.92.1', ['⏱️ Descanso: con la cuenta atrás en marcha la app ya no se recarga sola para actualizarse (aunque estés fuera de la app), así no se pierden los pitidos.'], 'quiet'],
   ['4.92.0', ['🚫 Ajustes → Alergias e intolerancias: marca gluten, lactosa, huevo, frutos secos, marisco… (y lo que no comas). «¿Qué como?», las recetas, el Coach y el informe lo tienen en cuenta, y te avisa si una comida que apuntas parece llevarlo.']],
   ['4.91.0', ['📝 Cardio: al hacer la foto o captura del reloj puedes añadir detalles (qué actividad era, resistencia, cuestas, mochila…), también por voz. La IA los usa para leer la actividad y afinar las calorías.']],
