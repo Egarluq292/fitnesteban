@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.93.0';
+const APP_VERSION = '4.93.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -1919,7 +1919,7 @@ async function showCard(build, name) {
       <button class="btn-ghost" data-mact="dl" type="button">⬇️ Guardar</button>
       <button class="btn-primary" data-mact="share" type="button">📤 Compartir</button>
     </div>
-    ${access.me?.admin && cardVideoMime() ? '<button class="btn-ghost w-full" data-mact="video" type="button">🎬 Vídeo para redes (con el logo)</button>' : ''}
+    ${cardVideoMime() ? '<button class="btn-ghost w-full" data-mact="video" type="button">🎬 Vídeo para redes (con el logo)</button>' : ''}
     <button class="btn-ghost w-full" data-close type="button">Cerrar</button>
   `, {
     video: () => showCardVideo(blob, name, () => showCard(async () => blob, name)),
@@ -6345,6 +6345,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.93.1', ['🎬 Tarjeta en vídeo para redes: al compartir un entreno o un reto, pulsa «Vídeo para redes» y tendrás tu tarjeta con el logo de FITNESTEBAN al final, lista para WhatsApp, Instagram o TikTok.']],
   ['4.93.0', ['🎬 (Solo admin, en pruebas) Tarjeta de entreno en vídeo para redes: la tarjeta y, al final, el logo F/S abriéndose con «fitnesteban.app».'], 'admin'],
   ['4.92.1', ['⏱️ Descanso: con la cuenta atrás en marcha la app ya no se recarga sola para actualizarse (aunque estés fuera de la app), así no se pierden los pitidos.'], 'quiet'],
   ['4.92.0', ['🚫 Ajustes → Alergias e intolerancias: marca gluten, lactosa, huevo, frutos secos, marisco… (y lo que no comas). «¿Qué como?», las recetas, el Coach y el informe lo tienen en cuenta, y te avisa si una comida que apuntas parece llevarlo.']],
