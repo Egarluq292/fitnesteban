@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.90.1';
+const APP_VERSION = '4.91.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -788,7 +788,7 @@ const ui = {
   mealSearch: '',
   calMonth: '',
   calSel: '',
-  cardio: { type: 'bike', minutes: '', intensity: 'media', date: todayISO(), weight: '', est: null, busy: false, km: '', m: '', gain: '', hr: '', wkcal: '' }
+  cardio: { type: 'bike', minutes: '', intensity: 'media', date: todayISO(), weight: '', est: null, busy: false, km: '', m: '', gain: '', hr: '', wkcal: '', desc: '' }
 };
 function guessMealType() {
   const h = new Date().getHours();
@@ -1439,6 +1439,7 @@ function keepCardioInputs() {
   const m = $('#cdMin'); if (m) ui.cardio.minutes = m.value;
   const d = $('#cdDate'); if (d) ui.cardio.date = d.value || todayISO();
   const w = $('#cdWeight'); if (w) ui.cardio.weight = w.value;
+  const ds = $('#cdDesc'); if (ds) ui.cardio.desc = ds.value;
   for (const f of ['km', 'm', 'gain', 'hr', 'wkcal']) { const el = $('#cdW_' + f); if (el) ui.cardio[f] = el.value; }
 }
 function watchVals(c) {
@@ -3107,6 +3108,9 @@ function renderCardio() {
       <div class="flex flex-wrap gap-1.5">${INTENSITIES.map(([k, l]) => `<button class="chip chip-sm ${c.intensity === k ? 'chip-on' : ''}" data-act="cdInt" data-int="${k}" type="button">${l}</button>`).join('')}</div>
       <p class="text-[11px] text-mute mt-2">${esc(T.hint[c.intensity])}</p>
     </div>
+    <div><div class="lbl mb-1">📝 Detalles <span class="text-mute font-normal">(opcional)</span></div>
+      <div class="flex gap-2"><textarea class="field flex-1 min-w-0 text-[13px]" id="cdDesc" rows="2" maxlength="300" placeholder="Ej: elíptica con resistencia alta, cuestas, con mochila de 8 kg…">${esc(c.desc || '')}</textarea>${micBtn('#cdDesc', 'btn-ghost px-3 py-2 shrink-0 self-start')}</div>
+      <p class="text-[11px] text-mute mt-1">La IA lo tiene en cuenta al leer la foto y al calcular las calorías.</p></div>
     <div class="rounded-xl border border-line bg-ink">
       <button class="w-full flex items-center justify-between px-3 py-2.5 text-sm font-bold" data-act="cdWatch" type="button"><span>⌚ Datos del reloj <span class="text-mute font-normal text-xs">(opcional)</span></span><span class="tri ${state.settings.watchOpen ? '' : '-rotate-90'}"></span></button>
       ${state.settings.watchOpen ? `<div class="px-3 pb-3 space-y-2">
@@ -3209,6 +3213,20 @@ document.body.appendChild(cdShotFile);
 cdShotFile.addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
   keepCardioInputs();
+  let img; try { img = await compressImage(f, 1400); } catch (err) { return toast(err.message, 'error'); }
+  // como en Dieta: antes de leerla, puedes añadir detalles para afinar
+  openModal(`<h3 class="modal-title">⌚ Tu actividad</h3>
+    <img src="${img}" alt="" class="w-full rounded-xl border border-line object-contain" style="max-height:34vh;background:#05080d" />
+    <div><div class="lbl mb-1">📝 Detalles <span class="text-mute font-normal">(opcional)</span></div>
+      <div class="flex gap-2"><textarea class="field flex-1 min-w-0 text-[13px]" id="cdShotDesc" rows="2" maxlength="300" placeholder="Ej: era elíptica, no bici · 4 series de cuestas · con mochila de 8 kg">${esc(ui.cardio.desc || '')}</textarea>${micBtn('#cdShotDesc', 'btn-ghost px-3 py-2 shrink-0 self-start')}</div>
+      <p class="text-[11px] text-mute mt-1">Ayuda a la IA a entender la actividad y a afinar las calorías.</p></div>
+    <button class="btn-primary w-full" data-mact="go" type="button">🔎 Leer actividad</button>
+    <button class="text-xs text-mute underline w-full" data-mact="other" type="button">Usar otra imagen</button>`, {
+    go: () => { ui.cardio.desc = ($('#cdShotDesc')?.value || '').trim(); readCardioShot(img); },
+    other: () => { ui.cardio.desc = ($('#cdShotDesc')?.value || '').trim(); cdShotFile.click(); }
+  });
+});
+async function readCardioShot(img) {
   openModal(`<div class="text-center py-6"><span class="spinner" style="width:34px;height:34px;border-width:3px;border-color:rgba(34,211,238,.25);border-top-color:#22d3ee"></span><h3 class="modal-title mt-3">Leyendo la actividad…</h3><p class="text-sm text-mute">Puede tardar unos segundos.</p></div>`, {});
   const keys = [...Object.keys(CARDIO_TYPES), ...Object.keys(CARDIO_EXTRA)];
   const list = keys.map(k => `${k} = ${cardioType(k).label}`).join(', ');
@@ -3216,14 +3234,14 @@ cdShotFile.addEventListener('change', async e => {
     <button class="btn-primary w-full" data-mact="again" type="button">📷 Probar con otra imagen</button><button class="text-xs text-mute underline w-full" data-close type="button">Rellenarlo a mano</button>`, { again: () => { cdShotFile.removeAttribute('capture'); cdShotFile.click(); } });
   let r;
   try {
-    const img = await compressImage(f, 1400);
     const prompt = `Es una captura de una app deportiva (Strava, Garmin Connect, Salud de Apple, Polar, Huawei…) o una foto de la pantalla de un reloj deportivo. Extrae SOLO los datos que aparezcan; si un dato no aparece, pon null (no lo inventes ni lo calcules).
 - actividad: una de estas claves: ${list}. HIIT, CrossFit, circuitos, «entrenamiento funcional» o clases colectivas = functional. Si no encaja ninguna, null.
 - fecha: AAAA-MM-DD si se ve una fecha concreta; si pone «Hoy», «hoy»; si pone «Ayer», «ayer»; si no, null.
 - minutos: el tiempo EN MOVIMIENTO (o tiempo de actividad) en minutos, con decimales si hay segundos. Si solo hay tiempo total, usa ese.
 - distancia_km (para bici, carrera, caminata…) o distancia_m (para natación, en metros).
 - fc_media (ppm), desnivel_m (desnivel positivo) y kcal (calorías que da el reloj o la app).
-- legible: false si la imagen no es de una actividad deportiva o no se lee.
+- legible: false si la imagen no es de una actividad deportiva o no se lee.${ui.cardio.desc ? `
+La persona añade estos detalles: «${ui.cardio.desc}». Úsalos para elegir la actividad y entender la imagen (si dice qué actividad es, manda eso), pero los números salen solo de la imagen.` : ''}
 Responde SOLO con JSON válido: {"actividad": "clave" | null, "fecha": "…" | null, "minutos": número | null, "distancia_km": número | null, "distancia_m": número | null, "fc_media": número | null, "desnivel_m": número | null, "kcal": número | null, "legible": true | false}`;
     r = parseJSONLoose(await callGemini([{ text: prompt }, { inlineData: { mimeType: 'image/jpeg', data: img.split(',')[1] } }], { timeout: 30000 }));
   } catch (err) { return fail(esc(err.message || 'Error de conexión') + '. Prueba de nuevo.'); }
@@ -3247,7 +3265,7 @@ Responde SOLO con JSON válido: {"actividad": "clave" | null, "fecha": "…" | n
   toast('Datos leídos ✓ Revisa y pulsa «Registrar»');
   // calcula ya las calorías con esos datos (no registra: lo confirma el usuario)
   setTimeout(() => estimateCardio(), 50);
-});
+}
 async function estimateCardio() {
   const c = ui.cardio;
   keepCardioInputs();
@@ -3276,7 +3294,7 @@ async function estimateCardio() {
 Actividad: ${T.label}${c.type === 'bike' ? ' (bicicleta estática o exterior)' : c.type === 'walk' ? ' (caminar)' : ''}.
 Duración: ${minutes} minutos.
 Intensidad percibida: ${intLabel} (escala: baja, media-baja, media, media-alta, alta). Descripción: ${T.hint[c.intensity]}.
-Peso corporal: ${kg} kg. ${(() => { const p = profileOf(); return `${p?.sex === 'm' ? 'Mujer' : p?.sex === 'h' ? 'Hombre' : 'Persona'}${profileAge(p) ? ` de ${profileAge(p)} años` : ' adulta'}.`; })()}
+${(c.desc || '').trim() ? `Detalles que da la persona: «${(c.desc || '').trim()}». Tenlos en cuenta (tipo de ejercicio, carga, terreno, pausas…).\n` : ''}Peso corporal: ${kg} kg. ${(() => { const p = profileOf(); return `${p?.sex === 'm' ? 'Mujer' : p?.sex === 'h' ? 'Hombre' : 'Persona'}${profileAge(p) ? ` de ${profileAge(p)} años` : ' adulta'}.`; })()}
 ${[wv.km ? `Distancia: ${wv.km} km.` : '', wv.m ? `Distancia: ${wv.m} m nadando.` : '', wv.gain ? `Desnivel positivo: ${wv.gain} m.` : '', speed ? `Media: ${speed}.` : '', wv.hr ? `Frecuencia cardiaca media: ${wv.hr} ppm (dato de su reloj; dale mucho peso).` : '', wv.wkcal ? `Su reloj marca ${wv.wkcal} kcal (probablemente totales y algo sobrestimadas).` : ''].filter(Boolean).join('\n')}
 Sé conservador: relojes y máquinas suelen sobrestimar.
 Responde SOLO con JSON válido: {"kcal": número entero, "explanation": "una frase breve con el razonamiento"}`;
@@ -6232,6 +6250,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.91.0', ['📝 Cardio: al hacer la foto o captura del reloj puedes añadir detalles (qué actividad era, resistencia, cuestas, mochila…), también por voz. La IA los usa para leer la actividad y afinar las calorías.']],
   ['4.90.1', ['🔢 Entreno: el test de máximo de un reto ya no suma como entreno en el resumen de la semana y del mes (sigue contando para el mapa muscular).'], 'quiet'],
   ['4.90.0', ['👥 Acceso → «Usuarios y planes»: pantalla completa con resumen, filtros y cada DÚO en una sola fila.', '💶 Modalidades Individual y DÚO con sus precios, renovación sumando los días que quedan, último pago en cada ficha, «Recordar renovación» por WhatsApp y cobros del mes y del año.', '🔗 Unir en DÚO a dos personas que ya tienen código (o separarlas), sin cambiarles el código.'], 'admin'],
   ['4.89.1', ['🖼️ Las tarjetas para compartir vuelven a la F de siempre.'], 'quiet'],
@@ -6958,7 +6977,7 @@ function man3dStop() { try { man3dMod?.stop(); } catch { /* nada */ } }
 const GYM3D_MAP = [
   [/m[aá]quina|polea|prensa|smith|multipower|jal[oó]n|contractora|cable|pec ?deck|hack|extensi[oó]n de cu[aá]driceps|curl femoral|curl n[oó]rdico|\+|gemelos sentado|pica|sissy|thruster|hiperextensi|patada|p[aá]jaro|apertura|abducci|aducci|paseo lateral|clean/i, null],
   [/martillo/i, 'curlh'], [/curl concentrado/i, 'curlconc'], [/curl (en banco )?inclinado|curl inclinado/i, 'curlinc'],
-  [/gorilla/i, 'gorilla'], [/toalla/i, 'towel'], [/remo invertido en trx/i, 'trxrow'], [/face ?pull|trx/i, 'trxfp'], [/remo (a una mano|con mancuerna a una mano)/i, 'dbrow1'], [/remo con (2|dos) mancuernas/i, 'csrow'],
+  [/gorilla/i, 'gorilla'], [/toalla/i, 'towel'], [/remo invertido en trx/i, 'trxrow'], [/face ?pull|trx/i, 'trxfp'], [/remo (a una mano|con mancuerna a una mano)/i, 'dbrow1'], [/remo con (2|dos) mancuernas|remo con mancuernas en banco inclinado/i, 'csrow'],
   [/press cerrado/i, 'benchc'], [/peso muerto (rumano )?a una pierna/i, 'sldl'], [/hip thrust a una pierna/i, 'hipth1'], [/zancadas?.*kettlebell/i, 'lungekb'],
   [/burpee/i, 'burpee'], [/hollow/i, 'hollow'], [/crunch/i, 'crunch'], [/plancha lateral/i, 'sk'], [/plancha/i, 'plank'],
   [/mountain|escalador/i, 'mc'], [/jumping|tijera/i, 'jj'],
@@ -7409,7 +7428,7 @@ const actions = {
     if (!(k >= 0 && k <= 5000)) return toast('Revisa las calorías', 'warn');
     state.cardio.push({ id: uid('k_'), date: c.date, type: c.type, minutes: parseInt(c.minutes, 10), intensity: c.est?.ik || c.intensity, kcal: k, ai: !!c.est?.ai, ...watchVals(c) });
     persist();
-    c.est = null; c.minutes = ''; for (const f of ['km', 'm', 'gain', 'hr', 'wkcal']) c[f] = '';
+    c.est = null; c.minutes = ''; c.desc = ''; for (const f of ['km', 'm', 'gain', 'hr', 'wkcal']) c[f] = '';
     render(); toast(`Cardio registrado: ${k} kcal ✓`);
   },
   cdDel: b => { if (!confirm('¿Borrar este registro de cardio?')) return; state.cardio = state.cardio.filter(x => x.id !== b.dataset.id); persist(); render(); },
