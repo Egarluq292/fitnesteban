@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.91.0';
+const APP_VERSION = '4.92.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -2376,7 +2376,7 @@ async function generateReport() {
     try {
       const prompt = `Eres entrenador personal y nutricionista deportivo. Analiza la última semana de ${profileText()}.
 Datos (JSON, null = sin datos): ${JSON.stringify(data)}
-Objetivos diarios configurados: ${state.settings.targetKcal} kcal y ${state.settings.targetProt} g de proteína; peso actual: ${latestWeight() || 'desconocido'} kg.
+Objetivos diarios configurados: ${state.settings.targetKcal} kcal y ${state.settings.targetProt} g de proteína; peso actual: ${latestWeight() || 'desconocido'} kg.${algPrompt()}
 Reglas: básate SOLO en estos datos; si faltan datos importantes, dilo en "mejorar". ${BODY_AI_RULES} Si los objetivos diarios claramente no encajan con su perfil y objetivo, dilo en "mejorar" con cifras orientativas. Sé directo, concreto y breve, en español de España. Nada de frases motivacionales vacías.
 Responde SOLO con JSON válido:
 {"titular": "una frase con el balance de la semana", "bien": ["máx. 3 puntos"], "mejorar": ["máx. 3 puntos"], "acciones": ["exactamente 3 acciones concretas y medibles para la próxima semana"]}`;
@@ -3689,6 +3689,8 @@ const QC_BASICS = [
   { desc: 'Café con leche y tostada con aceite', u: '200 ml de leche y 60 g de pan', g: 265, kcal: 280, prot: 10, carbs: 32, fat: 12, ing: ['200 ml de leche', '60 g de pan', '1 cucharadita de aceite'], r: 'b' },
   { desc: 'Avena con leche y plátano', u: '40 g de avena, 200 ml de leche y 1 plátano', g: 360, kcal: 350, prot: 15, carbs: 55, fat: 7, ing: ['40 g de copos de avena', '200 ml de leche', '1 plátano'], r: 'b' },
   { desc: 'Huevos revueltos con tostada', u: '2 huevos y 60 g de pan', g: 170, kcal: 320, prot: 18, carbs: 26, fat: 15, ing: ['2 huevos', '60 g de pan'], r: 'b' },
+  { desc: 'Tortitas de arroz con pavo', u: '4 tortitas y 80 g de pavo', g: 120, kcal: 240, prot: 21, carbs: 32, fat: 2, ing: ['4 tortitas de arroz', '80 g de pavo en lonchas'], low: 'tortitas de arroz con pavo', r: 'bx' },
+  { desc: 'Huevos revueltos con aguacate', u: '2 huevos y medio aguacate', g: 170, kcal: 230, prot: 14, carbs: 3, fat: 17, ing: ['2 huevos', '50 g de aguacate'], r: 'b' },
   { desc: 'Yogur con avena y frutos rojos', u: '1 yogur y 30 g de avena', g: 230, kcal: 260, prot: 16, carbs: 34, fat: 6, ing: ['1 yogur proteico', '30 g de copos de avena', 'Un puñado de frutos rojos'], r: 'b' }
 ];
 // Un plato = ingredientes con gramos y valores por 100 g: así al apuntarlo puedes ajustar la cantidad de cada uno
@@ -3715,15 +3717,54 @@ function qcPlan(L = qcLeft()) {
   return slots.map(tp => { const kcal = Math.min(part(L.kcal, tp), CAP[tp]); return { tp, kcal, prot: Math.min(part(L.prot, tp), Math.round(kcal * .4 / 4)), carbs: part(L.carbs, tp), fat: part(L.fat, tp) }; });
 }
 // sin IA: comidas con sentido (proteína + guarnición, o tentempié) de tus habituales y básicos, para lo que toca en esa comida
+/* 🚫 Alergias e intolerancias: se guardan solo en el móvil y se mandan a la IA en cada propuesta de comida.
+   Sin IA, «¿Qué como?» descarta los básicos y habituales que las contengan (por palabras clave). */
+const ALG = [
+  ['gluten', 'Gluten', 'sin gluten (celiaquía o sensibilidad)', /\b(pan|tostad|avena|trigo|pasta|espagueti|macarr|fideo|cusc[uú]s|cebada|centeno|harina|galleta|bizcocho|rebozad|empanad|pizza|bollo|cereal|seit[aá]n|cerveza)/i],
+  ['lactosa', 'Lactosa', 'sin lactosa (intolerancia)', /\b(leche|yogur|queso|nata|mantequilla|batido de prote[ií]na|reques[oó]n|k[eé]fir|helado|bechamel|cacito de prote[ií]na)/i],
+  ['leche', 'Proteína de leche', 'sin ningún lácteo (alergia a la proteína de la leche)', /\b(leche|yogur|queso|nata|mantequilla|batido de prote[ií]na|reques[oó]n|k[eé]fir|helado|bechamel|cacito de prote[ií]na|whey|case[ií]na)/i],
+  ['huevo', 'Huevo', 'sin huevo ni claras', /\b(huevo|claras?|tortilla|mayonesa|revuelto)/i],
+  ['frutos', 'Frutos secos', 'sin frutos secos', /\b(frutos secos|nuez|nueces|almendra|avellana|anacardo|pistacho|pi[ñn]ones|macadamia)/i],
+  ['cacahuete', 'Cacahuete', 'sin cacahuete ni crema de cacahuete', /\b(cacahuete|man[ií]|frutos secos)/i],
+  ['pescado', 'Pescado', 'sin pescado', /\b(pescado|merluza|salm[oó]n|at[uú]n|bacalao|sardina|anchoa|boquer[oó]n|caballa|dorada|lubina|rape|bonito|surimi)/i],
+  ['marisco', 'Marisco', 'sin marisco (crustáceos ni moluscos)', /\b(marisco|gamba|langostino|mejill[oó]n|calamar|pulpo|almeja|sepia|cigala|n[eé]cora|berberecho|surimi)/i],
+  ['soja', 'Soja', 'sin soja', /\b(soja|tofu|edamame|tempeh|miso)/i],
+  ['sesamo', 'Sésamo', 'sin sésamo', /\b(s[eé]samo|tahin|hummus)/i]
+];
+const algOn = () => { const st = state.settings; return { keys: (st.alg || []).filter(k => ALG.some(a => a[0] === k)), otras: String(st.algOtras || '').trim() }; };
+const algAny = () => { const a = algOn(); return a.keys.length > 0 || !!a.otras; };
+const algShort = () => { const a = algOn(), L = a.keys.map(k => ALG.find(x => x[0] === k)[1].toLowerCase()); if (a.otras) L.push(a.otras); return L.join(', '); };
+// texto para los prompts de comida (vacío si no hay nada marcado)
+function algPrompt() {
+  if (!algAny()) return '';
+  const a = algOn(), L = a.keys.map(k => ALG.find(x => x[0] === k)[2]);
+  return `\nALERGIAS E INTOLERANCIAS (OBLIGATORIO, por encima de cualquier otra regla): ${[...L, ...(a.otras ? [`además evita: ${a.otras}`] : [])].join('; ')}. Ningún plato, ingrediente ni condimento puede contenerlos, tampoco escondidos (pan rallado, rebozados, salsas, caldos, embutidos…). Si con lo que hay no se puede, dilo.`;
+}
+// ¿un alimento o plato choca con lo marcado? (sin IA, por palabras clave; también lo que escribe en «otras»)
+function algHit(txt) {
+  if (!algAny()) return false; const a = algOn(), t = String(txt || '');
+  if (a.keys.some(k => ALG.find(x => x[0] === k)[3].test(t))) return true;
+  const words = a.otras.split(/[,;·\n]| y /).map(w => normTxt(w.trim())).filter(w => w.length >= 3);
+  const n = normTxt(t); return words.some(w => n.includes(w));
+}
+function algCardHTML() {
+  const a = algOn();
+  return foldCard('alg', '🚫 Alergias e intolerancias', a.keys.length || a.otras ? `${a.keys.length + (a.otras ? 1 : 0)} marcada${a.keys.length + (a.otras ? 1 : 0) === 1 ? '' : 's'}` : 'Ninguna', algAny() ? 'text-amber-300' : '', `
+    <p class="text-[12px] text-mute">Marca lo que no puedes comer. La IA lo tiene en cuenta en «¿Qué como?», las recetas y el Coach, y te avisa si una comida que apuntas parece llevarlo.</p>
+    <div class="flex flex-wrap gap-1.5">${ALG.map(([k, l]) => `<button class="chip chip-sm ${a.keys.includes(k) ? 'chip-on' : ''}" data-act="alg" data-k="${k}" type="button">${a.keys.includes(k) ? '✓ ' : ''}${esc(l)}</button>`).join('')}</div>
+    <label class="lbl">Otras cosas que no comes <span class="text-mute font-normal">(opcional)</span><input class="field mt-1" id="algOtras" maxlength="120" placeholder="Ej: fresas, pimiento, cerdo" value="${esc(a.otras)}" /></label>
+    <p class="text-[11px] text-amber-300/90">⚠️ Es una ayuda, no una garantía: la IA puede equivocarse y no conoce las trazas ni la contaminación cruzada. Si tienes una alergia seria, revisa siempre las etiquetas.</p>`);
+}
 function qcLocal(B, tp) {
-  if (B.protOnly) return QC_BASICS.filter(x => x.r.includes('q') && x.kcal <= 170).sort((a, b) => b.prot / b.kcal - a.prot / a.kcal).slice(0, 3)
+  if (B.protOnly) return QC_BASICS.filter(x => x.r.includes('q') && x.kcal <= 170 && !algHit(`${x.desc} ${x.ing.join(' ')}`)).sort((a, b) => b.prot / b.kcal - a.prot / a.kcal).slice(0, 3)
     .map(x => { const f = 100 / x.g, items = [{ name: x.desc, uds: x.u || '', grams: x.g, per100: { kcal: x.kcal * f, prot: x.prot * f, carbs: x.carbs * f, fat: x.fat * f } }]; return { nombre: x.desc, items, ...qcSum(items) }; });
   const snack = tp === 'Puente' || tp === 'Desayuno';
   const mine = mealGroups().filter(e => e.count >= 2 && num(e.last.kcal) > 0 && (e.byType[tp] || 0) >= 1).sort((a, b) => b.count - a.count).slice(0, 15)
     .map(e => [{ desc: e.last.desc, kcal: num(e.last.kcal), prot: num(e.last.prot), carbs: num(e.last.carbs), fat: num(e.last.fat), ing: [e.last.desc], its: (e.last.items || []).filter(it => it.grams > 0 && it.per100), mine: true }]);
-  const R = r => QC_BASICS.filter(x => x.r.includes(r)), combos = [...mine];
-  const fruit = QC_BASICS.find(x => x.low === 'una pieza de fruta');
-  if (snack) { for (const x of tp === 'Desayuno' ? [...R('b'), ...R('xd').filter(y => y !== fruit)] : R('x')) { combos.push([x]); if (x !== fruit) combos.push([x, fruit]); } }
+  const okB = x => !algHit(`${x.desc} ${x.ing.join(' ')}`);
+  const R = r => QC_BASICS.filter(x => x.r.includes(r) && okB(x)), combos = mine.filter(c => !algHit(`${c[0].desc} ${(c[0].its || []).map(it => it.name).join(' ')}`));
+  const fruit0 = QC_BASICS.find(x => x.low === 'una pieza de fruta'), fruit = okB(fruit0) ? fruit0 : null;
+  if (snack) { for (const x of tp === 'Desayuno' ? [...R('b'), ...R('xd').filter(y => y !== fruit)] : R('x')) { combos.push([x]); if (fruit && x !== fruit) combos.push([x, fruit]); } }
   else for (const p of R('p')) for (const v of R('v')) { combos.push([p, v]); for (const c of R('c')) { combos.push([p, c, v]); for (const d of R('d')) combos.push([p, c, v, d]); } for (const d of R('d')) combos.push([p, v, d]); }
   const K = B.kcal, P = Math.max(0, B.prot);
   const score = c => { const k = c.reduce((a, x) => a + x.kcal, 0), pr = c.reduce((a, x) => a + x.prot, 0);
@@ -3789,7 +3830,7 @@ async function qcAsk(cx) {
 Para esta comida le corresponden unas ${B.kcal} kcal (±15 %), ${B.prot} g de proteína, ${B.carbs} g de hidratos y ${B.fat} g de grasa.${rest.length ? ` Después todavía tiene ${rest.map(x => `${qcDe(x.tp)} (~${x.kcal} kcal)`).join(' y ')}, así que no gastes en esta comida lo que es para luego.` : ' Es su última comida del día.'}
 ${img ? 'En la foto se ve su nevera o despensa: usa SOLO lo que se ve con claridad (más sal, aceite, especias y agua). Si algo no se distingue bien, no lo uses y ponlo en "dudas".' : have ? `Tiene en casa: ${have}. Usa SOLO eso (más sal, aceite, especias y agua).` : 'Usa ingredientes corrientes de supermercado español.'}
 ${prev.length ? `No repitas estas ideas: ${prev.join('; ')}.` : ''}
-${QC_RULES}${B.protOnly ? `\n- MODO PROTEÍNA: ya ha llegado a sus calorías de hoy y le faltan ${B.prot} g de proteína. Solo ideas de 150 kcal como mucho, con mucha proteína y casi sin grasa ni hidratos: lácteos desnatados o proteicos, claras, pavo, atún al natural, gambas, batido de proteína… Nada de pan, aceite, frutos secos ni dulces. Puede ser algo sencillo, sin cocinar.` : ''}
+${QC_RULES}${algPrompt()}${B.protOnly ? `\n- MODO PROTEÍNA: ya ha llegado a sus calorías de hoy y le faltan ${B.prot} g de proteína. Solo ideas de 150 kcal como mucho, con mucha proteína y casi sin grasa ni hidratos: lácteos desnatados o proteicos, claras, pavo, atún al natural, gambas, batido de proteína… Nada de pan, aceite, frutos secos ni dulces. Puede ser algo sencillo, sin cocinar.` : ''}
 Propón 3 opciones distintas, fáciles (menos de 20 minutos). Para cada ingrediente da su peso en gramos (en crudo si se cocina; si va por unidades, pon también las unidades) y sus valores por 100 g, realistas (tablas españolas). Incluye el aceite si se usa.
 Responde SOLO con JSON: {"opciones":[{"nombre":"…","items":[{"nombre":"Merluza","g":150,"uds":"","por100":{"kcal":0,"prot":0,"carbs":0,"fat":0}}],"pasos":"una frase"}],"veo":["alimento", "…"],"dudas":["lo que no distingues bien"],"nota":"una frase"}`;
   let r, err = null;
@@ -3819,7 +3860,7 @@ function qcShow(cx, ops, note, ia = false) {
   const seen = img ? veo.join(', ') : have;
   openModal(`<div class="flex items-center gap-2"><button class="text-mute text-xl -ml-1 px-1" data-mact="back" type="button">‹</button><div class="min-w-0"><div class="text-[11px] font-black tracking-widest text-cyan-300">🍽️ IDEAS PARA ${esc(qcDe(tp).toUpperCase())}</div><h3 class="text-lg font-black leading-tight">${B.protOnly ? `Hasta ~${B.prot} g de proteína · máx. ${B.kcal} kcal` : `Unas ${B.kcal} kcal · ${B.prot} g de proteína`}</h3><p class="text-[11px] text-mute">${B.protOnly ? `Te faltan ${L.prot} g de proteína y ya has llegado a tus kcal` : `De las ${L.kcal} kcal que te quedan hoy`}</p></div></div>
     ${img && veo.length ? `<div class="qc-seen"><b>👀 He visto:</b> ${esc(veo.join(', '))}${dudas.length ? `<br><b>🤔 No lo distingo bien:</b> ${esc(dudas.join(', '))}` : ''}</div>` : ''}
-    ${note ? `<p class="text-[12px] text-mute mt-2">${esc(note)}</p>` : ''}
+    ${note ? `<p class="text-[12px] text-mute mt-2">${esc(note)}</p>` : ''}${algAny() ? `<p class="text-[11px] text-amber-300 mt-1">🚫 Sin: ${esc(algShort())}. Revisa las etiquetas.</p>` : ''}
     ${ops.length ? ops.map((o, i) => `<div class="qc-card"><div class="font-extrabold text-[15px] leading-tight">${esc(o.nombre)}${o.mine ? ' <span class="text-[10.5px] text-amber-300 font-bold">· de tus habituales</span>' : ''}</div>
       <div class="text-[11px] font-mono mt-1">${macroLine({ kcal: o.kcal, prot: o.prot, carbs: o.carbs, fat: o.fat })}</div>
       ${o.items.length > 1 || ia ? `<ul class="qc-ing">${o.items.map(it => `<li>${esc(it.name)}${it.uds ? ` <span class="text-mute">(${esc(it.uds)})</span>` : ''} · ${it.grams} g</li>`).join('')}</ul>` : ''}${o.pasos ? `<p class="text-[12px] text-mute mt-1">${esc(o.pasos)}</p>` : ''}
@@ -4442,9 +4483,10 @@ Reglas:
 - Si un alimento no tiene cantidad en la descripción, estímala por la foto o por raciones habituales en España y marca "from_description": false.
 - Para cada alimento da tres raciones en gramos: pequeña, mediana y grande. La MEDIANA debe ser tu estimación más probable de lo que hay en el plato. Si from_description es true, "grams" es la cantidad indicada.
 - Incluye aceite o salsas solo si se ven o se mencionan. No inventes alimentos.
-- Los valores por 100 g deben referirse al alimento tal como se come (cocinado si está cocinado).
+- Los valores por 100 g deben referirse al alimento tal como se come (cocinado si está cocinado).${algAny() ? `
+- La persona NO puede tomar: ${algShort()}. Si el plato probablemente lleva algo de eso (aunque sea escondido: rebozado, salsa, pan…), explícalo en "alerta" en una frase; si no, "alerta": "".` : ''}
 Responde SOLO con JSON válido:
-{"dish_name": "nombre breve", "confidence": "alta" | "media" | "baja", "explanation": "una frase breve",
+{"dish_name": "nombre breve",${algAny() ? ' "alerta": "",' : ''} "confidence": "alta" | "media" | "baja", "explanation": "una frase breve",
  "items": [{"name": "nombre corto del alimento", "from_description": true|false, "grams": número, "small_g": número, "medium_g": número, "large_g": número,
             "per100": {"kcal": número, "protein": número, "carbs": número, "fat": número}}],
  "calories": total, "protein": total, "carbs": total, "fat": total}
@@ -4466,8 +4508,9 @@ Descripción del usuario: ${desc ? JSON.stringify(desc) : '(sin descripción, us
     ui.aiResult = {
       desc: desc || res.dish_name || ui.mealType, items,
       kcal: num(res.calories) || 0, prot: num(res.protein) || 0, carbs: num(res.carbs) || 0, fat: num(res.fat) || 0,
-      note: `${res.dish_name || 'Comida'}${res.confidence ? ` (confianza ${res.confidence})` : ''}: ${res.explanation || ''}`
+      note: `${res.alerta && algAny() ? `⚠️ ${String(res.alerta).slice(0, 200)} · ` : ''}${res.dish_name || 'Comida'}${res.confidence ? ` (confianza ${res.confidence})` : ''}: ${res.explanation || ''}`
     };
+    if (res.alerta && algAny()) toast(`⚠️ ${String(res.alerta).slice(0, 140)}`, 'warn');
     recalcFromItems(ui.aiResult);
   } catch (e) {
     toast('IA: ' + e.message, 'error');
@@ -4713,6 +4756,7 @@ function renderSettings() {
     <p class="text-[11px] ${Math.abs(sumK - st.targetKcal) > st.targetKcal * 0.05 ? 'text-amber-300' : 'text-mute'}">Tus macros suman ${sumK} kcal (objetivo ${st.targetKcal}).</p>
     <button class="btn-primary w-full" data-act="saveGoals" type="button">Guardar objetivos</button>
 `)}
+  ${algCardHTML()}
 
   <details class="card p-4 mt-3" id="blocksBox" ${ui.blocksOpen ? 'open' : ''}>
     <summary class="flex items-center justify-between cursor-pointer select-none">
@@ -5765,7 +5809,7 @@ Reglas:
 - Básate en SUS DATOS de abajo. Cita números concretos (kg, reps, g, kcal, fechas). Si faltan datos para responder, dilo y pide el dato concreto.
 - El campo "coach_app" es lo que la app le recomienda en cada ejercicio (doble progresión). No lo contradigas sin explicar por qué.
 - "quedan" = lo que le falta hoy para sus objetivos (negativo = se ha pasado). Para comidas, propone platos normales de España con cantidades en gramos y sus macros aproximados.
-- ${BODY_AI_RULES}
+- ${BODY_AI_RULES}${algPrompt() ? `\n- ${algPrompt().trim()} Ten en cuenta esto en cualquier comida, receta o alimento que propongas.` : ''}
 - Nada de frases motivacionales vacías. Si menciona dolor, lesión o algo médico, recomienda consultar a un profesional y no diagnostiques.
 - Ten en cuenta sus comentarios por ejercicio ("comentarios" en ultimas_sesiones: molestias, muy duro, fácil, poco tiempo, notas). Si se repiten molestias o "muy duro" en un ejercicio, propón una alternativa (puede cambiarla con ⇄ en la app) o ajustar carga/volumen; si algo le resulta fácil varias veces, anímale a progresar.
 - Comprueba si sus objetivos diarios ("objetivos": kcal y proteína) encajan con su sexo, edad, altura, peso actual y objetivo. Si claramente NO encajan (p. ej. demasiado altos o bajos para esa persona), avísale una sola vez en la conversación, en una o dos frases, con cifras orientativas y diciendo que los cambia en Ajustes → Objetivos diarios. Si faltan edad o altura, puedes sugerir que las añada en Ajustes → Mi perfil.
@@ -6174,7 +6218,7 @@ async function fetchRecipe(ml, wish = '', chatMsgs = []) {
 Reglas:
 - No añadas ningún ingrediente con calorías (ni aceite, ni mantequilla, ni salsas, ni azúcar, ni pan) que no esté en la lista. Si el plato necesita grasa para cocinar y no hay aceite en la lista, usa sartén antiadherente, horno, airfryer, plancha o un toque de spray.
 - Sí puedes usar sal, pimienta, especias, hierbas, ajo, limón, vinagre, mostaza y agua (cantidades orientativas: "1 pizca", "1 diente"…).
-- Pasos cortos, claros y en orden (máximo 8), en español de España, tuteando. Indica temperaturas y tiempos concretos.
+- Pasos cortos, claros y en orden (máximo 8), en español de España, tuteando. Indica temperaturas y tiempos concretos.${algPrompt() ? `\n- La persona tiene alergias o intolerancias: ningún condimento ni paso puede llevarlas. Si algún ingrediente de la lista podría contenerlas (p. ej. pan, embutido, salsa), avísalo en "consejo".${algPrompt()}` : ''}
 ${said ? `- Lo que el usuario ha dicho en la conversación (respeta sus preferencias de cocinado, utensilios y gustos): ${said}\n` : ''}${wish ? `- PETICIÓN PARA ESTA RECETA (manda sobre todo lo demás, salvo las cantidades): ${wish.slice(0, 200)}\n` : ''}
 Devuelve SOLO este JSON: {"titulo":"…","tiempo_min":n,"dificultad":"Fácil|Media","utensilios":["…"],"condimentos":["…"],"pasos":[{"texto":"…","min":n o null}],"consejo":"una frase"}`;
   const r = parseJSONLoose(await callGemini([{ text: prompt }], { timeout: 45000, temperature: 0.4 }));
@@ -6250,6 +6294,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.92.0', ['🚫 Ajustes → Alergias e intolerancias: marca gluten, lactosa, huevo, frutos secos, marisco… (y lo que no comas). «¿Qué como?», las recetas, el Coach y el informe lo tienen en cuenta, y te avisa si una comida que apuntas parece llevarlo.']],
   ['4.91.0', ['📝 Cardio: al hacer la foto o captura del reloj puedes añadir detalles (qué actividad era, resistencia, cuestas, mochila…), también por voz. La IA los usa para leer la actividad y afinar las calorías.']],
   ['4.90.1', ['🔢 Entreno: el test de máximo de un reto ya no suma como entreno en el resumen de la semana y del mes (sigue contando para el mapa muscular).'], 'quiet'],
   ['4.90.0', ['👥 Acceso → «Usuarios y planes»: pantalla completa con resumen, filtros y cada DÚO en una sola fila.', '💶 Modalidades Individual y DÚO con sus precios, renovación sumando los días que quedan, último pago en cada ficha, «Recordar renovación» por WhatsApp y cobros del mes y del año.', '🔗 Unir en DÚO a dos personas que ya tienen código (o separarlas), sin cambiarles el código.'], 'admin'],
@@ -7650,6 +7695,7 @@ const actions = {
     catch (e) { toast('Falla: ' + e.message, 'error'); }
     finally { state.settings.apiKey = saved.key; state.settings.model = saved.model; b.disabled = false; b.textContent = editing ? 'Probar' : 'Probar conexión'; }
   },
+  alg: b => { const st = state.settings, k = b.dataset.k; st.alg = (st.alg || []).includes(k) ? st.alg.filter(x => x !== k) : [...(st.alg || []), k]; persist(); render(); },
   saveGoals: () => {
     const v = id => parseInt($(id).value, 10);
     const g = { targetKcal: v('#tK'), targetProt: v('#tP'), targetCarbs: v('#tC'), targetFat: v('#tF') };
@@ -7896,6 +7942,7 @@ app.addEventListener('input', e => {
 });
 app.addEventListener('change', e => {
   const t = e.target;
+  if (t.id === 'algOtras') { state.settings.algOtras = t.value.trim().slice(0, 120); persist(); toast('Guardado ✓'); return render(); }
   if (t.dataset.habT !== undefined || t.dataset.habU !== undefined) {
     const h = state.settings.habitList[+(t.dataset.habT ?? t.dataset.habU)]; if (!h) return;
     if (t.dataset.habT !== undefined) h.target = clamp(parseInt(t.value, 10) || 2, 2, 20); else h.unit = t.value.trim().slice(0, 12);
