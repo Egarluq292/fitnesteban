@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.95.0';
+const APP_VERSION = '4.95.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -2901,7 +2901,7 @@ function trainTodayModal(T0 = todayISO(), fromCal = false) {
     <button class="btn-ghost w-full mt-${fromCal ? 2 : 3}" data-mact="hist" type="button">📚 Ver todo el historial</button>`, {
     cal: () => openCalendar(T0),
     card: (_, b) => { closeModal(); openShareCard(b.dataset.id); },
-    g3d: (_, b) => gym3dModal(b.dataset.n),
+    g3d: (_, b) => gym3dModal(b.dataset.n, () => trainTodayModal(T0, fromCal)),
     ccard: (_, b) => { closeModal(); openCardioCard(b.dataset.id); },
     hist: () => { closeModal(); openKeys.history = true; ui.view = 'progress'; ui.accessOpen = false; render(); goHistory(); }
   });
@@ -6400,6 +6400,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.95.1', ['Al ver una animación desde «Hoy has hecho», «Volver» te deja en la lista de ejercicios.'], 'quiet'],
   ['4.95.0', ['✅ «Hoy has hecho» más visual: cada ejercicio con su mini mapa muscular (qué has trabajado de un vistazo), y tarjeta para compartir también en el cardio.']],
   ['4.94.0', ['🔥 Tarjeta para compartir tu cardio: bici, correr, natación, funcional, pádel… (también las que registras con la captura de Strava o del reloj). Sale al registrar y con el botón 📸 de cada actividad, también en vídeo.']],
   ['4.93.1', ['🎬 Tarjeta en vídeo para redes: al compartir un entreno o un reto, pulsa «Vídeo para redes» y tendrás tu tarjeta con el logo de FITNESTEBAN al final, lista para WhatsApp, Instagram o TikTok.']],
@@ -7215,12 +7216,12 @@ const GYM3D_CUES = {
 const gym3dCues = name => { const id = gym3dOf(name); return id ? GYM3D_CUES[id.split(':')[0]] || null : null; };
 const canBeta = () => isAdminUser() || !!access.me?.beta; // 🧪 administrador y quien tenga «beta» en su código
 let gym3dMod = null;
-function gym3dModal(name) {
+function gym3dModal(name, back = null) { // back: volver a la ventana de la que vienes (p. ej. «Hoy has hecho»)
   const id = gym3dOf(name); if (!id) return;
   openModal(`<h3 class="text-lg font-black leading-tight">${esc(name)}</h3>
     <div class="man3d mt-3" id="gym3d"><span class="text-mute text-sm">Cargando animación…</span></div>
     ${gym3dCues(name) ? `<div class="lbl mt-3">💡 Las 3 claves</div><ol class="cues">${gym3dCues(name).map(c => `<li>${esc(c)}</li>`).join('')}</ol><p class="text-[11px] text-mute mt-1">Léelas antes de empezar y cuida una en cada serie.</p>` : '<p class="text-[11px] text-mute mt-2 text-center">Muestra el movimiento básico. Para la técnica fina, mira el vídeo.</p>'}
-    <div class="grid grid-cols-2 gap-2 mt-3"><a class="btn-ghost text-center" href="${esc(videoUrl({ name }))}" target="_blank" rel="noopener">▶ YouTube</a><button class="btn-primary" data-close type="button">Cerrar</button></div>`);
+    <div class="grid grid-cols-2 gap-2 mt-3"><a class="btn-ghost text-center" href="${esc(videoUrl({ name }))}" target="_blank" rel="noopener">▶ YouTube</a>${back ? '<button class="btn-primary" data-mact="back" type="button">‹ Volver</button>' : '<button class="btn-primary" data-close type="button">Cerrar</button>'}</div>`, back ? { back } : undefined);
   (async () => { const el = $('#gym3d'); try { gym3dMod ||= await import('./gym3d.js'); if (el?.isConnected) gym3dMod.mount(el, id); } catch { if (el) el.innerHTML = '<span class="text-mute text-sm">No se pudo cargar la animación. Mira el vídeo.</span>'; } })();
 }
 /* Aviso fijo en Inicio cuando al acceso le quedan 3 días o menos (el toast se pierde fácil) */
