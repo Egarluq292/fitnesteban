@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.92.0';
+const APP_VERSION = '4.92.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6294,6 +6294,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.92.1', ['⏱️ Descanso: con la cuenta atrás en marcha la app ya no se recarga sola para actualizarse (aunque estés fuera de la app), así no se pierden los pitidos.'], 'quiet'],
   ['4.92.0', ['🚫 Ajustes → Alergias e intolerancias: marca gluten, lactosa, huevo, frutos secos, marisco… (y lo que no comas). «¿Qué como?», las recetas, el Coach y el informe lo tienen en cuenta, y te avisa si una comida que apuntas parece llevarlo.']],
   ['4.91.0', ['📝 Cardio: al hacer la foto o captura del reloj puedes añadir detalles (qué actividad era, resistencia, cuestas, mochila…), también por voz. La IA los usa para leer la actividad y afinar las calorías.']],
   ['4.90.1', ['🔢 Entreno: el test de máximo de un reto ya no suma como entreno en el resumen de la semana y del mes (sigue contando para el mapa muscular).'], 'quiet'],
@@ -8132,10 +8133,12 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   const reloadNow = () => { if (refreshing) return; refreshing = true; try { persist(); savePrevCopy(localStorage.getItem(STORE_KEY), APP_VERSION); } catch { /* nada */ } location.reload(); };
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (refreshing || !hadController) return;
-    if (document.visibilityState === 'hidden' || !busy()) return reloadNow();
+    // con el descanso en marcha NUNCA se recarga (ni con la app en segundo plano): recargar borraría los pitidos programados
+    const canNow = () => !timer.endAt && (document.visibilityState === 'hidden' || !busy());
+    if (canNow()) return reloadNow();
     $('#topBanner').innerHTML = '';
-    const tryLater = () => { if (document.visibilityState === 'hidden' || !busy()) reloadNow(); else setTimeout(tryLater, 5000); };
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') reloadNow(); });
+    const tryLater = () => { if (canNow()) reloadNow(); else setTimeout(tryLater, 5000); };
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && !timer.endAt) reloadNow(); });
     setTimeout(tryLater, 5000);
   });
   // comprobar si hay versión nueva cada vez que vuelves a la app
