@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.90.0';
+const APP_VERSION = '4.90.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -2753,7 +2753,7 @@ const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', '
 function trainRange(a, b) { // entrenos y minutos entre dos fechas (incluidas)
   let n = 0, min = 0;
   for (const x of sortedSessions()) if (x.date >= a && x.date <= b) { n++; min += x.durationMin || 0; }
-  for (const x of retoEntries()) if (x.h.date >= a && x.h.date <= b) n++;
+  for (const x of retoEntries()) if (!x.h.test && x.h.date >= a && x.h.date <= b) n++; // el test de máximo no cuenta como entreno (sí para el mapa muscular)
   for (const c of state.cardio) if (c.date >= a && c.date <= b) { n++; min += c.minutes || 0; }
   return { n, min };
 }
@@ -2767,9 +2767,10 @@ function trainMonthLine(T) {
 function trainWeekHTML() {
   const T = todayISO(), dow = (new Date(T + 'T12:00').getDay() + 6) % 7, mon = addDays(T, -dow);
   const days = Array.from({ length: 7 }, (_, i) => addDays(mon, i));
-  const did = d => { const t = trainToday(d); return t.gym.length || t.ret.length || t.car.length; };
+  const nRet = t => t.ret.filter(x => !x.h.test).length; // sin tests de máximo
+  const did = d => { const t = trainToday(d); return t.gym.length || nRet(t) || t.car.length; };
   const n = days.filter(did).length; if (!n && !state.sessions.length) return '';
-  const ne = days.reduce((a, d) => { const t = trainToday(d); return a + t.gym.length + t.ret.length + t.car.length; }, 0); // entrenos (fuerza, retos y cardio)
+  const ne = days.reduce((a, d) => { const t = trainToday(d); return a + t.gym.length + nRet(t) + t.car.length; }, 0); // entrenos (fuerza, retos y cardio; los tests no)
   // días con algo hecho (fuerza, retos o cardio), de lunes a domingo; sin «de X» para no chocar con el contador de cada bloque
   const cal = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/><path d="M7.5 13.5h2M11 13.5h2M14.5 13.5h2M7.5 17h2M11 17h2"/></svg>';
   return `<div class="week-strip">
@@ -6231,6 +6232,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.90.1', ['🔢 Entreno: el test de máximo de un reto ya no suma como entreno en el resumen de la semana y del mes (sigue contando para el mapa muscular).'], 'quiet'],
   ['4.90.0', ['👥 Acceso → «Usuarios y planes»: pantalla completa con resumen, filtros y cada DÚO en una sola fila.', '💶 Modalidades Individual y DÚO con sus precios, renovación sumando los días que quedan, último pago en cada ficha, «Recordar renovación» por WhatsApp y cobros del mes y del año.', '🔗 Unir en DÚO a dos personas que ya tienen código (o separarlas), sin cambiarles el código.'], 'admin'],
   ['4.89.1', ['🖼️ Las tarjetas para compartir vuelven a la F de siempre.'], 'quiet'],
   ['4.89.0', ['✨ La pantalla de acceso estrena la F del logo, con su corredor.']],
