@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.94.0';
+const APP_VERSION = '4.95.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -2790,6 +2790,8 @@ function muscleMapHTML() {
 }
 /* Mini silueta para «Hoy te toca» */
 /* Músculos que trabaja un día: principales a tope, secundarios a medias (para las tarjetas de cada bloque) */
+// mini mapa muscular de un ejercicio (para las listas de «Hoy has hecho»)
+function exMuscleSVG(name) { const v = {}; for (const [m, w] of Object.entries(musclesOf(name))) v[m] = w === 1 ? 1 : 0.45; return bodySVG(v, 24); }
 function dayMuscleSVG(day, width) {
   const v = {};
   for (const e of day.exercises) for (const [m, w] of Object.entries(musclesOf(variantOf(e).variant.name))) v[m] = Math.max(v[m] || 0, w === 1 ? 1 : 0.45);
@@ -2885,16 +2887,22 @@ function trainTodayModal(T0 = todayISO(), fromCal = false) {
   openModal(`<h3 class="modal-title">${T0 === todayISO() ? '✅ Hoy has hecho' : `🏋️ ${esc((t => t.charAt(0).toUpperCase() + t.slice(1))(fmtDate(T0)))}`}</h3>
     ${gym.map(x => { const g = gymKcalInfo(x); return `<div class="card-in">
       <div class="flex justify-between items-baseline gap-2"><b class="text-[15px]">🏋️ ${esc(x.dayTitle || 'Sesión')}</b><span class="text-[11px] text-mute shrink-0">${x.durationMin ? `${x.durationMin} min` : ''}${g ? ` · <span class="${MAC.kcal.text}">~${g.kcal} kcal</span>` : ''}</span></div>
-      <div class="mt-1.5 space-y-1 text-[12.5px]">${x.exercises.map(e => `<div><b>${esc(e.name)}${rec.has(e.name) ? ' <span class="text-amber-300">🏅 récord</span>' : ''}:</b> <span class="font-mono text-mute">${e.sets.map(st => setStr(st, isBwEx(e.exId), isTimedEx(e))).join(', ')}</span></div>`).join('')}</div>
+      <div class="mt-1">${x.exercises.map(e => `<div class="hh-ex">
+        <div class="hh-map">${exMuscleSVG(e.name)}</div>
+        <div class="flex-1 min-w-0"><div class="text-[14px] font-semibold leading-tight">${esc(e.name)}${rec.has(e.name) ? ' <span class="text-amber-300 text-[12px] whitespace-nowrap">🏅 récord</span>' : ''}</div>
+          <div class="text-[12px] text-mute mt-0.5 font-mono">${e.sets.map(st => setStr(st, isBwEx(e.exId), isTimedEx(e))).join(', ')}</div></div>
+        ${canBeta() && gym3dOf(e.name) ? `<button class="hh-3d" data-mact="g3d" data-n="${esc(e.name)}" type="button" aria-label="Ver el movimiento en 3D">▶ 3D</button>` : ''}</div>`).join('')}</div>
       ${x.skipped?.length ? `<div class="text-[11px] text-mute mt-1">⏭ Hoy no: ${x.skipped.map(esc).join(' · ')}</div>` : ''}
       ${x.notes?.length ? x.notes.map(nn => `<div class="text-[11px] text-amber-200/90 mt-1">💬 ${esc(nn.name)}: ${esc(noteTxt(nn))}</div>`).join('') : ''}
       <button class="text-[12px] underline text-brand mt-2" data-mact="card" data-id="${esc(x.id)}" type="button">📸 Tarjeta para compartir</button></div>`; }).join('')}
     ${ret.map(x => `<div class="card-in"><b>🏆 ${x.h.test ? 'Test de máximo' : 'Reto'} ${esc(x.r.name)}</b>${x.h.test ? '' : ` <span class="text-[11px] text-mute">· nivel ${x.h.level}</span>`}<div class="font-mono text-[12.5px] text-mute mt-1">${retoLine(x)}</div></div>`).join('')}
-    ${car.map(c => `<div class="card-in"><b>${ctOf(c).icon} ${esc(ctOf(c).label)}</b> <span class="text-[12.5px] text-mute">· ${c.minutes} min${c.km ? ` · ${fmtNum(c.km)} km` : ''}${c.kcal ? ` · <span class="${MAC.kcal.text}">~${Math.round(c.kcal)} kcal</span>` : ''}</span></div>`).join('')}
+    ${car.map(c => `<div class="card-in"><b>${ctOf(c).icon} ${esc(ctOf(c).label)}</b> <span class="text-[12.5px] text-mute">· ${c.minutes} min${c.km ? ` · ${fmtNum(c.km)} km` : ''}${c.kcal ? ` · <span class="${MAC.kcal.text}">~${Math.round(c.kcal)} kcal</span>` : ''}</span>${c.id ? `<div><button class="text-[12px] underline text-brand mt-1.5" data-mact="ccard" data-id="${esc(c.id)}" type="button">📸 Tarjeta para compartir</button></div>` : ''}</div>`).join('')}
     ${fromCal ? '<button class="btn-ghost w-full mt-3" data-mact="cal" type="button">‹ Volver al calendario</button>' : ''}
     <button class="btn-ghost w-full mt-${fromCal ? 2 : 3}" data-mact="hist" type="button">📚 Ver todo el historial</button>`, {
     cal: () => openCalendar(T0),
     card: (_, b) => { closeModal(); openShareCard(b.dataset.id); },
+    g3d: (_, b) => gym3dModal(b.dataset.n),
+    ccard: (_, b) => { closeModal(); openCardioCard(b.dataset.id); },
     hist: () => { closeModal(); openKeys.history = true; ui.view = 'progress'; ui.accessOpen = false; render(); goHistory(); }
   });
 }
@@ -6392,6 +6400,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.95.0', ['✅ «Hoy has hecho» más visual: cada ejercicio con su mini mapa muscular (qué has trabajado de un vistazo), y tarjeta para compartir también en el cardio.']],
   ['4.94.0', ['🔥 Tarjeta para compartir tu cardio: bici, correr, natación, funcional, pádel… (también las que registras con la captura de Strava o del reloj). Sale al registrar y con el botón 📸 de cada actividad, también en vídeo.']],
   ['4.93.1', ['🎬 Tarjeta en vídeo para redes: al compartir un entreno o un reto, pulsa «Vídeo para redes» y tendrás tu tarjeta con el logo de FITNESTEBAN al final, lista para WhatsApp, Instagram o TikTok.']],
   ['4.93.0', ['🎬 (Solo admin, en pruebas) Tarjeta de entreno en vídeo para redes: la tarjeta y, al final, el logo F/S abriéndose con «fitnesteban.app».'], 'admin'],
