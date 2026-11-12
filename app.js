@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.97.0';
+const APP_VERSION = '4.98.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -819,7 +819,7 @@ function openModal(html, handlers = {}) {
   const first = root.querySelector('input,textarea');
   if (first && handlers.autofocus) first.focus();
 }
-function closeModal() {
+function closeModal() { $('#modalRoot').style.zIndex = '';
   micStop(); // si se estaba dictando en la ventana, deja de escuchar
   const root = $('#modalRoot');
   root.innerHTML = '';
@@ -4817,7 +4817,7 @@ function renderSettings() {
   const sumK = Math.round(st.targetProt * 4 + st.targetCarbs * 4 + st.targetFat * 9);
   const backupAge = st.lastBackup ? daysBetween(st.lastBackup, todayISO()) : null;
   return `
-  <button class="share-app" data-act="shareApp" type="button">${icon('share', 'w-5 h-5')}<span>Compartir la app</span></button>
+  <div class="grid grid-cols-2 gap-2"><button class="share-app" data-act="shareLink" type="button">${icon('share', 'w-5 h-5')}<span>Compartir app</span></button><button class="share-app" data-act="shareApp" type="button">🎬<span>Vídeo</span></button></div>
   <details class="card p-4 group mt-3" id="aiBox" ${ui.aiOpen ? 'open' : ''}>
     <summary class="flex items-center justify-between cursor-pointer select-none">
       <h3 class="section-title">🤖 IA de nutrición (Gemini)</h3>
@@ -6401,6 +6401,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.98.0', ['🎬 ¿Te gusta FITNESTEBAN? Ya tiene vídeo: en Ajustes, junto a «Compartir app», pulsa «🎬 Vídeo» y compártelo en WhatsApp, estados o redes, o guárdalo en tu galería.']],
   ['4.97.0', ['🧍 Nuevas animaciones 3D de máquinas: extensión de cuádriceps y curl femoral (sentado y tumbado).']],
   ['4.96.2', ['«Próximamente»: fuera el 3D, que ya ha llegado.'], 'quiet'],
   ['4.96.1', ['Corrección en el texto del aviso del 3D.'], 'quiet'],
@@ -6801,8 +6802,10 @@ function openNews(fromVer) {
     <div>${list().map(newsRowHTML).join('')}</div>
     ${roadmapHTML()}
     ${shown < total() ? `<button class="w-full text-center text-sm text-brand font-bold py-2.5 rounded-xl border border-line bg-ink" data-mact="more" type="button">🕘 Ver novedades anteriores <span class="text-mute font-normal">(${total() - shown})</span></button>` : `<p class="text-[11px] text-mute text-center">Has llegado al principio del historial.</p>`}
+    <button class="share-app mt-1" data-mact="promo" type="button">${icon('share', 'w-5 h-5')}<span>Vídeo de la app para compartir</span></button>
     <button class="btn-primary w-full mt-1" data-close type="button">Entendido</button>`;
   openModal(html(), {
+    promo: () => promoModal(),
     more: root => {
       if (fromVer && shown <= fresh.length) { const seenV = new Set(fresh.map(r => r.v)); shown = all.findIndex(r => !seenV.has(r.v)); if (shown < 0) shown = all.length; }
       shown = Math.min(all.length, shown + 8);
@@ -6835,7 +6838,7 @@ function openGuide() {
       <button class="btn-primary" data-close type="button">Cerrar</button>
     </div>
     <p class="text-[11px] text-mute text-center">Versión ${APP_VERSION}</p>
-  `, { news: () => openNews(null), shareApp: () => actions.shareApp() });
+  `, { news: () => openNews(null), shareApp: () => actions.shareLink() });
 }
 $('#helpBtn').addEventListener('click', openGuide);
 
@@ -8009,7 +8012,8 @@ const actions = {
   install: async () => { if (!deferredInstall) return; deferredInstall.prompt(); await deferredInstall.userChoice.catch(() => null); deferredInstall = null; render(); refreshLockInstall(); },
   installHelp: () => installHelpModal(),
   installHide: () => { lsSet(INSTALL_HIDE, Date.now() + 7 * 86400000); render(); },
-  shareApp: async () => {
+  shareApp: () => promoModal(),
+  shareLink: async () => {
     const url = 'https://fitnesteban.app', text = `Te recomiendo FITNESTEBAN, una app para entrenar y llevar la dieta. Puedes probarla ${TRIAL_DAYS} días: abre el enlace, instálala en tu móvil y entra con tu cuenta de Google.`;
     try { if (navigator.share) { await navigator.share({ title: 'FITNESTEBAN', text, url }); return; } } catch (e) { if (e?.name === 'AbortError') return; }
     try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Mensaje copiado: pégalo donde quieras'); } catch { toast(url); }
@@ -8418,6 +8422,29 @@ async function deviceGuard() {
   access.ok = false; if (deviceReason !== 'exp') try { localStorage.removeItem(ACCESS_KEY); } catch { /* nada */ }
   closeModal(); lockScreen('code', deviceReason === 'exp' ? expiredMsg(true) : blockedMsg());
 }
+/* 📣 Recomienda FITNESTEBAN: el vídeo de la app (promo.mp4, ~2,7 MB) solo se descarga al verlo o compartirlo */
+const PROMO_TXT = 'Mira la app que uso para entrenar y llevar la dieta 💪 👉 https://www.fitnesteban.app';
+let promoBlob = null;
+async function promoFile() { if (!promoBlob) { const r = await fetch('promo.mp4', { cache: 'no-store' }); if (!r.ok) throw new Error('Sin conexión: no se pudo descargar el vídeo'); promoBlob = await r.blob(); } return new File([promoBlob], 'FITNESTEBAN.mp4', { type: 'video/mp4' }); }
+function promoModal(fromLock = false) {
+  if (fromLock) $('#modalRoot').style.zIndex = 50; // por encima de la pantalla de acceso
+  openModal(`<h3 class="modal-title">${fromLock ? '▶ Así es FITNESTEBAN' : '📣 Recomienda FITNESTEBAN'}</h3>
+    <video src="promo.mp4" poster="promo.jpg" class="w-full rounded-2xl border border-line" style="max-height:56vh;background:#000" controls playsinline preload="none"></video>
+    ${fromLock ? '' : `<p class="text-[12px] text-mute">Compártelo en WhatsApp, en tus estados o en redes. Si Instagram no sale al compartir, guárdalo y súbelo desde la galería.</p>
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="save" type="button">⬇️ Guardar vídeo</button><button class="btn-primary" data-mact="share" type="button">📤 Compartir vídeo</button></div>
+    <button class="text-xs text-mute underline w-full" data-mact="link" type="button">🔗 Compartir solo el enlace</button>`}
+    <button class="btn-ghost w-full" data-close type="button">Cerrar</button>`, {
+    share: async (_, b) => { b.disabled = true; const t0 = b.textContent; b.textContent = 'Preparando…';
+      try { const f = await promoFile();
+        if (navigator.canShare?.({ files: [f] }) && navigator.share) { try { await navigator.share({ files: [f], text: PROMO_TXT }); } catch (e) { if (e?.name !== 'AbortError') toast('No se pudo compartir: ' + e.message, 'warn'); } }
+        else { dlBlob(f, f.name); toast('Este navegador no comparte vídeos: lo he guardado', 'warn'); }
+      } catch (e) { toast(e.message, 'error'); }
+      b.disabled = false; b.textContent = t0; },
+    save: async (_, b) => { b.disabled = true; try { const f = await promoFile(); dlBlob(f, f.name); toast('Vídeo guardado ✓'); } catch (e) { toast(e.message, 'error'); } b.disabled = false; },
+    link: () => actions.shareLink()
+  });
+}
+function dlBlob(blob, name) { const u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); }
 function lockScreen(mode, msg = '') {
   let el = $('#lockScreen');
   if (!el) { el = document.createElement('div'); el.id = 'lockScreen'; el.className = 'lock-screen'; document.body.appendChild(el); }
@@ -8434,7 +8461,9 @@ function lockScreen(mode, msg = '') {
       <p class="text-[13px] text-mute mt-1">Sin código: entra con tu cuenta de Google.</p>
       <button class="btn-google w-full mt-3" id="trialGo" type="button"><b class="g-g">G</b> Continuar con Google</button>
       <p class="text-[11px] text-mute mt-2 leading-snug">Tu correo se guarda solo para que Esteban pueda enviarte la guía y ayudarte (<a class="underline" href="privacidad.html" target="_blank" rel="noopener">privacidad</a>). Una prueba por persona. Al terminar, pide tu código de acceso a Esteban para seguir.</p></div>
+      <button class="lock-promo" id="lockPromo" type="button">▶ Mira lo que hace la app (1 min)</button>
       <div class="lock-or"><span>¿Ya tienes código?</span></div>` : ''}
+    ${msg || canTrial ? '' : '<button class="lock-promo" id="lockPromo" type="button">▶ Mira lo que hace la app (1 min)</button>'}
     <input class="field mt-5 text-center text-2xl font-black tracking-[.2em] uppercase" id="lockCode" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" />
     <button class="btn-primary w-full mt-3" id="lockGo" type="button">Entrar</button>
     <p class="text-[11px] text-mute text-center mt-4">Cada código es personal. Válido solo en 2 dispositivos.</p>
@@ -8458,6 +8487,7 @@ function lockScreen(mode, msg = '') {
   };
   $('#lockGo').onclick = go;
   if ($('#trialGo')) $('#trialGo').onclick = () => trialStart($('#trialGo'));
+  if ($('#lockPromo')) $('#lockPromo').onclick = () => promoModal(true);
   $('#lockCode').onkeydown = e => { if (e.key === 'Enter') go(); };
   if (!canTrial) setTimeout(() => $('#lockCode')?.focus(), 100);
 }
