@@ -11,5 +11,4 @@ af02eef92c88f92775e090a99debf79f plan=prueba hasta=2026-11-14
 bff66ad7b5b25711a298a0b609dafbea plan=prueba hasta=2026-11-16
 1b7b7987a0a5d95837767d6f97e7f17f plan=prueba hasta=2026-11-16
 #uso https://script.google.com/macros/s/AKfycbxbwKzXbu5HgWqO0_hEYhVYoWCAOBg5ryV6yDbZWsRCDAQ5NGU1esmvGpodWS8cDfTi9A/exec
-e83fefcfd8b512dba4d23bcc9da8ea08 plan=1m hasta=2026-12-12 duo=fjwk5p
 def6ccb74f9238425a1ce607c185fa02 plan=1m hasta=2026-12-12 duo=fjwk5p
