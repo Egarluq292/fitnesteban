@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.96.1';
+const APP_VERSION = '4.96.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6401,6 +6401,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.96.2', ['«Próximamente»: fuera el 3D, que ya ha llegado.'], 'quiet'],
   ['4.96.1', ['Corrección en el texto del aviso del 3D.'], 'quiet'],
   ['4.96.0', ['🧍 ¡LLEGA EL 3D! Tus ejercicios cobran vida: pulsa el botón brillante «3D» junto a cada ejercicio (en tu entreno o en «Hoy has hecho») y verás el movimiento completo, desde varios ángulos, con sus 3 claves de técnica.', '💪 Ya hay más de 75 ejercicios animados (press, sentadillas, remos, dominadas, aperturas, polea…) e irán llegando más.']],
   ['4.95.1', ['Al ver una animación desde «Hoy has hecho», «Volver» te deja en la lista de ejercicios.'], 'quiet'],
@@ -6758,8 +6759,7 @@ const newsRowHTML = r => `<div class="mt-3 first:mt-0">
 /* Novedades: primero las nuevas (o las 4 últimas) y «Ver novedades anteriores» va ampliando de 8 en 8 hasta el principio */
 /* 🔜 PRÓXIMAMENTE: lo que está por llegar (se ve en Novedades). Cada línea desaparece sola al pasar su fecha «hasta». */
 const ROADMAP = [
-  { id: 'polvoron', icon: '🎄', title: 'Operación Polvorón', txt: 'El calendario de AD(GYM)VIENTO: 24 casillas con rutinas en casa y retos cortos, del 1 al 24 de diciembre.', when: '20 de noviembre', until: '2026-11-19' },
-  { id: '3d', icon: '🧍', title: 'Ejercicios en 3D', txt: 'Botón «3D» en los ejercicios de tus bloques: un maniquí que hace el movimiento y las 3 claves para hacerlo bien.', when: 'Muy pronto' }
+  { id: 'polvoron', icon: '🎄', title: 'Operación Polvorón', txt: 'El calendario de AD(GYM)VIENTO: 24 casillas con rutinas en casa y retos cortos, del 1 al 24 de diciembre.', when: '20 de noviembre', until: '2026-11-19' }
 ];
 const roadLive = () => { const t = netToday() || todayISO(); return ROADMAP.filter(r => !r.until || t <= r.until); };
 function roadmapHTML(R = roadLive()) {
