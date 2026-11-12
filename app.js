@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.96.0';
+const APP_VERSION = '4.96.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6401,7 +6401,8 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
-  ['4.96.0', ['🧍 ¡LLEGA EL 3D! Tus ejercicios cobran vida: pulsa el botón brillante «3D» junto a cada ejercicio (en tu entreno o en «Hoy has hecho») y verás el movimiento completo, desde varios ángulos, con sus 3 claves de técnica.', '💪 Ya hay más de 75 ejercicios animados (press, sentadillas, remos, dominadas, aperturas, polea…) y irán llegando más.']],
+  ['4.96.1', ['Corrección en el texto del aviso del 3D.'], 'quiet'],
+  ['4.96.0', ['🧍 ¡LLEGA EL 3D! Tus ejercicios cobran vida: pulsa el botón brillante «3D» junto a cada ejercicio (en tu entreno o en «Hoy has hecho») y verás el movimiento completo, desde varios ángulos, con sus 3 claves de técnica.', '💪 Ya hay más de 75 ejercicios animados (press, sentadillas, remos, dominadas, aperturas, polea…) e irán llegando más.']],
   ['4.95.1', ['Al ver una animación desde «Hoy has hecho», «Volver» te deja en la lista de ejercicios.'], 'quiet'],
   ['4.95.0', ['✅ «Hoy has hecho» más visual: cada ejercicio con su mini mapa muscular (qué has trabajado de un vistazo), y tarjeta para compartir también en el cardio.']],
   ['4.94.0', ['🔥 Tarjeta para compartir tu cardio: bici, correr, natación, funcional, pádel… (también las que registras con la captura de Strava o del reloj). Sale al registrar y con el botón 📸 de cada actividad, también en vídeo.']],
