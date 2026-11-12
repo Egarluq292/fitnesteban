@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.100.0';
+const APP_VERSION = '5.0.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -2270,8 +2270,9 @@ function bodyAnalysis() {
   let tone = 'ok', title, lines = [];
   const p = out.pctWeek;
   if (goal === 'fat') {
+    const [rlo, rhi] = GOAL_LV.fat[goalLv(profileOf()) || 'mod'][3], rng = `${fmtNum(rlo)}–${fmtNum(rhi)} %`;
     if (p <= -1) { tone = 'warn'; title = 'Bajas más rápido de lo recomendable'; lines.push(`Tendencia ${kgw}. Por encima del ~1 % semanal aumenta el riesgo de perder músculo. Prueba a subir 100–150 kcal.`); }
-    else if (p <= -0.5) { title = 'Ritmo adecuado para perder grasa'; lines.push(`Tendencia ${kgw}: dentro del ~0,5–1 % semanal recomendado.`); }
+    else if (p <= -rlo) { title = 'Ritmo adecuado para perder grasa'; lines.push(`Tendencia ${kgw}: dentro del ~${rng} semanal que elegiste${p < -rhi ? ' (algo por encima, pero sin problema)' : ''}.`); }
     else if (p < -0.1) { title = 'Bajas despacio'; lines.push(`Tendencia ${kgw}.${wc !== null && wc <= -1 ? ' Con la cintura bajando, vas bien aunque sea lento.' : ' Si la cintura tampoco baja en 2–3 semanas, baja 100–150 kcal o suma pasos.'}`); }
     else {
       tone = 'warn'; title = p > 0.1 ? 'El peso sube y tu objetivo es perder grasa' : 'El peso no baja';
@@ -2286,6 +2287,10 @@ function bodyAnalysis() {
     if (pm < 0.1) { tone = 'warn'; title = 'No estás subiendo de peso'; lines.push(`Tendencia ${kgw}. Para ganar músculo hace falta un pequeño superávit: sube 100–150 kcal.`); if (lowLog) lines.push(logTxt); }
     else if (pm > hi * 2) { tone = 'warn'; title = 'Subes más rápido de lo que se puede ganar músculo'; lines.push(`Ritmo de ~${fmtNum(pm)} % al mes. Lo realista es ~${fmtNum(lo)}–${fmtNum(hi)} % al mes${out.beginner ? ' empezando' : ' entrenando de antes'}: probablemente gran parte sea grasa. Baja 100–150 kcal.`); }
     else { title = pm > hi ? 'Subes algo rápido' : 'Ritmo de volumen razonable'; lines.push(`Ritmo de ~${fmtNum(pm)} % al mes (lo realista: ${fmtNum(lo)}–${fmtNum(hi)} %).`); }
+  } else if (goal === 'maint' || goal === 'health') {
+    if (Math.abs(p) < 0.25) { title = 'Peso estable'; lines.push(`Tendencia ${kgw}: justo lo que buscas.`); }
+    else if (p < 0) { tone = p <= -0.5 ? 'warn' : 'ok'; title = 'Bajas de peso'; lines.push(`Tendencia ${kgw}.${p <= -0.5 ? ' Si no lo buscas, sube 100–150 kcal, sobre todo los días que entrenas.' : ' Vigílalo unas semanas.'}`); }
+    else { tone = p >= 0.5 ? 'warn' : 'ok'; title = 'Subes de peso'; lines.push(`Tendencia ${kgw}.${p >= 0.5 ? ' Si no lo buscas, baja 100–150 kcal o suma pasos.' : ' Vigílalo unas semanas.'}`); if (lowLog) lines.push(logTxt); }
   } else {
     if (p <= -1) { tone = 'warn'; title = 'Bajas demasiado rápido para recomposición'; lines.push(`Tendencia ${kgw}. A este ritmo es difícil conservar músculo: sube 100–150 kcal.`); }
     else if (p <= -0.25) { title = 'Bajas de peso'; lines.push(`Tendencia ${kgw}: perder algo de grasa es compatible con recomposición.`); }
@@ -2296,7 +2301,7 @@ function bodyAnalysis() {
       else if (wc === null || wc === undefined) lines.push('Mide la cintura una vez por semana: sin ella no se puede distinguir recomposición de estancamiento.');
     } else { tone = 'warn'; title = 'El peso sube'; lines.push(`Tendencia ${kgw}.${wc !== null && wc >= 1 ? ' La cintura también sube: probablemente sea grasa. Baja 100–150 kcal.' : ''}`); if (lowLog) lines.push(logTxt); }
   }
-  if (out.pctWeek > 0.05 && goal !== 'fat') lines.push(out.muscleLikely ? 'Ganancia de músculo: probable (se cumplen todos los criterios durante 4+ semanas).' : `Ganancia de músculo: aún no se puede saber. Falta: ${missing.join(', ')}.`);
+  if (out.pctWeek > 0.05 && (goal === 'recomp' || goal === 'muscle')) lines.push(out.muscleLikely ? 'Ganancia de músculo: probable (se cumplen todos los criterios durante 4+ semanas).' : `Ganancia de músculo: aún no se puede saber. Falta: ${missing.join(', ')}.`);
   if (waistTxt && !lines.some(l => l.includes('cintura'))) lines.push(`${waistTxt.charAt(0).toUpperCase() + waistTxt.slice(1)}.`);
   return { ...out, tone, title, lines };
 }
@@ -3839,17 +3844,28 @@ const ALG = [
   ['sesamo', 'Sésamo', 'sin sésamo', /\b(s[eé]samo|tahin|hummus)/i]
 ];
 const algOn = () => { const st = state.settings; return { keys: (st.alg || []).filter(k => ALG.some(a => a[0] === k)), otras: String(st.algOtras || '').trim() }; };
-const algAny = () => { const a = algOn(); return a.keys.length > 0 || !!a.otras; };
-const algShort = () => { const a = algOn(), L = a.keys.map(k => ALG.find(x => x[0] === k)[1].toLowerCase()); if (a.otras) L.push(a.otras); return L.join(', '); };
+const algAny = () => { const a = algOn(); return a.keys.length > 0 || !!a.otras || !!DIET_AI[profileOf()?.diet]; };
+const DIET_SHORT = { veg: 'carne ni pescado', vegan: 'nada de origen animal', pesc: 'carne' };
+const algShort = () => { const a = algOn(), L = a.keys.map(k => ALG.find(x => x[0] === k)[1].toLowerCase()); if (a.otras) L.push(a.otras); if (DIET_SHORT[profileOf()?.diet]) L.unshift(DIET_SHORT[profileOf().diet]); return L.join(', '); };
 // texto para los prompts de comida (vacío si no hay nada marcado)
 function algPrompt() {
   if (!algAny()) return '';
-  const a = algOn(), L = a.keys.map(k => ALG.find(x => x[0] === k)[2]);
-  return `\nALERGIAS E INTOLERANCIAS (OBLIGATORIO, por encima de cualquier otra regla): ${[...L, ...(a.otras ? [`además evita: ${a.otras}`] : [])].join('; ')}. Ningún plato, ingrediente ni condimento puede contenerlos, tampoco escondidos (pan rallado, rebozados, salsas, caldos, embutidos…). Si con lo que hay no se puede, dilo.`;
+  const a = algOn(), L = a.keys.map(k => ALG.find(x => x[0] === k)[2]), dt = DIET_AI[profileOf()?.diet];
+  if (dt) L.unshift(`alimentación ${dt}`);
+  return `\nALIMENTACIÓN, ALERGIAS E INTOLERANCIAS (OBLIGATORIO, por encima de cualquier otra regla): ${[...L, ...(a.otras ? [`además evita: ${a.otras}`] : [])].join('; ')}. Ningún plato, ingrediente ni condimento puede contenerlos, tampoco escondidos (pan rallado, rebozados, salsas, caldos, embutidos…). Si con lo que hay no se puede, dilo.`;
 }
 // ¿un alimento o plato choca con lo marcado? (sin IA, por palabras clave; también lo que escribe en «otras»)
+const MEAT_RE = /\b(pollo|pavo|ternera|cerdo|lomo|jam[oó]n|chorizo|salchich|hamburgues|carne|cordero|conejo|beicon|bacon|panceta|fiambre|embutido|fuet|pechuga|filete|alb[oó]ndiga|morcilla|solomillo|costilla)/i;
+function dietHit(t) {
+  const dt = profileOf()?.diet, A = k => ALG.find(x => x[0] === k)[3];
+  if (dt === 'pesc') return MEAT_RE.test(t);
+  if (dt === 'veg') return MEAT_RE.test(t) || A('pescado').test(t) || A('marisco').test(t);
+  if (dt === 'vegan') return MEAT_RE.test(t) || A('pescado').test(t) || A('marisco').test(t) || A('huevo').test(t) || A('leche').test(t) || /\bmiel\b/i.test(t);
+  return false;
+}
 function algHit(txt) {
   if (!algAny()) return false; const a = algOn(), t = String(txt || '');
+  if (dietHit(t)) return true;
   if (a.keys.some(k => ALG.find(x => x[0] === k)[3].test(t))) return true;
   const words = a.otras.split(/[,;·\n]| y /).map(w => normTxt(w.trim())).filter(w => w.length >= 3);
   const n = normTxt(t); return words.some(w => n.includes(w));
@@ -3998,8 +4014,8 @@ function renderDiet() {
   const cardioTxt = burned ? ` Con ejercicio has quemado ${burned} kcal (${[cardioK ? `cardio ${cardioK}` : '', gymK ? `gym ~${gymK}` : ''].filter(Boolean).join(' + ')}; balance neto ${Math.round(t.kcal - burned)} kcal)${st.eatBackCardio ? ', ya sumadas a tu margen' : ', que no se suman a tu margen: así el déficit es real'}.` : '';
   let advice;
   if (!mealsOf(date).length) advice = (isToday ? 'Aún no has registrado comida hoy.' : 'Sin comidas registradas este día.') + cardioTxt;
-  else if (leftP > 0 && leftK > 0) advice = `Llevas ${Math.round(t.kcal)} kcal y ${Math.round(t.prot)} g de proteína consumidas.${cardioTxt} Te quedan ${leftK} kcal y ${leftP} g de proteína. Prioriza la proteína: ${leftP > 40 ? 'pavo, claras, atún o un batido' : 'un yogur proteico basta'}.`;
-  else if (leftP > 0) advice = `Llevas ${Math.round(t.kcal)} kcal consumidas.${cardioTxt} Calorías cubiertas pero faltan ${leftP} g de proteína: tira de fuentes magras (claras, atún, batido con agua).`;
+  else if (leftP > 0 && leftK > 0) advice = `Llevas ${Math.round(t.kcal)} kcal y ${Math.round(t.prot)} g de proteína consumidas.${cardioTxt} Te quedan ${leftK} kcal y ${leftP} g de proteína. ${protFirst() ? 'Prioriza la proteína' : 'Completa con algo de proteína y verdura'}: ${protFoods(leftP > 40)}.`;
+  else if (leftP > 0) advice = `Llevas ${Math.round(t.kcal)} kcal consumidas.${cardioTxt} Calorías cubiertas pero faltan ${leftP} g de proteína${protFirst() ? `: tira de fuentes magras (${protFoods(true)})` : '. Si te apetece algo más, que lleve proteína'}.`;
   else if (leftK >= 0) advice = `Llevas ${Math.round(t.kcal)} kcal consumidas.${cardioTxt} Proteína cumplida ✓. Margen: ${leftK} kcal.`;
   else advice = `Llevas ${Math.round(t.kcal)} kcal consumidas.${cardioTxt} Te has pasado ${-leftK} kcal. Sin drama: mañana vuelve a tu objetivo, no compenses de más.`;
 
@@ -4035,8 +4051,8 @@ function renderDiet() {
 
   const over = leftK < 0;
   const hint = !mealsOf(date).length ? (isToday ? 'Aún no has registrado nada hoy. Toca ＋ en la comida que toque.' : 'Sin comidas registradas este día.')
-    : leftP > 0 && leftK > 0 ? `Prioriza la proteína: ${leftP > 40 ? 'pavo, claras, atún o un batido' : 'un yogur proteico o unas lonchas de pavo'}.`
-    : leftP > 0 ? 'Calorías cubiertas: si comes algo más, que sea proteína magra.'
+    : leftP > 0 && leftK > 0 ? `${protFirst() ? 'Prioriza la proteína' : 'Completa con proteína y verdura'}: ${protFoods(leftP > 40)}.`
+    : leftP > 0 ? (protFirst() ? 'Calorías cubiertas: si comes algo más, que sea proteína magra.' : 'Calorías cubiertas ✓ Vas bien.')
     : leftK >= 0 ? 'Proteína cumplida ✓ Vas muy bien.' : 'Te has pasado. Sin drama: mañana vuelve a tu objetivo, no compenses.';
 
   return `
@@ -4853,6 +4869,7 @@ function renderSettings() {
 
   ${profileSectionHTML()}
   ${foldCard('goals', '🎯 Objetivos diarios', `${st.targetKcal} kcal · ${st.targetProt} g P`, '', `
+    ${(() => { const t = suggestedTargets(); return targetsOff(t) ? `<div class="rounded-xl px-3 py-2 text-[12px] leading-snug" style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.4)">💡 Con tu perfil actual (${esc(goalName(profileOf()))}) te corresponderían unas <b>${t.kcal} kcal</b> y <b>${t.prot} g</b> de proteína. <button class="underline text-amber-300 font-bold" data-act="sugTargets" type="button">Ver propuesta</button></div>` : profileOf() ? '' : '<p class="text-[11px] text-mute">Completa «Mi perfil» para que la app te proponga objetivos a tu medida.</p>'; })()}
     <div class="grid grid-cols-4 gap-2">
       <label class="lbl ${MAC.kcal.text}">kcal<input class="field mt-1 text-center" id="tK" inputmode="numeric" value="${st.targetKcal}" /></label>
       <label class="lbl ${MAC.prot.text}">Prot g<input class="field mt-1 text-center" id="tP" inputmode="numeric" value="${st.targetProt}" /></label>
@@ -5612,15 +5629,45 @@ function ageFrom(birth, at = todayISO()) {
 const profileAge = p => (p?.birth ? ageFrom(p.birth) : (+p?.age || null));
 const BIRTH_MIN = '1920-01-01', birthMax = () => addDays(todayISO(), -14 * 365 - 3);
 const birthHint = b => { const a = ageFrom(b); return a !== null ? `→ ${a} años` : ''; };
+// ideas de proteína según su alimentación (sin suplementos)
+function protFoods(big) {
+  const dt = profileOf()?.diet;
+  if (dt === 'vegan') return big ? 'legumbres, tofu, soja texturizada o tempeh' : 'un yogur de soja o un puñado de edamame';
+  if (dt === 'veg') return big ? 'huevos, yogur griego, queso fresco batido o legumbres' : 'un yogur o un huevo';
+  if (dt === 'pesc') return big ? 'huevos, atún, merluza, yogur griego o legumbres' : 'un yogur o una lata de atún';
+  return big ? 'huevos, pavo, atún, yogur griego o legumbres' : 'un yogur o unas lonchas de pavo';
+}
+const protFirst = () => ['fat', 'recomp', 'muscle'].includes(profileOf()?.goal || 'recomp');
 function calcTargets(d) {
   const w = +d.weight, h = +d.height, a = ageFrom(d.birth) ?? +d.age;
   const bmr = 10 * w + 6.25 * h - 5 * a + (d.sex === 'h' ? 5 : d.sex === 'm' ? -161 : -78);
-  const adj = { fat: 0.8, recomp: 0.9, muscle: 1.1, maint: 1 }[d.goal] ?? 0.9;
-  const kcal = Math.round(bmr * (ACTIVITY[d.activity] || ACTIVITY.mid)[1] * adj / 10) * 10;
-  const prot = Math.round(w * ({ fat: 2, recomp: 2, muscle: 1.8, maint: 1.6 }[d.goal] ?? 1.8));
-  const fat = Math.round(w * 0.8);
+  const goal = GOALS[d.goal] ? d.goal : 'recomp', lv = goalLv({ goal, goalLv: d.goalLv });
+  const adj = lv ? GOAL_LV[goal][lv][2] : { recomp: 0.92, maint: 1, health: 1 }[goal];
+  let kcal = Math.round(bmr * (ACTIVITY[d.activity] || ACTIVITY.mid)[1] * adj / 10) * 10;
+  if (adj < 1) kcal = Math.max(kcal, Math.round(bmr / 10) * 10, d.sex === 'm' ? 1200 : 1500); // nunca por debajo de un mínimo
+  const prot = Math.round(w * ({ fat: lv === 'fast' ? 2 : 1.8, recomp: 2, muscle: 1.8, maint: 1.4, health: 1.3 }[goal]));
+  const fat = Math.round(w * (goal === 'health' ? 0.9 : 0.8));
   const carbs = Math.max(50, Math.round((kcal - prot * 4 - fat * 9) / 4));
   return { kcal, prot, carbs, fat };
+}
+// objetivos que le corresponderían con su perfil actual y su último peso (null si falta algo)
+function suggestedTargets(p = profileOf()) {
+  const w = latestWeight(), a = profileAge(p);
+  if (!p || !w || !p.sex || !a || !(+p.height >= 100)) return null;
+  return calcTargets({ ...p, weight: w, activity: p.activity || 'mid' });
+}
+const tgtSig = t => `${Math.round(t.kcal / 50)}|${Math.round(t.prot / 5)}`; // si decides mantener los tuyos, no se vuelve a avisar hasta que la propuesta cambie
+function targetsOff(t) { const st = state.settings; return !!t && st.tgtKeep !== tgtSig(t) && (Math.abs(st.targetKcal - t.kcal) / t.kcal > 0.12 || Math.abs(st.targetProt - t.prot) / t.prot > 0.15); }
+function targetsModal(t, why = '') {
+  const st = state.settings, cell = (l, a, b) => `<div><div class="text-[10px] text-mute">${l}</div><div class="text-[12px] text-mute line-through">${a}</div><div class="text-lg font-black ${a === b ? '' : 'text-brand'}">${b}</div></div>`;
+  openModal(`<h3 class="modal-title">🎯 Tus objetivos</h3>
+    <p class="text-[13px] leading-snug">${why || 'Con tu perfil actual te corresponderían estos objetivos.'} <span class="text-mute">Calculados con tu último peso (${fmtNum(latestWeight())} kg) y tu actividad.</span></p>
+    <div class="card p-3 grid grid-cols-4 gap-1 text-center">${cell('kcal', st.targetKcal, t.kcal)}${cell('proteína', `${st.targetProt} g`, `${t.prot} g`)}${cell('hidratos', `${st.targetCarbs} g`, `${t.carbs} g`)}${cell('grasa', `${st.targetFat} g`, `${t.fat} g`)}</div>
+    <p class="text-[11px] text-mute">Son orientativos: si en 2–3 semanas el peso no va como esperas, la app te propondrá ajustarlos.</p>
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="keep" type="button">Mantener los míos</button><button class="btn-primary" data-mact="apply" type="button">Aplicar</button></div>`, {
+    keep: () => { st.tgtKeep = tgtSig(t); persist(); closeModal(); render(); toast('Mantienes tus objetivos'); },
+    apply: () => { Object.assign(st, { targetKcal: t.kcal, targetProt: t.prot, targetCarbs: t.carbs, targetFat: t.fat }); persist(); closeModal(); render(); toast('Objetivos actualizados ✓'); }
+  });
 }
 /* ✉️ Correo de contacto: con aviso claro, va a la hoja de uso de Esteban (columna «correo») */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -5696,7 +5743,7 @@ function maybeAskEmail(tries = 0) {
 }
 
 function onboarding() {
-  const d = { step: 0, ok: false, email: state.settings.email || '', birth: '', name: '', sex: '', age: '', height: '', weight: '', activity: 'mid', goal: 'recomp', key: '', keyOk: false, testing: false };
+  const d = { step: 0, ok: false, email: state.settings.email || '', birth: '', name: '', sex: '', age: '', height: '', weight: '', activity: 'mid', goal: 'recomp', diet: 'omni', key: '', keyOk: false, testing: false };
   // lo rellenado se guarda al momento: si sales a crear la clave y el móvil cierra la app, sigues donde ibas
   const OB_KEY = 'fitnesteban_ob'; Object.assign(d, lsGet(OB_KEY) || {}, { testing: false });
   const save = () => lsSet(OB_KEY, { ...d, testing: false });
@@ -5733,7 +5780,8 @@ function onboarding() {
       <label class="lbl">Peso (kg)<input class="field mt-1" name="weight" inputmode="decimal" maxlength="5" value="${esc(d.weight)}" /></label>
     </div>
     <div><div class="lbl mb-1">Actividad diaria (sin contar el entreno)</div>${seg('activity', ACTIVITY, 3)}</div>
-    <div><div class="lbl mb-1">Objetivo</div>${seg('goal', GOALS, 2)}</div>
+    <div><div class="lbl mb-1">Objetivo</div>${goalPickHTML(d.goal || 'recomp', goalLv({ goal: d.goal || 'recomp', goalLv: d.goalLv }))}</div>
+    <div><div class="lbl mb-1">Alimentación</div>${seg('diet', DIETS, 2)}</div>
     <div class="card p-3" id="obTargets">${t ? `<div class="text-[11px] text-mute mb-1">Tus objetivos de partida</div>
       <div class="grid grid-cols-4 gap-1 text-center">
         <div><div class="text-lg font-black text-brand">${t.kcal}</div><div class="text-[10px] text-mute">kcal</div></div>
@@ -5782,7 +5830,7 @@ function onboarding() {
   };
   openModal(html(), {
     noClose: true,
-    pick: (root, b) => { keep(root); d[b.dataset.f] = b.dataset.v; draw(root); },
+    pick: (root, b) => { keep(root); d[b.dataset.f] = b.dataset.v; if (b.dataset.f === 'goal') d.goalLv = ''; draw(root); },
     google: async root => { keep(root); try { d.email = await googleEmail(); d.step++; draw(root); toast(`✓ ${d.email}`); } catch (e) { toast(e.message, 'warn'); } },
     back: root => { keep(root); d.step--; draw(root); },
     next: root => {
@@ -5803,7 +5851,7 @@ function onboarding() {
       keep(root);
       if (!b.dataset.skip && !d.keyOk && !(await test(root))) return;
       const t = calcTargets(d), st = state.settings;
-      st.profile = { name: d.name.slice(0, 24), sex: d.sex, birth: d.birth, height: d.height, goal: d.goal, activity: d.activity };
+      st.profile = { name: d.name.slice(0, 24), sex: d.sex, birth: d.birth, height: d.height, goal: d.goal, ...(goalLv(d) ? { goalLv: goalLv(d) } : {}), activity: d.activity, diet: d.diet || 'omni' }; st.v5seen = true;
       Object.assign(st, { targetKcal: t.kcal, targetProt: t.prot, targetCarbs: t.carbs, targetFat: t.fat, onboarded: todayISO(), installedAt: todayISO(), usageOk: true, email: d.email, emailAsked: todayISO() });
       if (!b.dataset.skip && d.keyOk) st.apiKey = d.key;
       state.bodyMetrics.push({ id: uid('m_'), date: todayISO(), weight: r2(+d.weight), waist: null });
@@ -5816,17 +5864,36 @@ function onboarding() {
 }
 
 /* ---------- Mi perfil: lo usan el Coach IA y el resumen semanal ---------- */
-const GOALS = { recomp: ['Recomposición', 'RECOMPOSICIÓN corporal (perder grasa manteniendo o ganando músculo)'], fat: ['Perder grasa', 'PERDER GRASA conservando el músculo'], muscle: ['Ganar músculo', 'GANAR MÚSCULO con el mínimo de grasa'], maint: ['Mantener', 'MANTENER peso y forma física, y salud'] };
+const GOALS = { fat: ['Perder grasa', 'PERDER GRASA conservando el músculo'], recomp: ['Recomposición', 'RECOMPOSICIÓN corporal (perder grasa manteniendo o ganando músculo; entrena fuerza)'], muscle: ['Ganar músculo', 'GANAR MÚSCULO con el mínimo de grasa'], maint: ['Mantener', 'MANTENER su peso y su forma'], health: ['Salud y rendimiento', 'COMER BIEN PARA RENDIR Y TENER SALUD, sin buscar cambiar el peso'] };
+const GOAL_INFO = { fat: 'Bajar de peso a costa de grasa, cuidando el músculo.', recomp: 'Mismo peso, menos grasa y más músculo. Para quien entrena fuerza.', muscle: 'Subir de peso despacio para ganar fuerza y volumen.', maint: 'Conservar tu peso y tu forma actual.', health: 'Comer bien para rendir y sentirte bien, sin cambiar el cuerpo. Ideal si corres, haces pádel o solo quieres comer mejor.' };
+// niveles: [nombre, explicación, factor de calorías, ritmo semanal (% del peso) para el análisis de Progreso]
+const GOAL_LV = {
+  fat: { soft: ['Suave', 'Unos 0,25–0,5 % de tu peso a la semana. Fácil de mantener.', 0.9, [0.25, 0.5]], mod: ['Moderado', 'Unos 0,5–0,75 % de tu peso a la semana. El equilibrio habitual.', 0.8, [0.5, 0.75]], fast: ['Rápido', 'Unos 0,75–1 % de tu peso a la semana. Exigente: mejor por poco tiempo y nunca por debajo de un mínimo de calorías.', 0.75, [0.75, 1]] },
+  muscle: { lean: ['Limpio', 'Subida lenta, con poca grasa.', 1.07], bulk: ['Volumen', 'Subida más rápida: más fuerza, también algo más de grasa.', 1.15] }
+};
+const goalLv = p => { const L = GOAL_LV[p?.goal]; if (!L) return null; return L[p.goalLv] ? p.goalLv : (p.goal === 'fat' ? 'mod' : 'lean'); };
+const goalName = p => { const g = GOALS[p?.goal] || GOALS.recomp, lv = goalLv(p); return lv ? `${g[0]} · ${GOAL_LV[p.goal][lv][0].toLowerCase()}` : g[0]; };
+const DIETS = { omni: 'Como de todo', veg: 'Vegetariana', vegan: 'Vegana', pesc: 'Pescetariana' };
+const DIET_AI = { veg: 'VEGETARIANA (sin carne ni pescado; sí huevos y lácteos)', vegan: 'VEGANA (nada de origen animal: ni carne, pescado, huevos, lácteos ni miel)', pesc: 'PESCETARIANA (sin carne; sí pescado, marisco, huevos y lácteos)' };
+// elegir objetivo y nivel (lo usan los primeros pasos y Mi perfil: data-mact="pick" con data-f goal/goalLv)
+function goalPickHTML(goal, lv) {
+  const L = GOAL_LV[goal];
+  return `<div class="seg" style="grid-template-columns:repeat(2,minmax(0,1fr))">${Object.entries(GOALS).map(([k, v]) => `<button class="seg-btn py-2 ${goal === k ? 'seg-on' : ''}" ${k === 'health' ? 'style="grid-column:1/-1"' : ''} data-mact="pick" data-f="goal" data-v="${k}" type="button">${v[0]}</button>`).join('')}</div>
+    <p class="text-[12px] text-mute mt-1.5 leading-snug">${GOAL_INFO[goal] || ''}</p>
+    ${L ? `<div class="seg mt-2" style="grid-template-columns:repeat(${Object.keys(L).length},minmax(0,1fr))">${Object.entries(L).map(([k, x]) => `<button class="seg-btn py-1.5 ${lv === k ? 'seg-on' : ''}" data-mact="pick" data-f="goalLv" data-v="${k}" type="button">${x[0]}</button>`).join('')}</div>
+    <p class="text-[11.5px] text-slate-300 mt-1 leading-snug">${L[lv][1]}</p>` : ''}`;
+}
 const SEXES = { h: 'Hombre', m: 'Mujer', x: 'Prefiero no decirlo' };
 function profileOf() { return state.settings.profile || null; }
 function profileText() {
   const p = profileOf() || {};
   const who = [p.sex === 'h' ? 'hombre' : p.sex === 'm' ? 'mujer' : 'persona', profileAge(p) ? `de ${profileAge(p)} años` : 'adulta'].join(' ') + (p.height ? `, ${p.height} cm de altura` : '');
-  return `${p.name || 'el usuario'} (${who}), objetivo: ${(GOALS[p.goal] || GOALS.recomp)[1]}`;
+  const lv = goalLv(p);
+  return `${p.name || 'el usuario'} (${who}), objetivo: ${(GOALS[p.goal] || GOALS.recomp)[1]}${lv ? ` (ritmo ${GOAL_LV[p.goal][lv][0].toLowerCase()})` : ''}${DIET_AI[p.diet] ? `; alimentación ${DIET_AI[p.diet]}` : ''}`;
 }
 function profileModal(after) {
   const p = profileOf() || { name: '', sex: '', age: '', goal: 'recomp' };
-  const seg = (name, opts, cur) => `<div class="seg" style="grid-template-columns:repeat(${name === 'goal' ? 2 : Object.keys(opts).length},minmax(0,1fr))">${Object.entries(opts).map(([k, v]) => `<button class="seg-btn py-2 ${cur === k ? 'seg-on' : ''}" data-mact="pick" data-f="${name}" data-v="${k}" type="button">${Array.isArray(v) ? v[0] : v}</button>`).join('')}</div>`;
+  const seg = (name, opts, cur) => `<div class="seg" style="grid-template-columns:repeat(${name === 'diet' ? 2 : Object.keys(opts).length},minmax(0,1fr))">${Object.entries(opts).map(([k, v]) => `<button class="seg-btn py-2 ${cur === k ? 'seg-on' : ''}" data-mact="pick" data-f="${name}" data-v="${k}" type="button">${Array.isArray(v) ? v[0] : v}</button>`).join('')}</div>`;
   const draft = { ...p, email: state.settings.email || '' };
   const html = () => `<h3 class="modal-title">👤 Mi perfil</h3>
     <p class="text-xs text-mute">El Coach IA y el resumen semanal lo usan para darte consejos a tu medida. Solo se guarda en este móvil y en tus copias.</p>
@@ -5836,7 +5903,9 @@ function profileModal(after) {
       <label class="lbl col-span-2">Fecha de nacimiento (opcional) <span class="text-brand font-bold" id="pfAge">${birthHint(draft.birth)}</span><input class="field mt-1" name="birth" type="date" min="${BIRTH_MIN}" max="${birthMax()}" value="${esc(draft.birth || '')}" />${!draft.birth && p.age ? `<span class="block text-[11px] text-amber-300 font-normal mt-1">Ahora pone ${esc(p.age)} años. Pon tu fecha y se actualizará sola en cada cumpleaños.</span>` : ''}</label>
       <label class="lbl">Altura en cm (opcional)<input class="field mt-1" name="height" inputmode="numeric" maxlength="3" placeholder="Ej: 175" value="${esc(draft.height || '')}" /></label>
     </div>
-    <div><div class="lbl mb-1">Objetivo</div>${seg('goal', GOALS, draft.goal)}</div>
+    <div><div class="lbl mb-1">Actividad diaria (sin contar el entreno)</div>${seg('activity', ACTIVITY, draft.activity || 'mid')}</div>
+    <div><div class="lbl mb-1">Objetivo</div>${goalPickHTML(draft.goal || 'recomp', goalLv(draft))}</div>
+    <div><div class="lbl mb-1">Alimentación</div>${seg('diet', DIETS, draft.diet || 'omni')}</div>
     <div class="card p-3 space-y-2"><div class="lbl">✉️ Correo de contacto${access.me?.admin ? '' : ' (opcional)'}</div>
       <div class="flex gap-2"><input class="field flex-1 min-w-0" name="email" type="email" inputmode="email" autocomplete="email" placeholder="tucorreo@gmail.com" value="${esc(draft.email)}" /></div>
       ${draft.email ? '' : gBtn()}
@@ -5845,7 +5914,7 @@ function profileModal(after) {
   const keep = root => { draft.name = mval(root, 'name').trim(); draft.birth = mval(root, 'birth'); draft.height = mval(root, 'height').replace(/\D/g, ''); draft.email = mval(root, 'email').trim().toLowerCase(); };
   const handlers = {
     autofocus: !p.name,
-    pick: (root, b) => { keep(root); draft[b.dataset.f] = b.dataset.v; root.querySelector('.modal-sheet').innerHTML = html(); },
+    pick: (root, b) => { keep(root); draft[b.dataset.f] = b.dataset.v; if (b.dataset.f === 'goal') draft.goalLv = ''; root.querySelector('.modal-sheet').innerHTML = html(); },
     google: async root => { keep(root); try { draft.email = await googleEmail(); root.querySelector('.modal-sheet').innerHTML = html(); } catch (e) { toast(e.message, 'warn'); } },
     save: root => {
       keep(root);
@@ -5854,9 +5923,12 @@ function profileModal(after) {
       if (!draft.sex) return toast('Elige una opción de sexo', 'warn');
       if (draft.height && (+draft.height < 100 || +draft.height > 230)) return toast('La altura va en centímetros (ej. 175)', 'warn');
       if (draft.birth && !(ageFrom(draft.birth) >= 10)) return toast('Revisa la fecha de nacimiento', 'warn');
-      state.settings.profile = { ...(p.activity ? { activity: p.activity } : {}), name: draft.name.slice(0, 24), sex: draft.sex, ...(draft.birth ? { birth: draft.birth } : p.age ? { age: p.age } : {}), height: draft.height || '', goal: draft.goal || 'recomp' };
+      const lv = goalLv({ goal: draft.goal || 'recomp', goalLv: draft.goalLv });
+      state.settings.profile = { activity: draft.activity || 'mid', name: draft.name.slice(0, 24), sex: draft.sex, ...(draft.birth ? { birth: draft.birth } : p.age ? { age: p.age } : {}), height: draft.height || '', goal: draft.goal || 'recomp', ...(lv ? { goalLv: lv } : {}), diet: draft.diet || 'omni' };
       if ((state.settings.email || '') !== draft.email) setEmail(draft.email);
+      state.settings.v5seen = true;
       persist(); closeModal(); render(); toast('Perfil guardado ✓');
+      const t = suggestedTargets(); if (targetsOff(t)) setTimeout(() => targetsModal(t, `Tus objetivos diarios no encajan con tu perfil (${esc(goalName(state.settings.profile))}).`), 350);
       if (after) after();
     }
   };
@@ -5867,7 +5939,7 @@ function profileSectionHTML() {
   return `<section class="card p-4 mt-3">
     <div class="flex items-center justify-between gap-3">
       <div class="min-w-0"><h3 class="section-title">👤 Mi perfil</h3>
-        <p class="text-xs ${p ? 'text-slate-300' : 'text-amber-300'} mt-1 truncate">${p ? `${esc(p.name)} · ${esc(SEXES[p.sex] || '')}${profileAge(p) ? ` · ${profileAge(p)} años` : ''}${p.height ? ` · ${esc(p.height)} cm` : ''} · ${esc((GOALS[p.goal] || GOALS.recomp)[0])}${state.settings.email ? ` · ✉️ ${esc(state.settings.email)}` : ''}` : 'Sin rellenar: el Coach IA no sabe a quién aconseja'}</p></div>
+        <p class="text-xs ${p ? 'text-slate-300' : 'text-amber-300'} mt-1">${p ? `${esc(p.name)} · ${esc(SEXES[p.sex] || '')}${profileAge(p) ? ` · ${profileAge(p)} años` : ''}${p.height ? ` · ${esc(p.height)} cm` : ''} · ${esc(goalName(p))}${state.settings.email ? ` · ✉️ ${esc(state.settings.email)}` : ''}` : 'Sin rellenar: el Coach IA no sabe a quién aconseja'}</p></div>
       <button class="btn-ghost px-3 py-2 shrink-0" data-act="editProfile" type="button">${p ? 'Editar' : 'Rellenar'}</button>
     </div></section>`;
 }
@@ -5919,6 +5991,7 @@ Reglas:
 - ${BODY_AI_RULES}${algPrompt() ? `\n- ${algPrompt().trim()} Ten en cuenta esto en cualquier comida, receta o alimento que propongas.` : ''}
 - Nada de frases motivacionales vacías. Si menciona dolor, lesión o algo médico, recomienda consultar a un profesional y no diagnostiques.
 - Ten en cuenta sus comentarios por ejercicio ("comentarios" en ultimas_sesiones: molestias, muy duro, fácil, poco tiempo, notas). Si se repiten molestias o "muy duro" en un ejercicio, propón una alternativa (puede cambiarla con ⇄ en la app) o ajustar carga/volumen; si algo le resulta fácil varias veces, anímale a progresar.
+- AJUSTA EL CONSEJO A SU OBJETIVO Y A SU ALIMENTACIÓN: insiste en la proteína solo si su objetivo es perder grasa, recomposición o ganar músculo, y sin obsesionarte. Si es mantener o salud y rendimiento, habla de comer variado, verdura y fruta, saciedad y energía (hidratos) para rendir. No recomiendes suplementos (batidos de proteína, etc.) salvo que ya los use. Varía las fuentes de proteína (huevos, lácteos, legumbres, pescado, carne, tofu…) según lo que coma y respeta siempre su estilo de alimentación.
 - Comprueba si sus objetivos diarios ("objetivos": kcal y proteína) encajan con su sexo, edad, altura, peso actual y objetivo. Si claramente NO encajan (p. ej. demasiado altos o bajos para esa persona), avísale una sola vez en la conversación, en una o dos frases, con cifras orientativas y diciendo que los cambia en Ajustes → Objetivos diarios. Si faltan edad o altura, puedes sugerir que las añada en Ajustes → Mi perfil.
 - Cuando propongas una o varias comidas CONCRETAS (alimentos con cantidades), añade al final de tu respuesta un bloque oculto EXACTAMENTE con este formato (no lo menciones en el texto):
 \`\`\`comida
@@ -6401,6 +6474,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.0.0', ['✨ FITNESTEBAN 5 · Objetivos a tu medida. Ajustes → Mi perfil: elige qué buscas, ahora con una explicación de cada objetivo y a qué ritmo (perder grasa suave, moderado o rápido; ganar músculo limpio o en volumen) y el nuevo «Salud y rendimiento».', '🥗 Dinos cómo comes (de todo, vegetariana, vegana o pescetariana): «¿Qué como?», las recetas y el Coach lo respetan.', '🎯 Si cambias tu perfil, la app te propone los objetivos que te corresponden y tú decides si aplicarlos. El Coach ya no insiste en la proteína si tu objetivo no lo pide.']],
   ['4.100.0', ['🔓 Si estás de prueba, en Inicio ves los días que te quedan. Y si pides tu código o renuevas antes de tiempo, no pierdes días: lo nuevo empieza cuando acaba lo que tienes.']],
   ['4.99.2', ['💶 Cobros: toca «cobrado este mes/año» (o «editar» junto al último pago de una ficha) para corregir el importe o la fecha, o borrar un cobro.'], 'admin'],
   ['4.99.1', ['Textos: «tu código es personal».'], 'quiet'],
@@ -6725,7 +6799,8 @@ const GUIDE = [
   ['📈 Progreso', [
     '⚖️ <b>Peso y cintura</b>: pésate al levantarte, después del baño y antes de comer; la cintura, una vez por semana a la altura del ombligo. <b>Registra siempre, también los días que sube</b>: un pesaje suelto no dice nada.',
     'La línea es tu <b>tendencia</b> (los puntos, cada pesaje). El peso de un día sube y baja 1–2 kg por agua y glucógeno (hidratos, sal, entreno, ciclo, descanso); 1 kg de grasa son ~7.700 kcal, así que un salto de un día no es grasa. Con unos 10 pesajes en 3 semanas (o 6 en 4) verás tu ritmo real en kg/semana.',
-    'La app lo interpreta según <b>tu objetivo</b> (Ajustes): perder grasa ≈ 0,5–1 % de tu peso por semana; recomposición = peso estable con la cintura bajando y la fuerza subiendo (peso estable no es fracaso); ganar músculo = subida lenta. Usa también lo que registras en Dieta y tu fuerza.',
+    'La app lo interpreta según <b>tu objetivo</b> (Ajustes): perder grasa = bajar al ritmo que elegiste (suave 0,25–0,5 %, moderado 0,5–0,75 % o rápido 0,75–1 % de tu peso por semana); recomposición = peso estable con la cintura bajando y la fuerza subiendo (peso estable no es fracaso); ganar músculo = subida lenta; mantener o salud y rendimiento = peso estable. Usa también lo que registras en Dieta y tu fuerza.',
+    '🎯 En <b>Ajustes → Mi perfil</b> eliges tu objetivo (con su explicación y su ritmo), tu actividad y cómo comes (de todo, vegetariana, vegana o pescetariana). Con eso la app te propone tus kcal y tu proteína, y si cambias el perfil te avisa por si quieres actualizarlos. El Coach, «¿Qué como?» y las recetas lo tienen en cuenta.',
     'Nunca te dirá que has ganado músculo con pocos días de datos: solo «probable» tras 4 semanas o más con peso al alza, cintura estable, fuerza subiendo y comida suficiente. El Coach IA usa exactamente este mismo análisis.',
     '🔥 <b>Mapa muscular</b>: «Ahora» muestra qué músculos siguen cargados y cuándo estarán listos; «7 días» y «30 días», cuánto has trabajado cada uno. Desliza sobre el mapa para cambiar. La figura es femenina o masculina según el sexo de tu perfil (Ajustes).',
     '🧠 <b>Resumen semanal</b>: analiza 7 días de fuerza, dieta, cardio y peso y te da 3 acciones para la semana siguiente.',
@@ -7258,6 +7333,17 @@ function planBannerHTML() {
     <button class="contact-btn mt-2" data-act="askCode" type="button">${icon('send', 'w-4 h-4')}<span>${me.trial ? 'Pedir mi código' : 'Pedir renovación'}</span></button></div>`;
 }
 // Pedir código o renovar: aclara que pedirlo antes no hace perder días
+/* ✨ FITNESTEBAN 5: aviso fijo en Inicio (hasta que lo revisas o lo cierras; como mucho 21 días) */
+function v5HomeHTML() {
+  const st = state.settings; if (st.v5seen) return '';
+  if (!st.v5since) { st.v5since = todayISO(); persist(); }
+  if (daysBetween(st.v5since, todayISO()) > 21) return '';
+  return `<div class="v5-card mb-3"><button class="v5-x" data-act="v5Close" type="button" aria-label="Cerrar">✕</button>
+    <div class="text-[11px] font-black tracking-widest text-cyan-300">✨ NOVEDAD · FITNESTEBAN 5</div>
+    <div class="text-[16px] font-extrabold mt-1 leading-tight">Objetivos a tu medida</div>
+    <p class="text-[12.5px] text-slate-300 mt-1 leading-snug">Elige qué buscas (perder grasa, ganar músculo, salud y rendimiento…) y a qué ritmo, y dinos cómo comes. La app ajusta tus calorías, tu proteína y los consejos del Coach.</p>
+    <button class="btn-primary w-full mt-2.5" data-act="v5Open" type="button">Revisar mis objetivos</button></div>`;
+}
 function askCodeModal() {
   const trial = !!access.me?.trial;
   openModal(`<h3 class="modal-title">${trial ? '🔓 Pedir mi código' : '⏳ Renovar'}</h3>
@@ -7269,7 +7355,7 @@ function renderHome() {
   const name = profileOf()?.name || access.me?.name || '';
   const f = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   return `<div class="pb-3"><div class="text-mute text-sm">${esc(f.charAt(0).toUpperCase() + f.slice(1))}</div><h1 class="text-2xl font-black mt-0.5">Hola${name ? ', ' + esc(name.split(' ')[0]) : ''}</h1></div>
-  ${planBannerHTML()}${advHomeHTML()}${advTeaserHTML()}
+  ${v5HomeHTML()}${planBannerHTML()}${advHomeHTML()}${advTeaserHTML()}
   <div id="homeCards" class="home-cards">${HOME_CARDS.map(c => `<button class="home-card" style="--c:${c.c};background-image:url(${c.img}.webp);background-position:${c.pos}" data-act="homeGo" data-v="${c.view}" type="button">
     <span class="home-shade"></span>
     <span class="home-txt">${c.view === 'train' && libNewList().length ? `<span class="home-pill">📚 ${libNewList().length === 1 ? '1 bloque nuevo' : libNewList().length + ' bloques nuevos'}</span>` : ''}<span class="block font-black text-[19px] leading-tight">${c.t}</span>${homeSub(c.view).filter(Boolean).slice(0, c.view === 'train' && libNewList().length ? 1 : 2).map((l, i) => `<span class="block text-[13px] ${i ? 'mt-0.5' : 'mt-1'} text-slate-300 truncate">${l}</span>`).join('')}</span>
@@ -7964,6 +8050,9 @@ const actions = {
   planAccess: b => planModal(b.dataset.hash),
   renewMsg: b => renewMsgModal(b.dataset.hash),
   askCode: () => askCodeModal(),
+  sugTargets: () => { const t = suggestedTargets(); if (t) targetsModal(t); },
+  v5Open: () => { state.settings.v5seen = true; persist(); profileModal(); },
+  v5Close: () => { state.settings.v5seen = true; persist(); render(); },
   pays: b => paysModal(b.dataset.hash || ''),
   setTheme: b => { try { localStorage.setItem(THEME_KEY, b.dataset.k); } catch { /* nada */ } applyTheme(); render(); },
   retoCard: b => openRetoCard(b.dataset.reto, b.dataset.at),
