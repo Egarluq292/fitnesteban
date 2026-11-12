@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.96.2';
+const APP_VERSION = '4.97.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6401,6 +6401,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.97.0', ['🧍 Nuevas animaciones 3D de máquinas: extensión de cuádriceps y curl femoral (sentado y tumbado).']],
   ['4.96.2', ['«Próximamente»: fuera el 3D, que ya ha llegado.'], 'quiet'],
   ['4.96.1', ['Corrección en el texto del aviso del 3D.'], 'quiet'],
   ['4.96.0', ['🧍 ¡LLEGA EL 3D! Tus ejercicios cobran vida: pulsa el botón brillante «3D» junto a cada ejercicio (en tu entreno o en «Hoy has hecho») y verás el movimiento completo, desde varios ángulos, con sus 3 claves de técnica.', '💪 Ya hay más de 75 ejercicios animados (press, sentadillas, remos, dominadas, aperturas, polea…) e irán llegando más.']],
@@ -7136,6 +7137,7 @@ function man3dStop() { try { man3dMod?.stop(); } catch { /* nada */ } }
 /* 🧍 Ejercicio (por su nombre) → animación 3D (gym3d.js). De lo más concreto a lo más general.
    Máquinas, poleas y superseries («+»): sin animación (se quedan con YouTube). El material sale del nombre. */
 const GYM3D_MAP = [
+  [/extensi[oó]n de (cu[aá]driceps|piernas)|leg extension/i, 'legext'], [/curl femoral sentado/i, 'legcs'], [/curl femoral (tumbado|acostado)/i, 'legcl'],
   [/aperturas?.*inclinad/i, 'fly'], [/^aperturas? (con mancuernas|en banco plano)/i, 'flyf'], [/^extensi[oó]n (de tr[ií]ceps )?en polea( con cuerda)?$/i, 'pushd'],
   [/m[aá]quina|polea|prensa|smith|multipower|jal[oó]n|contractora|cable|pec ?deck|hack|extensi[oó]n de cu[aá]driceps|curl femoral|curl n[oó]rdico|\+|gemelos sentado|pica|sissy|thruster|hiperextensi|patada|p[aá]jaro|apertura|abducci|aducci|paseo lateral|clean/i, null],
   [/martillo/i, 'curlh'], [/curl concentrado/i, 'curlconc'], [/curl (en banco )?inclinado|curl inclinado/i, 'curlinc'],
@@ -7165,6 +7167,9 @@ function gym3dOf(name) {
 
 /* 💡 Las 3 claves de cada movimiento (texto propio): se leen antes de empezar y se cuida una en cada serie */
 const GYM3D_CUES = {
+  legcs: ['Rodilla alineada con el eje y el rodillo justo encima del talón', 'Baja el rodillo doblando la rodilla, sin despegar la cadera del asiento', 'Vuelve despacio, sin dejar que el peso te estire de golpe'],
+  legcl: ['Cadera pegada al banco todo el rato', 'Rodilla justo fuera del banco y el rodillo encima del talón', 'Sube hasta 90° o más y baja despacio, sin rebotar'],
+  legext: ['Espalda pegada al respaldo y agárrate a las asas', 'Rodilla alineada con el eje de la máquina y el rodillo sobre el tobillo', 'Sube hasta estirar casi del todo, aguanta 1 s y baja despacio'],
   fly: ['Codos un poco flexionados y fijos todo el recorrido', 'Abre en arco hasta notar el estiramiento del pecho, sin pasar del hombro', 'Cierra como si abrazaras un árbol, sin chocar las mancuernas'],
   flyf: ['Codos un poco flexionados y fijos todo el recorrido', 'Abre en arco hasta notar el estiramiento del pecho, sin pasar del hombro', 'Cierra como si abrazaras un árbol, sin chocar las mancuernas'],
   pushd: ['Codos pegados al cuerpo: solo se mueven los antebrazos', 'Abajo, separa un poco la cuerda y estira del todo', 'Sube despacio hasta la altura del pecho, sin dejar que tire de ti'],

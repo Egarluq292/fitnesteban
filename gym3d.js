@@ -41,7 +41,10 @@ function build() {
   const dbs = [0, 1].map(() => { const g = new T.Group(); g.add(cyl(.014, .3, STEEL)); for (const x of [-.11, .11]) { const pl = cyl(.06, .07, PLATE); pl.position.x = x; g.add(pl); } g.visible = false; S.add(g); return g; });
   const kb = new T.Group(); { const bl = sh(new T.Mesh(new T.SphereGeometry(.11, 20, 16), PLATE)); bl.position.y = -.13; kb.add(bl); const hd = sh(new T.Mesh(new T.TorusGeometry(.06, .015, 8, 20), STEEL)); hd.position.y = -.01; kb.add(hd); } kb.visible = false; S.add(kb);
   const straps = [0, 1].map(() => { const m = new T.Mesh(new T.CylinderGeometry(.012, .012, 1, 8), new T.MeshStandardMaterial({ color: 0xfacc15, roughness: .6 })); m.visible = false; S.add(m); return m; });
-  return { S, root, B, bag, prop, bar, dbs, kb, straps };
+  // rodillo acolchado de las máquinas de pierna (extensión de cuádriceps)
+  const roller = sh(new T.Mesh(new T.CylinderGeometry(.065, .065, .42, 20), new T.MeshStandardMaterial({ color: 0x1f2937, roughness: .9 }))); roller.rotation.z = Math.PI / 2; roller.visible = false; S.add(roller);
+  const lever = sh(new T.Mesh(new T.CylinderGeometry(.018, .018, 1, 10), STEEL)); lever.visible = false; S.add(lever);
+  return { S, root, B, bag, prop, bar, dbs, kb, straps, roller, lever };
 }
 let W = null;
 /* Poses: ángulos en grados. hip/knee/sh/el por lado con sufijo L/R si son distintos. ground: puntos que tocan el suelo. */
@@ -109,6 +112,9 @@ const P = {
   dbrow1: { base: { rootX: 45, hip: 55, knee: 20, neck: -20, shL: 90, elL: 0, hipAb: 8 }, a: { shR: 45, elR: 0 }, b: { shR: -20, elR: 105, shAbR: 10 }, db: 'R', restL: true },
   fly: { base: { rootX: -55, hip: 55, knee: 90, sh: 90, el: 15, shAb: 0 }, a: { shH: 0 }, b: { shH: 78 }, ground: ['anL', 'anR'], incline: true, db: true, hammer: true },
   flyf: { base: { rootX: -90, hip: 8, knee: 92, neck: 0, sh: 90, el: 15, shAb: 0 }, a: { shH: 0 }, b: { shH: 80 }, ground: ['anL', 'anR'], bench: [.4, .45, 1.3, 0, -.45], db: true, hammer: true },
+  legext: { cam: [3.4, 1.2, .55], pin: ['pelvis', [0, .58, 0]], base: { rootX: -12, hip: 100, neck: 0, sh: -8, shAb: 22, el: 12 }, a: { knee: 88 }, b: { knee: 4 }, incline: 'back', roller: true, seatT: true },
+  legcs: { cam: [3.4, 1.2, .55], pin: ['pelvis', [0, .58, 0]], base: { rootX: -12, hip: 100, neck: 0, sh: -8, shAb: 22, el: 12 }, a: { knee: 6 }, b: { knee: 95 }, incline: 'back', roller: 'back', seatT: true },
+  legcl: { cam: [3.6, 1.3, .45], pin: ['pelvis', [0, .62, 0]], base: { rootX: 90, hip: 12, neck: -35, sh: 150, shAb: 22, el: 45 }, a: { knee: 3 }, b: { knee: 112 }, roller: 'back', pad: ['neck', 'knL'] },
   pushd: { cam: [3.6, 1.5, 1.2], base: { spine: 12, hip: 8, knee: 8, neck: -6, sh: 6, shAb: 8 }, a: { el: 100 }, b: { el: 4 }, strap: [0, 1.95, .5], tower: [0, .62] },
   csrow: { base: { rootX: 55, hip: 50, knee: 15, neck: -10 }, a: { sh: 55, el: 0, shAb: 6 }, b: { sh: -15, el: 100, shAb: 18 }, db: true, incline: 'front' },
   benchc: { base: { rootX: -90, hip: 8, knee: 92, neck: 0 }, a: { sh: 90, el: 0, shAb: 0 }, b: { sh: 12, shAb: 5, el: 112 }, ground: ['anL', 'anR'], bench: [.4, .45, 1.3, 0, -.45], bar: 'hands' },
@@ -169,7 +175,14 @@ function apply(p, ex) {
   if (FIX) for (const j of ex.fix || []) if (FIX[j]) ikTo(j, FIX[j]);
   if (ex.flat) { const qr = new T.Quaternion(), qp = new T.Quaternion(); root.getWorldQuaternion(qr); for (const j of ex.flat) { B[j].parent.getWorldQuaternion(qp); B[j].quaternion.copy(qp.invert().multiply(qr)); B[j].updateMatrixWorld(true); } } // pie plano: ni punta ni talón se levantan
   if (ex.anchor && ex.Ls) { const A = anchorOf(ex); W.straps.forEach((m, i) => { const h = new T.Vector3(); B[i ? 'hdR' : 'hdL'].getWorldPosition(h); seg(m, h, new T.Vector3(h.x * .3, A.y, A.z)); }); }
+  else if (ex.roller) W.straps.forEach(m => { m.visible = false; });
   else if (ex.strap) { const A = new T.Vector3(...ex.strap); W.straps.forEach((m, i) => { const h = new T.Vector3(); B[i ? 'hdR' : 'hdL'].getWorldPosition(h); seg(m, h, A); }); } else W.straps.forEach(m => { m.visible = false; });
+  if (ex.roller) { // el rodillo va delante de la espinilla, junto al tobillo, y una palanca lo une al eje a la altura de la rodilla
+    const k = new T.Vector3(), a = new T.Vector3(), k2 = new T.Vector3(), a2 = new T.Vector3(); B.knL.getWorldPosition(k); B.anL.getWorldPosition(a); B.knR.getWorldPosition(k2); B.anR.getWorldPosition(a2);
+    k.add(k2).multiplyScalar(.5); a.add(a2).multiplyScalar(.5); const u = a.clone().sub(k).normalize(), fr = new T.Vector3(0, u.z, -u.y).multiplyScalar(ex.roller === 'back' ? -1 : 1); // 'back': detrás del tobillo (curl femoral)
+    const rp = a.clone().addScaledVector(u, -.07).addScaledVector(fr, .1); W.roller.position.copy(rp); W.roller.visible = true;
+    const piv = k.clone().addScaledVector(fr, .02); piv.x = .26; const end = rp.clone(); end.x = .26; seg(W.lever, piv, end);
+  } else if (W.roller) { W.roller.visible = false; W.lever.visible = false; }
   if (ex.bag) {
     const a = new T.Vector3(), b = new T.Vector3();
     if (ex.bag === 'chest') { B.spine.getWorldPosition(a); bag.position.set(a.x, a.y + .3, a.z + .2); bag.rotation.set(root.rotation.x, 0, 0); }
@@ -208,6 +221,8 @@ function props(ex, pA) {
   if (ex.incline) { apply(pA, ex); const a = new T.Vector3(), b = new T.Vector3(); B.pelvis.getWorldPosition(a); B.neck.getWorldPosition(b); const mid = a.clone().add(b).multiplyScalar(.5), dir = b.clone().sub(a), len = dir.length() + .25;
     const bk = new T.Mesh(new T.BoxGeometry(.4, len, .08), m); bk.position.copy(mid).add(new T.Vector3(0, 0, ex.incline === 'front' ? .15 : -.13).applyAxisAngle(new T.Vector3(1, 0, 0), Math.atan2(dir.z, dir.y))); bk.rotation.x = Math.atan2(dir.z, dir.y); prop.add(bk);
     if (ex.incline !== 'front') box(.4, a.y - .1, .45, 0, (a.y - .1) / 2, a.z + .1); }
+  if (ex.seatT) { apply(pA, ex); const p0 = new T.Vector3(), k1 = new T.Vector3(); B.pelvis.getWorldPosition(p0); B.knL.getWorldPosition(k1); const top = Math.min(p0.y, k1.y) - .08, z0 = p0.z - .18, z1 = k1.z - .02; box(.46, top, z1 - z0, 0, top / 2, (z0 + z1) / 2); }
+  if (ex.pad) { apply(pA, ex); const [j1, j2] = ex.pad, p1 = new T.Vector3(), p2 = new T.Vector3(); B[j1].getWorldPosition(p1); B[j2].getWorldPosition(p2); const top = Math.min(p1.y, p2.y) - .11, z0 = Math.min(p1.z, p2.z) - .05, z1 = Math.max(p1.z, p2.z) + .05; box(.45, top, z1 - z0, 0, top / 2, (z0 + z1) / 2); } // banco bajo el cuerpo (curl femoral tumbado)
   if (ex.foot) { apply(pA, ex); const a = new T.Vector3(); B[ex.foot].getWorldPosition(a); box(.45, a.y - .02, .4, a.x, (a.y - .02) / 2, a.z - .05); }
   if (ex.hands) { // mesa o pared donde apoyan las manos (sale de la pose inicial)
     apply(pA, ex); const a = new T.Vector3(), b = new T.Vector3(); B.hdL.getWorldPosition(a); B.hdR.getWorldPosition(b); const hz = (a.z + b.z) / 2, hy = (a.y + b.y) / 2 - .05;
@@ -249,7 +264,7 @@ export function mount(el, id, lv = 1) {
     if (ex.pin?.[1] === 'auto') FIX.pin = FIX[ex.pin[0]];
   }
   props(ex, poseAt(0));
-  const per = { pull: 3, hipth: 2.6, lat: 2.4, curl: 2.2, curlh: 2.2, burpee: 4.5, plank: 4, hollow: 3.5, gorilla: 4.4, swing: 1.8, fly: 4, flyf: 4, pushd: 3.2 }[id] || 2.8;
+  const per = { pull: 3, hipth: 2.6, lat: 2.4, curl: 2.2, curlh: 2.2, burpee: 4.5, plank: 4, hollow: 3.5, gorilla: 4.4, swing: 1.8, legext: 3.2, legcs: 3.2, legcl: 3.2, fly: 4, flyf: 4, pushd: 3.2 }[id] || 2.8;
   const t0 = performance.now();
   const frame = now => {
     if (!cv.isConnected) { stop(); return; }
