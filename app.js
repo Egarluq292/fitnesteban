@@ -1570,33 +1570,7 @@ function markSetDone(exId, key, i) {
   render();
 }
 
-/* ✍️ Registro hecho después de entrenar: si la media sale por debajo de 35 s por serie, no fue en directo */
-const LIVE_SEC_PER_SET = 35;
-function manualMinutesEstimate(day, exs) {
-  let sec = 5 * 60; // calentamiento
-  for (const x of exs) {
-    const e = day.exercises.find(y => y.id === x.exId);
-    for (const st of x.sets) sec += (x.timed ? st.r : st.r * 3) + 15; // trabajo + preparar la serie
-    sec += Math.max(0, x.sets.length - 1) * (e?.rest || 90) + 60; // descansos + cambio de ejercicio
-  }
-  return Math.max(5, Math.round(sec / 60 / 5) * 5);
-}
-function askManualDuration(day, exs) {
-  const est = manualMinutesEstimate(day, exs);
-  openModal(`
-    <h3 class="modal-title">✍️ ¿Cuánto duró el entreno?</h3>
-    <p class="text-xs text-mute">Parece que has apuntado la sesión después de entrenar. Con tus series y descansos calculo unos <strong class="text-white">${est} min</strong>; cámbialo si duró otra cosa. Con ese tiempo se estiman las kcal.</p>
-    <label class="lbl">Minutos<input class="field mt-1 text-center text-xl font-black" name="mins" inputmode="numeric" value="${est}" /></label>
-    <div class="grid grid-cols-2 gap-2">
-      <button class="btn-ghost" data-mact="live" type="button">Lo hice en directo</button>
-      <button class="btn-primary" data-mact="ok" type="button">Guardar</button>
-    </div>`, {
-    live: () => { closeModal(); saveSession({ live: true }); },
-    ok: root => { const v = parseInt(mval(root, 'mins'), 10); if (!(v >= 1 && v <= 300)) return toast('Revisa los minutos', 'warn'); closeModal(); saveSession({ mins: v }); }
-  });
-}
-
-function saveSession(opt = {}) {
+function saveSession() {
   const day = currentDay();
   const d = draftOf(day.id);
   const today = todayISO();
@@ -1615,9 +1589,6 @@ function saveSession(opt = {}) {
     if (sets.length) exs.push({ exId: e.id, exKey: key, name: variant.name, sets, ...(e.timed ? { timed: true } : {}) });
   }
   if (!exs.length) return toast('Apunta al menos una serie con repeticiones.', 'warn');
-  const liveMins = sessionMinutes(d), setsTotal = exs.reduce((a, x) => a + x.sets.length, 0);
-  const manual = !opt.live && !opt.mins && (!liveMins || (liveMins * 60) / setsTotal < LIVE_SEC_PER_SET);
-  if (manual) return askManualDuration(day, exs);
 
   const existingIdx = state.sessions.findIndex(s => s.date === today && s.dayId === day.id);
   if (existingIdx >= 0 && !confirm('Ya guardaste este día hoy. ¿Sustituir esa sesión por esta?')) return;
@@ -1640,9 +1611,8 @@ function saveSession(opt = {}) {
   const notes = day.exercises.map(e => { const nt = d.notes?.[e.id]; return nt && (nt.tags.length || nt.text.trim()) ? { exId: e.id, name: variantOf(e).variant.name, tags: nt.tags, text: nt.text.trim() } : null; }).filter(Boolean);
   if (notes.length) session.notes = notes;
   if (deloadActive()) session.deload = true;
-  const mins = opt.mins || liveMins;
+  const mins = sessionMinutes(d);
   if (mins) session.durationMin = mins;
-  if (opt.mins) session.durManual = true; // duración indicada a mano (registro hecho después)
   const ppP = isPP(prog()) ? prog() : null, ppPre = ppP && ppInfo(ppP);
   state.sessions = others;
   state.sessions.push(session);
@@ -2155,7 +2125,7 @@ function editExModal(exId) {
       <label class="lbl col-span-2">Descanso (seg)<input class="field mt-1" name="rest" inputmode="numeric" value="${e.rest}" /></label>
     </div>
     <label class="habit"><input type="checkbox" name="bw" ${e.bw ? 'checked' : ''} /><span class="text-xs">Con peso corporal <span class="text-mute">(dominadas, fondos… el campo de peso pasa a ser el lastre; vacío = solo tu peso)</span></span></label>
-    <label class="habit"><input type="checkbox" name="timed" ${e.timed ? 'checked' : ''} /><span class="text-xs">⏱ Por tiempo <span class="text-mute">(plancha, paseo del granjero… mín y máx pasan a ser segundos y cada serie lleva cronómetro; sin «peso corporal», también apuntas los kg)</span></span></label>
+    <label class="habit"><input type="checkbox" name="timed" ${e.timed ? 'checked' : ''} /><span class="text-xs">⏱ Por tiempo <span class="text-mute">(plancha, paseo del granjero… mín y máx pasan a ser segundos y cada serie lleva cronómetro)</span></span></label>
     <p class="text-[11px] text-mute">El coach sube el peso cuando haces las reps máximas en todas las series, y baja un 10 % si fallas el mínimo dos sesiones seguidas.</p>
     <div class="flex gap-2 mt-4">
       ${!isNew ? `<button class="btn-ghost" data-mact="up" type="button" aria-label="Subir">▲</button><button class="btn-ghost" data-mact="down" type="button" aria-label="Bajar">▼</button>` : ''}
@@ -6431,7 +6401,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
-  ['4.99.0', ['✍️ ¿Apuntas el entreno al llegar a casa? Ahora, al guardar, la app nota que lo has registrado después y te pregunta cuánto duró, con una estimación ya puesta. Así las kcal salen con el tiempo real y no con lo que tardas en rellenarlo.', '🏋️⏱ Recuerda que puedes apuntar peso y tiempo en el mismo ejercicio (paseo del granjero, plancha con disco…): en el ✎ marca «⏱ Por tiempo» sin «Con peso corporal». Lo tienes explicado en la guía.']],
+  ['4.99.0', ['🔑 Cada código vale ahora en 1 dispositivo (quien ya tenía 2 registrados los conserva). Textos de los códigos: «aquí tienes tu código personal». Script de uso v14: pégalo (Ajustes → Acceso → Reconfigurar).'], 'admin'],
   ['4.98.0', ['🎬 ¿Te gusta FITNESTEBAN? Ya tiene vídeo: en Ajustes, junto a «Compartir app», pulsa «🎬 Vídeo» y compártelo en WhatsApp, estados o redes, o guárdalo en tu galería.']],
   ['4.97.0', ['🧍 Nuevas animaciones 3D de máquinas: extensión de cuádriceps y curl femoral (sentado y tumbado).']],
   ['4.96.2', ['«Próximamente»: fuera el 3D, que ya ha llegado.'], 'quiet'],
@@ -6702,13 +6672,11 @@ const GUIDE = [
     'Todo se guarda solo mientras escribes: puedes cerrar la app a mitad de sesión.',
     '🤸 <b>Peso corporal</b>: en dominadas, flexiones, fondos… el campo de peso es el <b>lastre</b>: vacío = solo tu peso (PC). Actívalo en el ✎ del ejercicio con «Con peso corporal».',
     '⏱ <b>Ejercicios por tiempo</b> (plancha, hollow hold…): ▶ cronometra la serie y apunta los segundos solos.',
-    '🏋️⏱ <b>Peso + tiempo</b> (paseo del granjero, plancha con disco…): en el ✎ del ejercicio marca «⏱ Por tiempo» y deja sin marcar «Con peso corporal». Apuntas kg y segundos en cada serie; pon el mismo mínimo y máximo si te marcan un tiempo fijo. Cuando lo aguantes en todas las series, el coach te sube el peso.',
     '⏱ Con un entreno en curso, una franja ámbar bajo la cabecera muestra el tiempo y la serie que toca, en cualquier pestaña. Tócala y te lleva a esa serie.',
     '↺ <b>Igual que la serie anterior</b>: desde la S2, copia peso y reps de la anterior con un toque.',
     '⇄ cambia de variante, ✎ edita series, rango, descanso, incremento y vídeo. «▶ Técnica» abre YouTube.',
     '💬 <b>Comenta al Coach</b> (bajo las series): marca 😣 Molestia, 🥵 Muy duro, 😌 Fácil o ⏱ Poco tiempo y escribe o dicta con 🎤 lo que notes. Lo verá el Coach IA y te lo recordaré la próxima vez; con 😣 o 🥵 no te subo peso.',
     '⏱ Bajo el título del día ves la <b>duración estimada</b>; la <b>real</b> se mide desde tu primera serie ✓ hasta «Guardar sesión» (las pausas de más de 20 min no cuentan).',
-    '✍️ <b>¿Lo apuntas al llegar a casa?</b> Si registras la sesión después de entrenar, al guardar la app lo nota y te pregunta cuánto duró (con una estimación ya puesta), para que las kcal salgan bien. No tienes que activar nada.',
     'Al final, «Guardar sesión»: resumen, volumen, récords personales y 📸 <b>Tarjeta</b> para compartir, con la foto del bloque. La de un entreno pasado la recuperas en Progreso → Historial o en el calendario (Dieta → toca la fecha → toca el día → «📸 Ver tarjeta»). 🗑️ «Abandonar» borra lo apuntado hoy, con confirmación.'
   ]],
   ['🏆 Retos', [
@@ -8382,7 +8350,7 @@ const TRIAL_KEY = 'fitnesteban_trial', TRIAL_DAYS = 7; // las pruebas ya empezad
 const trialLeft = () => { const h = access.me?.hasta || lsGet(TRIAL_KEY)?.hasta; return h ? Math.max(0, daysBetween(todayISO(), fecha10(h)) + 1) : TRIAL_DAYS; };
 function trialMe(t = lsGet(TRIAL_KEY)) { return t?.h && t.hasta ? { hash: t.h, admin: false, plan: 'prueba', hasta: t.hasta, trial: true } : null; }
 const trialEndMsg = () => `Tu periodo de prueba ha terminado. Pide tu código de acceso a Esteban y seguirás con todos tus datos.${contactBtn('Pedir mi código', 'mx-auto mt-3')}`;
-const trialDevMsg = r => r === 'device' ? `Este dispositivo ya ha usado su periodo de prueba con otra cuenta de Google. Para seguir, pide tu código de acceso a Esteban.${contactBtn('Pedir mi código', 'mx-auto mt-3')}` : `Esa cuenta ya tiene su periodo de prueba abierto en ${DEVICE_LIMIT} dispositivos. Para seguir, pide tu código de acceso a Esteban.${contactBtn('Pedir mi código', 'mx-auto mt-3')}`;
+const trialDevMsg = r => r === 'device' ? `Este dispositivo ya ha usado su periodo de prueba con otra cuenta de Google. Para seguir, pide tu código de acceso a Esteban.${contactBtn('Pedir mi código', 'mx-auto mt-3')}` : `Esa cuenta ya tiene su periodo de prueba abierto en otro dispositivo. Para seguir, pide tu código de acceso a Esteban.${contactBtn('Pedir mi código', 'mx-auto mt-3')}`;
 async function trialHashOf(m) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('fitnesteban-prueba|' + m)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('').slice(0, 32); }
 const fecha10 = x => String(x || '').slice(0, 10);
 async function trialCall(tk = '') {
@@ -8424,10 +8392,10 @@ async function accessCheck(list) {
   const h = await codeHash(saved.code);
   return list.find(x => x.hash === h) || null;
 }
-/* 📱 Cada código vale como mucho en 2 dispositivos (el administrador, sin límite). Lo decide el script de la hoja de uso.
+/* 📱 Cada código vale en 1 dispositivo (quien ya tenía 2 los conserva) (el administrador, sin límite). Lo decide el script de la hoja de uso.
    Si el script no responde o aún no está actualizado, se deja entrar: nadie se queda fuera por un fallo ajeno. */
-const DEVICE_LIMIT = 2;
-const blockedMsg = () => `Este código ya se usa en ${DEVICE_LIMIT} dispositivos. Si has cambiado de móvil, escribe a Esteban y te lo libera.${contactBtn('Contacto', 'mx-auto mt-3')}`;
+const DEVICE_LIMIT = 1;
+const blockedMsg = () => `Este código es personal y ya se está usando en otro dispositivo. Si has cambiado de móvil, escribe a Esteban y te lo libera.${contactBtn('Contacto', 'mx-auto mt-3')}`;
 let deviceSure = false; // ¿el script ha contestado de verdad? (si no, se vuelve a preguntar al volver a la app)
 let deviceDiag = ''; // qué contestó el script la última vez (se ve en Ajustes → Aplicación)
 let deviceReason = ''; // 'exp' si el script dice que el plan ha caducado
@@ -8499,7 +8467,7 @@ function lockScreen(mode, msg = '') {
     ${msg || canTrial ? '' : '<button class="lock-promo" id="lockPromo" type="button">▶ Mira lo que hace la app (1 min)</button>'}
     <input class="field mt-5 text-center text-2xl font-black tracking-[.2em] uppercase" id="lockCode" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" />
     <button class="btn-primary w-full mt-3" id="lockGo" type="button">Entrar</button>
-    <p class="text-[11px] text-mute text-center mt-4">Cada código es personal. Válido solo en 2 dispositivos.</p>
+    <p class="text-[11px] text-mute text-center mt-4">Cada código es personal.</p>
     ${msg ? '' : `<p class="text-[12px] text-mute text-center mt-4">¿No tienes código?</p>${contactBtn('Contacto', 'mx-auto mt-2')}`}
     <div id="lockInstall" class="mt-5">${installBannerHTML(true)}</div></div>`;
   const go = async () => {
@@ -8683,7 +8651,7 @@ async function loadUsage() {
     ui.usage = {}; for (const x of d.rows || []) ui.usage[String(x.h).toLowerCase()] = x;
     ui.trialH = {}; // 🧪 filas del periodo de prueba: su huella es la del correo (así no dependen de la columna «nombre»)
     for (const x of d.rows || []) { const m = String(x.m || '').trim().toLowerCase(), h = String(x.h).toLowerCase(); if (m && !(access.list || []).some(y => y.hash === h) && await trialHashOf(m) === h) ui.trialH[h] = (String(x.nm || '').match(/\d{4}-\d{2}-\d{2}/) || [''])[0] || (x.first ? addDays(fecha10(x.first), TRIAL_DAYS - 1) : ''); }
-    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageOld12 = !(d.ver >= 12); ui.usageOld13 = !(d.ver >= 13); ui.usageVer = +d.ver || 0;
+    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageOld12 = !(d.ver >= 12); ui.usageOld13 = !(d.ver >= 14); ui.usageVer = +d.ver || 0;
     // nombres puestos en otro dispositivo tuyo: se copian aquí si aquí no tienes uno
     let got = 0;
     for (const x of d.rows || []) { const h = String(x.h).toLowerCase(), nm = String(x.nm || '').trim(); if (nm && nm !== 'Sin nombre' && nm !== 'Yo (admin)' && !state.accessNames[h]) { state.accessNames[h] = nm.slice(0, 24); got++; } }
@@ -8700,14 +8668,14 @@ function usageLine(hash) {
   if (!u) return '<div class="text-[11px] text-mute">⚪ Aún no la ha abierto (o sin conexión desde que tiene el código)</div>';
   const ago = daysBetween(u.last, todayISO()), old = u.v && cmpVer(APP_VERSION, String(u.v)) > 0;
   const when = ago <= 0 ? 'Hoy' : ago === 1 ? 'Ayer' : `Hace ${ago} días`;
-  return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} de ${DEVICE_LIMIT} dispositivos`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="truncate text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${dv.p && !(access.list || []).some(x => x.hash === hash && x.anon) ? `<b class="text-white">${esc(dv.p)}</b> · ` : ''}${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}${dv.k ? ` · ${dv.k} día${dv.k === 1 ? '' : 's'} de uso` : ''}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 truncate">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
+  return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} dispositivo${u.n === 1 ? '' : 's'} (límite: ${DEVICE_LIMIT}${u.n > DEVICE_LIMIT ? '; los que ya tenía se mantienen' : ''})`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="truncate text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${dv.p && !(access.list || []).some(x => x.hash === hash && x.anon) ? `<b class="text-white">${esc(dv.p)}</b> · ` : ''}${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}${dv.k ? ` · ${dv.k} día${dv.k === 1 ? '' : 's'} de uso` : ''}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 truncate">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
 }
 function usageScript(key) {
-  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 2; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos; periodo de prueba de 7 días con Google) · v13
+  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 1; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos; periodo de prueba de 7 días con Google) · v13
 const READ_KEY = '${key}';
 const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
 const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre', 'correo', 'alta', 'dispositivos', 'bloqueos'];
-const LIMITE = 2;
+const LIMITE = 1; // un dispositivo por código; quien ya tenía 2 registrados los conserva
 const DIAS_PRUEBA = 7;
 // 🧪 Periodos de prueba: uno por cuenta de Google (el correo lo confirma Google) y una por instalación. Fechas de Google, no del móvil.
 function hex_(b) { return b.map(x => ((x + 256) % 256).toString(16).padStart(2, '0')).join(''); }
@@ -8859,12 +8827,12 @@ function doGet_(e) {
   if (q.op === 'hoy') {
     const c = CacheService.getScriptCache(); let n = c.get('hoy');
     if (n === null) { const hoy = fecha_(new Date()), adm = admins_(); n = String(hoja_().getDataRange().getValues().slice(1).filter(r => fecha_(r[1]) === hoy && adm.indexOf(String(r[0])) < 0).length); c.put('hoy', n, 60); }
-    return salida_({ ok: true, ver: 13, hoy: +n });
+    return salida_({ ok: true, ver: 14, hoy: +n });
   }
   if (q.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
   const datos = hoja_().getDataRange().getValues().slice(1);
   const dd = disp_();
-  return salida_({ ok: true, ver: 13, rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
+  return salida_({ ok: true, ver: 14, rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
 }`;
 }
 /* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
@@ -8947,7 +8915,7 @@ async function usageSetupModal() {
 }
 
 function codeShareModal(title, who, code, warn = '') {
-  const msg = `Hola${who ? ' ' + who : ''}, tu código de FITNESTEBAN es ${fmtCode(code)}\nEs personal. Válido solo en 2 dispositivos.\nhttps://fitnesteban.app`;
+  const msg = `Hola${who ? ' ' + who : ''}, aquí tienes tu código personal de FITNESTEBAN: ${fmtCode(code)}\nhttps://fitnesteban.app`;
   openModal(`<h3 class="modal-title">${title}</h3>${warn}
     <div class="text-center py-1"><div class="text-[11px] text-mute mb-1">${warn ? 'Nuevo código' : 'Código'}</div><div class="font-mono text-3xl font-black tracking-[.2em] text-brand">${fmtCode(code)}</div></div>
     <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="copy" type="button">📋 Copiar</button><a class="btn-ghost block text-center" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">💬 WhatsApp</a></div>
@@ -9202,7 +9170,7 @@ function accessSectionHTML() {
     ${list.length ? `<p class="text-[12px] text-slate-300">💶 Este mes: <b class="text-white">${eur(paysSummary().mes)}</b> · Este año: <b class="text-white">${eur(paysSummary().ano)}</b> <span class="text-mute">(solo en este móvil)</span></p>` : ''}
     <button class="btn-primary w-full" data-act="accPage" type="button">👥 Usuarios y planes</button>
     ${access.usageUrl && lsGet(USE_KEY)
-      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : ui.usageOld12 ? '<span class="text-amber-300">actualiza el script a la v12 (Reconfigurar → nueva versión) para activar el periodo de prueba con Google</span>' : ui.usageOld13 ? '<span class="text-amber-300">actualiza el script a la v13 (Reconfigurar → nueva versión): las pruebas nuevas pasan a 7 días</span>' : 'actualizado ahora · nombres, correos, altas y quién usa cada dispositivo') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
+      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : ui.usageOld12 ? '<span class="text-amber-300">actualiza el script a la v12 (Reconfigurar → nueva versión) para activar el periodo de prueba con Google</span>' : ui.usageOld13 ? '<span class="text-amber-300">actualiza el script a la v14 (Reconfigurar → nueva versión): las pruebas nuevas pasan a 7 días</span>' : 'actualizado ahora · nombres, correos, altas y quién usa cada dispositivo') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
       : access.usageUrl ? `<button class="btn-ghost w-full" data-act="usageHere" type="button">📶 Ver quién usa la app en este dispositivo</button>`
       : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
     ${access.usageUrl && lsGet(USE_KEY) ? (lsGet(SHEET_KEY) && !ui.sheetEdit
@@ -9373,7 +9341,7 @@ function newAccessModal(who = '', plan = 'prueba') {
   });
 }
 function duoShareModal(made) {
-  const msg = `Hola ${made[0].w} y ${made[1].w}, aquí tenéis vuestros códigos de FITNESTEBAN DÚO:\n${made.map(m => `${m.w}: ${fmtCode(m.code)}`).join('\n')}\nCada código es personal y vale en 2 dispositivos.\nhttps://fitnesteban.app`;
+  const msg = `Hola ${made[0].w} y ${made[1].w}, aquí tenéis vuestros códigos personales de FITNESTEBAN DÚO:\n${made.map(m => `${m.w}: ${fmtCode(m.code)}`).join('\n')}\nhttps://fitnesteban.app`;
   openModal(`<h3 class="modal-title">👥 DÚO creado</h3>
     ${made.map(m => `<div class="text-center py-1"><div class="text-[11px] text-mute mb-1">${esc(m.w)}</div><div class="font-mono text-3xl font-black tracking-[.2em] text-brand">${fmtCode(m.code)}</div></div>`).join('')}
     <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="copy" type="button">📋 Copiar mensaje</button><a class="btn-ghost block text-center" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">💬 WhatsApp</a></div>
