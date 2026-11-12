@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.98.0';
+const APP_VERSION = '4.99.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -1570,7 +1570,33 @@ function markSetDone(exId, key, i) {
   render();
 }
 
-function saveSession() {
+/* ✍️ Registro hecho después de entrenar: si la media sale por debajo de 35 s por serie, no fue en directo */
+const LIVE_SEC_PER_SET = 35;
+function manualMinutesEstimate(day, exs) {
+  let sec = 5 * 60; // calentamiento
+  for (const x of exs) {
+    const e = day.exercises.find(y => y.id === x.exId);
+    for (const st of x.sets) sec += (x.timed ? st.r : st.r * 3) + 15; // trabajo + preparar la serie
+    sec += Math.max(0, x.sets.length - 1) * (e?.rest || 90) + 60; // descansos + cambio de ejercicio
+  }
+  return Math.max(5, Math.round(sec / 60 / 5) * 5);
+}
+function askManualDuration(day, exs) {
+  const est = manualMinutesEstimate(day, exs);
+  openModal(`
+    <h3 class="modal-title">✍️ ¿Cuánto duró el entreno?</h3>
+    <p class="text-xs text-mute">Parece que has apuntado la sesión después de entrenar. Con tus series y descansos calculo unos <strong class="text-white">${est} min</strong>; cámbialo si duró otra cosa. Con ese tiempo se estiman las kcal.</p>
+    <label class="lbl">Minutos<input class="field mt-1 text-center text-xl font-black" name="mins" inputmode="numeric" value="${est}" /></label>
+    <div class="grid grid-cols-2 gap-2">
+      <button class="btn-ghost" data-mact="live" type="button">Lo hice en directo</button>
+      <button class="btn-primary" data-mact="ok" type="button">Guardar</button>
+    </div>`, {
+    live: () => { closeModal(); saveSession({ live: true }); },
+    ok: root => { const v = parseInt(mval(root, 'mins'), 10); if (!(v >= 1 && v <= 300)) return toast('Revisa los minutos', 'warn'); closeModal(); saveSession({ mins: v }); }
+  });
+}
+
+function saveSession(opt = {}) {
   const day = currentDay();
   const d = draftOf(day.id);
   const today = todayISO();
@@ -1589,6 +1615,9 @@ function saveSession() {
     if (sets.length) exs.push({ exId: e.id, exKey: key, name: variant.name, sets, ...(e.timed ? { timed: true } : {}) });
   }
   if (!exs.length) return toast('Apunta al menos una serie con repeticiones.', 'warn');
+  const liveMins = sessionMinutes(d), setsTotal = exs.reduce((a, x) => a + x.sets.length, 0);
+  const manual = !opt.live && !opt.mins && (!liveMins || (liveMins * 60) / setsTotal < LIVE_SEC_PER_SET);
+  if (manual) return askManualDuration(day, exs);
 
   const existingIdx = state.sessions.findIndex(s => s.date === today && s.dayId === day.id);
   if (existingIdx >= 0 && !confirm('Ya guardaste este día hoy. ¿Sustituir esa sesión por esta?')) return;
@@ -1611,8 +1640,9 @@ function saveSession() {
   const notes = day.exercises.map(e => { const nt = d.notes?.[e.id]; return nt && (nt.tags.length || nt.text.trim()) ? { exId: e.id, name: variantOf(e).variant.name, tags: nt.tags, text: nt.text.trim() } : null; }).filter(Boolean);
   if (notes.length) session.notes = notes;
   if (deloadActive()) session.deload = true;
-  const mins = sessionMinutes(d);
+  const mins = opt.mins || liveMins;
   if (mins) session.durationMin = mins;
+  if (opt.mins) session.durManual = true; // duración indicada a mano (registro hecho después)
   const ppP = isPP(prog()) ? prog() : null, ppPre = ppP && ppInfo(ppP);
   state.sessions = others;
   state.sessions.push(session);
@@ -2125,7 +2155,7 @@ function editExModal(exId) {
       <label class="lbl col-span-2">Descanso (seg)<input class="field mt-1" name="rest" inputmode="numeric" value="${e.rest}" /></label>
     </div>
     <label class="habit"><input type="checkbox" name="bw" ${e.bw ? 'checked' : ''} /><span class="text-xs">Con peso corporal <span class="text-mute">(dominadas, fondos… el campo de peso pasa a ser el lastre; vacío = solo tu peso)</span></span></label>
-    <label class="habit"><input type="checkbox" name="timed" ${e.timed ? 'checked' : ''} /><span class="text-xs">⏱ Por tiempo <span class="text-mute">(plancha, paseo del granjero… mín y máx pasan a ser segundos y cada serie lleva cronómetro)</span></span></label>
+    <label class="habit"><input type="checkbox" name="timed" ${e.timed ? 'checked' : ''} /><span class="text-xs">⏱ Por tiempo <span class="text-mute">(plancha, paseo del granjero… mín y máx pasan a ser segundos y cada serie lleva cronómetro; sin «peso corporal», también apuntas los kg)</span></span></label>
     <p class="text-[11px] text-mute">El coach sube el peso cuando haces las reps máximas en todas las series, y baja un 10 % si fallas el mínimo dos sesiones seguidas.</p>
     <div class="flex gap-2 mt-4">
       ${!isNew ? `<button class="btn-ghost" data-mact="up" type="button" aria-label="Subir">▲</button><button class="btn-ghost" data-mact="down" type="button" aria-label="Bajar">▼</button>` : ''}
@@ -6401,6 +6431,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.99.0', ['✍️ ¿Apuntas el entreno al llegar a casa? Ahora, al guardar, la app nota que lo has registrado después y te pregunta cuánto duró, con una estimación ya puesta. Así las kcal salen con el tiempo real y no con lo que tardas en rellenarlo.', '🏋️⏱ Recuerda que puedes apuntar peso y tiempo en el mismo ejercicio (paseo del granjero, plancha con disco…): en el ✎ marca «⏱ Por tiempo» sin «Con peso corporal». Lo tienes explicado en la guía.']],
   ['4.98.0', ['🎬 ¿Te gusta FITNESTEBAN? Ya tiene vídeo: en Ajustes, junto a «Compartir app», pulsa «🎬 Vídeo» y compártelo en WhatsApp, estados o redes, o guárdalo en tu galería.']],
   ['4.97.0', ['🧍 Nuevas animaciones 3D de máquinas: extensión de cuádriceps y curl femoral (sentado y tumbado).']],
   ['4.96.2', ['«Próximamente»: fuera el 3D, que ya ha llegado.'], 'quiet'],
@@ -6671,11 +6702,13 @@ const GUIDE = [
     'Todo se guarda solo mientras escribes: puedes cerrar la app a mitad de sesión.',
     '🤸 <b>Peso corporal</b>: en dominadas, flexiones, fondos… el campo de peso es el <b>lastre</b>: vacío = solo tu peso (PC). Actívalo en el ✎ del ejercicio con «Con peso corporal».',
     '⏱ <b>Ejercicios por tiempo</b> (plancha, hollow hold…): ▶ cronometra la serie y apunta los segundos solos.',
+    '🏋️⏱ <b>Peso + tiempo</b> (paseo del granjero, plancha con disco…): en el ✎ del ejercicio marca «⏱ Por tiempo» y deja sin marcar «Con peso corporal». Apuntas kg y segundos en cada serie; pon el mismo mínimo y máximo si te marcan un tiempo fijo. Cuando lo aguantes en todas las series, el coach te sube el peso.',
     '⏱ Con un entreno en curso, una franja ámbar bajo la cabecera muestra el tiempo y la serie que toca, en cualquier pestaña. Tócala y te lleva a esa serie.',
     '↺ <b>Igual que la serie anterior</b>: desde la S2, copia peso y reps de la anterior con un toque.',
     '⇄ cambia de variante, ✎ edita series, rango, descanso, incremento y vídeo. «▶ Técnica» abre YouTube.',
     '💬 <b>Comenta al Coach</b> (bajo las series): marca 😣 Molestia, 🥵 Muy duro, 😌 Fácil o ⏱ Poco tiempo y escribe o dicta con 🎤 lo que notes. Lo verá el Coach IA y te lo recordaré la próxima vez; con 😣 o 🥵 no te subo peso.',
     '⏱ Bajo el título del día ves la <b>duración estimada</b>; la <b>real</b> se mide desde tu primera serie ✓ hasta «Guardar sesión» (las pausas de más de 20 min no cuentan).',
+    '✍️ <b>¿Lo apuntas al llegar a casa?</b> Si registras la sesión después de entrenar, al guardar la app lo nota y te pregunta cuánto duró (con una estimación ya puesta), para que las kcal salgan bien. No tienes que activar nada.',
     'Al final, «Guardar sesión»: resumen, volumen, récords personales y 📸 <b>Tarjeta</b> para compartir, con la foto del bloque. La de un entreno pasado la recuperas en Progreso → Historial o en el calendario (Dieta → toca la fecha → toca el día → «📸 Ver tarjeta»). 🗑️ «Abandonar» borra lo apuntado hoy, con confirmación.'
   ]],
   ['🏆 Retos', [
