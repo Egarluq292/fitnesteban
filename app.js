@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.0.1';
+const APP_VERSION = '5.0.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -5851,7 +5851,7 @@ function onboarding() {
       keep(root);
       if (!b.dataset.skip && !d.keyOk && !(await test(root))) return;
       const t = calcTargets(d), st = state.settings;
-      st.profile = { name: d.name.slice(0, 24), sex: d.sex, birth: d.birth, height: d.height, goal: d.goal, ...(goalLv(d) ? { goalLv: goalLv(d) } : {}), activity: d.activity, diet: d.diet || 'omni' }; st.v5seen = true;
+      st.profile = { name: d.name.slice(0, 24), sex: d.sex, birth: d.birth, height: d.height, goal: d.goal, ...(goalLv(d) ? { goalLv: goalLv(d) } : {}), activity: d.activity, diet: d.diet || 'omni' }; st.v5x = true;
       Object.assign(st, { targetKcal: t.kcal, targetProt: t.prot, targetCarbs: t.carbs, targetFat: t.fat, onboarded: todayISO(), installedAt: todayISO(), usageOk: true, email: d.email, emailAsked: todayISO() });
       if (!b.dataset.skip && d.keyOk) st.apiKey = d.key;
       state.bodyMetrics.push({ id: uid('m_'), date: todayISO(), weight: r2(+d.weight), waist: null });
@@ -6473,6 +6473,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.0.2', ['El aviso de FITNESTEBAN 5 en Inicio vuelve a salir y se queda hasta que lo cierras con ✕.'], 'quiet'],
   ['5.0.1', ['El aviso de FITNESTEBAN 5 en Inicio se queda hasta que lo cierras con ✕.'], 'quiet'],
   ['5.0.0', ['✨ FITNESTEBAN 5 · Objetivos a tu medida. Ajustes → Mi perfil: elige qué buscas, ahora con una explicación de cada objetivo y a qué ritmo (perder grasa suave, moderado o rápido; ganar músculo limpio o en volumen) y el nuevo «Salud y rendimiento».', '🥗 Dinos cómo comes (de todo, vegetariana, vegana o pescetariana): «¿Qué como?», las recetas y el Coach lo respetan.', '🎯 Si cambias tu perfil, la app te propone los objetivos que te corresponden y tú decides si aplicarlos. El Coach ya no insiste en la proteína si tu objetivo no lo pide.']],
   ['4.100.0', ['🔓 Si estás de prueba, en Inicio ves los días que te quedan. Y si pides tu código o renuevas antes de tiempo, no pierdes días: lo nuevo empieza cuando acaba lo que tienes.']],
@@ -7335,7 +7336,7 @@ function planBannerHTML() {
 // Pedir código o renovar: aclara que pedirlo antes no hace perder días
 /* ✨ FITNESTEBAN 5: aviso fijo en Inicio hasta que lo cierras con ✕ (como mucho 21 días) */
 function v5HomeHTML() {
-  const st = state.settings; if (st.v5seen) return '';
+  const st = state.settings; if (st.v5x) return ''; // v5x: cerrado con ✕ (el antiguo v5seen se ignora para que vuelva a salir)
   if (!st.v5since) { st.v5since = todayISO(); persist(); }
   if (daysBetween(st.v5since, todayISO()) > 21) return '';
   return `<div class="v5-card mb-3"><button class="v5-x" data-act="v5Close" type="button" aria-label="Cerrar">✕</button>
@@ -8052,7 +8053,7 @@ const actions = {
   askCode: () => askCodeModal(),
   sugTargets: () => { const t = suggestedTargets(); if (t) targetsModal(t); },
   v5Open: () => profileModal(),
-  v5Close: () => { state.settings.v5seen = true; persist(); render(); },
+  v5Close: () => { state.settings.v5x = true; persist(); render(); },
   pays: b => paysModal(b.dataset.hash || ''),
   setTheme: b => { try { localStorage.setItem(THEME_KEY, b.dataset.k); } catch { /* nada */ } applyTheme(); render(); },
   retoCard: b => openRetoCard(b.dataset.reto, b.dataset.at),
