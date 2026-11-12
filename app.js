@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.99.1';
+const APP_VERSION = '4.99.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6401,6 +6401,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.99.2', ['💶 Cobros: toca «cobrado este mes/año» (o «editar» junto al último pago de una ficha) para corregir el importe o la fecha, o borrar un cobro.'], 'admin'],
   ['4.99.1', ['Textos: «tu código es personal».'], 'quiet'],
   ['4.99.0', ['🔑 Cada código vale ahora en 1 dispositivo (quien ya tenía 2 registrados los conserva). Textos de los códigos: «aquí tienes tu código personal». Script de uso v14: pégalo (Ajustes → Acceso → Reconfigurar).'], 'admin'],
   ['4.98.0', ['🎬 ¿Te gusta FITNESTEBAN? Ya tiene vídeo: en Ajustes, junto a «Compartir app», pulsa «🎬 Vídeo» y compártelo en WhatsApp, estados o redes, o guárdalo en tu galería.']],
@@ -7952,6 +7953,7 @@ const actions = {
   regenAccess: b => regenAccess(b.dataset.hash),
   planAccess: b => planModal(b.dataset.hash),
   renewMsg: b => renewMsgModal(b.dataset.hash),
+  pays: b => paysModal(b.dataset.hash || ''),
   setTheme: b => { try { localStorage.setItem(THEME_KEY, b.dataset.k); } catch { /* nada */ } applyTheme(); render(); },
   retoCard: b => openRetoCard(b.dataset.reto, b.dataset.at),
   libNewSee: () => { libMarkSeen(); go('train'); ui.trainHome = true; render(); },
@@ -9123,7 +9125,7 @@ function accSummaryHTML(list) {
   const pairs = new Set(L.filter(x => duoMate(x)).map(x => x.duo)).size;
   const tile = (v, l, c = 'text-white') => `<div class="rounded-xl bg-white/5 px-3 py-2.5"><div class="text-xl font-black ${c}">${v}</div><div class="text-[11px] text-mute leading-tight">${l}</div></div>`;
   return `<div class="grid grid-cols-2 gap-2">${tile(n('ok') + n('soon'), 'con acceso en vigor')}${tile(pairs, pairs === 1 ? 'DÚO (2 cuentas)' : 'DÚOS (2 cuentas cada uno)', 'text-cyan-300')}${tile(n('soon'), 'caducan en 7 días o menos', n('soon') ? 'text-amber-300' : 'text-white')}${tile(n('exp'), 'caducados', n('exp') ? 'text-rose-300' : 'text-white')}</div>
-    <div class="grid grid-cols-2 gap-2">${tile(eur(p.mes), 'cobrado este mes', 'text-brand')}${tile(eur(p.ano), 'cobrado este año', 'text-brand')}</div>
+    <button class="grid grid-cols-2 gap-2 w-full text-left" data-act="pays" type="button">${tile(eur(p.mes), 'cobrado este mes', 'text-brand')}${tile(eur(p.ano), 'cobrado este año ›', 'text-brand')}</button>
     <p class="text-[11px] text-mute">${n('free')} Free · los cobros se apuntan al crear o renovar y solo se guardan en este móvil.</p>`;
 }
 function accPairRowHTML(x, m, gh) {
@@ -9237,13 +9239,43 @@ function planLabel(x) {
   return left !== null && left < 0 ? `<span class="text-rose-300">${esc(name)} · caducó el ${esc(fmtDateShort(x.hasta))}</span>`
     : `<span class="${left !== null && left <= 3 ? 'text-amber-300' : 'text-slate-300'}">${esc(name)} · hasta el ${esc(fmtDateShort(x.hasta))}${left !== null ? ` (${left === 0 ? 'hoy' : left + ' d'})` : ''}</span>`;
 }
+/* 💶 Cobros apuntados (solo en este móvil): ver, corregir o borrar (p. ej. los de una prueba) */
+function paysModal(onlyHash = '') {
+  const rows = () => Object.entries(state.accessPays || {}).filter(([h]) => !onlyHash || h === onlyHash).flatMap(([h, arr]) => arr.map((p, i) => ({ h, i, ...p }))).sort((a, b) => b.d.localeCompare(a.d));
+  let editing = null, del = null;
+  const who = h => state.accessNames?.[h] || `Sin nombre …${h.slice(-4)}`;
+  const html = () => { const R = rows(), tot = R.reduce((a, p) => a + p.eur, 0);
+    return `<h3 class="modal-title">💶 Cobros${onlyHash ? ` · ${esc(who(onlyHash))}` : ''}</h3>
+    <p class="text-[12px] text-mute -mt-1">Solo se guardan en este móvil. Corrige el importe o la fecha, o borra los que no sean de verdad.</p>
+    <div class="space-y-1.5 overflow-y-auto" style="max-height:52vh">${R.length ? R.map(p => { const k = `${p.h}:${p.i}`;
+      if (editing === k) return `<div class="rounded-xl bg-white/5 px-3 py-2 space-y-2"><div class="text-[13px] font-semibold">${esc(who(p.h))} · ${esc(planName(p.k))}${p.mod === 'duo' ? ' DÚO' : ''}</div>
+        <div class="grid grid-cols-2 gap-2"><label class="lbl">Importe (€)<input class="field mt-1" id="payEur" inputmode="decimal" value="${(+p.eur).toFixed(2).replace('.', ',')}" /></label><label class="lbl">Fecha<input class="field mt-1" id="payDate" type="date" value="${esc(p.d)}" /></label></div>
+        <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="cancel" type="button">Cancelar</button><button class="btn-primary" data-mact="save" type="button">Guardar</button></div></div>`;
+      return `<div class="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2"><div class="flex-1 min-w-0"><div class="text-[13px] font-semibold break-words">${esc(who(p.h))}</div><div class="text-[11px] text-mute">${esc(fmtDateShort(p.d))}/${esc(p.d.slice(2, 4))} · ${esc(planName(p.k))}${p.mod === 'duo' ? ' DÚO' : ''}</div></div>
+        <b class="text-[14px] shrink-0">${eur(p.eur)}</b>
+        ${del === k ? `<button class="chip chip-sm shrink-0 text-rose-300" data-mact="delok" data-k="${k}" type="button">¿Borrar?</button>` : `<button class="iconbtn iconbtn-sm" data-mact="edit" data-k="${k}" type="button" aria-label="Editar">✎</button><button class="iconbtn iconbtn-sm" data-mact="del" data-k="${k}" type="button" aria-label="Borrar">🗑</button>`}</div>`; }).join('') : '<p class="text-[13px] text-mute text-center py-4">No hay cobros apuntados.</p>'}</div>
+    ${R.length ? `<div class="flex justify-between text-[13px] px-1"><span class="text-mute">Total</span><b>${eur(tot)}</b></div>` : ''}
+    <button class="btn-ghost w-full" data-close type="button">Cerrar</button>`; };
+  const redraw = root => { root.querySelector('.modal-sheet').innerHTML = html(); };
+  const at = k => { const [h, i] = k.split(':'); return [h, +i]; };
+  openModal(html(), {
+    edit: (root, b) => { editing = b.dataset.k; del = null; redraw(root); },
+    cancel: root => { editing = null; redraw(root); },
+    save: root => { const [h, i] = at(editing), p = state.accessPays[h]?.[i]; if (!p) return;
+      const v = parseFloat(String($('#payEur').value).replace(',', '.')), d = $('#payDate').value;
+      if (!(v >= 0)) return toast('Escribe un importe válido', 'warn'); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return toast('Elige una fecha', 'warn');
+      p.eur = Math.round(v * 100) / 100; p.d = d; persist(); editing = null; redraw(root); render(); toast('Cobro corregido ✓'); },
+    del: (root, b) => { del = b.dataset.k; editing = null; redraw(root); },
+    delok: (root, b) => { const [h, i] = at(b.dataset.k); state.accessPays[h]?.splice(i, 1); if (!state.accessPays[h]?.length) delete state.accessPays[h]; persist(); del = null; redraw(root); render(); toast('Cobro borrado'); }
+  });
+}
 function payInfoHTML(x, inPair = false) { // en la ficha: modalidad, último pago, recordar la renovación y unir/separar DÚO
   if (x.admin) return '';
   const gh = !!lsGet(GH_KEY);
   const mate = duoMate(x), lp = lastPay(x.hash) || (mate ? lastPay(mate.hash) : null), T = netToday() || todayISO();
   const near = x.hasta && daysBetween(T, x.hasta) <= 7;
   return `${mate && !inPair ? `<div class="text-[11px] text-cyan-300">👥 DÚO con ${esc(state.accessNames[mate.hash] || 'sin nombre')}</div>` : ''}
-    ${lp ? `<div class="text-[11px] text-mute">💶 Último pago: ${eur(lp.eur)} · ${esc(planName(lp.k))}${lp.mod === 'duo' ? ' DÚO' : ''} · ${esc(fmtDateShort(lp.d))}</div>` : ''}
+    ${lp ? `<div class="text-[11px] text-mute">💶 Último pago: ${eur(lp.eur)} · ${esc(planName(lp.k))}${lp.mod === 'duo' ? ' DÚO' : ''} · ${esc(fmtDateShort(lp.d))} · <button class="underline text-brand" data-act="pays" data-hash="${esc(mate && !(state.accessPays?.[x.hash] || []).length ? mate.hash : x.hash)}" type="button">editar</button></div>` : ''}
     ${x.hasta ? `<button class="text-[12px] underline ${near ? 'text-amber-300' : 'text-brand'}" data-act="renewMsg" data-hash="${esc(x.hash)}" type="button">💬 Recordar renovación</button>` : ''}
     ${gh && mate ? `<button class="block text-[12px] underline text-mute" data-act="duoSplit" data-hash="${esc(x.hash)}" type="button">Separar el DÚO</button>` : gh && x.hasta && isPaidPlan(x.plan || '') ? `<button class="block text-[12px] underline text-cyan-300" data-act="duoJoin" data-hash="${esc(x.hash)}" type="button">👥 Unir en DÚO con otra persona</button>` : ''}`;
 }
