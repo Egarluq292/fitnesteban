@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.0.2';
+const APP_VERSION = '5.0.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -826,12 +826,18 @@ function closeModal() { $('#modalRoot').style.zIndex = '';
   root.classList.remove('open');
   document.body.classList.remove('overflow-hidden');
   modalHandlers = {};
+  if (ui.fichaBack) { const h = ui.fichaBack; ui.fichaBack = null; setTimeout(() => { if (ui.accPage && !$('#modalRoot').classList.contains('open')) accFichaModal(h); }, 0); } // al cerrar lo que se abrió desde la ficha, se vuelve a ella
   if (ui.roadPending) { ui.roadPending = false; setTimeout(roadNotify, 700); } // «Próximamente» esperaba a que se cerrara otra ventana
 }
 $('#modalRoot').addEventListener('click', e => {
   if (e.target.closest('[data-close]')) return closeModal();
   const b = e.target.closest('[data-mact]');
-  if (b && modalHandlers[b.dataset.mact]) modalHandlers[b.dataset.mact]($('#modalRoot'), b);
+  if (b && modalHandlers[b.dataset.mact]) return modalHandlers[b.dataset.mact]($('#modalRoot'), b);
+  // botones de la ficha de un usuario: usan las mismas acciones que la página
+  const a = e.target.closest('[data-act]'), fn = a && actions[a.dataset.act]; if (!fn) return;
+  e.preventDefault(); if (ui.accessPin) ui.pinAt = Date.now();
+  const fh = a.closest('[data-ficha]')?.dataset.ficha; ui.fichaBack = fh || null;
+  Promise.resolve(fn(a)).finally(() => { if (fh && $('#modalRoot [data-ficha]')) { ui.fichaBack = null; ui.fichaRedraw?.(); } });
 });
 ['input', 'change'].forEach(ev => $('#modalRoot').addEventListener(ev, e => { if (e.target.name === 'birth') { const sp = e.target.closest('label')?.querySelector('#pfAge,#obAge'); if (sp) sp.textContent = birthHint(e.target.value); } }));
 const mval = (root, name) => root.querySelector(`[name="${name}"]`)?.value ?? '';
@@ -6473,6 +6479,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.0.3', ['👥 Nuevo botón en la cabecera para ir directo a Usuarios. El PIN vale para toda la sesión: hasta cerrar la app o 15 minutos sin tocar nada de Acceso.', 'Lista más clara: una línea por persona (o por DÚO), «Requieren atención» arriba, buscador y filtros fijos, y filtro «🟢 Hoy» con quién ha usado la app hoy.', 'Al tocar a alguien se abre su ficha con botones grandes: renovar, recordar la renovación, nombre, código nuevo, beta, ocultar nombre y quitar acceso.'], 'admin'],
   ['5.0.2', ['El aviso de FITNESTEBAN 5 en Inicio vuelve a salir y se queda hasta que lo cierras con ✕.'], 'quiet'],
   ['5.0.1', ['El aviso de FITNESTEBAN 5 en Inicio se queda hasta que lo cierras con ✕.'], 'quiet'],
   ['5.0.0', ['✨ FITNESTEBAN 5 · Objetivos a tu medida. Ajustes → Mi perfil: elige qué buscas, ahora con una explicación de cada objetivo y a qué ritmo (perder grasa suave, moderado o rápido; ganar músculo limpio o en volumen) y el nuevo «Salud y rendimiento».', '🥗 Dinos cómo comes (de todo, vegetariana, vegana o pescetariana): «¿Qué como?», las recetas y el Coach lo respetan.', '🎯 Si cambias tu perfil, la app te propone los objetivos que te corresponden y tú decides si aplicarlos. El Coach ya no insiste en la proteína si tu objetivo no lo pide.']],
@@ -6921,6 +6928,7 @@ function openGuide() {
   `, { news: () => openNews(null), shareApp: () => actions.shareLink() });
 }
 $('#helpBtn').addEventListener('click', openGuide);
+$('#usersBtn')?.addEventListener('click', () => { if (ui.accPage && ui.view === 'settings') return; actions.usersGo(); });
 
 const USAGE_NOTICE_VER = '4.26.2';
 function maybeShowNews() {
@@ -6944,6 +6952,7 @@ function maybeShowNews() {
    RENDER Y EVENTOS
    ========================================================================= */
 function render() {
+  const adm = isAdminUser(); const ub = $('#usersBtn'), mb = $('#mailBtn'); if (ub) ub.style.display = adm ? '' : 'none'; if (mb) mb.style.display = adm ? 'none' : ''; $('#usersBtn')?.classList.toggle('is-on', adm && ui.view === 'settings' && !!ui.accPage); const hd = document.querySelector('header'); if (hd) document.documentElement.style.setProperty('--hdr-h', hd.offsetHeight + 'px');
   try { renderInner(); }
   catch (e) {
     console.error(e);
@@ -7997,9 +8006,13 @@ const actions = {
   export: () => exportBackup(),
   editProfile: () => profileModal(),
   newAccess: () => newAccessModal(),
-  trialCode: b => newAccessModal(b.dataset.who || '', '1m'),
-  openAccess: () => {
-    if (state.settings.pinHash) return askPinOnly('🔑 Acceso', 'Escribe tu PIN para abrir esta sección.', pin => { ui.accessOpen = true; ui.accessPin = pin; ui.accessReveal = {}; ui.usage = null; ui.usageErr = ''; render(); loadUsage(); });
+  trialCode: b => newAccessModal(b.dataset.who || '', '1m', b.dataset.from || ''),
+  openAccess: then => {
+    if (typeof then !== 'function') then = null;
+    // el PIN vale para toda la sesión: hasta cerrar la app o 15 min sin tocar nada de Acceso
+    const done = pin => { ui.accessOpen = true; if (pin) { ui.accessPin = pin; ui.pinAt = Date.now(); } ui.accessReveal = ui.accessReveal || {}; ui.usageErr = ''; if (then) then(); else render(); loadUsage(); };
+    if (pinOk()) return done(ui.accessPin);
+    if (state.settings.pinHash) return askPinOnly('🔑 Acceso', 'Escribe tu PIN para abrir esta sección.', pin => done(pin));
     let fails = 0;
     openModal(`<h3 class="modal-title">🔑 Acceso</h3><p class="text-sm text-mute">Este dispositivo no tiene PIN: escribe tu código personal de acceso (o crea un PIN en Ajustes → Seguridad para usarlo aquí).</p>
       <input class="field mt-1 text-center text-2xl font-black tracking-[.2em] uppercase" name="code" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" />
@@ -8008,10 +8021,12 @@ const actions = {
       ok: async root => {
         const h = await codeHash(mval(root, 'code'));
         if (h !== access.me?.hash) { fails++; root.querySelector('[name=code]').value = ''; if (fails >= 5) { closeModal(); return toast('Demasiados intentos', 'error'); } return toast(`Código incorrecto (${fails}/5)`, 'error'); }
-        ui.accessOpen = true; closeModal(); render();
+        closeModal(); done(null);
       }
     });
   },
+  usersGo: () => { ui.view = 'settings'; actions.openAccess(() => { ui.accPage = true; render(); window.scrollTo({ top: 0 }); }); },
+  accFicha: b => accFichaModal(b.dataset.hash),
   closeAccess: () => { ui.accessOpen = false; render(); },
   accPage: () => { ui.accPage = true; render(); window.scrollTo({ top: 0 }); },
   accPageClose: () => { ui.accPage = false; render(); window.scrollTo({ top: 0 }); },
@@ -8160,6 +8175,7 @@ app.addEventListener('contextmenu', e => { if (e.target.closest('[data-act=daily
 app.addEventListener('click', e => {
   const b = e.target.closest('[data-act]');
   if (!b || !app.contains(b)) return;
+  if (ui.accessOpen && ui.accessPin) ui.pinAt = Date.now();
   const fn = actions[b.dataset.act];
   if (fn) { e.preventDefault(); fn(b); }
 });
@@ -9146,7 +9162,8 @@ function planPill(x) {
 function accFilterHTML(list) {
   const n = k => list.filter(x => accStatus(x) === k).length;
   const idle = list.filter(x => !x.admin && (() => { const u = ui.usage?.[x.hash]; return !u || daysBetween(u.last, todayISO()) > 7; })()).length;
-  const F = [['all', 'Todos', list.length], ['soon', 'Caducan pronto', n('soon')], ['exp', 'Caducados', n('exp')], ['idle', 'Sin usar +7 d', ui.usage ? idle : null], ['duo', '👥 DÚO', new Set(list.filter(x => duoMate(x)).map(x => x.duo)).size], ['ind', '👤 Individual', list.filter(x => !x.admin && !duoMate(x) && isPaidPlan(x.plan || '')).length], ['free', 'Free', n('free')], ['trial', '🧪 En prueba', ui.usage ? trialRows().length : null]];
+  const hoy = list.filter(x => !x.admin && ui.usage?.[x.hash]?.last === todayISO()).length;
+  const F = [['all', 'Todos', list.length], ['today', '🟢 Hoy', ui.usage ? hoy : null], ['soon', 'Caducan pronto', n('soon')], ['exp', 'Caducados', n('exp')], ['idle', 'Sin usar +7 d', ui.usage ? idle : null], ['duo', '👥 DÚO', new Set(list.filter(x => duoMate(x)).map(x => x.duo)).size], ['ind', '👤 Individual', list.filter(x => !x.admin && !duoMate(x) && isPaidPlan(x.plan || '')).length], ['free', 'Free', n('free')], ['trial', '🧪 En prueba', ui.usage ? trialRows().length : null]];
   return `<input class="field" id="accSearch" placeholder="🔎 Buscar por nombre o correo" autocomplete="off" value="${esc(ui.accQ || '')}" />
     <div class="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" data-noswipe>${F.filter(f => f[2] !== null).map(([k, l, c]) => `<button class="chip chip-sm shrink-0 ${(ui.accF || 'all') === k ? 'chip-on' : ''}" data-act="accF" data-k="${k}" type="button">${l} <span class="opacity-70">${c}</span></button>`).join('')}</div>`;
 }
@@ -9154,6 +9171,7 @@ function accFilterDom() {
   const q = normTxt(($('#accSearch')?.value || '').trim()); ui.accQ = $('#accSearch')?.value || '';
   let n = 0;
   document.querySelectorAll('#accRows .acc-row').forEach(r => { const okF = !r.dataset.f; const hit = !q || r.dataset.s.includes(q); r.style.display = hit ? '' : 'none'; if (hit && !r.hidden) n++; });
+  document.querySelectorAll('#accRows .acc-row-h').forEach(h => { h.style.display = q ? 'none' : ''; });
   $('#accNone')?.classList.toggle('hidden', n > 0);
 }
 document.addEventListener('input', e => { if (e.target.id === 'accSearch') accFilterDom(); });
@@ -9189,36 +9207,19 @@ function trialRowsHTML() {
         <span class="flex-1 min-w-0"><span class="block font-semibold text-[13px] truncate ${ago === 0 ? 'text-emerald-300' : ''}">${esc(who)}</span><span class="block text-[11px] text-mute">${ago === 0 ? 'Activo hoy' : ago === null ? '' : `Último uso hace ${plural(ago, 'día', 'días')}`} · ${plural(u.days || 1, 'día', 'días')} de uso</span></span>
         <span class="text-[11px] shrink-0">${pill}</span><span class="tri shrink-0 ${open ? 'rotate-180' : ''}"></span></button>
       ${open ? `<div class="px-3 pb-2.5 pt-1 text-xs space-y-1.5"><p class="text-[11px] text-mute">Empezó el ${esc(fmtDateShort(u.first || ''))}${u.hasta ? ` · termina el ${esc(fmtDateShort(u.hasta))}` : ''}${u.v ? ` · v${esc(u.v)}` : ''}</p>
-        ${lsGet(GH_KEY) ? `<button class="btn-ghost w-full" data-act="trialCode" data-who="${esc(String(u.m || '').split('@')[0].slice(0, 24))}" type="button">🔑 Darle su código personal</button>` : ''}
+        ${lsGet(GH_KEY) ? `<button class="btn-ghost w-full" data-act="trialCode" data-who="${esc(String(u.m || '').split('@')[0].slice(0, 24))}" data-from="${esc(u.hasta && u.hasta > todayISO() ? u.hasta : '')}" type="button">🔑 Darle su código personal</button>` : ''}
         <p class="text-[11px] text-mute">Cuando le des un código, lo escribe en la pantalla de acceso y sigue con todos sus datos.</p></div>` : ''}</div>`;
   }).join('');
 }
-function accDetailHTML(x, gh, pay = true) {
-      const me = x.hash === access.me.hash, has = me ? !!lsGet(ACCESS_KEY)?.code : !!state.accessCodes?.[x.hash], shown = ui.accessReveal?.[x.hash];
-      const codeLine = has
-        ? `<span class="font-mono text-[15px] font-black tracking-[.15em] ${shown ? 'text-brand' : 'text-mute'}">${shown ? fmtCode(shown) : '••••-••••'}</span>
-           <span class="flex gap-1.5"><button class="iconbtn iconbtn-sm" data-act="showCode" data-hash="${esc(x.hash)}" type="button" aria-label="Ver código">${shown ? '🙈' : '👁'}</button><button class="iconbtn iconbtn-sm" data-act="copyCode" data-hash="${esc(x.hash)}" type="button" aria-label="Copiar código">📋</button></span>`
-        : `<span class="text-amber-300 text-[11px]">Código no guardado (creado antes de la 4.24). Si lo necesita, dale uno nuevo con 🔄.</span>`;
-      const detail = `<div class="px-3 pb-2.5 pt-1 text-xs space-y-1.5">
-      <div class="flex items-center justify-between gap-2"><span class="min-w-0 text-[11px]">${x.admin ? '<span class="text-brand">Administrador · sin límite</span>' : `⏳ ${planLabel(x)}`}${x.anon ? '<span class="block text-mute">🙈 Su nombre de perfil no se registra</span>' : ''}${x.beta ? '<span class="block text-cyan-300">🧪 Prueba las novedades antes que nadie</span>' : ''}</span>
-      <span class="flex items-center gap-1.5 shrink-0"><button class="iconbtn iconbtn-sm" data-act="nameAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Poner nombre">✎</button>${gh && !x.admin ? `<button class="iconbtn iconbtn-sm" data-act="planAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Plan">⏳</button>` : ''}${gh && !x.admin ? `<button class="iconbtn iconbtn-sm${x.beta ? ' iconbtn-on' : ''}" data-act="betaAccess" data-hash="${esc(x.hash)}" type="button" aria-label="${x.beta ? 'Quitar el acceso anticipado' : 'Dar acceso anticipado a las novedades'}">🧪</button>` : ''}${gh && !x.admin ? `<button class="iconbtn iconbtn-sm" data-act="anonAccess" data-hash="${esc(x.hash)}" type="button" aria-label="${x.anon ? 'Volver a mostrar su nombre de perfil' : 'Ocultar su nombre de perfil'}">${x.anon ? '🙈' : '👤'}</button>` : ''}${gh ? `<button class="iconbtn iconbtn-sm" data-act="regenAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Nuevo código">🔄</button>` : ''}${me || !gh ? '' : `<button class="iconbtn iconbtn-sm text-rose-300" data-act="delAccess" data-hash="${esc(x.hash)}" type="button" aria-label="Quitar acceso">🗑</button>`}</span></div>
-      <div class="flex items-center justify-between gap-2 min-h-[28px]">${codeLine}</div>${usageLine(x.hash)}${pay ? payInfoHTML(x) : ''}</div>`;
-  return detail;
-}
-function accPersonRowHTML(x, gh) {
-  const me = x.hash === access.me.hash, detail = accDetailHTML(x, gh);
-      const open = ui.accOpenH === x.hash, st = accStatus(x), u = ui.usage?.[x.hash];
-      const ago = u ? daysBetween(u.last, todayISO()) : null;
-      const today = ago === 0, dotCls = !u ? 'u-none' : today ? 'u-today' : ago <= 7 ? 'u-week' : 'u-old';
-      const vOld = u?.v && cmpVer(APP_VERSION, String(u.v)) > 0;
-      const pill = x.admin ? '<span class="text-brand">admin</span>' : planPill(x);
-      const visF = ui.accF === 'trial' ? false : (!ui.accF || ui.accF === 'all' || ui.accF === st || (ui.accF === 'idle' && !x.admin && (ago === null || ago > 7))) || (me && (!ui.accF || ui.accF === 'all')) || (ui.accF === 'ind' && !x.admin && isPaidPlan(x.plan || ''));
-      return `<div class="acc-row ${open ? 'acc-open' : ''}" data-s="${esc(normTxt([accessWho(x), u?.m || '', x.hash.slice(-4)].join(' ')))}" ${visF ? '' : 'hidden'}>
-        <button class="w-full flex items-center gap-2 px-3 py-2.5 text-left" data-act="accRow" data-hash="${esc(x.hash)}" type="button">
-          <span class="u-dot ${dotCls}"></span>
-          <span class="flex-1 min-w-0"><span class="block font-semibold text-[13px] truncate ${today ? 'text-emerald-300' : ''}">${accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`}${me ? ' <span class="text-mute">(tú)</span>' : ''}</span>${u?.m ? `<span class="block text-[11px] text-mute truncate">${esc(u.m)}</span>` : ''}${u?.v ? `<span class="block text-[10px] ${vOld ? 'text-amber-300' : 'text-mute'}">v${esc(u.v)}${vOld ? ' · antigua' : ''}${today ? '' : ` · ${ago === 1 ? 'ayer' : `hace ${ago} d`}`}</span>` : u ? '' : '<span class="block text-[10px] text-mute">sin abrir aún</span>'}</span>
-          <span class="text-[11px] shrink-0">${pill}</span><span class="tri shrink-0 ${open ? 'rotate-180' : ''}"></span></button>
-        ${open ? detail : ''}</div>`;
+const PIN_TTL = 15 * 60e3, pinOk = () => !!ui.accessPin && Date.now() - (ui.pinAt || 0) < PIN_TTL;
+const accDot = h => { const u = ui.usage?.[h], ago = u ? daysBetween(u.last, todayISO()) : null; return !u ? 'u-none' : ago === 0 ? 'u-today' : ago <= 7 ? 'u-week' : 'u-old'; };
+function accPersonRowHTML(x) {
+  const me = x.hash === access.me.hash, st = accStatus(x), u = ui.usage?.[x.hash], ago = u ? daysBetween(u.last, todayISO()) : null;
+  const visF = ui.accF === 'trial' ? false : (!ui.accF || ui.accF === 'all' || ui.accF === st || (ui.accF === 'idle' && !x.admin && (ago === null || ago > 7)) || (ui.accF === 'today' && !x.admin && ago === 0)) || (me && (!ui.accF || ui.accF === 'all')) || (ui.accF === 'ind' && !x.admin && isPaidPlan(x.plan || ''));
+  const name = accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`;
+  return `<button class="acc-row acc-line" data-act="accFicha" data-hash="${esc(x.hash)}" data-s="${esc(normTxt([accessWho(x), u?.m || '', x.hash.slice(-4)].join(' ')))}" ${visF ? '' : 'hidden'} type="button">
+    <span class="u-dot ${accDot(x.hash)}"></span><span class="flex-1 min-w-0 text-left font-semibold text-[14px] break-words ${ago === 0 ? 'text-emerald-300' : ''}">${name}${me ? ' <span class="text-mute font-normal text-[12px]">(tú)</span>' : ''}</span>
+    <span class="text-[11.5px] shrink-0 text-right">${x.admin ? '<span class="text-brand">admin</span>' : planPill(x)}</span><span class="text-mute text-lg leading-none">›</span></button>`;
 }
 /* 👥 Usuarios y planes: pantalla completa (solo admin, con Acceso abierto) */
 function accSummaryHTML(list) {
@@ -9229,42 +9230,60 @@ function accSummaryHTML(list) {
     <button class="grid grid-cols-2 gap-2 w-full text-left" data-act="pays" type="button">${tile(eur(p.mes), 'cobrado este mes', 'text-brand')}${tile(eur(p.ano), 'cobrado este año ›', 'text-brand')}</button>
     <p class="text-[11px] text-mute">${n('free')} Free · los cobros se apuntan al crear o renovar y solo se guardan en este móvil.</p>`;
 }
-function accPairRowHTML(x, m, gh) {
-  const open = ui.accOpenH === x.hash, f = ui.accF || 'all', st = accStatus(x), n1 = accessWho(x) || 'Sin nombre', n2 = accessWho(m) || 'Sin nombre';
+function accPairRowHTML(x, m) {
+  const f = ui.accF || 'all', st = accStatus(x), n1 = accessWho(x) || 'Sin nombre', n2 = accessWho(m) || 'Sin nombre';
   const idle = [x, m].some(y => { const u = ui.usage?.[y.hash]; return !u || daysBetween(u.last, todayISO()) > 7; });
-  const vis = f === 'all' || f === 'duo' || f === st || (f === 'idle' && idle);
-  const s = normTxt([n1, n2, ui.usage?.[x.hash]?.m || '', ui.usage?.[m.hash]?.m || '', x.hash.slice(-4), m.hash.slice(-4), 'duo'].join(' '));
-  return `<div class="acc-row ${open ? 'acc-open' : ''}" data-s="${esc(s)}" ${vis ? '' : 'hidden'}>
-    <button class="w-full flex items-center gap-2 px-3 py-2.5 text-left" data-act="accRow" data-hash="${esc(x.hash)}" type="button"><span class="text-[15px] shrink-0">👥</span>
-      <span class="flex-1 min-w-0"><span class="block font-semibold text-[13px] break-words">${esc(n1)} + ${esc(n2)}</span><span class="block text-[11px] text-mute">${x.hasta ? `hasta el ${esc(fmtDateShort(x.hasta))}` : ''}</span></span>
-      <span class="text-[11px] shrink-0">${planPill(x)}</span><span class="tri shrink-0 ${open ? 'rotate-180' : ''}"></span></button>
-    ${open ? `<div class="px-2 pb-2.5 space-y-2">${[x, m].map(y => `<div class="rounded-xl bg-white/5"><div class="px-3 pt-2 text-[12px] font-semibold">${esc(accessWho(y) || 'Sin nombre')}</div>${accDetailHTML(y, gh, false)}</div>`).join('')}<div class="px-1 text-xs space-y-1.5">${payInfoHTML(x, true)}</div></div>` : ''}</div>`;
+  const today = [x, m].some(y => ui.usage?.[y.hash]?.last === todayISO());
+  const vis = f === 'all' || f === 'duo' || f === st || (f === 'idle' && idle) || (f === 'today' && today);
+  const sx = normTxt([n1, n2, ui.usage?.[x.hash]?.m || '', ui.usage?.[m.hash]?.m || '', x.hash.slice(-4), m.hash.slice(-4), 'duo'].join(' '));
+  return `<button class="acc-row acc-line" data-act="accFicha" data-hash="${esc(x.hash)}" data-s="${esc(sx)}" ${vis ? '' : 'hidden'} type="button">
+    <span class="flex flex-col gap-1 shrink-0"><span class="u-dot ${accDot(x.hash)}"></span><span class="u-dot ${accDot(m.hash)}"></span></span>
+    <span class="flex-1 min-w-0 text-left font-semibold text-[14px] break-words">${esc(n1)} + ${esc(n2)}</span>
+    <span class="text-[11.5px] shrink-0 text-right">${planPill(x)}</span><span class="text-mute text-lg leading-none">›</span></button>`;
+}
+// ficha de una persona (o de un DÚO) en ventana aparte, con botones grandes
+function accFichaModal(hash) {
+  const x = (access.list || []).find(y => y.hash === hash); if (!x) return;
+  const m = duoMate(x), gh = !!lsGet(GH_KEY), P = m ? [x, m] : [x];
+  const big = (act, h, ico, txt, cls = '') => `<button class="ficha-btn ${cls}" data-act="${act}" data-hash="${esc(h)}" type="button"><span class="text-xl">${ico}</span><span>${txt}</span></button>`;
+  const person = y => { const me = y.hash === access.me.hash, has = me ? !!lsGet(ACCESS_KEY)?.code : !!state.accessCodes?.[y.hash], shown = ui.accessReveal?.[y.hash];
+    return `<div class="rounded-xl bg-white/5 p-3 space-y-1.5">
+      ${m ? `<div class="font-bold text-[14px]">${esc(accessWho(y) || 'Sin nombre')}</div>` : ''}
+      <div class="text-[12px]">${y.admin ? '<span class="text-brand">Administrador · sin límite</span>' : `⏳ ${planLabel(y)}`}${y.beta ? ' · <span class="text-cyan-300">🧪 beta</span>' : ''}${y.anon ? ' · <span class="text-mute">🙈 nombre de perfil oculto</span>' : ''}</div>
+      <div class="flex items-center justify-between gap-2 min-h-[30px]">${has ? `<span class="font-mono text-[16px] font-black tracking-[.15em] ${shown ? 'text-brand' : 'text-mute'}">${shown ? fmtCode(shown) : '••••-••••'}</span><span class="flex gap-1.5"><button class="iconbtn iconbtn-sm" data-act="showCode" data-hash="${esc(y.hash)}" type="button" aria-label="Ver código">${shown ? '🙈' : '👁'}</button><button class="iconbtn iconbtn-sm" data-act="copyCode" data-hash="${esc(y.hash)}" type="button" aria-label="Copiar código">📋</button></span>` : '<span class="text-amber-300 text-[11px]">Código no guardado: si lo necesita, dale uno nuevo.</span>'}</div>
+      ${usageLine(y.hash)}
+      ${gh && !y.admin ? `<div class="grid grid-cols-5 gap-1 pt-1">${big('nameAccess', y.hash, '✎', 'Nombre', 'ficha-sm')}${big('regenAccess', y.hash, '🔄', 'Código nuevo', 'ficha-sm')}${big('betaAccess', y.hash, '🧪', y.beta ? 'Quitar beta' : 'Beta', 'ficha-sm')}${big('anonAccess', y.hash, y.anon ? '👤' : '🙈', y.anon ? 'Mostrar nombre' : 'Ocultar nombre', 'ficha-sm')}${big('delAccess', y.hash, '🗑', 'Quitar acceso', 'ficha-sm ficha-del')}</div>` : `<div class="pt-1">${big('nameAccess', y.hash, '✎', 'Nombre')}</div>`}
+    </div>`; };
+  const html = () => `<div data-ficha="${esc(hash)}"><h3 class="modal-title">${m ? `👥 ${esc(accessWho(x) || 'Sin nombre')} + ${esc(accessWho(m) || 'Sin nombre')}` : esc(accessWho(x) || 'Sin nombre')}</h3>
+    ${gh && !x.admin && x.hasta ? `<div class="grid grid-cols-2 gap-2 mb-2">${big('planAccess', x.hash, '⏳', m ? 'Renovar el DÚO' : 'Renovar o cambiar', 'ficha-main')}${big('renewMsg', x.hash, '💬', 'Recordar renovación')}</div>` : gh && !x.admin ? `<div class="mb-2">${big('planAccess', x.hash, '⏳', 'Cambiar plan', 'ficha-main')}</div>` : ''}
+    <div class="space-y-2">${P.map(person).join('')}</div>
+    <div class="text-xs space-y-1.5 mt-2 px-1">${payInfoHTML(x, true)}</div>
+    <button class="btn-ghost w-full mt-3" data-close type="button">Cerrar</button></div>`;
+  openModal(html());
+  ui.fichaRedraw = () => { const sh = $('#modalRoot .modal-sheet'); if (sh?.querySelector(`[data-ficha="${hash}"]`)) sh.innerHTML = html(); };
 }
 function usersPageHTML() {
-  const list = access.list || [], gh = !!lsGet(GH_KEY), seen = new Set();
-  const rows = accSorted(list).map(x => {
-    if (seen.has(x.hash)) return ''; const m = duoMate(x);
-    if (m) { seen.add(m.hash); return accPairRowHTML(x, m, gh); }
-    return accPersonRowHTML(x, gh);
-  }).join('');
-  return `<button class="flex items-center gap-1.5 text-[13px] text-brand mb-2" data-act="accPageClose" type="button"><span class="tri rotate-90"></span> Ajustes</button>
-  <section class="card p-4 space-y-3">
-    <h2 class="text-lg font-black">👥 Usuarios y planes</h2>
-    ${accSummaryHTML(list)}
-    ${gh ? '<button class="btn-primary w-full" data-act="newAccess" type="button">＋ Crear código para alguien</button>' : ''}
-  </section>
-  <section class="card p-4 mt-3 space-y-3">
+  const list = access.list || [], gh = !!lsGet(GH_KEY), p = paysSummary(), mes = new Date().toLocaleDateString('es-ES', { month: 'long' });
+  const groups = L => { const seen = new Set(); return accSorted(L).map(x => { if (seen.has(x.hash)) return ''; const m = duoMate(x); if (m) { seen.add(m.hash); return accPairRowHTML(x, m); } return accPersonRowHTML(x); }).join(''); };
+  const attn = x => !x.admin && ['exp', 'soon'].includes(accStatus(x)), split = (!ui.accF || ui.accF === 'all') && !ui.accQ;
+  const A = split ? list.filter(x => attn(x) || (duoMate(x) && attn(duoMate(x)))) : [], R = split ? list.filter(x => !A.includes(x)) : list;
+  return `<div class="users-top">
+    <div class="flex items-center justify-between gap-2"><button class="flex items-center gap-1.5 text-[13px] text-brand" data-act="accPageClose" type="button"><span class="tri rotate-90"></span> Ajustes</button>
+      ${gh ? '<button class="chip chip-sm chip-on" data-act="newAccess" type="button">＋ Nuevo código</button>' : ''}</div>
+    <h2 class="text-xl font-black mt-1 flex items-center gap-2.5 flex-wrap">👥 Usuarios ${activeChip()}</h2>
     ${accFilterHTML(list)}
-    <div class="space-y-1.5" id="accRows">${rows}${trialRowsHTML()}</div>
-    <p class="text-[12px] text-mute text-center hidden" id="accNone">Nadie coincide con la búsqueda.</p>
-    ${gh ? '<p class="text-[11px] text-mute">Toca a una persona para ver su ficha: ✎ nombre · ⏳ renovar o cambiar el plan · 🧪 acceso anticipado a las novedades · 👤/🙈 registrar u ocultar su nombre de perfil · 🔄 nuevo código · 🗑 quitar acceso. Nombres, códigos y cobros solo los ves tú; en GitHub solo hay huellas.</p>' : ''}
-    ${list.length ? '<button class="btn-ghost w-full" data-act="copyHashes" type="button">📋 Copiar huellas y nombres (para tu hoja)</button>' : ''}
-  </section>`;
+  </div>
+  <button class="w-full text-left text-[13px] mt-2 px-1" data-act="pays" type="button">💶 ${esc(mes.charAt(0).toUpperCase() + mes.slice(1))}: <b>${eur(p.mes)}</b> · Este año: <b>${eur(p.ano)}</b> <span class="text-mute">(solo en este móvil) ›</span></button>
+  <div id="accRows" class="mt-2 space-y-1.5">
+    ${A.length ? `<div class="lbl acc-row-h">⚠️ Requieren atención · ${A.filter(x => !duoMate(x) || x.hash < duoMate(x).hash).length}</div>${groups(A)}<div class="lbl acc-row-h mt-3">Resto</div>` : ''}
+    ${groups(R)}${trialRowsHTML()}</div>
+  <p class="text-[12px] text-mute text-center hidden mt-3" id="accNone">Nadie coincide con la búsqueda.</p>
+  ${list.length ? '<button class="btn-ghost w-full mt-4" data-act="copyHashes" type="button">📋 Copiar huellas y nombres (para tu hoja)</button>' : ''}`;
 }
 function accessSectionHTML() {
   if (!access.me?.admin) return '';
   setTimeout(loadActiveCount, 0);
-  if (!ui.accessOpen) { ui.accessPin = null; ui.accessReveal = {}; }
+  if (!ui.accessOpen) ui.accessReveal = {};
   if (!ui.accessOpen) return `<section class="card p-0 mt-3"><button class="w-full flex items-center justify-between px-4 py-3.5" data-act="openAccess" type="button">
       <span class="flex items-center gap-2.5"><h3 class="section-title">🔑 Acceso</h3>${activeChip()}</span><span class="flex items-center gap-2 text-[11px] text-mute">🔒 Protegido<span class="tri"></span></span></button></section>`;
   const list = access.list || [], gh = !!lsGet(GH_KEY);
@@ -9377,7 +9396,7 @@ function payInfoHTML(x, inPair = false) { // en la ficha: modalidad, último pag
   const near = x.hasta && daysBetween(T, x.hasta) <= 7;
   return `${mate && !inPair ? `<div class="text-[11px] text-cyan-300">👥 DÚO con ${esc(state.accessNames[mate.hash] || 'sin nombre')}</div>` : ''}
     ${lp ? `<div class="text-[11px] text-mute">💶 Último pago: ${eur(lp.eur)} · ${esc(planName(lp.k))}${lp.mod === 'duo' ? ' DÚO' : ''} · ${esc(fmtDateShort(lp.d))} · <button class="underline text-brand" data-act="pays" data-hash="${esc(mate && !(state.accessPays?.[x.hash] || []).length ? mate.hash : x.hash)}" type="button">editar</button></div>` : ''}
-    ${x.hasta ? `<button class="text-[12px] underline ${near ? 'text-amber-300' : 'text-brand'}" data-act="renewMsg" data-hash="${esc(x.hash)}" type="button">💬 Recordar renovación</button>` : ''}
+    ${x.hasta && !inPair ? `<button class="text-[12px] underline ${near ? 'text-amber-300' : 'text-brand'}" data-act="renewMsg" data-hash="${esc(x.hash)}" type="button">💬 Recordar renovación</button>` : ''}
     ${gh && mate ? `<button class="block text-[12px] underline text-mute" data-act="duoSplit" data-hash="${esc(x.hash)}" type="button">Separar el DÚO</button>` : gh && x.hasta && isPaidPlan(x.plan || '') ? `<button class="block text-[12px] underline text-cyan-300" data-act="duoJoin" data-hash="${esc(x.hash)}" type="button">👥 Unir en DÚO con otra persona</button>` : ''}`;
 }
 /* 👥 Unir dos cuentas que ya existen en un DÚO (mismos códigos) o separarlas */
@@ -9441,8 +9460,8 @@ function planModal(hash) {
       } }); }
   });
 }
-function newAccessModal(who = '', plan = 'prueba') {
-  let k = plan, who0 = who, who2 = '', nd = 15, mod = 'ind', from = '';
+function newAccessModal(who = '', plan = 'prueba', from0 = '') {
+  let k = plan, who0 = who, who2 = '', nd = 15, mod = 'ind', from = from0;
   const html = () => `<h3 class="modal-title">Nuevo código de acceso</h3>
     <div><div class="lbl mb-1.5">Plan</div>${planChips(k)}</div>${planCustomHTML(k, nd)}
     ${isPaidPlan(k) ? `<div><div class="lbl mb-1.5">Modalidad</div>${modChips(mod)}</div>` : ''}
