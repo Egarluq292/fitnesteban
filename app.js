@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.99.2';
+const APP_VERSION = '4.100.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -5711,7 +5711,7 @@ function onboarding() {
       <p>🩺 <b>No sustituye a un profesional.</b> Las cifras son orientativas: si tienes lesiones, embarazo o algún problema de salud, consulta antes.</p>
       <p>🛠️ <b>Es un proyecto vivo.</b> Irá mejorando, pero puede tener fallos o cambiar.</p>
       <p>📶 <b>Para mantener la app</b>, envía a Esteban solo el día de último uso, la versión instalada y un identificador del dispositivo (sin datos personales). Nada de tu dieta ni de tus entrenos.</p>
-      <p>${access.me?.trial ? `🔓 <b>Estás de prueba:</b> ${(n => n > 1 ? `te quedan ${n} días` : n === 1 ? 'hoy es tu último día' : 'tu prueba ha terminado')(trialLeft())} con todo incluido. Al terminar, pide tu código de acceso a Esteban y sigues con tus datos.` : '🔑 <b>Tu código es personal:</b> es solo para ti.'}</p>
+      <p>${access.me?.trial ? `🔓 <b>¡Bienvenido/a!</b> Disfruta de tus ${TRIAL_DAYS} días de prueba.` : '🔑 <b>Tu código es personal:</b> es solo para ti.'}</p>
       <p>✉️ <b>Tu correo</b> lo guarda Esteban para enviarte la guía de la app y, si tú le escribes, resolverte dudas.</p>
       <p class="text-mute">Todo, con detalle, en la <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.</p>
     </div>
@@ -6401,6 +6401,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.100.0', ['🔓 Si estás de prueba, en Inicio ves los días que te quedan. Y si pides tu código o renuevas antes de tiempo, no pierdes días: lo nuevo empieza cuando acaba lo que tienes.']],
   ['4.99.2', ['💶 Cobros: toca «cobrado este mes/año» (o «editar» junto al último pago de una ficha) para corregir el importe o la fecha, o borrar un cobro.'], 'admin'],
   ['4.99.1', ['Textos: «tu código es personal».'], 'quiet'],
   ['4.99.0', ['🔑 Cada código vale ahora en 1 dispositivo (quien ya tenía 2 registrados los conserva). Textos de los códigos: «aquí tienes tu código personal». Script de uso v14: pégalo (Ajustes → Acceso → Reconfigurar).'], 'admin'],
@@ -7249,11 +7250,20 @@ function gym3dModal(name, back = null) { // back: volver a la ventana de la que 
 /* Aviso fijo en Inicio cuando al acceso le quedan 3 días o menos (el toast se pierde fácil) */
 function planBannerHTML() {
   const me = access.me, left = me ? planDaysLeft(me) : null;
+  if (me?.trial && left > 3) return `<button class="trial-chip mb-3" data-act="askCode" type="button">🔓 Te quedan ${left} días · <u>Pedir mi código</u></button>`;
   if (left === null || left > 3 || left < 0) return '';
   const d = new Date(planOf(me).hasta + 'T12:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   return `<div class="plan-warn mb-3"><div class="text-[14px] font-extrabold">⏳ ${me.trial ? (left === 0 ? 'Hoy es el último día de tu prueba' : left === 1 ? 'Mañana es el último día de tu prueba' : `Tu periodo de prueba termina el ${esc(d)}`) : left === 0 ? 'Hoy es tu último día de acceso' : left === 1 ? 'Mañana es tu último día de acceso' : `Tu acceso termina el ${esc(d)}`}</div>
     <p class="text-[12px] mt-0.5 opacity-90">Después la app dejará de abrirse, pero tus datos no se borran: pide a Esteban que lo renueve y sigues donde lo dejaste.</p>
-    ${contactBtn('Pedir renovación', 'mt-2')}</div>`;
+    <button class="contact-btn mt-2" data-act="askCode" type="button">${icon('send', 'w-4 h-4')}<span>${me.trial ? 'Pedir mi código' : 'Pedir renovación'}</span></button></div>`;
+}
+// Pedir código o renovar: aclara que pedirlo antes no hace perder días
+function askCodeModal() {
+  const trial = !!access.me?.trial;
+  openModal(`<h3 class="modal-title">${trial ? '🔓 Pedir mi código' : '⏳ Renovar'}</h3>
+    <p class="text-[14px] leading-snug">${trial ? 'Pídelo cuando quieras: <b>no pierdes los días de prueba</b> que te quedan. Tu código empezará a contar cuando termine la prueba.' : 'Renueva cuando quieras: <b>no pierdes los días</b> que te quedan. Lo nuevo empieza a contar cuando termine lo que tienes.'}</p>
+    ${contactBtn('Escribir a Esteban', 'w-full justify-center')}
+    <button class="btn-ghost w-full" data-close type="button">Ahora no</button>`);
 }
 function renderHome() {
   const name = profileOf()?.name || access.me?.name || '';
@@ -7953,6 +7963,7 @@ const actions = {
   regenAccess: b => regenAccess(b.dataset.hash),
   planAccess: b => planModal(b.dataset.hash),
   renewMsg: b => renewMsgModal(b.dataset.hash),
+  askCode: () => askCodeModal(),
   pays: b => paysModal(b.dataset.hash || ''),
   setTheme: b => { try { localStorage.setItem(THEME_KEY, b.dataset.k); } catch { /* nada */ } applyTheme(); render(); },
   retoCard: b => openRetoCard(b.dataset.reto, b.dataset.at),
@@ -8375,7 +8386,7 @@ async function trialStart(btn) {
     if (d.h) lsSet(TRIAL_KEY, { h: d.h, hasta: d.hasta, m: email });
     if (!d.allowed) { lockScreen('code', d.reason === 'exp' ? trialEndMsg() : trialDevMsg(d.reason)); return; }
     Object.assign(state.settings, { email, usageOk: true }); persist();
-    unlock(trialMe()); { const n = trialLeft(); toast(`¡Bienvenido! Tienes ${n} ${n === 1 ? 'día' : 'días'} con todo incluido 👋`); }
+    unlock(trialMe()); toast(`¡Bienvenido/a! Disfruta de tus ${TRIAL_DAYS} días de prueba 👋`);
     setTimeout(() => { usagePing(); setTimeout(emailSync, 2500); }, 1500);
   } catch (e) { btn.disabled = false; btn.innerHTML = old; if (!/popup_closed|access_denied/i.test(e.message || '')) toast(e.message || 'No se pudo entrar con Google', 'error'); }
 }
@@ -9341,16 +9352,17 @@ function planModal(hash) {
   });
 }
 function newAccessModal(who = '', plan = 'prueba') {
-  let k = plan, who0 = who, who2 = '', nd = 15, mod = 'ind';
+  let k = plan, who0 = who, who2 = '', nd = 15, mod = 'ind', from = '';
   const html = () => `<h3 class="modal-title">Nuevo código de acceso</h3>
     <div><div class="lbl mb-1.5">Plan</div>${planChips(k)}</div>${planCustomHTML(k, nd)}
     ${isPaidPlan(k) ? `<div><div class="lbl mb-1.5">Modalidad</div>${modChips(mod)}</div>` : ''}
     <label class="lbl">${mod === 'duo' && isPaidPlan(k) ? 'Primera persona' : '¿Para quién es?'} (solo lo verás tú)<input class="field mt-1" name="who" maxlength="24" placeholder="Ej: Ana" value="${esc(who0)}" /></label>
     ${mod === 'duo' && isPaidPlan(k) ? `<label class="lbl">Segunda persona<input class="field mt-1" name="who2" maxlength="24" placeholder="Ej: Luis" value="${esc(who2)}" /></label>` : ''}
     ${priceLine(k, isPaidPlan(k) ? mod : 'ind')}
-    <p class="text-[11px] text-mute">${k === 'custom' ? 'Cuenta desde hoy (fecha de la red). Podrás cambiarlo con ⏳.' : PLANS[k][1] ? `Caducará el ${esc(fmtDateShort(planTokens(k)[1].slice(6)))}. Podrás renovarlo con ⏳.` : 'Sin caducidad.'}${mod === 'duo' && isPaidPlan(k) ? ' Son dos códigos independientes que caducan y se renuevan juntos.' : ''}</p>
+    ${isPaidPlan(k) ? `<label class="lbl">Empieza a contar <span class="text-mute font-normal">(si aún está de prueba, pon el día que le acaba)</span><input class="field mt-1" name="from" type="date" value="${esc(from || todayISO())}" /></label>` : ''}
+    <p class="text-[11px] text-mute">${k === 'custom' ? 'Cuenta desde hoy (fecha de la red). Podrás cambiarlo con ⏳.' : PLANS[k][1] ? `Caducará el ${esc(fmtDateShort(planTokens(k, isPaidPlan(k) ? from : '')[1].slice(6)))}. Podrás renovarlo con ⏳.` : 'Sin caducidad.'}${mod === 'duo' && isPaidPlan(k) ? ' Son dos códigos independientes que caducan y se renuevan juntos.' : ''}</p>
     <button class="btn-primary w-full" data-mact="next" type="button">Continuar</button>`;
-  const keep = root => { who0 = mval(root, 'who'); who2 = root.querySelector('[name=who2]') ? mval(root, 'who2') : who2; if (k === 'custom') nd = +mval(root, 'pdays') || nd; };
+  const keep = root => { if (root.querySelector('[name=from]')) from = mval(root, 'from') || ''; who0 = mval(root, 'who'); who2 = root.querySelector('[name=who2]') ? mval(root, 'who2') : who2; if (k === 'custom') nd = +mval(root, 'pdays') || nd; };
   openModal(html(), {
     autofocus: true,
     plan: (root, b) => { keep(root); k = b.dataset.k; root.querySelector('.modal-sheet').innerHTML = html(); },
@@ -9361,7 +9373,7 @@ function newAccessModal(who = '', plan = 'prueba') {
       if (!w1 || (duo && !w2)) return toast(duo ? 'Pon el nombre de las dos personas' : 'Pon un nombre', 'warn');
       const kk = planResolve(k, root);
       askPin({ title: duo ? `DÚO para ${esc(w1)} y ${esc(w2)}` : `Crear código para ${esc(w1)}`, text: 'Tu PIN abre la llave de GitHub para añadir el código a la lista.', onPin: async pin => {
-        const did = duo ? Math.random().toString(36).slice(2, 8) : '', toks = [...planTokens(kk), ...(duo ? ['duo=' + did] : [])];
+        const did = duo ? Math.random().toString(36).slice(2, 8) : '', toks = [...planTokens(kk, isPaidPlan(kk) ? from : ''), ...(duo ? ['duo=' + did] : [])];
         const people = duo ? [w1, w2] : [w1], made = [];
         for (const w of people) { const code = newCode(); made.push({ w, code, hash: await codeHash(code) }); }
         await ghEditAcl(pin, lines => [...lines.filter(l => l.trim()), ...made.map(m => [m.hash, ...toks].join(' '))], `Acceso: nuevo código${duo ? ' DÚO' : ''} (${kk})`);
