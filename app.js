@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.95.1';
+const APP_VERSION = '4.96.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -1413,7 +1413,7 @@ function renderExerciseCard(e, idx, day, d) {
     </div>
     <div class="flex items-center justify-between gap-3 mt-2">
       <p class="text-xs text-mute italic min-w-0">${esc(variant.note)}</p>
-      <span class="flex gap-1.5 shrink-0">${canBeta() && gym3dOf(variant.name) ? `<button class="btn-3d" data-act="gym3d" data-n="${esc(variant.name)}" type="button" aria-label="Ver el movimiento en 3D">🧍 3D</button>` : ''}<a class="btn-video" href="${esc(videoUrl(variant))}" target="_blank" rel="noopener noreferrer" aria-label="Ver técnica en YouTube">▶ Técnica${variant.video ? '' : ' 🔎'}</a></span>
+      <span class="flex gap-1.5 shrink-0">${can3D() && gym3dOf(variant.name) ? `<button class="btn-3d${seen3D() ? '' : ' is-new'}" data-act="gym3d" data-n="${esc(variant.name)}" type="button" aria-label="Ver el movimiento en 3D">🧍 3D</button>` : ''}<a class="btn-video" href="${esc(videoUrl(variant))}" target="_blank" rel="noopener noreferrer" aria-label="Ver técnica en YouTube">▶ Técnica${variant.video ? '' : ' 🔎'}</a></span>
     </div>
     <div class="coach ${tone.cls} mt-3">
       <div class="font-bold text-sm">${tone.icon} ${esc(c.title)}</div>
@@ -2678,7 +2678,8 @@ const MUSCLE_RULES = [
   [/granjero|farmer/, ['forearm', 'trapezius'], ['abs']],
   [/burpee/, ['quadriceps', 'chest'], ['deltoids', 'triceps', 'abs']],
   [/extensi[oó]n de (cu[aá]driceps|piernas)|leg extension/, ['quadriceps'], []],
-  [/diamante|press cerrado|fondos en banco|extensi[oó]n|press franc[eé]s|tr[ií]ceps|patada/, ['triceps'], ['chest']],
+  [/extensi[oó]n|press franc[eé]s|patada/, ['triceps'], []],
+  [/diamante|press cerrado|fondos en banco|tr[ií]ceps/, ['triceps'], ['chest']],
   [/fondos|paralelas|dips/, ['chest', 'triceps'], ['deltoids']],
   [/face pull|p[aá]jaros|apertura con banda|apertura trx|hombro posterior|deltoides posterior/, ['deltoids'], ['upper-back', 'trapezius']],
   [/clean|push press|snatch/, ['deltoids'], ['gluteal', 'hamstring', 'triceps', 'trapezius']],
@@ -2891,7 +2892,7 @@ function trainTodayModal(T0 = todayISO(), fromCal = false) {
         <div class="hh-map">${exMuscleSVG(e.name)}</div>
         <div class="flex-1 min-w-0"><div class="text-[14px] font-semibold leading-tight">${esc(e.name)}${rec.has(e.name) ? ' <span class="text-amber-300 text-[12px] whitespace-nowrap">🏅 récord</span>' : ''}</div>
           <div class="text-[12px] text-mute mt-0.5 font-mono">${e.sets.map(st => setStr(st, isBwEx(e.exId), isTimedEx(e))).join(', ')}</div></div>
-        ${canBeta() && gym3dOf(e.name) ? `<button class="hh-3d" data-mact="g3d" data-n="${esc(e.name)}" type="button" aria-label="Ver el movimiento en 3D">▶ 3D</button>` : ''}</div>`).join('')}</div>
+        ${can3D() && gym3dOf(e.name) ? `<button class="hh-3d${seen3D() ? '' : ' is-new'}" data-mact="g3d" data-n="${esc(e.name)}" type="button" aria-label="Ver el movimiento en 3D">▶ 3D</button>` : ''}</div>`).join('')}</div>
       ${x.skipped?.length ? `<div class="text-[11px] text-mute mt-1">⏭ Hoy no: ${x.skipped.map(esc).join(' · ')}</div>` : ''}
       ${x.notes?.length ? x.notes.map(nn => `<div class="text-[11px] text-amber-200/90 mt-1">💬 ${esc(nn.name)}: ${esc(noteTxt(nn))}</div>`).join('') : ''}
       <button class="text-[12px] underline text-brand mt-2" data-mact="card" data-id="${esc(x.id)}" type="button">📸 Tarjeta para compartir</button></div>`; }).join('')}
@@ -6400,6 +6401,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.96.0', ['🧍 ¡LLEGA EL 3D! Tus ejercicios cobran vida: pulsa el botón brillante «3D» junto a cada ejercicio (en tu entreno o en «Hoy has hecho») y verás el movimiento completo, desde varios ángulos, con sus 3 claves de técnica.', '💪 Ya hay más de 75 ejercicios animados (press, sentadillas, remos, dominadas, aperturas, polea…) y irán llegando más.']],
   ['4.95.1', ['Al ver una animación desde «Hoy has hecho», «Volver» te deja en la lista de ejercicios.'], 'quiet'],
   ['4.95.0', ['✅ «Hoy has hecho» más visual: cada ejercicio con su mini mapa muscular (qué has trabajado de un vistazo), y tarjeta para compartir también en el cardio.']],
   ['4.94.0', ['🔥 Tarjeta para compartir tu cardio: bici, correr, natación, funcional, pádel… (también las que registras con la captura de Strava o del reloj). Sale al registrar y con el botón 📸 de cada actividad, también en vídeo.']],
@@ -6647,6 +6649,7 @@ const GUIDE = [
     'Cada bloque lleva su propia rotación: {{ROTACION}}',
     'Para montar el tuyo: «＋ Crear bloque» (en Tus bloques) → nombre y cuántos días tiene → se abre en el Día 1. Pulsa «＋ Añadir ejercicio», cambia de día con las pestañas y repite; «＋ Día» añade otro día. También desde Ajustes → Bloques («＋ Día» y «＋ Ejercicios»). Para eliminar un bloque tuyo: ⋯ de su tarjeta → «🗑 Eliminar este bloque», o la 🗑 en Ajustes → Bloques.',
     'Los bloques preparados (Full Body, PPT, Híbrido 5, Brazos, Tren inferior, Glúteo, Calistenia en casa, Kettlebell…) traen su descripción y «Cómo usarlo»: la ves en el ⋯ de su tarjeta. Los que acaban de salir llevan la etiqueta <b>NUEVO</b> hasta que los abres.',
+    '🧍 El botón <b>3D</b> junto a un ejercicio (en tu entreno y en «Hoy has hecho») abre una animación del movimiento con sus 3 claves de técnica; la cámara gira sola para que lo veas desde varios ángulos. Si un ejercicio aún no tiene animación, usa el ▶ de YouTube.',
     'Para cambiar ejercicios, usa «＋ Añadir ejercicio» (crear uno o elegir entre los preparados) y el ✎ de cada ejercicio. «＋ Día» añade días. El ✎ del bloque o del día permite renombrar, reordenar (◀ ▶) o eliminar. El historial nunca se borra al eliminar.'
   ]],
   ['🧭 Cómo decide el coach el peso', [
@@ -7132,6 +7135,7 @@ function man3dStop() { try { man3dMod?.stop(); } catch { /* nada */ } }
 /* 🧍 Ejercicio (por su nombre) → animación 3D (gym3d.js). De lo más concreto a lo más general.
    Máquinas, poleas y superseries («+»): sin animación (se quedan con YouTube). El material sale del nombre. */
 const GYM3D_MAP = [
+  [/aperturas?.*inclinad/i, 'fly'], [/^aperturas? (con mancuernas|en banco plano)/i, 'flyf'], [/^extensi[oó]n (de tr[ií]ceps )?en polea( con cuerda)?$/i, 'pushd'],
   [/m[aá]quina|polea|prensa|smith|multipower|jal[oó]n|contractora|cable|pec ?deck|hack|extensi[oó]n de cu[aá]driceps|curl femoral|curl n[oó]rdico|\+|gemelos sentado|pica|sissy|thruster|hiperextensi|patada|p[aá]jaro|apertura|abducci|aducci|paseo lateral|clean/i, null],
   [/martillo/i, 'curlh'], [/curl concentrado/i, 'curlconc'], [/curl (en banco )?inclinado|curl inclinado/i, 'curlinc'],
   [/gorilla/i, 'gorilla'], [/toalla/i, 'towel'], [/remo invertido en trx/i, 'trxrow'], [/face ?pull|trx/i, 'trxfp'], [/remo (a una mano|con mancuerna a una mano)/i, 'dbrow1'], [/remo con (2|dos) mancuernas|remo con mancuernas en banco inclinado/i, 'csrow'],
@@ -7152,7 +7156,7 @@ const GYM3D_MAP = [
   [/remo/i, 'bbrow'], [/curl/i, 'curl']
 ];
 const GYM3D_EQ = n => /mancuerna/i.test(n) ? 'db' : /kettlebell/i.test(n) ? 'kb' : /barra|\bez\b|\bz\b/i.test(n) ? 'bar' : /toalla|banda|trx|mesa/i.test(n) ? 'none' : '';
-const GYM3D_DEF = { benchc: 'bar', csrow: 'db', curlh: 'db', curlinc: 'db', curlconc: 'db', sldl: 'db', gorilla: 'db', lungekb: 'kb', dbrow1: 'db', bench: 'bar', incl: 'db', ohp: 'bar', rdl: 'bar', dl: 'bar', bbrow: 'bar', curl: 'db', hipth: 'bar', skull: 'bar', lunge: 'db', calfdb: 'db', stepdb: 'db', bulg: 'db', sumo: 'db', goblet: 'db', gm: 'bar', sqbar: 'bar', ohext: 'db' };
+const GYM3D_DEF = { fly: 'db', flyf: 'db', benchc: 'bar', csrow: 'db', curlh: 'db', curlinc: 'db', curlconc: 'db', sldl: 'db', gorilla: 'db', lungekb: 'kb', dbrow1: 'db', bench: 'bar', incl: 'db', ohp: 'bar', rdl: 'bar', dl: 'bar', bbrow: 'bar', curl: 'db', hipth: 'bar', skull: 'bar', lunge: 'db', calfdb: 'db', stepdb: 'db', bulg: 'db', sumo: 'db', goblet: 'db', gm: 'bar', sqbar: 'bar', ohext: 'db' };
 function gym3dOf(name) {
   for (const [re, id] of GYM3D_MAP) if (re.test(name || '')) { if (!id) return null; const eq = GYM3D_EQ(name); return eq && eq !== GYM3D_DEF[id] && GYM3D_DEF[id] ? `${id}:${eq}` : id; }
   return null;
@@ -7160,6 +7164,9 @@ function gym3dOf(name) {
 
 /* 💡 Las 3 claves de cada movimiento (texto propio): se leen antes de empezar y se cuida una en cada serie */
 const GYM3D_CUES = {
+  fly: ['Codos un poco flexionados y fijos todo el recorrido', 'Abre en arco hasta notar el estiramiento del pecho, sin pasar del hombro', 'Cierra como si abrazaras un árbol, sin chocar las mancuernas'],
+  flyf: ['Codos un poco flexionados y fijos todo el recorrido', 'Abre en arco hasta notar el estiramiento del pecho, sin pasar del hombro', 'Cierra como si abrazaras un árbol, sin chocar las mancuernas'],
+  pushd: ['Codos pegados al cuerpo: solo se mueven los antebrazos', 'Abajo, separa un poco la cuerda y estira del todo', 'Sube despacio hasta la altura del pecho, sin dejar que tire de ti'],
   sqbar: ['Pies a la anchura de los hombros y apoyo en todo el pie', 'Las rodillas van hacia donde apuntan los pies', 'Pecho alto: baja controlado y sin rebotar abajo'],
   sq: ['Pies a la anchura de los hombros y apoyo en todo el pie', 'Las rodillas van hacia donde apuntan los pies', 'Baja como si te sentaras, con el pecho alto'],
   goblet: ['Peso pegado al pecho, codos hacia abajo', 'Baja entre las piernas con el tronco erguido', 'Sube empujando el suelo con todo el pie'],
@@ -7215,9 +7222,12 @@ const GYM3D_CUES = {
 };
 const gym3dCues = name => { const id = gym3dOf(name); return id ? GYM3D_CUES[id.split(':')[0]] || null : null; };
 const canBeta = () => isAdminUser() || !!access.me?.beta; // 🧪 administrador y quien tenga «beta» en su código
+const can3D = () => true;
+const seen3D = () => !!lsGet('fitnesteban_3dseen'); // hasta que abres tu primera animación, los botones 3D brillan // 🧍 animaciones 3D de los ejercicios: abiertas a todos desde la 4.96.0
 let gym3dMod = null;
 function gym3dModal(name, back = null) { // back: volver a la ventana de la que vienes (p. ej. «Hoy has hecho»)
   const id = gym3dOf(name); if (!id) return;
+  if (!seen3D()) { lsSet('fitnesteban_3dseen', 1); setTimeout(() => document.querySelectorAll('.is-new').forEach(b => b.classList.remove('is-new')), 0); }
   openModal(`<h3 class="text-lg font-black leading-tight">${esc(name)}</h3>
     <div class="man3d mt-3" id="gym3d"><span class="text-mute text-sm">Cargando animación…</span></div>
     ${gym3dCues(name) ? `<div class="lbl mt-3">💡 Las 3 claves</div><ol class="cues">${gym3dCues(name).map(c => `<li>${esc(c)}</li>`).join('')}</ol><p class="text-[11px] text-mute mt-1">Léelas antes de empezar y cuida una en cada serie.</p>` : '<p class="text-[11px] text-mute mt-2 text-center">Muestra el movimiento básico. Para la técnica fina, mira el vídeo.</p>'}
@@ -7568,7 +7578,7 @@ const actions = {
   adv: () => advGrid(),
   advOn: () => advActivate(),
   advInfo: () => advInfoModal(),
-  gym3d: b => { if (canBeta()) gym3dModal(b.dataset.n); },
+  gym3d: b => { if (can3D()) gym3dModal(b.dataset.n); },
   queComo: () => queComoModal(),
   cdWatch: () => { keepCardioInputs(); state.settings.watchOpen = !state.settings.watchOpen; persist(); render(); },
   cdUseWatch: () => { const e = ui.cardio.est; if (!e?.wkcal) return; keepCardioInputs(); e.appKcal = e.appKcal ?? e.kcal; e.kcal = +e.wkcal; e.usedWatch = true; render(); toast('Puestas las kcal del reloj'); },

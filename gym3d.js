@@ -1,6 +1,7 @@
 /* Maniquí 3D para los ejercicios de los bloques (FITNESTEBAN). Copia aparte de man3d.js (el del calendario) con barra, mancuernas, banco y barra de dominadas. */
 import * as T from './three.module.min.js';
 const d = Math.PI / 180;
+const HSIGN = 1; // sentido del giro horizontal del hombro (shH)
 let R = null, raf = 0, cv = null;
 function build() {
   const S = new T.Scene(); S.fog = new T.Fog(0x05080d, 6, 14);
@@ -106,6 +107,9 @@ const P = {
   // ---- correcciones de Esteban ----
   curlh: { a: { el: 0, sh: 0 }, b: { el: 140, sh: 5 }, db: true, hammer: true },
   dbrow1: { base: { rootX: 45, hip: 55, knee: 20, neck: -20, shL: 90, elL: 0, hipAb: 8 }, a: { shR: 45, elR: 0 }, b: { shR: -20, elR: 105, shAbR: 10 }, db: 'R', restL: true },
+  fly: { base: { rootX: -55, hip: 55, knee: 90, sh: 90, el: 15, shAb: 0 }, a: { shH: 0 }, b: { shH: 78 }, ground: ['anL', 'anR'], incline: true, db: true, hammer: true },
+  flyf: { base: { rootX: -90, hip: 8, knee: 92, neck: 0, sh: 90, el: 15, shAb: 0 }, a: { shH: 0 }, b: { shH: 80 }, ground: ['anL', 'anR'], bench: [.4, .45, 1.3, 0, -.45], db: true, hammer: true },
+  pushd: { cam: [3.6, 1.5, 1.2], base: { spine: 12, hip: 8, knee: 8, neck: -6, sh: 6, shAb: 8 }, a: { el: 100 }, b: { el: 4 }, strap: [0, 1.95, .5], tower: [0, .62] },
   csrow: { base: { rootX: 55, hip: 50, knee: 15, neck: -10 }, a: { sh: 55, el: 0, shAb: 6 }, b: { sh: -15, el: 100, shAb: 18 }, db: true, incline: 'front' },
   benchc: { base: { rootX: -90, hip: 8, knee: 92, neck: 0 }, a: { sh: 90, el: 0, shAb: 0 }, b: { sh: 12, shAb: 5, el: 112 }, ground: ['anL', 'anR'], bench: [.4, .45, 1.3, 0, -.45], bar: 'hands' },
   curlinc: { pin: ['pelvis', [0, .55, 0]], fix: ['anL', 'anR'], base: { rootX: -55, hip: 35, knee: 90, shAb: 6, sh: -55 }, a: { el: 0 }, b: { el: 135 }, db: true, incline: 'back' },
@@ -141,7 +145,8 @@ function apply(p, ex) {
   for (const k of SIDES) {
     const s = k === 'L' ? 1 : -1;
     B['hp' + k].rotation.set(-g('hip', k) * d, 0, g('hipAb', k) * d * s); B['kn' + k].rotation.set(g('knee', k) * d, 0, 0); B['an' + k].rotation.set(g('ankle', k) * d, 0, 0);
-    B['sh' + k].rotation.set(-g('sh', k) * d, 0, g('shAb', k) * d * s); B['el' + k].rotation.set(-g('el', k) * d, 0, 0);
+    const hz = p['shH' + k] ?? p.shH; // shH: abrir el brazo en horizontal (aperturas) girando todo el brazo como un bloque, sin rotar la muñeca
+    if (hz != null) B['sh' + k].rotation.set(-g('sh', k) * d, hz * d * s * HSIGN, g('shAb', k) * d * s, 'YXZ'); else B['sh' + k].rotation.set(-g('sh', k) * d, 0, g('shAb', k) * d * s, 'XYZ'); B['el' + k].rotation.set(-g('el', k) * d, 0, 0);
   }
   root.position.set(0, 0, 0); root.updateMatrixWorld(true);
   let mn = 1e9; const v = new T.Vector3();
@@ -198,6 +203,7 @@ function props(ex, pA) {
   if (ex.restL) { apply(pA, ex); const a = new T.Vector3(); B.hdL.getWorldPosition(a); box(.4, a.y - .04, .45, a.x, (a.y - .04) / 2, a.z); }
   if (ex.fixBar && FIX?.hdL) { const pb = new T.Mesh(new T.CylinderGeometry(.02, .02, 1.2, 16), new T.MeshStandardMaterial({ color: 0x9ca3af, metalness: .8, roughness: .3 })); pb.rotation.z = Math.PI / 2; pb.position.copy(FIX.hdL.clone().add(FIX.hdR).multiplyScalar(.5)); pb.position.y += .02; prop.add(pb); for (const x of [-.6, .6]) box(.05, pb.position.y, .05, x, pb.position.y / 2, pb.position.z); }
   if (ex.anchor) { const AP = anchorOf(ex); if (ex.Ls) { const ank = new T.Mesh(new T.SphereGeometry(.045, 12, 10), m); ank.position.copy(AP); prop.add(ank); } else { const pb = new T.Mesh(new T.CylinderGeometry(.02, .02, 1.2, 16), new T.MeshStandardMaterial({ color: 0x9ca3af, metalness: .8, roughness: .3 })); pb.rotation.z = Math.PI / 2; pb.position.copy(AP); prop.add(pb); box(1.2, .04, .7, 0, AP.y + .04, AP.z - .25); for (const x of [-.55, .55]) box(.05, AP.y, .05, x, AP.y / 2, AP.z); } }
+  if (ex.tower) { const [tx, tz] = ex.tower; box(.14, 2.15, .14, tx, 1.075, tz); box(.5, .06, .14, tx, 2.03, (tz + (ex.strap?.[2] ?? tz)) / 2); }
   if (ex.strap) { const ank = new T.Mesh(new T.SphereGeometry(.04, 12, 10), m); ank.position.set(...ex.strap); prop.add(ank); }
   if (ex.incline) { apply(pA, ex); const a = new T.Vector3(), b = new T.Vector3(); B.pelvis.getWorldPosition(a); B.neck.getWorldPosition(b); const mid = a.clone().add(b).multiplyScalar(.5), dir = b.clone().sub(a), len = dir.length() + .25;
     const bk = new T.Mesh(new T.BoxGeometry(.4, len, .08), m); bk.position.copy(mid).add(new T.Vector3(0, 0, ex.incline === 'front' ? .15 : -.13).applyAxisAngle(new T.Vector3(1, 0, 0), Math.atan2(dir.z, dir.y))); bk.rotation.x = Math.atan2(dir.z, dir.y); prop.add(bk);
@@ -243,7 +249,7 @@ export function mount(el, id, lv = 1) {
     if (ex.pin?.[1] === 'auto') FIX.pin = FIX[ex.pin[0]];
   }
   props(ex, poseAt(0));
-  const per = { pull: 3, hipth: 2.6, lat: 2.4, curl: 2.2, curlh: 2.2, burpee: 4.5, plank: 4, hollow: 3.5, gorilla: 4.4, swing: 1.8 }[id] || 2.8;
+  const per = { pull: 3, hipth: 2.6, lat: 2.4, curl: 2.2, curlh: 2.2, burpee: 4.5, plank: 4, hollow: 3.5, gorilla: 4.4, swing: 1.8, fly: 4, flyf: 4, pushd: 3.2 }[id] || 2.8;
   const t0 = performance.now();
   const frame = now => {
     if (!cv.isConnected) { stop(); return; }
