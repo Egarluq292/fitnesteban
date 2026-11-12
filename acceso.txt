@@ -13,3 +13,4 @@ bff66ad7b5b25711a298a0b609dafbea plan=prueba hasta=2026-11-16
 #uso https://script.google.com/macros/s/AKfycbxbwKzXbu5HgWqO0_hEYhVYoWCAOBg5ryV6yDbZWsRCDAQ5NGU1esmvGpodWS8cDfTi9A/exec
 642581dfee4fce3c01b65999faadc807 plan=1m hasta=2026-12-12 duo=d9mrid
 8f0fa446e585486a54ac3590ca6299ab plan=1m hasta=2026-12-12 duo=d9mrid
+374879a772c617e5fcc73cc0b7f0b4a4 plan=1m hasta=2026-12-12
