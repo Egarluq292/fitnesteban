@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '4.99.0';
+const APP_VERSION = '4.99.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -5711,7 +5711,7 @@ function onboarding() {
       <p>🩺 <b>No sustituye a un profesional.</b> Las cifras son orientativas: si tienes lesiones, embarazo o algún problema de salud, consulta antes.</p>
       <p>🛠️ <b>Es un proyecto vivo.</b> Irá mejorando, pero puede tener fallos o cambiar.</p>
       <p>📶 <b>Para mantener la app</b>, envía a Esteban solo el día de último uso, la versión instalada y un identificador del dispositivo (sin datos personales). Nada de tu dieta ni de tus entrenos.</p>
-      <p>${access.me?.trial ? `🔓 <b>Estás de prueba:</b> ${(n => n > 1 ? `te quedan ${n} días` : n === 1 ? 'hoy es tu último día' : 'tu prueba ha terminado')(trialLeft())} con todo incluido. Al terminar, pide tu código de acceso a Esteban y sigues con tus datos.` : '🔑 <b>Tu código es solo tuyo:</b> funciona como mucho en 2 dispositivos.'}</p>
+      <p>${access.me?.trial ? `🔓 <b>Estás de prueba:</b> ${(n => n > 1 ? `te quedan ${n} días` : n === 1 ? 'hoy es tu último día' : 'tu prueba ha terminado')(trialLeft())} con todo incluido. Al terminar, pide tu código de acceso a Esteban y sigues con tus datos.` : '🔑 <b>Tu código es personal:</b> es solo para ti.'}</p>
       <p>✉️ <b>Tu correo</b> lo guarda Esteban para enviarte la guía de la app y, si tú le escribes, resolverte dudas.</p>
       <p class="text-mute">Todo, con detalle, en la <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.</p>
     </div>
@@ -6401,6 +6401,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['4.99.1', ['Textos: «tu código es personal».'], 'quiet'],
   ['4.99.0', ['🔑 Cada código vale ahora en 1 dispositivo (quien ya tenía 2 registrados los conserva). Textos de los códigos: «aquí tienes tu código personal». Script de uso v14: pégalo (Ajustes → Acceso → Reconfigurar).'], 'admin'],
   ['4.98.0', ['🎬 ¿Te gusta FITNESTEBAN? Ya tiene vídeo: en Ajustes, junto a «Compartir app», pulsa «🎬 Vídeo» y compártelo en WhatsApp, estados o redes, o guárdalo en tu galería.']],
   ['4.97.0', ['🧍 Nuevas animaciones 3D de máquinas: extensión de cuádriceps y curl femoral (sentado y tumbado).']],
@@ -9170,7 +9171,7 @@ function accessSectionHTML() {
     ${list.length ? `<p class="text-[12px] text-slate-300">💶 Este mes: <b class="text-white">${eur(paysSummary().mes)}</b> · Este año: <b class="text-white">${eur(paysSummary().ano)}</b> <span class="text-mute">(solo en este móvil)</span></p>` : ''}
     <button class="btn-primary w-full" data-act="accPage" type="button">👥 Usuarios y planes</button>
     ${access.usageUrl && lsGet(USE_KEY)
-      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de 2 dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : ui.usageOld12 ? '<span class="text-amber-300">actualiza el script a la v12 (Reconfigurar → nueva versión) para activar el periodo de prueba con Google</span>' : ui.usageOld13 ? '<span class="text-amber-300">actualiza el script a la v14 (Reconfigurar → nueva versión): las pruebas nuevas pasan a 7 días</span>' : 'actualizado ahora · nombres, correos, altas y quién usa cada dispositivo') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
+      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : ui.usageOld12 ? '<span class="text-amber-300">actualiza el script a la v12 (Reconfigurar → nueva versión) para activar el periodo de prueba con Google</span>' : ui.usageOld13 ? '<span class="text-amber-300">actualiza el script a la v14 (Reconfigurar → nueva versión): las pruebas nuevas pasan a 7 días</span>' : 'actualizado ahora · nombres, correos, altas y quién usa cada dispositivo') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
       : access.usageUrl ? `<button class="btn-ghost w-full" data-act="usageHere" type="button">📶 Ver quién usa la app en este dispositivo</button>`
       : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
     ${access.usageUrl && lsGet(USE_KEY) ? (lsGet(SHEET_KEY) && !ui.sheetEdit
