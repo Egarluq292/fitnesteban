@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.1.4';
+const APP_VERSION = '5.1.5';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4123,7 +4123,7 @@ function renderDiet() {
       <div class="d2-left"><div class="d2-left-l">${leftP > 0 ? 'Proteína que falta' : 'Proteína'}</div><div class="d2-left-v ${MAC.prot.text}">${leftP > 0 ? `${leftP}<span> g</span>` : '✓<span> cumplida</span>'}</div></div>
     </div>
     ${isToday && mealsOf(date).length && (leftK > 60 || qcProtMode(qcLeft())) ? `<button class="qc-btn ${MAC.kcal.text}" data-act="queComo" type="button">¿Qué como?</button>` : `<p class="text-xs text-mute mt-2.5 leading-relaxed">${esc(hint)}</p>`}
-    ${burned ? `<p class="text-[11px] mt-2 text-mute">${cardioK ? `🔥 Cardio <b class="${MAC.kcal.text}">−${cardioK}</b> · ` : ''}${gymK ? `🏋️ Gym <b class="${MAC.kcal.text}">−${gymK}</b> · ` : ''}Neto <b class="text-white">${Math.round(t.kcal - burned)}</b> kcal</p>` : ''}
+    ${burned ? `<button class="text-[11px] mt-2 text-mute text-left w-full" data-act="netInfo" type="button">${cardioK ? `🔥 Cardio <b class="${MAC.kcal.text}">−${cardioK}</b> · ` : ''}${gymK ? `🏋️ Gym <b class="${MAC.kcal.text}">−${gymK}</b> · ` : ''}Neto <b class="text-white">${String(Math.round(t.kcal - burned)).replace('-', '−')}</b> kcal <span class="text-brand font-bold">ⓘ</span></button>` : ''}
   </section>
 
   ${weekStripHTML(date)}
@@ -6530,6 +6530,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.1.5', ['🔥 Dieta: toca la línea «Cardio · Neto» (ⓘ) para ver qué significa cada número y por qué «Te quedan» no suma lo que quemas.'], 'quiet'],
   ['5.1.4', ['Usuarios: arreglada la versión que salía como una fecha («Sun Jan 05 2003…»). Google convertía «5.1.3» en el 5 de enero de 2003; ahora la app la manda como «v5.1.4» y recupera las que ya estaban convertidas.', '«Desactualizada» solo sale si van una versión MENOR por detrás (5.0 frente a 5.1), y en tu fila sale siempre la versión que tienes abierta. Los dispositivos ya no se cortan con «…».'], 'admin'],
   ['5.1.3', ['🚫 Alergias e intolerancias: nueva opción «Fructosa (malabsorción)».', 'Detección más fina de alérgenos en platos españoles (croquetas, lasaña, flan, natillas, chipirones, vieiras, turrón…) y sin falsas alarmas con «sin gluten» o «sin lactosa».'], 'quiet'],
   ['5.1.2', ['Con una ventana abierta, el fondo ya no se mueve aunque deslices el dedo; al cerrarla vuelves justo donde estabas.'], 'quiet'],
@@ -8085,6 +8086,14 @@ const actions = {
     });
   },
   usersGo: () => { ui.view = 'settings'; actions.openAccess(() => { ui.accPage = true; render(); window.scrollTo({ top: 0 }); }); },
+  netInfo: () => openModal(`<h3 class="modal-title">🔥 Lo que quemas y lo que comes</h3>
+    <div class="space-y-2 text-[13px] leading-relaxed">
+      <p><b>🔥 Cardio</b>: las calorías que has quemado hoy en el cardio que has registrado (andar, bici, correr, nadar…). Si también has entrenado en el gym, sale <b>🏋️ Gym</b> con lo que gastaste en esa sesión.</p>
+      <p><b>Neto</b>: lo que has comido menos lo que has quemado. Por ejemplo, si has comido 1478 kcal y has quemado 975 en cardio, el neto es 503. Es solo un dato para ver el balance del día.</p>
+      <p><b>«Te quedan» no suma lo que quemas.</b> Es tu objetivo menos lo que has comido. Lo hacemos así a propósito: las calorías del reloj y de las fórmulas suelen salir altas, y si te las comes todas, frenas tu progreso. Tu objetivo ya tiene en cuenta el nivel de actividad de tu perfil.</p>
+      <p class="text-mute text-[12px]">¿Un día de mucho desgaste (una ruta larga, un partido)? Puedes comer algo más, pero mejor una parte de lo quemado, no todo.</p>
+    </div>
+    <button class="btn-primary w-full mt-3" data-close type="button">Entendido</button>`),
   accFicha: b => { b.classList.add('acc-tap'); setTimeout(() => { b.classList.remove('acc-tap'); accFichaModal(b.dataset.hash); }, 160); }, // se ilumina la fila que has tocado y luego se abre su ficha
   closeAccess: () => { ui.accessOpen = false; render(); },
   accPage: () => { ui.accPage = true; render(); window.scrollTo({ top: 0 }); },
