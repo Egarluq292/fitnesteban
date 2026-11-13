@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.0.3';
+const APP_VERSION = '5.0.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6479,6 +6479,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.0.4', ['Nuevo código: abre en «1 mes» y se ve desde el principio si es Individual o DÚO. El plan «Prueba» ya no se ofrece, porque la prueba de 7 días es automática.', '📅 En «Renovar o cambiar», nuevo enlace para corregir la fecha de fin si te equivocas: quita o suma días sin anotar ningún pago.', 'El botón 👥 sale en la cabecera desde el primer momento al abrir la app.'], 'admin'],
   ['5.0.3', ['👥 Nuevo botón en la cabecera para ir directo a Usuarios. El PIN vale para toda la sesión: hasta cerrar la app o 15 minutos sin tocar nada de Acceso.', 'Lista más clara: una línea por persona (o por DÚO), «Requieren atención» arriba, buscador y filtros fijos, y filtro «🟢 Hoy» con quién ha usado la app hoy.', 'Al tocar a alguien se abre su ficha con botones grandes: renovar, recordar la renovación, nombre, código nuevo, beta, ocultar nombre y quitar acceso.'], 'admin'],
   ['5.0.2', ['El aviso de FITNESTEBAN 5 en Inicio vuelve a salir y se queda hasta que lo cierras con ✕.'], 'quiet'],
   ['5.0.1', ['El aviso de FITNESTEBAN 5 en Inicio se queda hasta que lo cierras con ✕.'], 'quiet'],
@@ -6952,7 +6953,7 @@ function maybeShowNews() {
    RENDER Y EVENTOS
    ========================================================================= */
 function render() {
-  const adm = isAdminUser(); const ub = $('#usersBtn'), mb = $('#mailBtn'); if (ub) ub.style.display = adm ? '' : 'none'; if (mb) mb.style.display = adm ? 'none' : ''; $('#usersBtn')?.classList.toggle('is-on', adm && ui.view === 'settings' && !!ui.accPage); const hd = document.querySelector('header'); if (hd) document.documentElement.style.setProperty('--hdr-h', hd.offsetHeight + 'px');
+  const adm = isAdminUser() || (!access.me && lsGet('fitnesteban_adm') === 1); if (access.me) { try { if (access.me.admin) localStorage.setItem('fitnesteban_adm', '1'); else localStorage.removeItem('fitnesteban_adm'); } catch { /* nada */ } } const ub = $('#usersBtn'), mb = $('#mailBtn'); if (ub) ub.style.display = adm ? '' : 'none'; if (mb) mb.style.display = adm ? 'none' : ''; $('#usersBtn')?.classList.toggle('is-on', adm && ui.view === 'settings' && !!ui.accPage); const hd = document.querySelector('header'); if (hd) document.documentElement.style.setProperty('--hdr-h', hd.offsetHeight + 'px');
   try { renderInner(); }
   catch (e) {
     console.error(e);
@@ -9351,7 +9352,7 @@ function planTokens(k, from = '') { // from (aaaa-mm-dd): renovar sumando a lo q
   const now = netNow() || Date.now(), f = from ? new Date(from + 'T12:00:00+01:00').getTime() : 0, base = Math.max(now, f);
   return ['plan=' + k, 'hasta=' + new Date(base + days * 86400000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' })];
 }
-const planChips = (cur, act = 'plan') => `<div class="flex flex-wrap justify-center gap-1.5">${Object.entries(PLANS).map(([k, [l, d]]) => `<button class="chip flex-col justify-center leading-tight py-2 ${cur === k ? 'chip-on' : ''}" style="width:calc(33.333% - 4px)" data-mact="${act}" data-k="${k}" type="button"><span class="whitespace-nowrap">${l}</span><span class="text-[10px] opacity-70 font-semibold">${d ? d + ' días' : 'sin límite'}</span></button>`).join('')}<button class="chip flex-col justify-center leading-tight py-2 ${cur === 'custom' ? 'chip-on' : ''}" style="width:calc(33.333% - 4px)" data-mact="${act}" data-k="custom" type="button"><span class="whitespace-nowrap">Otro</span><span class="text-[10px] opacity-70 font-semibold">tú eliges</span></button></div>`;
+const planChips = (cur, act = 'plan') => `<div class="flex flex-wrap justify-center gap-1.5">${Object.entries(PLANS).filter(([k]) => k !== 'prueba').map(([k, [l, d]]) => `<button class="chip flex-col justify-center leading-tight py-2 ${cur === k ? 'chip-on' : ''}" style="width:calc(33.333% - 4px)" data-mact="${act}" data-k="${k}" type="button"><span class="whitespace-nowrap">${l}</span><span class="text-[10px] opacity-70 font-semibold">${d ? d + ' días' : 'sin límite'}</span></button>`).join('')}<button class="chip flex-col justify-center leading-tight py-2 ${cur === 'custom' ? 'chip-on' : ''}" style="width:calc(33.333% - 4px)" data-mact="${act}" data-k="custom" type="button"><span class="whitespace-nowrap">Otro</span><span class="text-[10px] opacity-70 font-semibold">tú eliges</span></button></div>`;
 function planLabel(x) {
   if (x.admin) return '';
   if (!x.hasta) return '<span class="text-emerald-300">Free · sin caducidad</span>';
@@ -9437,9 +9438,17 @@ function planModal(hash) {
   const x = (access.list || []).find(y => y.hash === hash); if (!x) return;
   const mate = duoMate(x), who = state.accessNames[hash] || 'Sin nombre', whoM = mate ? (state.accessNames[mate.hash] || 'su pareja de DÚO') : '';
   let k = x.hasta ? (x.plan || '1m') : 'free', nd = 15, sum = true;
+  if (k === 'prueba') k = '1m';
   if (!PLANS[k]) { nd = planDaysOf(k) || 15; k = 'custom'; }
   const mod = mate ? 'duo' : 'ind', T = netToday() || todayISO(), alive = x.hasta && x.hasta >= T;
+  let fix = false, fixD = x.hasta || T;
   const html = () => {
+    if (fix) return `<h3 class="modal-title">📅 Corregir la fecha · ${esc(who)}</h3>
+    ${mate ? `<p class="text-[12px] text-cyan-300 -mt-1">👥 Se cambia también a ${esc(whoM)}.</p>` : ''}
+    <p class="text-xs">Ahora: ${planLabel(x)}</p>
+    <label class="lbl">Último día con acceso<input class="field mt-1" name="fixd" type="date" value="${esc(fixD)}" /></label>
+    <p class="text-[11px] text-mute">Para arreglar un error: le quita o le suma días sin cambiar su plan y <b>sin anotar ningún pago</b>. Si pones una fecha ya pasada, perderá el acceso la próxima vez que abra la app.</p>
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="fixoff" type="button">Volver</button><button class="btn-primary" data-mact="fixgo" type="button">Guardar fecha</button></div>`;
     const kk = k === 'custom' ? 'd' + nd : k, end = planDaysOf(kk) ? planTokens(kk, sum && alive ? x.hasta : '')[1].slice(6) : '';
     return `<h3 class="modal-title">⏳ Renovar o cambiar · ${esc(who)}</h3>
     ${mate ? `<p class="text-[12px] text-cyan-300 -mt-1">👥 DÚO con ${esc(whoM)}: se renuevan los dos a la vez.</p>` : ''}
@@ -9448,10 +9457,18 @@ function planModal(hash) {
     ${priceLine(k, mod)}
     ${alive && planDaysOf(kk) ? `<label class="flex items-center gap-2 text-[13px]"><input type="checkbox" data-mact="sum" ${sum ? 'checked' : ''}/> Sumar a los días que le quedan</label>` : ''}
     <p class="text-[11px] text-mute">${k === 'free' ? '«Free» no caduca.' : end ? `Nueva fecha de fin: <b class="text-white">${esc(fmtDateShort(end))}</b>.` : 'Cuenta desde hoy.'} Si estaba caducado, vuelve a entrar solo al abrir la app.</p>
-    <button class="btn-primary w-full" data-mact="go" type="button">${isPaidPlan(k) ? `Renovar · ${eur(PRICES[mod][k])}` : 'Guardar plan'}</button>`; };
+    <button class="btn-primary w-full" data-mact="go" type="button">${isPaidPlan(k) ? `Renovar · ${eur(PRICES[mod][k])}` : 'Guardar plan'}</button>
+    ${x.hasta ? '<button class="w-full text-[12px] text-brand underline" data-mact="fixon" type="button">📅 ¿Te has equivocado? Corregir la fecha de fin (sin cobro)</button>' : ''}`; };
   openModal(html(), {
     plan: (root, b) => { if (k === 'custom') nd = +mval(root, 'pdays') || nd; k = b.dataset.k; root.querySelector('.modal-sheet').innerHTML = html(); },
     sum: (root, b) => { sum = b.checked; root.querySelector('.modal-sheet').innerHTML = html(); },
+    fixon: root => { fix = true; root.querySelector('.modal-sheet').innerHTML = html(); },
+    fixoff: root => { fixD = mval(root, 'fixd') || fixD; fix = false; root.querySelector('.modal-sheet').innerHTML = html(); },
+    fixgo: root => { const d = mval(root, 'fixd'); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return toast('Elige una fecha', 'warn'); const hs = [hash, ...(mate ? [mate.hash] : [])];
+      askPin({ title: `${esc(who)}${mate ? ` y ${esc(whoM)}` : ''}: hasta el ${esc(fmtDateShort(d))}`, text: 'Tu PIN abre la llave de GitHub para guardar la fecha. No se anota ningún pago.', onPin: async pin => {
+        await ghEditAcl(pin, lines => lines.map(l => hs.some(h => l.trim().toLowerCase().startsWith(h)) ? [...l.trim().split(/\s+/).filter(t => !/^hasta=/i.test(t)), 'hasta=' + d].join(' ') : l), 'Acceso: fecha corregida');
+        ui.accessPin = pin; closeModal(); render(); toast(`Fecha corregida: hasta el ${fmtDateShort(d)} ✓`);
+      } }); },
     go: root => { const k2 = planResolve(k, root), toks = planTokens(k2, sum && alive ? x.hasta : ''), hs = [hash, ...(mate ? [mate.hash] : [])];
       askPin({ title: `${esc(who)}${mate ? ` y ${esc(whoM)}` : ''}: ${esc(planName(k2))}`, text: 'Tu PIN abre la llave de GitHub para guardar el plan.', onPin: async pin => {
         await ghEditAcl(pin, lines => lines.map(l => hs.some(h => l.trim().toLowerCase().startsWith(h)) ? [l.trim().split(/\s+/)[0], ...l.trim().split(/\s+/).slice(1).filter(t => !/^(plan|hasta)=/i.test(t)), ...toks].join(' ') : l), 'Acceso: plan ' + k2);
@@ -9460,7 +9477,7 @@ function planModal(hash) {
       } }); }
   });
 }
-function newAccessModal(who = '', plan = 'prueba', from0 = '') {
+function newAccessModal(who = '', plan = '1m', from0 = '') {
   let k = plan, who0 = who, who2 = '', nd = 15, mod = 'ind', from = from0;
   const html = () => `<h3 class="modal-title">Nuevo código de acceso</h3>
     <div><div class="lbl mb-1.5">Plan</div>${planChips(k)}</div>${planCustomHTML(k, nd)}
