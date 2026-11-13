@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.1.1';
+const APP_VERSION = '5.1.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -809,13 +809,20 @@ function toast(msg, kind = 'ok') {
   setTimeout(() => el.remove(), ms + 400);
 }
 let modalHandlers = {};
+// con una ventana abierta, el fondo no se mueve aunque deslices (en iPhone «overflow: hidden» no basta): se fija la página donde estaba
+let lockY = null;
+function scrollLock(on) {
+  const b = document.body.style;
+  if (on && lockY === null) { lockY = window.scrollY; Object.assign(b, { position: 'fixed', top: `-${lockY}px`, left: '0', right: '0', width: '100%' }); const h = document.querySelector('body > header'); if (h) h.style.transform = `translateY(${lockY}px)`; }
+  else if (!on && lockY !== null) { const y = lockY; lockY = null; Object.assign(b, { position: '', top: '', left: '', right: '', width: '' }); const h = document.querySelector('body > header'); if (h) h.style.transform = ''; window.scrollTo(0, y); }
+}
 function openModal(html, handlers = {}) {
   modalHandlers = handlers;
   const root = $('#modalRoot');
   const swap = root.classList.contains('open'); // de una ventana a otra (p. ej. chat → receta): sin animación de entrada, para que no asome lo de detrás
   root.innerHTML = `<div class="modal-back" ${handlers.noClose ? '' : 'data-close'}></div><div class="modal-sheet ${swap ? 'no-anim ' : ''}${handlers.sheetClass || ''}" role="dialog" aria-modal="true">${html}</div>`;
   root.classList.add('open');
-  document.body.classList.add('overflow-hidden');
+  document.body.classList.add('overflow-hidden'); scrollLock(true);
   const first = root.querySelector('input,textarea');
   if (first && handlers.autofocus) first.focus();
 }
@@ -824,7 +831,7 @@ function closeModal() { $('#modalRoot').style.zIndex = '';
   const root = $('#modalRoot');
   root.innerHTML = '';
   root.classList.remove('open');
-  document.body.classList.remove('overflow-hidden');
+  document.body.classList.remove('overflow-hidden'); scrollLock(false);
   modalHandlers = {};
   if (ui.fichaBack) { const h = ui.fichaBack; ui.fichaBack = null; setTimeout(() => { if (ui.accPage && !$('#modalRoot').classList.contains('open')) accFichaModal(h); }, 0); } // al cerrar lo que se abrió desde la ficha, se vuelve a ella
   if (ui.roadPending) { ui.roadPending = false; setTimeout(roadNotify, 700); } // «Próximamente» esperaba a que se cerrara otra ventana
@@ -6515,6 +6522,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.1.2', ['Con una ventana abierta, el fondo ya no se mueve aunque deslices el dedo; al cerrarla vuelves justo donde estabas.'], 'quiet'],
   ['5.1.1', ['🍽️ «¿Qué como?» con más estilos: 🎲 Variado, 🍲 Cuchara, 🥘 Arroces, 🍝 Pasta, 🥩 Carne, 🐟 Pescado, 🥗 Ligero y 🥡 Táper (platos que aguantan bien para llevar).', '⚡ Nuevo interruptor «Tengo poco tiempo»: se combina con cualquier estilo y todo se hace en menos de 20 minutos.']],
   ['5.1.0', ['🍲 «¿Qué como?» con cocina de casa: en la comida y la cena elige qué te apetece (🎲 Variado, 🍲 De cuchara, 🥘 Arroces o ⚡ Rápido). En «Variado», a mediodía siempre hay un plato de cuchara o un arroz (lentejas, potaje, estofado, cocido, paella, arroz caldoso…), y por la noche, cenas ligeras pero variadas.', 'Los guisos se cocinan para varios: ves tu ración, la receta es para la olla entera y la lista de la compra sale ya multiplicada.', 'Más variedad: no repite lo que has comido estos días y no todo es pollo. El Coach también propone más cocina casera.']],
   ['5.0.6', ['🩺 Aviso sanitario discreto en Perfil, propuesta de objetivos, análisis del peso, resumen semanal y pantalla inicial del coach: la información es orientativa y no sustituye a un profesional sanitario.'], 'quiet'],
