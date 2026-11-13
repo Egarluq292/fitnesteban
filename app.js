@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.1.2';
+const APP_VERSION = '5.1.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -3844,18 +3844,25 @@ function qcPlan(L = qcLeft()) {
 // sin IA: comidas con sentido (proteína + guarnición, o tentempié) de tus habituales y básicos, para lo que toca en esa comida
 /* 🚫 Alergias e intolerancias: se guardan solo en el móvil y se mandan a la IA en cada propuesta de comida.
    Sin IA, «¿Qué como?» descarta los básicos y habituales que las contengan (por palabras clave). */
+// palabras clave por alergia (sin IA): empiezan en inicio de palabra, también con tilde o ñ (sin lookbehind, que rompe iPhones antiguos)
+const algRe = w => new RegExp(`(^|[^a-z0-9áéíóúüñ])(${w})`, 'i');
+const ALG_MILK = 'leche|yogur|queso|nata\\b|natas\\b|mantequilla|reques[oó]n|k[eé]fir|helado|bechamel|natillas|flan|cuajada|crema pastelera|batido|cacito de prote[ií]na|mozzarella|parmesano|burrata|ricotta|mascarpone|feta\\b|brie\\b|camembert|gouda|emmental|cheddar|manchego|petit suisse|tarta de queso|carbonara';
 const ALG = [
-  ['gluten', 'Gluten', 'sin gluten (celiaquía o sensibilidad)', /\b(pan|tostad|avena|trigo|pasta|espagueti|macarr|fideo|cusc[uú]s|cebada|centeno|harina|galleta|bizcocho|rebozad|empanad|pizza|bollo|cereal|seit[aá]n|cerveza)/i],
-  ['lactosa', 'Lactosa', 'sin lactosa (intolerancia)', /\b(leche|yogur|queso|nata|mantequilla|batido de prote[ií]na|reques[oó]n|k[eé]fir|helado|bechamel|cacito de prote[ií]na)/i],
-  ['leche', 'Proteína de leche', 'sin ningún lácteo (alergia a la proteína de la leche)', /\b(leche|yogur|queso|nata|mantequilla|batido de prote[ií]na|reques[oó]n|k[eé]fir|helado|bechamel|cacito de prote[ií]na|whey|case[ií]na)/i],
-  ['huevo', 'Huevo', 'sin huevo ni claras', /\b(huevo|claras?|tortilla|mayonesa|revuelto)/i],
-  ['frutos', 'Frutos secos', 'sin frutos secos', /\b(frutos secos|nuez|nueces|almendra|avellana|anacardo|pistacho|pi[ñn]ones|macadamia)/i],
-  ['cacahuete', 'Cacahuete', 'sin cacahuete ni crema de cacahuete', /\b(cacahuete|man[ií]|frutos secos)/i],
-  ['pescado', 'Pescado', 'sin pescado', /\b(pescado|merluza|salm[oó]n|at[uú]n|bacalao|sardina|anchoa|boquer[oó]n|caballa|dorada|lubina|rape|bonito|surimi)/i],
-  ['marisco', 'Marisco', 'sin marisco (crustáceos ni moluscos)', /\b(marisco|gamba|langostino|mejill[oó]n|calamar|pulpo|almeja|sepia|cigala|n[eé]cora|berberecho|surimi)/i],
-  ['soja', 'Soja', 'sin soja', /\b(soja|tofu|edamame|tempeh|miso)/i],
-  ['sesamo', 'Sésamo', 'sin sésamo', /\b(s[eé]samo|tahin|hummus)/i]
+  ['gluten', 'Gluten', 'sin gluten (celiaquía o sensibilidad)', algRe('pan\\b|panes\\b|panecillo|panko|pan rallado|picos\\b|regañ|biscote|tostad|avena|trigo|espelta|kamut|centeno|cebada|malta|s[eé]mola|cusc[uú]s|bulgur|seit[aá]n|pasta\\b|pastas\\b|espagueti|macarr|fideo|fideu|tallar[ií]n|lasa[ñn]a|canel[oó]n|ravioli|tortellini|ñoqui|harina|galleta|bizcocho|magdalena|cruas[aá]n|croissant|boller|bollo|rosquilla|churro|rebozad|empanad|croqueta|pizza|cereal|muesli|cerveza|tortilla de trigo|wrap|fajita|burrito')],
+  ['lactosa', 'Lactosa', 'sin lactosa (intolerancia)', algRe(ALG_MILK)],
+  ['leche', 'Proteína de leche', 'sin ningún lácteo (alergia a la proteína de la leche)', algRe(ALG_MILK + '|whey|case[ií]na|suero de leche')],
+  ['huevo', 'Huevo', 'sin huevo ni claras', algRe('huevo|claras?\\b|yema|tortilla(?! de trigo| de ma[ií]z)|mayonesa|alioli|revuelto|flan|merengue|natillas|rebozad|empanad|bizcocho|magdalena|carbonara|crema pastelera|pasta fresca|croqueta')],
+  ['frutos', 'Frutos secos', 'sin frutos secos', algRe('frutos secos|nuez|nueces|almendra|avellana|anacardo|pistacho|pi[ñn][oó]n|macadamia|pecana|nutella|nocilla|turr[oó]n|mazap[aá]n|guirlache|praliné|pesto')],
+  ['cacahuete', 'Cacahuete', 'sin cacahuete ni crema de cacahuete', algRe('cacahuete|man[ií]\\b|frutos secos|satay')],
+  ['pescado', 'Pescado', 'sin pescado', algRe('pescado|merluza|salm[oó]n|at[uú]n|bonito|bacalao|sardina|anchoa|boquer[oó]n|caballa|jurel|dorada|lubina|rape\\b|rodaballo|lenguado|gallo\\b|mero\\b|corvina|salmonete|abadejo|trucha|panga|emperador|pez espada|arenque|palometa|surimi|huevas|caviar|caldo de pescado|fumet')],
+  ['marisco', 'Marisco', 'sin marisco (crustáceos ni moluscos)', algRe('marisco|gamba|langostino|camar[oó]n|carabinero|cigala|bogavante|langosta|cangrejo|n[eé]cora|centolla|buey de mar|percebe|mejill[oó]n|almeja|berberecho|navaja|vieira|zamburi[ñn]a|ostra|calamar|chipir[oó]n|sepia|choco\\b|chocos\\b|pulpo|surimi|paella de marisco|caldo de marisco')],
+  ['soja', 'Soja', 'sin soja', algRe('soja|tofu|edamame|tempeh|miso\\b|tamari|lecitina')],
+  ['sesamo', 'Sésamo', 'sin sésamo', algRe('s[eé]samo|tah[ií]n|tahini|hummus|gomasio')],
+  ['fructosa', 'Fructosa (malabsorción)', 'cuidado con la fructosa (malabsorción): evita frutas con mucha fructosa (manzana, pera, mango, sandía, cereza, uva, higo, dátil, caqui), miel, zumos, siropes, refrescos azucarados y edulcorantes terminados en «-itol» (sorbitol, xilitol, maltitol…); si propones fruta, que sea de poca fructosa (fresas, naranja, mandarina, plátano maduro, kiwi, melón) y en ración pequeña; y avisa si un plato lleva mucha cebolla o ajo', algRe('manzana|pera\\b|peras\\b|mango|sand[ií]a|cereza|uvas?\\b|higos?\\b|d[aá]til|caqui|membrillo|miel\\b|zumo|sirope|agave|jarabe|almíbar|compota|refresco|sorbitol|xilitol|maltitol|manitol')]
 ];
+// «pan sin gluten», «leche sin lactosa»…: no cuentan para esa alergia
+const ALG_NEG = { gluten: /\S+(\s+\S+)?\s+sin\s+gluten/gi, lactosa: /\S+(\s+\S+)?\s+sin\s+lactosa/gi, huevo: /\S+(\s+\S+)?\s+sin\s+huevo/gi, soja: /\S+(\s+\S+)?\s+sin\s+soja/gi };
+const algTest = (k, t) => { const a = ALG.find(x => x[0] === k); return !!a && a[3].test(ALG_NEG[k] ? t.replace(ALG_NEG[k], ' ') : t); };
 const algOn = () => { const st = state.settings; return { keys: (st.alg || []).filter(k => ALG.some(a => a[0] === k)), otras: String(st.algOtras || '').trim() }; };
 const algAny = () => { const a = algOn(); return a.keys.length > 0 || !!a.otras || !!DIET_AI[profileOf()?.diet]; };
 const DIET_SHORT = { veg: 'carne ni pescado', vegan: 'nada de origen animal', pesc: 'carne' };
@@ -3870,7 +3877,7 @@ function algPrompt() {
 // ¿un alimento o plato choca con lo marcado? (sin IA, por palabras clave; también lo que escribe en «otras»)
 const MEAT_RE = /\b(pollo|pavo|ternera|cerdo|lomo|jam[oó]n|chorizo|salchich|hamburgues|carne|cordero|conejo|beicon|bacon|panceta|fiambre|embutido|fuet|pechuga|filete|alb[oó]ndiga|morcilla|solomillo|costilla)/i;
 function dietHit(t) {
-  const dt = profileOf()?.diet, A = k => ALG.find(x => x[0] === k)[3];
+  const dt = profileOf()?.diet, A = k => ({ test: t => algTest(k, t) });
   if (dt === 'pesc') return MEAT_RE.test(t);
   if (dt === 'veg') return MEAT_RE.test(t) || A('pescado').test(t) || A('marisco').test(t);
   if (dt === 'vegan') return MEAT_RE.test(t) || A('pescado').test(t) || A('marisco').test(t) || A('huevo').test(t) || A('leche').test(t) || /\bmiel\b/i.test(t);
@@ -3879,7 +3886,7 @@ function dietHit(t) {
 function algHit(txt) {
   if (!algAny()) return false; const a = algOn(), t = String(txt || '');
   if (dietHit(t)) return true;
-  if (a.keys.some(k => ALG.find(x => x[0] === k)[3].test(t))) return true;
+  if (a.keys.some(k => algTest(k, t))) return true;
   const words = a.otras.split(/[,;·\n]| y /).map(w => normTxt(w.trim())).filter(w => w.length >= 3);
   const n = normTxt(t); return words.some(w => n.includes(w));
 }
@@ -3888,6 +3895,7 @@ function algCardHTML() {
   return foldCard('alg', '🚫 Alergias e intolerancias', a.keys.length || a.otras ? `${a.keys.length + (a.otras ? 1 : 0)} marcada${a.keys.length + (a.otras ? 1 : 0) === 1 ? '' : 's'}` : 'Ninguna', algAny() ? 'text-amber-300' : '', `
     <p class="text-[12px] text-mute">Marca lo que no puedes comer. La IA lo tiene en cuenta en «¿Qué como?», las recetas y el Coach, y te avisa si una comida que apuntas parece llevarlo.</p>
     <div class="flex flex-wrap gap-1.5">${ALG.map(([k, l]) => `<button class="chip chip-sm ${a.keys.includes(k) ? 'chip-on' : ''}" data-act="alg" data-k="${k}" type="button">${a.keys.includes(k) ? '✓ ' : ''}${esc(l)}</button>`).join('')}</div>
+    ${a.keys.includes('fructosa') ? '<p class="text-[11px] text-mute">🍎 Fructosa: la tolerancia es muy personal. Sigue lo que te haya pautado tu médico o dietista. Si es intolerancia hereditaria a la fructosa, la dieta es mucho más estricta: no te fíes solo de la app.</p>' : ''}
     <label class="lbl">Otras cosas que no comes <span class="text-mute font-normal">(opcional)</span><input class="field mt-1" id="algOtras" maxlength="120" placeholder="Ej: fresas, pimiento, cerdo" value="${esc(a.otras)}" /></label>
     <p class="text-[11px] text-amber-300/90">⚠️ Es una ayuda, no una garantía: la IA puede equivocarse y no conoce las trazas ni la contaminación cruzada. Si tienes una alergia seria, revisa siempre las etiquetas.</p>`);
 }
@@ -6522,6 +6530,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.1.3', ['🚫 Alergias e intolerancias: nueva opción «Fructosa (malabsorción)».', 'Detección más fina de alérgenos en platos españoles (croquetas, lasaña, flan, natillas, chipirones, vieiras, turrón…) y sin falsas alarmas con «sin gluten» o «sin lactosa».'], 'quiet'],
   ['5.1.2', ['Con una ventana abierta, el fondo ya no se mueve aunque deslices el dedo; al cerrarla vuelves justo donde estabas.'], 'quiet'],
   ['5.1.1', ['🍽️ «¿Qué como?» con más estilos: 🎲 Variado, 🍲 Cuchara, 🥘 Arroces, 🍝 Pasta, 🥩 Carne, 🐟 Pescado, 🥗 Ligero y 🥡 Táper (platos que aguantan bien para llevar).', '⚡ Nuevo interruptor «Tengo poco tiempo»: se combina con cualquier estilo y todo se hace en menos de 20 minutos.']],
   ['5.1.0', ['🍲 «¿Qué como?» con cocina de casa: en la comida y la cena elige qué te apetece (🎲 Variado, 🍲 De cuchara, 🥘 Arroces o ⚡ Rápido). En «Variado», a mediodía siempre hay un plato de cuchara o un arroz (lentejas, potaje, estofado, cocido, paella, arroz caldoso…), y por la noche, cenas ligeras pero variadas.', 'Los guisos se cocinan para varios: ves tu ración, la receta es para la olla entera y la lista de la compra sale ya multiplicada.', 'Más variedad: no repite lo que has comido estos días y no todo es pollo. El Coach también propone más cocina casera.']],
