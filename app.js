@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.0.5';
+const APP_VERSION = '5.0.6';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -2521,7 +2521,7 @@ function renderReport(r, open) {
     <summary class="flex items-center justify-between cursor-pointer gap-2"><span class="text-xs font-bold truncate">${esc(fmtDate(r.date))} · ${esc(r.ai?.titular || 'Resumen de datos')}</span><span class="tri"></span></summary>
     <div class="flex flex-wrap gap-1 mt-2">${chips.map(c => `<span class="text-[10px] bg-panel border border-line rounded-full px-2 py-0.5 text-slate-300">${c}</span>`).join('')}</div>
     ${r.ai ? `${list('✅', r.ai.bien)}${list('⚠️', r.ai.mejorar)}
-      ${r.ai.acciones?.length ? `<div class="mt-2 text-[11px] font-bold text-brand uppercase tracking-wider">Próxima semana</div>${list('🎯', r.ai.acciones)}` : ''}`
+      ${r.ai.acciones?.length ? `<div class="mt-2 text-[11px] font-bold text-brand uppercase tracking-wider">Próxima semana</div>${list('🎯', r.ai.acciones)}` : ''}${medNote('mt-2')}`
       : `<p class="text-[11px] text-mute mt-2">${d.ejercicios_que_suben.length ? `Suben: ${esc(d.ejercicios_que_suben.join(', '))}. ` : ''}${d.ejercicios_estancados_segun_coach.length ? `Estancados: ${esc(d.ejercicios_estancados_segun_coach.join(', '))}.` : ''}</p>`}
   </details>`;
 }
@@ -4784,7 +4784,7 @@ function renderProgress() {
       <div class="flex justify-between gap-2 text-[11px] text-mute"><span class="shrink-0">Peso <span class="opacity-70">· línea = tendencia</span></span><span class="text-right">${wt.last ? `<b class="text-white">${fmtNum(Math.round(wt.last.y * 10) / 10)} kg</b>${wt.ready ? ` · ${wt.kgWeek > 0 ? '+' : wt.kgWeek < 0 ? '−' : ''}${fmtNum(Math.abs(wt.kgWeek))} kg/sem` : ''}` : ''}</span></div>
       ${lineChart(wPts, { color: '#00d2df', unit: ' kg', label: 'el peso', trend: wt.trend.length >= 2 ? wt.trend.map(t => ({ x: t.x, y: Math.round(t.y * 10) / 10 })) : null })}
       ${wt.spike ? `<div class="coach coach-hold mt-2"><div class="font-bold text-xs">${wt.spike > 0 ? '↗️' : '↘️'} Hoy ${wt.spike > 0 ? '+' : '−'}${fmtNum(Math.abs(wt.spike))} kg sobre tu tendencia</div><p class="text-xs mt-1 opacity-90 leading-relaxed">${wt.spike > 0 ? 'Es un pico de un día: casi seguro agua y glucógeno (más hidratos o sal, entreno intenso, ciclo, poco descanso, digestión). No es grasa: 1 kg de grasa son ~7.700 kcal. Sigue registrando: la tendencia lo absorbe.' : 'Bajada de un día: suele ser agua (menos hidratos o sal, más sudor). No cuenta como grasa perdida; mira la tendencia.'}</p></div>` : ''}
-      ${wPts.length ? `<div class="coach ${wt.tone === 'warn' ? 'coach-stall' : wt.tone === 'ok' ? 'coach-up' : 'coach-hold'} mt-2"><div class="font-bold text-xs">⚖️ ${esc(wt.title)}</div>${wt.lines.map(l => `<p class="text-xs mt-1 opacity-90 leading-relaxed">${esc(l)}</p>`).join('')}</div>` : ''}
+      ${wPts.length ? `<div class="coach ${wt.tone === 'warn' ? 'coach-stall' : wt.tone === 'ok' ? 'coach-up' : 'coach-hold'} mt-2"><div class="font-bold text-xs">⚖️ ${esc(wt.title)}</div>${wt.lines.map(l => `<p class="text-xs mt-1 opacity-90 leading-relaxed">${esc(l)}</p>`).join('')}</div>${medNote('mt-1.5')}` : ''}
       <p class="text-[11px] text-mute mt-2 leading-snug">📌 Pésate en las mismas condiciones: al levantarte, después del baño y antes de comer. La cintura, una vez por semana a la altura del ombligo.</p>
     </div>
     <div>
@@ -5664,12 +5664,15 @@ function suggestedTargets(p = profileOf()) {
 }
 const tgtSig = t => `${Math.round(t.kcal / 50)}|${Math.round(t.prot / 5)}`; // si decides mantener los tuyos, no se vuelve a avisar hasta que la propuesta cambie
 function targetsOff(t) { const st = state.settings; return !!t && st.tgtKeep !== tgtSig(t) && (Math.abs(st.targetKcal - t.kcal) / t.kcal > 0.12 || Math.abs(st.targetProt - t.prot) / t.prot > 0.15); }
+const MED_NOTE = 'Información orientativa. No sustituye el consejo de un profesional sanitario: ante cualquier duda de salud, consulta con tu médico.';
+const medNote = (cls = '') => `<p class="med-note ${cls}">🩺 ${MED_NOTE}</p>`;
 function targetsModal(t, why = '') {
   const st = state.settings, cell = (l, a, b) => `<div><div class="text-[10px] text-mute">${l}</div><div class="text-[12px] text-mute line-through">${a}</div><div class="text-lg font-black ${a === b ? '' : 'text-brand'}">${b}</div></div>`;
   openModal(`<h3 class="modal-title">🎯 Tus objetivos</h3>
     <p class="text-[13px] leading-snug">${why || 'Con tu perfil actual te corresponderían estos objetivos.'} <span class="text-mute">Calculados con tu último peso (${fmtNum(latestWeight())} kg) y tu actividad.</span></p>
     <div class="card p-3 grid grid-cols-4 gap-1 text-center">${cell('kcal', st.targetKcal, t.kcal)}${cell('proteína', `${st.targetProt} g`, `${t.prot} g`)}${cell('hidratos', `${st.targetCarbs} g`, `${t.carbs} g`)}${cell('grasa', `${st.targetFat} g`, `${t.fat} g`)}</div>
     <p class="text-[11px] text-mute">Son orientativos: si en 2–3 semanas el peso no va como esperas, la app te propondrá ajustarlos.</p>
+    ${medNote()}
     <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="keep" type="button">Mantener los míos</button><button class="btn-primary" data-mact="apply" type="button">Aplicar</button></div>`, {
     keep: () => { st.tgtKeep = tgtSig(t); persist(); closeModal(); render(); toast('Mantienes tus objetivos'); },
     apply: () => { Object.assign(st, { targetKcal: t.kcal, targetProt: t.prot, targetCarbs: t.carbs, targetFat: t.fat }); persist(); closeModal(); render(); toast('Objetivos actualizados ✓'); }
@@ -5916,6 +5919,7 @@ function profileModal(after) {
       <div class="flex gap-2"><input class="field flex-1 min-w-0" name="email" type="email" inputmode="email" autocomplete="email" placeholder="tucorreo@gmail.com" value="${esc(draft.email)}" /></div>
       ${draft.email ? '' : gBtn()}
       <p class="text-[10px] text-mute leading-snug">${EMAIL_NOTICE}</p>${contactBtn('Contacto', 'contact-sm mt-2')}</div>
+    ${medNote()}
     <button class="btn-primary w-full" data-mact="save" type="button">Guardar</button>`;
   const keep = root => { draft.name = mval(root, 'name').trim(); draft.birth = mval(root, 'birth'); draft.height = mval(root, 'height').replace(/\D/g, ''); draft.email = mval(root, 'email').trim().toLowerCase(); };
   const handlers = {
@@ -6189,6 +6193,7 @@ function chatBodyHTML() {
     <div class="text-center mt-2"><div class="text-4xl">💬</div>
       <p class="text-sm text-mute mt-2 leading-relaxed">Pregúntame lo que quieras sobre tu entreno o tu dieta. Leo tu plan, tus últimas sesiones, lo que llevas comido y tu peso.</p></div>
     <div class="flex flex-col gap-2 mt-4">${CHAT_CHIPS.map((q, i) => `<button class="chat-chip" data-mact="chip" data-i="${i}" type="button">${esc(q)}</button>`).join('')}</div>
+    ${medNote('chat-med mt-4 text-center')}
     ${chatHistoryHTML()}`;
   return c.msgs.map((m, i) => m.role === 'user'
     ? `<div class="chat-me">${esc(m.text)}</div>`
@@ -6479,6 +6484,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.0.6', ['🩺 Aviso sanitario discreto en Perfil, propuesta de objetivos, análisis del peso, resumen semanal y pantalla inicial del coach: la información es orientativa y no sustituye a un profesional sanitario.'], 'quiet'],
   ['5.0.5', ['Usuarios más fáciles de tocar: filas con relleno, más separadas y con una franja de color según el estado (rojo caducado, ámbar caduca pronto, cian DÚO, verde Free).', 'La fila que tocas se ilumina un instante antes de abrir su ficha.'], 'admin'],
   ['5.0.4', ['Nuevo código: abre en «1 mes» y se ve desde el principio si es Individual o DÚO. El plan «Prueba» ya no se ofrece, porque la prueba de 7 días es automática.', '📅 En «Renovar o cambiar», nuevo enlace para corregir la fecha de fin si te equivocas: quita o suma días sin anotar ningún pago.', 'El botón 👥 sale en la cabecera desde el primer momento al abrir la app.'], 'admin'],
   ['5.0.3', ['👥 Nuevo botón en la cabecera para ir directo a Usuarios. El PIN vale para toda la sesión: hasta cerrar la app o 15 minutos sin tocar nada de Acceso.', 'Lista más clara: una línea por persona (o por DÚO), «Requieren atención» arriba, buscador y filtros fijos, y filtro «🟢 Hoy» con quién ha usado la app hoy.', 'Al tocar a alguien se abre su ficha con botones grandes: renovar, recordar la renovación, nombre, código nuevo, beta, ocultar nombre y quitar acceso.'], 'admin'],
