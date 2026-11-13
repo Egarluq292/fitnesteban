@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.3.0';
+const APP_VERSION = '5.2.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4069,8 +4069,7 @@ function renderDiet() {
   else if (leftP > 0 && leftK > 0) advice = `Llevas ${Math.round(t.kcal)} kcal y ${Math.round(t.prot)} g de proteína consumidas.${cardioTxt} Te quedan ${leftK} kcal y ${leftP} g de proteína. ${protFirst() ? 'Prioriza la proteína' : 'Completa con algo de proteína y verdura'}: ${protFoods(leftP > 40)}.`;
   else if (leftP > 0) advice = `Llevas ${Math.round(t.kcal)} kcal consumidas.${cardioTxt} Calorías cubiertas pero faltan ${leftP} g de proteína${protFirst() ? `: tira de fuentes magras (${protFoods(true)})` : '. Si te apetece algo más, que lleve proteína'}.`;
   else if (leftK >= 0) advice = `Llevas ${Math.round(t.kcal)} kcal consumidas.${cardioTxt} Proteína cumplida ✓. Margen: ${leftK} kcal.`;
-  else advice = canBeta() ? `Llevas ${Math.round(t.kcal)} kcal consumidas.${cardioTxt} Hoy vas ${-leftK} kcal por encima de tu objetivo. Un día así no estropea la semana: mañana, a tu ritmo normal, sin compensar.`
-    : `Llevas ${Math.round(t.kcal)} kcal consumidas.${cardioTxt} Te has pasado ${-leftK} kcal. Sin drama: mañana vuelve a tu objetivo, no compenses de más.`;
+  else advice = `Llevas ${Math.round(t.kcal)} kcal consumidas.${cardioTxt} Te has pasado ${-leftK} kcal. Sin drama: mañana vuelve a tu objetivo, no compenses de más.`;
 
   const typeChips = MEAL_TYPES.map(tp => `<button class="chip chip-sm meal-chip ${ui.mealType === tp ? 'chip-on' : ''}" data-act="mealType" data-type="${tp}" type="button">${tp}</button>`).join('');
   const hasHistory = Object.keys(state.meals).length > 0;
@@ -4100,13 +4099,13 @@ function renderDiet() {
         <span class="block text-[11px] font-mono mt-0.5">${macroLine(m)}</span></span><span class="text-mute text-lg leading-none">⋯</span></button>`).join('')}
       ${!items.length && yd.length ? `<button class="d2-add-empty" data-act="repeatYday" data-type="${tp}" type="button">↻ Repetir el de ayer <span class="text-mute font-normal">· ${esc(yd.map(m => m.desc).join(' + ').slice(0, 38))}</span></button>` : ''}
     </div>`;
-  }).join('') + (canBeta() ? `<button class="d2-add-empty d2-add-otro" data-act="outMeal" type="button">🍽️ Comida fuera o copas</button>` : '');
+  }).join('');
 
   const over = leftK < 0;
   const hint = !mealsOf(date).length ? (isToday ? 'Aún no has registrado nada hoy. Toca ＋ en la comida que toque.' : 'Sin comidas registradas este día.')
     : leftP > 0 && leftK > 0 ? `${protFirst() ? 'Prioriza la proteína' : 'Completa con proteína y verdura'}: ${protFoods(leftP > 40)}.`
     : leftP > 0 ? (protFirst() ? 'Calorías cubiertas: si comes algo más, que sea proteína magra.' : 'Calorías cubiertas ✓ Vas bien.')
-    : leftK >= 0 ? 'Proteína cumplida ✓ Vas muy bien.' : canBeta() ? 'Un día alto no estropea una semana ordenada. Mañana, a tu ritmo normal, sin compensar.' : 'Te has pasado. Sin drama: mañana vuelve a tu objetivo, no compenses.';
+    : leftK >= 0 ? 'Proteína cumplida ✓ Vas muy bien.' : 'Te has pasado. Sin drama: mañana vuelve a tu objetivo, no compenses.';
 
   return `
   <div class="flex items-center justify-between">
@@ -4121,7 +4120,7 @@ function renderDiet() {
   <section class="card p-4 mt-3">
     ${ringsCard(t, st, budget, st.eatBackCardio && burned > 0)}
     <div class="grid grid-cols-2 gap-2 mt-4">
-      <div class="d2-left"><div class="d2-left-l">${over ? (canBeta() ? 'Hoy, por encima' : 'Te has pasado') : 'Te quedan'}</div><div class="d2-left-v ${over && !canBeta() ? 'text-rose-300' : MAC.kcal.text}">${over && canBeta() ? '+' : ''}${Math.abs(leftK)}<span> kcal</span></div></div>
+      <div class="d2-left"><div class="d2-left-l">${over ? 'Te has pasado' : 'Te quedan'}</div><div class="d2-left-v ${over ? 'text-rose-300' : MAC.kcal.text}">${Math.abs(leftK)}<span> kcal</span></div></div>
       <div class="d2-left"><div class="d2-left-l">${leftP > 0 ? 'Proteína que falta' : 'Proteína'}</div><div class="d2-left-v ${MAC.prot.text}">${leftP > 0 ? `${leftP}<span> g</span>` : '✓<span> cumplida</span>'}</div></div>
     </div>
     ${isToday && mealsOf(date).length && (leftK > 60 || qcProtMode(qcLeft())) ? `<button class="qc-btn ${MAC.kcal.text}" data-act="queComo" type="button">¿Qué como?</button>` : `<p class="text-xs text-mute mt-2.5 leading-relaxed">${esc(hint)}</p>`}
@@ -4176,56 +4175,6 @@ function macroStackBar(t, h, state2 = 'ok') {
   // apagada = te quedas corto · normal = en tu objetivo · con tope rojo = te pasas
   return `<span class="d2-bar d2-stack ${state2 === 'short' ? 'd2-short' : state2 === 'over' ? 'd2-over' : ''}" style="height:${h}%">${state2 === 'over' ? '<span style="display:block;height:3px;flex:none;background:#f43f5e"></span>' : ''}${seg(c, MAC.carbs.hex)}${seg(f, MAC.fat.hex)}${seg(p, MAC.prot.hex)}</span>`;
 }
-/* 🧪 Balance de la semana (lunes a domingo de la fecha elegida): solo cuentan los días con comidas apuntadas */
-function weekBalanceHTML(sel) {
-  const st = state.settings, T = todayISO(), dow = (parseISO(sel).getDay() + 6) % 7, mon = addDays(sel, -dow);
-  const days = Array.from({ length: 7 }, (_, i) => addDays(mon, i)).filter(d => d <= T && mealsOf(d).length);
-  if (!days.length || !st.targetKcal) return '';
-  const diff = Math.round(days.reduce((a, d) => a + totalsOf(d).kcal - st.targetKcal, 0)), n = days.length;
-  const [txt, cls] = Math.abs(diff) <= 150 ? ['vas en tu objetivo', 'text-emerald-300']
-    : diff < 0 ? [`${fmtNum(-diff)} kcal por debajo de tu objetivo`, 'text-emerald-300']
-    : [`${fmtNum(diff)} kcal por encima de tu objetivo (unas ${fmtNum(Math.round(diff / n))} al día)`, 'text-amber-300'];
-  return `<div class="mt-2 mx-1 mb-1 rounded-xl bg-white/5 px-3 py-2"><div class="text-[11px] text-mute">Esta semana · ${n} ${n === 1 ? 'día apuntado' : 'días apuntados'}</div>
-    <div class="text-sm font-bold ${cls}">${txt}</div>${diff > 150 ? '' : '<div class="text-[10px] text-mute mt-0.5">Un día alto no estropea una semana ordenada.</div>'}</div>`;
-}
-
-/* 🧪 Comida fuera y copas: estimación en dos toques, sin pesar nada */
-const OUT_MEAL = [['Ligera', 600], ['Normal', 1000], ['Copiosa', 1500]];
-const OUT_DRINK = [['Copa con refresco zero o tónica light', 'copa con zero', 'copas con zero', 120, 0], ['Copa con refresco normal', 'copa con refresco', 'copas con refresco', 200, 20], ['Cerveza (tercio o caña doble)', 'cerveza', 'cervezas', 140, 11], ['Copa de vino', 'copa de vino', 'copas de vino', 120, 4]];
-function outMealModal() {
-  const h = new Date().getHours(), sel = { meal: -1, drink: 0, n: 0, type: h < 17 && h >= 12 ? 'Comida' : h >= 20 || h < 5 ? 'Cena' : 'Otro' };
-  const chip = (act, i, on, txt) => `<button class="chip chip-sm ${on ? 'chip-on' : ''}" data-mact="${act}" data-i="${i}" type="button">${txt}</button>`;
-  const draw = root => {
-    root.querySelectorAll('[data-mact=meal]').forEach(b => b.classList.toggle('chip-on', +b.dataset.i === sel.meal));
-    root.querySelectorAll('[data-mact=drink]').forEach(b => b.classList.toggle('chip-on', +b.dataset.i === sel.drink));
-    root.querySelectorAll('[data-mact=type]').forEach(b => b.classList.toggle('chip-on', b.dataset.i === sel.type));
-    root.querySelector('#outN').textContent = sel.n;
-    const k = (sel.meal >= 0 ? OUT_MEAL[sel.meal][1] : 0) + sel.n * OUT_DRINK[sel.drink][3];
-    root.querySelector('#outTot').textContent = k ? `≈ ${fmtNum(k)} kcal` : 'Elige la comida, las bebidas o las dos';
-  };
-  openModal(`<h3 class="modal-title">🍽️ Comida fuera y copas</h3>
-    <p class="text-xs text-mute">Una estimación aproximada, sin pesar nada. Si sabes la cifra exacta, luego puedes editarla.</p>
-    <div class="lbl">Comida</div><div class="flex flex-wrap gap-1.5">${OUT_MEAL.map(([n, k], i) => chip('meal', i, false, `${n} · ${fmtNum(k)}`)).join('')}</div>
-    <div class="flex flex-wrap gap-1.5">${['Comida', 'Cena', 'Otro'].map(t => chip('type', t, t === sel.type, t)).join('')}</div>
-    <div class="lbl">Bebidas</div><div class="flex flex-wrap gap-1.5">${OUT_DRINK.map((d, i) => chip('drink', i, i === 0, `${d[0]} · ${d[3]}`)).join('')}</div>
-    <div class="flex items-center justify-center gap-4"><button class="iconbtn" data-mact="less" type="button" aria-label="Una menos">−</button><span class="text-2xl font-black w-10 text-center" id="outN">0</span><button class="iconbtn" data-mact="more" type="button" aria-label="Una más">＋</button></div>
-    <div class="text-center font-bold ${MAC.kcal.text}" id="outTot">Elige la comida, las bebidas o las dos</div>
-    <button class="btn-primary w-full" data-mact="ok" type="button">Añadir</button>`, {
-    meal: (root, b) => { sel.meal = sel.meal === +b.dataset.i ? -1 : +b.dataset.i; draw(root); },
-    type: (root, b) => { sel.type = b.dataset.i; draw(root); },
-    drink: (root, b) => { sel.drink = +b.dataset.i; draw(root); },
-    more: root => { sel.n = Math.min(15, sel.n + 1); draw(root); },
-    less: root => { sel.n = Math.max(0, sel.n - 1); draw(root); },
-    ok: () => {
-      if (sel.meal < 0 && !sel.n) return toast('Elige la comida o las bebidas', 'warn');
-      const date = ui.dietDate;
-      if (sel.meal >= 0) { const [n, k] = OUT_MEAL[sel.meal]; addMeal(date, { type: sel.type, desc: `Comida fuera (${n.toLowerCase()}, aprox.)`, kcal: k, prot: k * 0.2 / 4, carbs: k * 0.45 / 4, fat: k * 0.35 / 9 }); }
-      if (sel.n) { const d = OUT_DRINK[sel.drink]; addMeal(date, { type: 'Otro', desc: `${sel.n} ${sel.n === 1 ? d[1] : d[2]} (aprox.)`, kcal: sel.n * d[3], carbs: sel.n * d[4] }); }
-      closeModal(); render(); toast('Apuntado ✓ Si sabes la cifra exacta, toca la entrada y edítala.');
-    }
-  });
-}
-
 /* Franja de 7 días: barra = kcal frente al objetivo; punto = proteína cumplida */
 function weekStripHTML(sel) {
   const st = state.settings, T = todayISO();
@@ -4234,19 +4183,19 @@ function weekStripHTML(sel) {
   const cells = days.map(d => {
     const t = totalsOf(d), has = mealsOf(d).length > 0;
     const pct = has ? Math.min(1.25, t.kcal / (st.targetKcal || 1)) : 0;
-    const soft = canBeta(), hi = pct > 1.1 && !soft;
+    const cls = !has ? '' : pct > 1.1 ? 'bg-rose-400' : pct >= 0.85 ? 'bg-amber-300' : 'bg-amber-300/50';
     const pOk = has && t.prot >= st.targetProt * 0.9;
     return `<button class="d2-day ${d === sel ? 'd2-day-on' : ''}" data-act="dietGo" data-date="${d}" type="button" aria-label="${esc(fmtDate(d))}">
-      <span class="d2-kc"${has && hi ? ' style="color:#fda4af"' : ''}>${has ? Math.round(t.kcal) : ''}</span>
-      <span class="d2-barbox"><span class="d2-goal"></span>${has ? macroStackBar(t, Math.max(6, Math.round(pct / 1.25 * 100)), hi ? 'over' : pct >= 0.85 || d === T ? 'ok' : 'short') : ''}</span>
+      <span class="d2-kc"${has && pct > 1.1 ? ' style="color:#fda4af"' : ''}>${has ? Math.round(t.kcal) : ''}</span>
+      <span class="d2-barbox"><span class="d2-goal"></span>${has ? macroStackBar(t, Math.max(6, Math.round(pct / 1.25 * 100)), pct > 1.1 ? 'over' : pct >= 0.85 || d === T ? 'ok' : 'short') : ''}</span>
       <span class="d2-dot ${pOk ? 'd2-dot-on' : ''}"></span>
       <span class="d2-dl">${DAY_LETTER[parseISO(d).getDay()]}</span></button>`;
   }).join('');
   return `<section class="card px-3 pt-3 pb-2 mt-3">
     <div class="flex items-center justify-between px-1"><h3 class="text-[11px] font-bold uppercase tracking-wider text-mute">Últimos 7 días</h3>
       <span class="text-[10px] text-mute">${['prot', 'fat', 'carbs'].map(k => `<span class="inline-block w-2 h-2 rounded-sm align-middle" style="background:${MAC[k].hex}"></span> ${MAC[k].short}`).join(' ')} · <span class="d2-dot d2-dot-on !inline-block align-middle"></span> prot. ✓</span></div>
-      <p class="text-[10px] text-mute mt-1">${canBeta() ? 'Apagada: te quedas corto · viva: en tu objetivo o por encima (la raya es tu objetivo)' : 'Apagada: te quedas corto · viva: en tu objetivo · tope rojo: te pasas'}</p>
-    <div class="grid grid-cols-7 gap-1 mt-2">${cells}</div>${canBeta() ? weekBalanceHTML(sel) : ''}</section>`;
+      <p class="text-[10px] text-mute mt-1">Apagada: te quedas corto · viva: en tu objetivo · tope rojo: te pasas</p>
+    <div class="grid grid-cols-7 gap-1 mt-2">${cells}</div></section>`;
 }
 function mealMenu(id) {
   const date = ui.dietDate, m = mealsOf(date).find(x => x.id === id); if (!m) return;
@@ -6585,7 +6534,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
-  ['5.3.0', ['🧪 Acceso anticipado · Dieta sin culpa: el día que te pasas sale «Hoy, por encima +X kcal» sin rojo, y debajo de los 7 días aparece el balance de la semana (lunes a domingo, solo días apuntados).', '🧪 Nuevo botón «🍽️ Comida fuera o copas»: comida ligera, normal o copiosa y copas según el tipo (con zero, con refresco normal, cerveza o vino), en dos toques y editable después.'], 'admin'],
+  ['5.2.1', ['🧍 Nuevas animaciones 3D: Prensa de piernas, Curl en polea y Curl martillo en polea con cuerda, cada una con sus 3 claves.', 'Pulsa el botón 3D del ejercicio en tu entreno o en la lista de ejercicios del bloque.']],
   ['5.2.0', ['👣 Nuevo: Pasos. Apúntalos desde la tarjeta Progreso de Inicio, escribiendo el número o con una captura del reloj o del móvil (hoy o ayer), y ponte una meta si quieres.', '🎯 Para qué sirven: la app usa tu media de pasos para comprobar si el nivel de actividad de tu perfil es el correcto. Si no encaja, te avisa en Progreso → Pasos y lo ajusta por ti con un toque, y con él tus calorías (tú decides si las aplicas).', 'Los pasos no restan calorías del día: eso ya lo tiene en cuenta tu objetivo. Las caminatas que haces como ejercicio, en Cardio como siempre.']],
   ['5.1.5', ['🔥 Dieta: toca la línea «Cardio · Neto» (ⓘ) para ver qué significa cada número y por qué «Te quedan» no suma lo que quemas.'], 'quiet'],
   ['5.1.4', ['Usuarios: arreglada la versión que salía como una fecha («Sun Jan 05 2003…»). Google convertía «5.1.3» en el 5 de enero de 2003; ahora la app la manda como «v5.1.4» y recupera las que ya estaban convertidas.', '«Desactualizada» solo sale si van una versión MENOR por detrás (5.0 frente a 5.1), y en tu fila sale siempre la versión que tienes abierta. Los dispositivos ya no se cortan con «…».'], 'admin'],
@@ -7348,6 +7297,7 @@ function man3dStop() { try { man3dMod?.stop(); } catch { /* nada */ } }
    Máquinas, poleas y superseries («+»): sin animación (se quedan con YouTube). El material sale del nombre. */
 const GYM3D_MAP = [
   [/extensi[oó]n de (cu[aá]driceps|piernas)|leg extension/i, 'legext'], [/curl femoral sentado/i, 'legcs'], [/curl femoral (tumbado|acostado)/i, 'legcl'],
+  [/^prensa( de piernas)?( con (los )?pies altos)?$/i, 'press'], [/curl martillo.*(polea|cuerda)/i, 'curlhc'], [/^curl (de b[ií]ceps )?en polea( baja)?( con barra)?$/i, 'curlc'],
   [/aperturas?.*inclinad/i, 'fly'], [/^aperturas? (con mancuernas|en banco plano)/i, 'flyf'], [/^extensi[oó]n (de tr[ií]ceps )?en polea( con cuerda)?$/i, 'pushd'],
   [/m[aá]quina|polea|prensa|smith|multipower|jal[oó]n|contractora|cable|pec ?deck|hack|extensi[oó]n de cu[aá]driceps|curl femoral|curl n[oó]rdico|\+|gemelos sentado|pica|sissy|thruster|hiperextensi|patada|p[aá]jaro|apertura|abducci|aducci|paseo lateral|clean/i, null],
   [/martillo/i, 'curlh'], [/curl concentrado/i, 'curlconc'], [/curl (en banco )?inclinado|curl inclinado/i, 'curlinc'],
@@ -7377,6 +7327,9 @@ function gym3dOf(name) {
 
 /* 💡 Las 3 claves de cada movimiento (texto propio): se leen antes de empezar y se cuida una en cada serie */
 const GYM3D_CUES = {
+  press: ['Espalda y cadera pegadas al respaldo, y agárrate a las asas', 'Pies a la anchura de la cadera en el centro de la plataforma; rodillas en la línea de los pies', 'Baja sin que la cadera se despegue del asiento y empuja con todo el pie, sin bloquear las rodillas arriba'],
+  curlc: ['Codos pegados al cuerpo y quietos: solo se mueven los antebrazos', 'Sube hasta la altura del pecho sin echar el cuerpo hacia atrás', 'Baja despacio hasta estirar casi del todo: que la polea no te arrastre'],
+  curlhc: ['Agarra la cuerda con las palmas enfrentadas y los codos pegados al cuerpo', 'Sube sin girar las muñecas, hasta la altura del pecho', 'Baja despacio y controlado, sin balancear el cuerpo'],
   legcs: ['Rodilla alineada con el eje y el rodillo justo encima del talón', 'Baja el rodillo doblando la rodilla, sin despegar la cadera del asiento', 'Vuelve despacio, sin dejar que el peso te estire de golpe'],
   legcl: ['Cadera pegada al banco todo el rato', 'Rodilla justo fuera del banco y el rodillo encima del talón', 'Sube hasta 90° o más y baja despacio, sin rebotar'],
   legext: ['Espalda pegada al respaldo y agárrate a las asas', 'Rodilla alineada con el eje de la máquina y el rodillo sobre el tobillo', 'Sube hasta estirar casi del todo, aguanta 1 s y baja despacio'],
@@ -8037,7 +7990,6 @@ const actions = {
   addFor: b => { ui.mealType = b.dataset.type; ui.addOpen = true; ui.mealSearch = ''; render(); setTimeout(() => $('#mealCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30); },
   addClose: () => { ui.addOpen = false; ui.aiResult = null; ui.editing = null; ui.img = null; render(); },
   dietGo: b => { if (dietPending()) return toast('Termina o cierra la comida que estás añadiendo', 'warn'); ui.dietDate = b.dataset.date; ui._animRings = true; render(); },
-  outMeal: () => outMealModal(),
   repeatYday: b => {
     const tp = b.dataset.type, src = mealsOf(addDays(ui.dietDate, -1)).filter(m => (m.type || 'Otro') === tp);
     src.forEach(m => { const c = clone(m); delete c.id; addMeal(ui.dietDate, c); });

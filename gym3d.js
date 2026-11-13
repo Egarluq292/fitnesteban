@@ -44,7 +44,9 @@ function build() {
   // rodillo acolchado de las máquinas de pierna (extensión de cuádriceps)
   const roller = sh(new T.Mesh(new T.CylinderGeometry(.065, .065, .42, 20), new T.MeshStandardMaterial({ color: 0x1f2937, roughness: .9 }))); roller.rotation.z = Math.PI / 2; roller.visible = false; S.add(roller);
   const lever = sh(new T.Mesh(new T.CylinderGeometry(.018, .018, 1, 10), STEEL)); lever.visible = false; S.add(lever);
-  return { S, root, B, bag, prop, bar, dbs, kb, straps, roller, lever };
+  // plataforma de la prensa: se mueve con los pies por el carril
+  const sled = new T.Group(); { const pl = sh(new T.Mesh(new T.BoxGeometry(.62, .5, .05), new T.MeshStandardMaterial({ color: 0x475569, roughness: .7, metalness: .3 }))); sled.add(pl); for (const x of [-.4, .4]) { const pin = cyl(.018, .16, STEEL); pin.position.set(x, -.12, .07); sled.add(pin); for (const o of [0, .045]) { const d2 = cyl(.12, .038, PLATE); d2.position.set(x + Math.sign(x) * (.05 + o), -.12, .07); sled.add(d2); } } } sled.visible = false; S.add(sled);
+  return { S, root, B, bag, prop, bar, dbs, kb, straps, roller, lever, sled };
 }
 let W = null;
 /* Poses: ángulos en grados. hip/knee/sh/el por lado con sufijo L/R si son distintos. ground: puntos que tocan el suelo. */
@@ -115,6 +117,9 @@ const P = {
   legext: { cam: [3.4, 1.2, .55], pin: ['pelvis', [0, .58, 0]], base: { rootX: -12, hip: 100, neck: 0, sh: -8, shAb: 22, el: 12 }, a: { knee: 88 }, b: { knee: 4 }, incline: 'back', roller: true, seatT: true },
   legcs: { cam: [3.4, 1.2, .55], pin: ['pelvis', [0, .58, 0]], base: { rootX: -12, hip: 100, neck: 0, sh: -8, shAb: 22, el: 12 }, a: { knee: 6 }, b: { knee: 95 }, incline: 'back', roller: 'back', seatT: true },
   legcl: { cam: [3.6, 1.3, .45], pin: ['pelvis', [0, .62, 0]], base: { rootX: 90, hip: 12, neck: -35, sh: 150, shAb: 22, el: 45 }, a: { knee: 3 }, b: { knee: 112 }, roller: 'back', pad: ['neck', 'knL'] },
+  press: { cam: [3.1, 1.3, .6], ang: 1.0, pin: ['pelvis', [0, .48, -.45]], base: { rootX: -48, spine: 0, neck: 8, sh: -4, shAb: 24, el: 18, hip: 118, knee: 105, hipAb: 4 }, a: { slide: 0 }, b: { slide: .34 }, sled: 42, fix: ['anL', 'anR'], incline: 'back' },
+  curlc: { cam: [4, 1.35, .85], ang: .55, base: { knee: 6, hip: 4, spine: 4, shAb: 0 }, a: { el: 6, sh: 0 }, b: { el: 135, sh: 8 }, strap: [0, .14, .55], tower: [0, .62], handle: true },
+  curlhc: { cam: [4, 1.35, .85], ang: .55, base: { knee: 6, hip: 4, spine: 4, shAb: 4 }, a: { el: 6, sh: 0 }, b: { el: 135, sh: 8 }, strap: [0, .14, .55], tower: [0, .62] },
   pushd: { cam: [3.6, 1.5, 1.2], base: { spine: 12, hip: 8, knee: 8, neck: -6, sh: 6, shAb: 8 }, a: { el: 100 }, b: { el: 4 }, strap: [0, 1.95, .5], tower: [0, .62] },
   csrow: { base: { rootX: 55, hip: 50, knee: 15, neck: -10 }, a: { sh: 55, el: 0, shAb: 6 }, b: { sh: -15, el: 100, shAb: 18 }, db: true, incline: 'front' },
   benchc: { base: { rootX: -90, hip: 8, knee: 92, neck: 0 }, a: { sh: 90, el: 0, shAb: 0 }, b: { sh: 12, shAb: 5, el: 112 }, ground: ['anL', 'anR'], bench: [.4, .45, 1.3, 0, -.45], bar: 'hands' },
@@ -173,6 +178,14 @@ function apply(p, ex) {
     for (const k of SIDES) { const sp = new T.Vector3(); B['sh' + k].getWorldPosition(sp); const tgt = sp.clone().add(new T.Vector3(sp.x, A.y, A.z).sub(sp).normalize().multiplyScalar(reach)); ikTo('hd' + k, tgt); }
   }
   if (FIX) for (const j of ex.fix || []) if (FIX[j]) ikTo(j, FIX[j]);
+  if (ex.sled && FIX?.anL) { // prensa: los pies empujan la plataforma por un carril inclinado; la planta siempre pegada a ella
+    const u = new T.Vector3(0, Math.sin(ex.sled * d), Math.cos(ex.sled * d)), up = new T.Vector3(0, u.z, -u.y), sl = p.slide || 0;
+    for (const j of ['anL', 'anR']) ikTo(j, FIX[j].clone().addScaledVector(u, sl));
+    const qf = new T.Quaternion().setFromRotationMatrix(new T.Matrix4().makeBasis(new T.Vector3(1, 0, 0), u.clone().negate(), up)), qp = new T.Quaternion();
+    for (const j of ['anL', 'anR']) { B[j].parent.getWorldQuaternion(qp); B[j].quaternion.copy(qp.invert().multiply(qf)); B[j].updateMatrixWorld(true); }
+    const c = FIX.anL.clone().add(FIX.anR).multiplyScalar(.5).addScaledVector(u, sl + .085).addScaledVector(up, .06);
+    W.sled.position.copy(c); W.sled.quaternion.setFromRotationMatrix(new T.Matrix4().makeBasis(new T.Vector3(1, 0, 0), up, u)); W.sled.visible = true;
+  } else if (W.sled) W.sled.visible = false;
   if (ex.flat) { const qr = new T.Quaternion(), qp = new T.Quaternion(); root.getWorldQuaternion(qr); for (const j of ex.flat) { B[j].parent.getWorldQuaternion(qp); B[j].quaternion.copy(qp.invert().multiply(qr)); B[j].updateMatrixWorld(true); } } // pie plano: ni punta ni talón se levantan
   if (ex.anchor && ex.Ls) { const A = anchorOf(ex); W.straps.forEach((m, i) => { const h = new T.Vector3(); B[i ? 'hdR' : 'hdL'].getWorldPosition(h); seg(m, h, new T.Vector3(h.x * .3, A.y, A.z)); }); }
   else if (ex.roller) W.straps.forEach(m => { m.visible = false; });
@@ -182,7 +195,8 @@ function apply(p, ex) {
     k.add(k2).multiplyScalar(.5); a.add(a2).multiplyScalar(.5); const u = a.clone().sub(k).normalize(), fr = new T.Vector3(0, u.z, -u.y).multiplyScalar(ex.roller === 'back' ? -1 : 1); // 'back': detrás del tobillo (curl femoral)
     const rp = a.clone().addScaledVector(u, -.07).addScaledVector(fr, .1); W.roller.position.copy(rp); W.roller.visible = true;
     const piv = k.clone().addScaledVector(fr, .02); piv.x = .26; const end = rp.clone(); end.x = .26; seg(W.lever, piv, end);
-  } else if (W.roller) { W.roller.visible = false; W.lever.visible = false; }
+  } else if (ex.handle) { const h1 = new T.Vector3(), h2 = new T.Vector3(); B.hdL.getWorldPosition(h1); B.hdR.getWorldPosition(h2); const c = h1.clone().add(h2).multiplyScalar(.5), dx = new T.Vector3(.17, 0, 0); seg(W.lever, c.clone().sub(dx), c.clone().add(dx)); W.roller.visible = false; } // barra corta de la polea
+  else if (W.roller) { W.roller.visible = false; W.lever.visible = false; }
   if (ex.bag) {
     const a = new T.Vector3(), b = new T.Vector3();
     if (ex.bag === 'chest') { B.spine.getWorldPosition(a); bag.position.set(a.x, a.y + .3, a.z + .2); bag.rotation.set(root.rotation.x, 0, 0); }
@@ -216,6 +230,14 @@ function props(ex, pA) {
   if (ex.restL) { apply(pA, ex); const a = new T.Vector3(); B.hdL.getWorldPosition(a); box(.4, a.y - .04, .45, a.x, (a.y - .04) / 2, a.z); }
   if (ex.fixBar && FIX?.hdL) { const pb = new T.Mesh(new T.CylinderGeometry(.02, .02, 1.2, 16), new T.MeshStandardMaterial({ color: 0x9ca3af, metalness: .8, roughness: .3 })); pb.rotation.z = Math.PI / 2; pb.position.copy(FIX.hdL.clone().add(FIX.hdR).multiplyScalar(.5)); pb.position.y += .02; prop.add(pb); for (const x of [-.6, .6]) box(.05, pb.position.y, .05, x, pb.position.y / 2, pb.position.z); }
   if (ex.anchor) { const AP = anchorOf(ex); if (ex.Ls) { const ank = new T.Mesh(new T.SphereGeometry(.045, 12, 10), m); ank.position.copy(AP); prop.add(ank); } else { const pb = new T.Mesh(new T.CylinderGeometry(.02, .02, 1.2, 16), new T.MeshStandardMaterial({ color: 0x9ca3af, metalness: .8, roughness: .3 })); pb.rotation.z = Math.PI / 2; pb.position.copy(AP); prop.add(pb); box(1.2, .04, .7, 0, AP.y + .04, AP.z - .25); for (const x of [-.55, .55]) box(.05, AP.y, .05, x, AP.y / 2, AP.z); } }
+  if (ex.sled && FIX?.anL) { // carriles de la prensa, su apoyo al suelo y las asas del asiento
+    const u = new T.Vector3(0, Math.sin(ex.sled * d), Math.cos(ex.sled * d)), c = FIX.anL.clone().add(FIX.anR).multiplyScalar(.5);
+    const SM = new T.MeshStandardMaterial({ color: 0x9ca3af, metalness: .8, roughness: .3 }), a0 = c.clone().addScaledVector(u, -.25), a1 = c.clone().addScaledVector(u, .75);
+    for (const x of [-.34, .34]) { const r = new T.Mesh(new T.CylinderGeometry(.022, .022, 1, 12), SM); r.position.copy(a0.clone().add(a1).multiplyScalar(.5)); r.position.x = x; r.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), u); r.castShadow = true; prop.add(r);
+      box(.05, a1.y, .05, x, a1.y / 2, a1.z); box(.05, Math.max(.04, a0.y), .05, x, Math.max(.04, a0.y) / 2, a0.z); }
+    const p0 = new T.Vector3(); B.pelvis.getWorldPosition(p0); box(.8, .04, a1.z - p0.z + .5, 0, .02, (a1.z + p0.z - .5) / 2);
+    for (const x of [-.27, .27]) box(.05, .05, .22, x, p0.y + .02, p0.z + .05);
+  }
   if (ex.tower) { const [tx, tz] = ex.tower; box(.14, 2.15, .14, tx, 1.075, tz); box(.5, .06, .14, tx, 2.03, (tz + (ex.strap?.[2] ?? tz)) / 2); }
   if (ex.strap) { const ank = new T.Mesh(new T.SphereGeometry(.04, 12, 10), m); ank.position.set(...ex.strap); prop.add(ank); }
   if (ex.incline) { apply(pA, ex); const a = new T.Vector3(), b = new T.Vector3(); B.pelvis.getWorldPosition(a); B.neck.getWorldPosition(b); const mid = a.clone().add(b).multiplyScalar(.5), dir = b.clone().sub(a), len = dir.length() + .25;
@@ -264,7 +286,7 @@ export function mount(el, id, lv = 1) {
     if (ex.pin?.[1] === 'auto') FIX.pin = FIX[ex.pin[0]];
   }
   props(ex, poseAt(0));
-  const per = { pull: 3, hipth: 2.6, lat: 2.4, curl: 2.2, curlh: 2.2, burpee: 4.5, plank: 4, hollow: 3.5, gorilla: 4.4, swing: 1.8, legext: 3.2, legcs: 3.2, legcl: 3.2, fly: 4, flyf: 4, pushd: 3.2 }[id] || 2.8;
+  const per = { pull: 3, hipth: 2.6, lat: 2.4, curl: 2.2, curlh: 2.2, burpee: 4.5, plank: 4, hollow: 3.5, gorilla: 4.4, swing: 1.8, legext: 3.2, legcs: 3.2, legcl: 3.2, fly: 4, flyf: 4, pushd: 3.2, press: 3.4, curlc: 2.6, curlhc: 2.6 }[id] || 2.8;
   const t0 = performance.now();
   const frame = now => {
     if (!cv.isConnected) { stop(); return; }
