@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.0.4';
+const APP_VERSION = '5.0.5';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6479,6 +6479,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.0.5', ['Usuarios más fáciles de tocar: filas con relleno, más separadas y con una franja de color según el estado (rojo caducado, ámbar caduca pronto, cian DÚO, verde Free).', 'La fila que tocas se ilumina un instante antes de abrir su ficha.'], 'admin'],
   ['5.0.4', ['Nuevo código: abre en «1 mes» y se ve desde el principio si es Individual o DÚO. El plan «Prueba» ya no se ofrece, porque la prueba de 7 días es automática.', '📅 En «Renovar o cambiar», nuevo enlace para corregir la fecha de fin si te equivocas: quita o suma días sin anotar ningún pago.', 'El botón 👥 sale en la cabecera desde el primer momento al abrir la app.'], 'admin'],
   ['5.0.3', ['👥 Nuevo botón en la cabecera para ir directo a Usuarios. El PIN vale para toda la sesión: hasta cerrar la app o 15 minutos sin tocar nada de Acceso.', 'Lista más clara: una línea por persona (o por DÚO), «Requieren atención» arriba, buscador y filtros fijos, y filtro «🟢 Hoy» con quién ha usado la app hoy.', 'Al tocar a alguien se abre su ficha con botones grandes: renovar, recordar la renovación, nombre, código nuevo, beta, ocultar nombre y quitar acceso.'], 'admin'],
   ['5.0.2', ['El aviso de FITNESTEBAN 5 en Inicio vuelve a salir y se queda hasta que lo cierras con ✕.'], 'quiet'],
@@ -8027,7 +8028,7 @@ const actions = {
     });
   },
   usersGo: () => { ui.view = 'settings'; actions.openAccess(() => { ui.accPage = true; render(); window.scrollTo({ top: 0 }); }); },
-  accFicha: b => accFichaModal(b.dataset.hash),
+  accFicha: b => { b.classList.add('acc-tap'); setTimeout(() => { b.classList.remove('acc-tap'); accFichaModal(b.dataset.hash); }, 160); }, // se ilumina la fila que has tocado y luego se abre su ficha
   closeAccess: () => { ui.accessOpen = false; render(); },
   accPage: () => { ui.accPage = true; render(); window.scrollTo({ top: 0 }); },
   accPageClose: () => { ui.accPage = false; render(); window.scrollTo({ top: 0 }); },
@@ -9203,7 +9204,7 @@ function trialRowsHTML() {
     const left = u.hasta ? daysBetween(t, u.hasta) : null, ago = u.last ? daysBetween(u.last, todayISO()) : null, open = ui.accOpenH === u.h;
     const dot = ago === 0 ? 'u-today' : ago !== null && ago <= 7 ? 'u-week' : 'u-old', who = u.m || 'Sin correo';
     const pill = left === null ? '' : left < 0 ? '<span class="text-rose-300">Terminada</span>' : `<span class="${left <= 3 ? 'text-amber-300' : 'text-cyan-300'}">Prueba · ${left === 0 ? 'hoy' : left + ' d'}</span>`;
-    return `<div class="acc-row ${open ? 'acc-open' : ''}" data-s="${esc(normTxt(who + ' prueba'))}" ${show ? '' : 'hidden'}>
+    return `<div class="acc-row st-trial ${open ? 'acc-open' : ''}" data-s="${esc(normTxt(who + ' prueba'))}" ${show ? '' : 'hidden'}>
       <button class="w-full flex items-center gap-2 px-3 py-2.5 text-left" data-act="accRow" data-hash="${esc(u.h)}" type="button"><span class="u-dot ${dot}"></span>
         <span class="flex-1 min-w-0"><span class="block font-semibold text-[13px] truncate ${ago === 0 ? 'text-emerald-300' : ''}">${esc(who)}</span><span class="block text-[11px] text-mute">${ago === 0 ? 'Activo hoy' : ago === null ? '' : `Último uso hace ${plural(ago, 'día', 'días')}`} · ${plural(u.days || 1, 'día', 'días')} de uso</span></span>
         <span class="text-[11px] shrink-0">${pill}</span><span class="tri shrink-0 ${open ? 'rotate-180' : ''}"></span></button>
@@ -9218,7 +9219,7 @@ function accPersonRowHTML(x) {
   const me = x.hash === access.me.hash, st = accStatus(x), u = ui.usage?.[x.hash], ago = u ? daysBetween(u.last, todayISO()) : null;
   const visF = ui.accF === 'trial' ? false : (!ui.accF || ui.accF === 'all' || ui.accF === st || (ui.accF === 'idle' && !x.admin && (ago === null || ago > 7)) || (ui.accF === 'today' && !x.admin && ago === 0)) || (me && (!ui.accF || ui.accF === 'all')) || (ui.accF === 'ind' && !x.admin && isPaidPlan(x.plan || ''));
   const name = accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`;
-  return `<button class="acc-row acc-line" data-act="accFicha" data-hash="${esc(x.hash)}" data-s="${esc(normTxt([accessWho(x), u?.m || '', x.hash.slice(-4)].join(' ')))}" ${visF ? '' : 'hidden'} type="button">
+  return `<button class="acc-row acc-line st-${st}" data-act="accFicha" data-hash="${esc(x.hash)}" data-s="${esc(normTxt([accessWho(x), u?.m || '', x.hash.slice(-4)].join(' ')))}" ${visF ? '' : 'hidden'} type="button">
     <span class="u-dot ${accDot(x.hash)}"></span><span class="flex-1 min-w-0 text-left font-semibold text-[14px] break-words ${ago === 0 ? 'text-emerald-300' : ''}">${name}${me ? ' <span class="text-mute font-normal text-[12px]">(tú)</span>' : ''}</span>
     <span class="text-[11.5px] shrink-0 text-right">${x.admin ? '<span class="text-brand">admin</span>' : planPill(x)}</span><span class="text-mute text-lg leading-none">›</span></button>`;
 }
@@ -9237,7 +9238,7 @@ function accPairRowHTML(x, m) {
   const today = [x, m].some(y => ui.usage?.[y.hash]?.last === todayISO());
   const vis = f === 'all' || f === 'duo' || f === st || (f === 'idle' && idle) || (f === 'today' && today);
   const sx = normTxt([n1, n2, ui.usage?.[x.hash]?.m || '', ui.usage?.[m.hash]?.m || '', x.hash.slice(-4), m.hash.slice(-4), 'duo'].join(' '));
-  return `<button class="acc-row acc-line" data-act="accFicha" data-hash="${esc(x.hash)}" data-s="${esc(sx)}" ${vis ? '' : 'hidden'} type="button">
+  return `<button class="acc-row acc-line st-${['exp', 'soon'].includes(st) ? st : 'duo'}" data-act="accFicha" data-hash="${esc(x.hash)}" data-s="${esc(sx)}" ${vis ? '' : 'hidden'} type="button">
     <span class="flex flex-col gap-1 shrink-0"><span class="u-dot ${accDot(x.hash)}"></span><span class="u-dot ${accDot(m.hash)}"></span></span>
     <span class="flex-1 min-w-0 text-left font-semibold text-[14px] break-words">${esc(n1)} + ${esc(n2)}</span>
     <span class="text-[11.5px] shrink-0 text-right">${planPill(x)}</span><span class="text-mute text-lg leading-none">›</span></button>`;
