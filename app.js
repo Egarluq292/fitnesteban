@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.1.0';
+const APP_VERSION = '5.1.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -3910,7 +3910,7 @@ function qcLocal(B, tp) {
 }
 function queComoModal(pick) {
   const L = qcLeft(), ia = !!state.settings.apiKey, plan = qcPlan(L), B = plan.find(x => x.tp === pick) || plan[0], tp = B.tp;
-  const rest = plan.filter(x => x !== B), sty = lsGet('fitnesteban_qcsty') || 'var';
+  const rest = plan.filter(x => x !== B), s0 = lsGet('fitnesteban_qcsty'), sty = QC_STYLES[s0] ? s0 : 'var', fast = !!lsGet('fitnesteban_qcfast') || s0 === 'rapido';
   openModal(`<div class="text-[11px] font-black tracking-widest text-cyan-300">🍽️ ¿QUÉ COMO?</div>
     ${B.protOnly ? `<h3 class="text-xl font-black leading-tight">Te faltan ${L.prot} g de proteína</h3>
     <p class="text-[12px] text-mute mt-1">Ya has llegado a tus kcal: ideas con mucha proteína y casi sin calorías (unas 150 kcal como mucho).</p>`
@@ -3918,17 +3918,19 @@ function queComoModal(pick) {
     ${B.protOnly ? '' : plan.length > 1 ? `<p class="text-[12px] text-mute mt-1">Repartido entre lo que te falta hoy. ¿Para qué comida?</p>
     <div class="flex flex-wrap gap-1.5 mt-2">${plan.map(x => `<button class="chip chip-sm ${x === B ? 'chip-on' : ''}" data-mact="pick" data-tp="${x.tp}" type="button">${x.tp} · ~${x.kcal} kcal</button>`).join('')}</div>`
       : `<p class="text-[12px] text-mute mt-1">Para ${qcDe(tp)}: es tu última comida de hoy.</p>`}
-    ${qcStyleOn(tp, B) ? `<div class="lbl mt-3 mb-1.5">¿Qué te apetece?</div><div class="flex flex-wrap gap-1.5">${Object.entries(QC_STYLES).map(([k, v]) => `<button class="chip chip-sm ${sty === k ? 'chip-on' : ''}" data-mact="sty" data-k="${k}" type="button">${v}</button>`).join('')}</div>` : ''}
+    ${qcStyleOn(tp, B) ? `<div class="lbl mt-3 mb-1.5">¿Qué te apetece?</div><div class="qc-sty">${Object.entries(QC_STYLES).map(([k, [e, l]]) => `<button class="qc-sty-b ${sty === k ? 'is-on' : ''}" data-mact="sty" data-k="${k}" type="button"><span class="text-lg leading-none">${e}</span><span>${l}</span></button>`).join('')}</div>
+    <button class="qc-fast ${fast ? 'is-on' : ''}" data-mact="fast" type="button"><span>⚡ Tengo poco tiempo <span class="text-mute font-normal">· menos de 20 min</span></span><span class="qc-sw"></span></button>` : ''}
     <div class="grid gap-2 mt-4">
       <button class="qc-opt" data-mact="close" type="button"><span class="text-2xl">🎯</span><span class="min-w-0"><b>${B.protOnly ? 'Ideas para completar la proteína' : `Ideas para ${qcDe(tp)}`}</b><span>${B.protOnly ? `Hasta ~${B.prot} g de proteína en unas 150 kcal` : `Unas ${B.kcal} kcal y ${B.prot} g de proteína`}${rest.length ? `, y aún te queda ${rest.map(x => qcDe(x.tp)).join(' y ')}` : ''}</span></span></button>
       <button class="qc-opt" data-mact="home" type="button"><span class="text-2xl">🏠</span><span class="min-w-0"><b>Con lo que tengo en casa</b><span>Escribe o dicta lo que tienes${ia ? '' : ' · necesita la clave de Gemini'}</span></span></button>
       <button class="qc-opt" data-mact="photo" type="button"><span class="text-2xl">📷</span><span class="min-w-0"><b>Foto de la nevera o la despensa</b><span>${ia ? 'Te propongo platos con lo que se ve' : 'Necesita la clave de Gemini (Ajustes)'}</span></span></button>
     </div>`, {
     pick: (_, b) => queComoModal(b.dataset.tp),
-    sty: (_, b) => { lsSet('fitnesteban_qcsty', b.dataset.k); queComoModal(tp); },
-    close: () => ia ? qcAsk({ L, B, rest, tp, sty }) : qcShow({ L, B, rest, tp }, qcLocal(B, tp), 'Con tus comidas habituales y alimentos básicos (sin IA).'),
-    home: () => { if (!ia) return toast('Añade tu clave de Gemini en Ajustes para usar esta opción', 'warn'); qcHome({ L, B, rest, tp, sty }); },
-    photo: () => { if (!ia) return toast('Añade tu clave de Gemini en Ajustes para usar esta opción', 'warn'); ui.qc = { L, B, rest, tp, sty }; qcFile.click(); }
+    sty: (_, b) => { lsSet('fitnesteban_qcsty', b.dataset.k); if (fast) lsSet('fitnesteban_qcfast', 1); queComoModal(tp); },
+    fast: () => { lsSet('fitnesteban_qcfast', fast ? 0 : 1); if (s0 === 'rapido') lsSet('fitnesteban_qcsty', 'var'); queComoModal(tp); },
+    close: () => ia ? qcAsk({ L, B, rest, tp, sty, fast }) : qcShow({ L, B, rest, tp }, qcLocal(B, tp), 'Con tus comidas habituales y alimentos básicos (sin IA).'),
+    home: () => { if (!ia) return toast('Añade tu clave de Gemini en Ajustes para usar esta opción', 'warn'); qcHome({ L, B, rest, tp, sty, fast }); },
+    photo: () => { if (!ia) return toast('Añade tu clave de Gemini en Ajustes para usar esta opción', 'warn'); ui.qc = { L, B, rest, tp, sty, fast }; qcFile.click(); }
   });
 }
 function qcHome(cx, pre = lsGet('fitnesteban_qchave') || '', title = '🏠 ¿Qué tienes en casa?') {
@@ -3956,12 +3958,21 @@ const QC_RULES = `REGLAS (obligatorias):
 - El nombre del plato debe encajar con esa comida (no llames «cena» a un puente).
 - Ajusta a lo que corresponde a ESTA comida, no a todo lo que queda del día. Mejor quedarse algo corto que pasarse.
 - Si con lo que hay no se llega a la proteína sin forzar, no fuerces: dilo en "nota" y sugiere qué comprar.`;
-const QC_STYLES = { var: '🎲 Variado', cuchara: '🍲 De cuchara', arroz: '🥘 Arroces', rapido: '⚡ Rápido' };
+const QC_STYLES = { var: ['🎲', 'Variado'], cuchara: ['🍲', 'Cuchara'], arroz: ['🥘', 'Arroces'], pasta: ['🍝', 'Pasta'], carne: ['🥩', 'Carne'], pescado: ['🐟', 'Pescado'], ligero: ['🥗', 'Ligero'], taper: ['🥡', 'Táper'] };
 const qcStyleOn = (tp, B) => (tp === 'Comida' || tp === 'Cena') && !B.protOnly;
-function qcStyleTxt(tp, sty) {
+function qcStyleTxt(tp, sty, fast) {
+  const t = qcStyleBase(tp, sty, fast);
+  return fast && !t.includes('20 minutos') ? t + ' TODAS deben hacerse en menos de 20 minutos: si el plato suele ser largo (un guiso, un cocido), usa su versión rápida (legumbre cocida de bote, olla exprés, sobras…).' : t;
+}
+function qcStyleBase(tp, sty, fast) {
   if (sty === 'cuchara') return 'Propón 3 platos de cuchara españoles distintos entre sí (legumbres como lentejas, garbanzos o alubias; potajes, estofados, guisos de carne o pescado, cocido, fabada, sopas o cremas), con su receta tradicional aligerada si hace falta.';
   if (sty === 'arroz') return 'Propón 3 arroces españoles distintos (paella, arroz caldoso, meloso, al horno, arroz negro, arroz con verduras…).';
-  if (sty === 'rapido') return 'Propón 3 opciones distintas y rápidas (menos de 20 minutos).';
+  if (sty === 'pasta') return 'Propón 3 platos de pasta distintos entre sí (macarrones, espaguetis, lasaña, fideuá, tallarines, pasta al horno, con verduras, carne, pescado o marisco…), con la ración de pasta ajustada a sus hidratos.';
+  if (sty === 'carne') return 'Propón 3 platos de carne distintos, cada uno con una carne diferente (ternera, cerdo, pollo, pavo, cordero, conejo…) y una forma de cocinar diferente (plancha, horno, en salsa, guisada, albóndigas, brocheta…), con su guarnición.';
+  if (sty === 'pescado') return 'Propón 3 platos de pescado o marisco distintos (azul y blanco; al horno, en salsa, a la plancha, en papillote, guisado…), con su guarnición.';
+  if (sty === 'ligero') return 'Propón 3 platos ligeros pero saciantes, con mucha verdura y su proteína (ensaladas completas, verduras salteadas o al horno con carne, pescado o huevo, cremas o sopas…).';
+  if (sty === 'taper') return 'Propón 3 platos que aguanten bien en táper y se recalienten sin estropearse, para llevar al trabajo (legumbres, guisos, arroces al horno, pasta, salteados…). Nada que se ablande o se seque al recalentar.';
+  if (fast) return tp === 'Cena' ? 'Propón 3 cenas distintas, ligeras y variadas, de menos de 20 minutos (tortillas o revueltos, pescado a la plancha, ensaladas completas, salteados…).' : 'Propón 3 opciones distintas y variadas de menos de 20 minutos (incluida, si encaja, una de cuchara con legumbre cocida de bote).';
   if (tp === 'Comida') return 'Propón 3 opciones distintas: 1) un plato tradicional español de cuchara o un arroz (potaje, lentejas, garbanzos, estofado, cocido, fabada, arroz caldoso, paella…); 2) uno rápido (menos de 20 minutos); 3) otro distinto a los dos anteriores (horno, guiso corto, legumbre en ensalada, pescado, pasta…).';
   if (tp === 'Cena') return 'Propón 3 cenas distintas, más ligeras y de poca elaboración (máximo 30 minutos), y variadas: tortillas o revueltos, cremas o sopas, pescado al horno o en papillote, ensaladas templadas, verduras rellenas, salteados… Nada repetido entre ellas.';
   return 'Propón 3 opciones distintas, fáciles (menos de 20 minutos).';
@@ -3972,14 +3983,14 @@ function qcRecent(tp) { // platos de esa comida de los últimos 10 días, para n
   return out.slice(0, 12);
 }
 async function qcAsk(cx) {
-  const { B, rest, tp, have = '', img = null, prev = [] } = cx, sty = qcStyleOn(tp, B) ? (cx.sty || 'var') : '', recent = qcRecent(tp);
+  const { B, rest, tp, have = '', img = null, prev = [] } = cx, on = qcStyleOn(tp, B), sty = on ? (cx.sty || 'var') : '', fast = on && !!cx.fast, recent = qcRecent(tp);
   openModal(`<div class="text-center py-6"><span class="spinner" style="width:34px;height:34px;border-width:3px;border-color:rgba(34,211,238,.25);border-top-color:#22d3ee"></span><h3 class="modal-title mt-3">${img ? 'Mirando lo que tienes…' : 'Pensando en tu comida…'}</h3><p class="text-sm text-mute">Unos segundos.</p></div>`);
   const prompt = `Eres un dietista práctico de España. Propón ideas para ${qcDe(tp).toUpperCase()} de hoy.
 Para esta comida le corresponden unas ${B.kcal} kcal (±15 %), ${B.prot} g de proteína, ${B.carbs} g de hidratos y ${B.fat} g de grasa.${rest.length ? ` Después todavía tiene ${rest.map(x => `${qcDe(x.tp)} (~${x.kcal} kcal)`).join(' y ')}, así que no gastes en esta comida lo que es para luego.` : ' Es su última comida del día.'}
 ${img ? 'En la foto se ve su nevera o despensa: usa SOLO lo que se ve con claridad (más sal, aceite, especias y agua). Si algo no se distingue bien, no lo uses y ponlo en "dudas".' : have ? `Tiene en casa: ${have}. Usa SOLO eso (más sal, aceite, especias y agua).` : 'Usa ingredientes corrientes de supermercado español.'}
 ${prev.length ? `No repitas estas ideas: ${prev.join('; ')}.` : ''}${recent.length ? `\nEstos días ya ha comido: ${recent.join('; ')}. Propón platos diferentes.` : ''}
 ${QC_RULES}${algPrompt()}${B.protOnly ? `\n- MODO PROTEÍNA: ya ha llegado a sus calorías de hoy y le faltan ${B.prot} g de proteína. Solo ideas de 150 kcal como mucho, con mucha proteína y casi sin grasa ni hidratos: lácteos desnatados o proteicos, claras, pavo, atún al natural, gambas, batido de proteína… Nada de pan, aceite, frutos secos ni dulces. Puede ser algo sencillo, sin cocinar.` : ''}
-${qcStyleTxt(tp, sty)} Para cada ingrediente da su peso en gramos (en crudo si se cocina; si va por unidades, pon también las unidades) y sus valores por 100 g, realistas (tablas españolas). Incluye el aceite si se usa.
+${qcStyleTxt(tp, sty, fast)} Para cada ingrediente da su peso en gramos (en crudo si se cocina; si va por unidades, pon también las unidades) y sus valores por 100 g, realistas (tablas españolas). Incluye el aceite si se usa.
 Responde SOLO con JSON: {"opciones":[{"nombre":"…","olla":1,"items":[{"nombre":"Merluza","g":150,"uds":"","por100":{"kcal":0,"prot":0,"carbs":0,"fat":0}}],"pasos":"una frase"}],"veo":["alimento", "…"],"dudas":["lo que no distingues bien"],"nota":"una frase"}`;
   let r, err = null;
   for (let t = 0; t < 2; t++) { // un segundo intento automático: muchas veces a la segunda sale bien
@@ -6504,6 +6515,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.1.1', ['🍽️ «¿Qué como?» con más estilos: 🎲 Variado, 🍲 Cuchara, 🥘 Arroces, 🍝 Pasta, 🥩 Carne, 🐟 Pescado, 🥗 Ligero y 🥡 Táper (platos que aguantan bien para llevar).', '⚡ Nuevo interruptor «Tengo poco tiempo»: se combina con cualquier estilo y todo se hace en menos de 20 minutos.']],
   ['5.1.0', ['🍲 «¿Qué como?» con cocina de casa: en la comida y la cena elige qué te apetece (🎲 Variado, 🍲 De cuchara, 🥘 Arroces o ⚡ Rápido). En «Variado», a mediodía siempre hay un plato de cuchara o un arroz (lentejas, potaje, estofado, cocido, paella, arroz caldoso…), y por la noche, cenas ligeras pero variadas.', 'Los guisos se cocinan para varios: ves tu ración, la receta es para la olla entera y la lista de la compra sale ya multiplicada.', 'Más variedad: no repite lo que has comido estos días y no todo es pollo. El Coach también propone más cocina casera.']],
   ['5.0.6', ['🩺 Aviso sanitario discreto en Perfil, propuesta de objetivos, análisis del peso, resumen semanal y pantalla inicial del coach: la información es orientativa y no sustituye a un profesional sanitario.'], 'quiet'],
   ['5.0.5', ['Usuarios más fáciles de tocar: filas con relleno, más separadas y con una franja de color según el estado (rojo caducado, ámbar caduca pronto, cian DÚO, verde Free).', 'La fila que tocas se ilumina un instante antes de abrir su ficha.'], 'admin'],
