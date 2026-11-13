@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.1.5';
+const APP_VERSION = '5.2.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -2474,6 +2474,7 @@ function weekData() {
     comidas_con_proteina_suficiente: mealsTot ? `${mealsOk} de ${mealsTot} (mínimo ${minProt()} g por comida)` : null, comidas_con_proteina_baja_por_tipo: lowTypes,
     cardio_sesiones: cardio.length, cardio_minutos: cardio.reduce((a, c) => a + c.minutes, 0), cardio_kcal: cardio.reduce((a, c) => a + c.kcal, 0), gym_kcal_estimadas: sess.reduce((a, x) => a + gymKcalOf(x), 0),
     peso_y_composicion: bodyForAI(),
+    pasos: stepsForAI(),
     habitos_cumplidos_en_sesiones: habits, semana_de_descarga: deloadActive(),
     comentarios_del_usuario: sess.flatMap(s => (s.notes || []).map(n => `${s.date} ${n.name}: ${noteTxt(n)}`)),
     habitos_diarios: (state.settings.habitList || []).filter(h => h.where === 'daily').map(h => {
@@ -4843,6 +4844,8 @@ function renderProgress() {
     </div>
   </details>
 
+  ${stepsCardHTML()}
+
   <details class="card p-4 mt-3" ${openAttr('strength')}>
     <summary class="flex items-center justify-between gap-3 cursor-pointer select-none"><h3 class="section-title shrink-0">🏋️ Fuerza por ejercicio</h3><span class="flex items-center gap-2 text-[11px] text-mute"><span>${opts.length ? `${opts.length} ${opts.length === 1 ? 'ejercicio' : 'ejercicios'}` : 'Sin sesiones'}</span><span class="tri"></span></span></summary>
     <div class="mt-3">${strengthHtml}</div>
@@ -6031,6 +6034,7 @@ function chatContext() {
     cardio_14_dias: state.cardio.filter(c => c.date >= addDays(T, -13)).map(c => ({ fecha: c.date, tipo: cardioType(c.type).label, min: c.minutes, intensidad: c.intensity, kcal: c.kcal, ...(watchLine(c) ? { reloj: watchLine(c) } : {}) })),
     medidas_corporales: [...state.bodyMetrics].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8).map(m => ({ fecha: m.date, peso: m.weight, cintura: m.waist })),
     analisis_peso_de_la_app: bodyForAI(),
+    pasos: stepsForAI(),
     semana_de_descarga: deloadActive(),
     retos: RETO_IDS.filter(id => state.retos[id]).map(id => { const r = RETOS[id], st = state.retos[id]; return { reto: r.name, unidad: r.unit, nivel: st.level, meta: r.max, mejor_marca: st.best, proxima_sesion: retoSets(id, st.level), ultimas: st.history.slice(-3).map(h => ({ fecha: h.date, hecho: h.got, sensacion: h.feel })) }; })
   };
@@ -6530,6 +6534,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.2.0', ['👣 Nuevo: Pasos. Apúntalos desde la tarjeta Progreso de Inicio, escribiendo el número o con una captura del reloj o del móvil (hoy o ayer), y ponte una meta si quieres.', '🎯 Para qué sirven: la app usa tu media de pasos para comprobar si el nivel de actividad de tu perfil es el correcto. Si no encaja, te avisa en Progreso → Pasos y lo ajusta por ti con un toque, y con él tus calorías (tú decides si las aplicas).', 'Los pasos no restan calorías del día: eso ya lo tiene en cuenta tu objetivo. Las caminatas que haces como ejercicio, en Cardio como siempre.']],
   ['5.1.5', ['🔥 Dieta: toca la línea «Cardio · Neto» (ⓘ) para ver qué significa cada número y por qué «Te quedan» no suma lo que quemas.'], 'quiet'],
   ['5.1.4', ['Usuarios: arreglada la versión que salía como una fecha («Sun Jan 05 2003…»). Google convertía «5.1.3» en el 5 de enero de 2003; ahora la app la manda como «v5.1.4» y recupera las que ya estaban convertidas.', '«Desactualizada» solo sale si van una versión MENOR por detrás (5.0 frente a 5.1), y en tu fila sale siempre la versión que tienes abierta. Los dispositivos ya no se cortan con «…».'], 'admin'],
   ['5.1.3', ['🚫 Alergias e intolerancias: nueva opción «Fructosa (malabsorción)».', 'Detección más fina de alérgenos en platos españoles (croquetas, lasaña, flan, natillas, chipirones, vieiras, turrón…) y sin falsas alarmas con «sin gluten» o «sin lactosa».'], 'quiet'],
@@ -7421,6 +7426,88 @@ function askCodeModal() {
     ${contactBtn('Escribir a Esteban', 'w-full justify-center')}
     <button class="btn-ghost w-full" data-close type="button">Ahora no</button>`);
 }
+/* ---------- 👣 Pasos: un dato diario aparte del cardio (NO resta calorías: tu objetivo ya cuenta con el nivel de actividad del perfil) ---------- */
+const stepsOf = d => { const v = state.steps?.[d]; return Number.isFinite(v) ? v : null; };
+const fmtSteps = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); // 8.500 (toLocaleString no pone el punto en números de 4 cifras)
+function stepsAvg(days, end = todayISO()) {
+  const v = []; for (let i = 0; i < days; i++) { const n = stepsOf(addDays(end, -i)); if (n !== null) v.push(n); }
+  return v.length ? { avg: Math.round(v.reduce((a, x) => a + x, 0) / v.length), n: v.length } : null;
+}
+const STEP_LV = n => n < 5500 ? 'low' : n <= 9500 ? 'mid' : 'high'; // orientativo: <5.500 sentada · 5.500–9.500 algo activa · >9.500 muy activa
+function stepsMismatch() { // ¿la media de 14 días encaja con la actividad del perfil? (con al menos 5 días apuntados)
+  const a = stepsAvg(14), p = profileOf(); if (!a || a.n < 5 || !p) return null;
+  const lv = STEP_LV(a.avg), cur = p.activity || 'mid';
+  return lv === cur ? null : { avg: a.avg, lv, cur };
+}
+function stepsForAI() {
+  const a7 = stepsAvg(7), a14 = stepsAvg(14);
+  if (!a14) return null;
+  return { hoy: stepsOf(todayISO()), media_7_dias: a7?.avg ?? null, dias_apuntados_7: a7?.n || 0, media_14_dias: a14.avg, meta_diaria: state.settings.stepGoal || null, nota: 'Los pasos NO restan calorías en la app: el objetivo ya cuenta con el nivel de actividad del perfil. Úsalos para valorar su movimiento diario y, si su media no encaja con su actividad del perfil, sugiérele revisarla.' };
+}
+function stepsPillHTML() { // 👣 dentro de la tarjeta Progreso de Inicio: al tocar la píldora se apuntan; el resto de la tarjeta va a Progreso
+  if (state.settings.stepsOff) return '';
+  const t = stepsOf(todayISO()), g = state.settings.stepGoal || 0;
+  return `<span class="home-pill home-steps ${t !== null && g && t >= g ? 'is-ok' : ''}" data-act="stepsOpen" role="button">👣 ${t !== null ? `${fmtSteps(t)} pasos hoy${g && t >= g ? ' ✓' : ''}` : 'Apuntar pasos de hoy'}</span>`;
+}
+function stepsCardHTML() {
+  const a7 = stepsAvg(7), a14 = stepsAvg(14), g = state.settings.stepGoal || 0, T = todayISO(), mm = stepsMismatch();
+  const days = Array.from({ length: 14 }, (_, i) => addDays(T, i - 13)), vals = days.map(stepsOf);
+  const max = Math.max(g, ...vals.filter(v => v !== null), 1000);
+  const wd = d => ['D', 'L', 'M', 'X', 'J', 'V', 'S'][new Date(d + 'T12:00').getDay()];
+  return `<details class="card p-4 mt-3" ${openAttr('stepsCard')}>
+    <summary class="flex items-center justify-between gap-3 cursor-pointer select-none"><h3 class="section-title shrink-0">👣 Pasos</h3><span class="text-[12px] text-mute text-right">${a7 ? `media ${fmtSteps(a7.avg)}/día` : 'sin datos'}</span></summary>
+    <div class="mt-3 space-y-3">
+      ${a14 ? `<div class="steps-chart">${g ? `<span class="steps-goal" style="bottom:calc(16px + (100% - 16px) * ${(g / max).toFixed(3)})"></span>` : ''}${days.map((d, i) => `<button class="steps-col" data-act="stepsOpen" data-d="${d}" type="button" aria-label="${esc(fmtDate(d))}"><span class="steps-b ${vals[i] === null ? 'is-empty' : g && vals[i] >= g ? 'is-ok' : ''}" style="height:${vals[i] === null ? 4 : Math.max(4, Math.round(vals[i] / max * 100))}%"></span><span class="steps-d ${d === T ? 'text-brand' : ''}">${wd(d)}</span></button>`).join('')}</div>
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div class="stat"><div class="stat-v text-[18px]">${a7 ? fmtSteps(a7.avg) : '—'}</div><div class="stat-l">media 7 días</div></div>
+        <div class="stat"><div class="stat-v text-[18px]">${fmtSteps(a14.avg)}</div><div class="stat-l">media 14 días</div></div>
+        <div class="stat"><div class="stat-v text-[18px]">${g ? fmtSteps(g) : '—'}</div><div class="stat-l">tu meta</div></div>
+      </div>` : '<p class="text-sm text-mute">Apunta tus pasos cada día (o el total de ayer, por la mañana) y aquí verás cómo te mueves.</p>'}
+      ${mm ? `<div class="coach coach-hold"><div class="font-bold text-xs">🚶 Tu actividad del perfil no encaja</div><p class="text-xs mt-1 opacity-90 leading-relaxed">Tu media de 14 días es de ${fmtSteps(mm.avg)} pasos, que se parece más a «${ACTIVITY[mm.lv][0]}» que a «${ACTIVITY[mm.cur][0]}», lo que pusiste en tu perfil. La app puede ajustarlo por ti y proponerte las calorías que te corresponden; tú decides si las aplicas. Es orientativo.</p><button class="btn-primary w-full mt-2 !py-2 text-[13px]" data-act="stepsFix" type="button">Ajustar a «${ACTIVITY[mm.lv][0]}»</button></div>` : ''}
+      <button class="btn-primary w-full" data-act="stepsOpen" type="button">👣 Apuntar pasos</button>
+      <p class="text-[11px] text-mute leading-snug">👣 <b>Para qué sirven:</b> la app usa tu media de pasos para comprobar si el nivel de actividad de tu perfil es el correcto. Si no encaja, te avisa aquí y lo ajusta por ti con un toque, y con él tus calorías. No restan calorías del día: eso ya lo hace tu objetivo. Las caminatas que haces como ejercicio, apúntalas en Cardio.</p>
+    </div></details>`;
+}
+const stepsFile = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*', hidden: true });
+document.body.appendChild(stepsFile);
+stepsFile.addEventListener('change', async e => {
+  const f = e.target.files[0], d0 = ui.stepsD || todayISO(); e.target.value = ''; if (!f) return;
+  let img; try { img = await compressImage(f, 1400); } catch (err) { return toast(err.message, 'error'); }
+  openModal(`<div class="text-center py-6"><span class="spinner" style="width:34px;height:34px;border-width:3px;border-color:rgba(34,211,238,.25);border-top-color:#22d3ee"></span><h3 class="modal-title mt-3">Leyendo tus pasos…</h3></div>`);
+  try {
+    const r = parseJSONLoose(await callGemini([{ text: `Es una captura de una app de salud o deportiva (Salud de Apple, Google Fit, Samsung Health, Huawei Salud, Garmin, Xiaomi, Fitbit…) o una foto de la pantalla de un reloj. Extrae SOLO el número de PASOS de un día (no la distancia, ni las calorías, ni el objetivo de pasos) y la fecha a la que corresponde: AAAA-MM-DD si se ve; «hoy» si pone Hoy; «ayer» si pone Ayer; si no se ve, null. Si hay una gráfica de varios días, coge el día destacado o el total del día. No inventes nada. Responde SOLO con JSON: {"pasos": número | null, "fecha": "…" | null}` }, { inlineData: { mimeType: 'image/jpeg', data: img.split(',')[1] } }], { timeout: 30000 }));
+    const n = Math.round(num(r?.pasos) || 0), fd = String(r?.fecha || '').toLowerCase();
+    const d = fd === 'ayer' ? addDays(todayISO(), -1) : /^\d{4}-\d{2}-\d{2}$/.test(fd) && fd <= todayISO() ? fd : fd === 'hoy' ? todayISO() : d0;
+    if (!(n > 0 && n < 150000)) throw new Error('No veo el número de pasos en la imagen. Prueba con otra captura o escríbelo.');
+    stepsModal(d, n, true);
+  } catch (err) { stepsModal(d0); toast(err.message || 'No he podido leer la imagen', 'warn'); }
+});
+function stepsModal(d = todayISO(), val = null, fromPhoto = false) {
+  const T = todayISO(), Y = addDays(T, -1), st = state.settings;
+  ui.stepsD = d;
+  const cur = val ?? stepsOf(d);
+  openModal(`<h3 class="modal-title">👣 Pasos</h3>
+    <div class="flex gap-1.5">${[[T, 'Hoy'], [Y, 'Ayer']].map(([x, l]) => `<button class="chip chip-sm ${d === x ? 'chip-on' : ''}" data-mact="day" data-d="${x}" type="button">${l}</button>`).join('')}${d !== T && d !== Y ? `<span class="chip chip-sm chip-on">${esc(fmtDate(d))}</span>` : ''}</div>
+    ${fromPhoto ? '<p class="text-[12px] text-emerald-300">📷 Leído de tu captura. Comprueba el número y la fecha antes de guardar.</p>' : ''}
+    <label class="lbl">Pasos del día<input class="field mt-1 text-2xl font-black text-center tracking-wide" name="n" inputmode="numeric" placeholder="Ej: 8500" value="${cur !== null ? cur : ''}" /></label>
+    ${st.apiKey ? '<button class="btn-ghost w-full" data-mact="photo" type="button">📷 Leerlos de una captura del reloj o del móvil</button>' : ''}
+    <label class="lbl">Meta diaria <span class="text-mute font-normal">(opcional)</span><input class="field mt-1" name="g" inputmode="numeric" placeholder="Ej: 8000" value="${st.stepGoal || ''}" /></label>
+    <p class="text-[11px] text-mute leading-snug">👣 <b>Para qué sirven:</b> la app usa tu media de pasos para comprobar si el nivel de actividad de tu perfil es el correcto y, si no encaja, te propone ajustarlo (y con él tus calorías). No restan calorías del día. Necesita al menos 5 días apuntados en dos semanas.</p>
+    <button class="btn-primary w-full" data-mact="save" type="button">Guardar</button>
+    ${stepsOf(d) !== null ? '<button class="text-[12px] text-rose-300 underline w-full" data-mact="del" type="button">Borrar los pasos de este día</button>' : ''}
+    <button class="text-[12px] text-mute underline w-full" data-mact="off" type="button">${st.stepsOff ? 'Volver a mostrar los pasos en Inicio' : 'No me interesa: quitar los pasos de Inicio'}</button>`, {
+    day: (root, b) => { const v = mval(root, 'n'); stepsModal(b.dataset.d, v ? Math.round(num(v)) : null); },
+    photo: () => { stepsFile.click(); },
+    save: root => {
+      const n = Math.round(num(String(mval(root, 'n')).replace(/[.\s]/g, ''))), g = Math.round(num(String(mval(root, 'g')).replace(/[.\s]/g, '')));
+      if (!(n >= 0 && n < 150000) || !String(mval(root, 'n')).trim()) return toast('Escribe tus pasos', 'warn');
+      state.steps = state.steps || {}; state.steps[d] = n; st.stepGoal = g > 0 && g < 100000 ? g : null;
+      persist(); closeModal(); render(); toast(`👣 ${fmtSteps(n)} pasos ${d === T ? 'hoy' : d === Y ? 'ayer' : 'el ' + fmtDate(d)} ✓`);
+    },
+    del: () => { if (state.steps) delete state.steps[d]; persist(); closeModal(); render(); },
+    off: () => { st.stepsOff = !st.stepsOff; persist(); closeModal(); render(); toast(st.stepsOff ? 'Quitado de Inicio. Lo tienes en Progreso → Pasos.' : 'Los pasos vuelven a Inicio ✓'); }
+  });
+}
 function renderHome() {
   const name = profileOf()?.name || access.me?.name || '';
   const f = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -7428,7 +7515,7 @@ function renderHome() {
   ${v5HomeHTML()}${planBannerHTML()}${advHomeHTML()}${advTeaserHTML()}
   <div id="homeCards" class="home-cards">${HOME_CARDS.map(c => `<button class="home-card" style="--c:${c.c};background-image:url(${c.img}.webp);background-position:${c.pos}" data-act="homeGo" data-v="${c.view}" type="button">
     <span class="home-shade"></span>
-    <span class="home-txt">${c.view === 'train' && libNewList().length ? `<span class="home-pill">📚 ${libNewList().length === 1 ? '1 bloque nuevo' : libNewList().length + ' bloques nuevos'}</span>` : ''}<span class="block font-black text-[19px] leading-tight">${c.t}</span>${homeSub(c.view).filter(Boolean).slice(0, c.view === 'train' && libNewList().length ? 1 : 2).map((l, i) => `<span class="block text-[13px] ${i ? 'mt-0.5' : 'mt-1'} text-slate-300 truncate">${l}</span>`).join('')}</span>
+    <span class="home-txt">${c.view === 'train' && libNewList().length ? `<span class="home-pill">📚 ${libNewList().length === 1 ? '1 bloque nuevo' : libNewList().length + ' bloques nuevos'}</span>` : ''}${c.view === 'progress' ? stepsPillHTML() : ''}<span class="block font-black text-[19px] leading-tight">${c.t}</span>${homeSub(c.view).filter(Boolean).slice(0, (c.view === 'train' && libNewList().length) || (c.view === 'progress' && stepsPillHTML()) ? 1 : 2).map((l, i) => `<span class="block text-[13px] ${i ? 'mt-0.5' : 'mt-1'} text-slate-300 truncate">${l}</span>`).join('')}</span>
     <span class="home-go">›</span></button>`).join('')}</div>`;
 }
 function fitHome() {
@@ -8086,6 +8173,13 @@ const actions = {
     });
   },
   usersGo: () => { ui.view = 'settings'; actions.openAccess(() => { ui.accPage = true; render(); window.scrollTo({ top: 0 }); }); },
+  stepsFix: () => { // la app ajusta la actividad del perfil a tu media de pasos y te propone las calorías nuevas (tú decides si aplicarlas)
+    const mm = stepsMismatch(), p = profileOf(); if (!mm || !p) return;
+    state.settings.profile = { ...state.settings.profile, activity: mm.lv }; persist(); render();
+    const t = suggestedTargets();
+    if (t) targetsModal(t, `👣 Tu actividad del perfil ahora es «${ACTIVITY[mm.lv][0]}», según tu media de ${fmtSteps(mm.avg)} pasos. Estos serían tus objetivos:`); else toast(`Actividad del perfil: «${ACTIVITY[mm.lv][0]}» ✓`);
+  },
+  stepsOpen: b => stepsModal(b?.dataset?.d || todayISO()),
   netInfo: () => openModal(`<h3 class="modal-title">🔥 Lo que quemas y lo que comes</h3>
     <div class="space-y-2 text-[13px] leading-relaxed">
       <p><b>🔥 Cardio</b>: las calorías que has quemado hoy en el cardio que has registrado (andar, bici, correr, nadar…). Si también has entrenado en el gym, sale <b>🏋️ Gym</b> con lo que gastaste en esa sesión.</p>
