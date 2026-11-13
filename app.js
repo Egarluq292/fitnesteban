@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.1.3';
+const APP_VERSION = '5.1.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -5770,7 +5770,7 @@ async function emailSync() {
     const st = state.settings, url = access.usageUrl, code = lsGet(ACCESS_KEY)?.code || lsGet(TRIAL_KEY)?.h, m = st.email || '';
     if (!url || !code || !access.ok || !navigator.onLine || !m || st.emailSent === m) return; // solo se envía un correo nuevo o cambiado; quitarlo de la app no lo borra de la hoja (lo dice el aviso)
     const h = await myHash();
-    await fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ h, v: APP_VERSION, m, i: installDate() }) });
+    await fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ h, v: 'v' + APP_VERSION, m, i: installDate() }) });
     st.emailSent = m; persist();
   } catch { /* se reintenta al volver a abrir la app */ }
 }
@@ -6530,6 +6530,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.1.4', ['Usuarios: arreglada la versión que salía como una fecha («Sun Jan 05 2003…»). Google convertía «5.1.3» en el 5 de enero de 2003; ahora la app la manda como «v5.1.4» y recupera las que ya estaban convertidas.', '«Desactualizada» solo sale si van una versión MENOR por detrás (5.0 frente a 5.1), y en tu fila sale siempre la versión que tienes abierta. Los dispositivos ya no se cortan con «…».'], 'admin'],
   ['5.1.3', ['🚫 Alergias e intolerancias: nueva opción «Fructosa (malabsorción)».', 'Detección más fina de alérgenos en platos españoles (croquetas, lasaña, flan, natillas, chipirones, vieiras, turrón…) y sin falsas alarmas con «sin gluten» o «sin lactosa».'], 'quiet'],
   ['5.1.2', ['Con una ventana abierta, el fondo ya no se mueve aunque deslices el dedo; al cerrarla vuelves justo donde estabas.'], 'quiet'],
   ['5.1.1', ['🍽️ «¿Qué como?» con más estilos: 🎲 Variado, 🍲 Cuchara, 🥘 Arroces, 🍝 Pasta, 🥩 Carne, 🐟 Pescado, 🥗 Ligero y 🥡 Táper (platos que aguantan bien para llevar).', '⚡ Nuevo interruptor «Tengo poco tiempo»: se combina con cualquier estilo y todo se hace en menos de 20 minutos.']],
@@ -8813,9 +8814,16 @@ async function usagePing() {
     // solo móviles que han visto la frase de las condiciones (instalados desde la 4.26) y el administrador
     if (!access.me?.admin && !state.settings.usageOk) return;
     const h = await myHash();
-    await fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ h, v: APP_VERSION, i: installDate() }) });
+    await fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ h, v: 'v' + APP_VERSION, i: installDate() }) });
     lsSet(PING_KEY, mark);
   } catch { /* sin conexión: mañana se vuelve a intentar */ }
+}
+// versión que guarda la hoja: «v5.1.3» (con la v, para que Google no la convierta en fecha) o, de móviles antiguos, «5.1.3»…
+// …que Google pudo convertir en la fecha 5/1/2003: se recupera de esa fecha
+const MES3 = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
+function usageVer(v) {
+  const t = String(v || '').trim().replace(/^v/i, ''), m = t.match(/^[A-Z][a-z]{2} ([A-Z][a-z]{2}) (\d{2}) (\d{4})/);
+  return m && MES3[m[1]] ? `${+m[2]}.${MES3[m[1]]}.${+m[3] % 100}` : t;
 }
 async function loadUsage() {
   const enc = lsGet(USE_KEY);
@@ -8826,7 +8834,7 @@ async function loadUsage() {
     const r = await fetch(`${access.usageUrl}?key=${encodeURIComponent(key)}&t=${Date.now()}`, { cache: 'no-store' });
     const d = await r.json();
     if (!d.ok) throw new Error(d.error === 'clave' ? 'La clave del registro no coincide con la del script' : 'El registro no respondió bien');
-    ui.usage = {}; for (const x of d.rows || []) ui.usage[String(x.h).toLowerCase()] = x;
+    ui.usage = {}; for (const x of d.rows || []) { x.v = usageVer(x.v); ui.usage[String(x.h).toLowerCase()] = x; }
     ui.trialH = {}; // 🧪 filas del periodo de prueba: su huella es la del correo (así no dependen de la columna «nombre»)
     for (const x of d.rows || []) { const m = String(x.m || '').trim().toLowerCase(), h = String(x.h).toLowerCase(); if (m && !(access.list || []).some(y => y.hash === h) && await trialHashOf(m) === h) ui.trialH[h] = (String(x.nm || '').match(/\d{4}-\d{2}-\d{2}/) || [''])[0] || (x.first ? addDays(fecha10(x.first), TRIAL_DAYS - 1) : ''); }
     ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageOld12 = !(d.ver >= 12); ui.usageOld13 = !(d.ver >= 14); ui.usageVer = +d.ver || 0;
@@ -8844,9 +8852,11 @@ function usageLine(hash) {
   if (!ui.usage) return ui.usageLoading ? '<div class="text-[11px] text-mute"><span class="spinner"></span> Consultando uso…</div>' : '';
   const u = ui.usage[hash];
   if (!u) return '<div class="text-[11px] text-mute">⚪ Aún no la ha abierto (o sin conexión desde que tiene el código)</div>';
-  const ago = daysBetween(u.last, todayISO()), old = u.v && cmpVer(APP_VERSION, String(u.v)) > 0;
+  const mine = hash === access.me?.hash, ver = mine && (!u.v || cmpVer(APP_VERSION, String(u.v)) > 0) ? APP_VERSION : u.v; // en tu fila manda la versión que tienes abierta
+  const mm = x => String(x).split('.').slice(0, 2).join('.') + '.0'; // solo cuenta ir detrás en una versión MENOR (5.0.x frente a 5.1.x); los parches no
+  const ago = daysBetween(u.last, todayISO()), old = !!ver && /^\d+\.\d+/.test(String(ver)) && cmpVer(mm(APP_VERSION), mm(ver)) > 0;
   const when = ago <= 0 ? 'Hoy' : ago === 1 ? 'Ayer' : `Hace ${ago} días`;
-  return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(u.v || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${+u.days === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} dispositivo${u.n === 1 ? '' : 's'} (límite: ${DEVICE_LIMIT}${u.n > DEVICE_LIMIT ? '; los que ya tenía se mantienen' : ''})`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="truncate text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${dv.p && !(access.list || []).some(x => x.hash === hash && x.anon) ? `<b class="text-white">${esc(dv.p)}</b> · ` : ''}${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}${dv.k ? ` · ${dv.k} día${dv.k === 1 ? '' : 's'} de uso` : ''}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 truncate">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
+  return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(ver || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${(+u.days || 1) === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} dispositivo${u.n === 1 ? '' : 's'} (límite: ${DEVICE_LIMIT}${u.n > DEVICE_LIMIT ? '; los que ya tenía se mantienen' : ''})`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="min-w-0 break-words text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${dv.p && !(access.list || []).some(x => x.hash === hash && x.anon) ? `<b class="text-white">${esc(dv.p)}</b> · ` : ''}${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}${dv.k ? ` · ${dv.k} día${dv.k === 1 ? '' : 's'} de uso` : ''}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 break-words">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
 }
 function usageScript(key) {
   return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 1; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos; periodo de prueba de 7 días con Google) · v13
