@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.7.0';
+const APP_VERSION = '5.7.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6709,6 +6709,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.7.1', ['👥 Usuarios: el paso de un filtro a otro es más suave y fuera la barrita gris bajo los filtros.'], 'quiet'],
   ['5.7.0', ['🏋️ Perfil: nueva pregunta «Días que entrenas a la semana» (0, 1–2, 3–4 o 5 o más). Así tus calorías se ajustan también si no entrenas o si entrenas mucho. Si no la tocas, todo sigue igual (3–4 días).', 'La actividad diaria se elige ahora sin contar el entreno: solo cómo es el resto de tu día.']],
   ['5.6.2', ['👥 Usuarios: el buscador ya no toca el título ni los filtros.'], 'quiet'],
   ['5.6.1', ['👥 Usuarios: desliza el dedo a izquierda o derecha sobre la lista para pasar de un filtro a otro (Todos, Hoy, Caducan pronto, Caducados…).'], 'admin'],
@@ -8012,6 +8013,14 @@ function swipeEnd() {
 document.addEventListener('touchend', swipeEnd, { passive: true });
 document.addEventListener('touchcancel', swipeEnd, { passive: true });
 
+/* Cambia de filtro sin saltos: la fila de píldoras se queda donde estaba y se desliza suave hasta la elegida */
+function accGo(k) {
+  const sl = $('#accChips')?.scrollLeft || 0;
+  ui.accF = k; render(); accFilterDom();
+  const row = $('#accChips'), c = row?.querySelector(`[data-k="${k}"]`); if (!row || !c) return;
+  row.scrollLeft = sl;
+  row.scrollTo({ left: Math.max(0, c.offsetLeft - row.offsetLeft - (row.clientWidth - c.offsetWidth) / 2), behavior: 'smooth' });
+}
 /* 👥 Usuarios: deslizar el dedo pasa por los filtros (Todos · Hoy · Caducan pronto · Caducados · Sin usar · DÚO · Individual · Free · En prueba) */
 const acs = { on: false, axis: null, x0: 0, y0: 0, dx: 0, busy: false };
 const accKeys = () => [...document.querySelectorAll('[data-act="accF"]')].map(b => b.dataset.k);
@@ -8034,15 +8043,14 @@ function accSwipeEnd() {
   const dir = acs.dx < 0 ? 1 : -1, K = accKeys(), next = K[K.indexOf(ui.accF || 'all') + dir];
   if (!next || Math.abs(acs.dx) < 60) { b.style.transition = 'transform 200ms ease, opacity 200ms ease'; b.style.transform = ''; b.style.opacity = ''; return; }
   acs.busy = true;
-  b.style.transition = 'transform 150ms ease, opacity 150ms ease'; b.style.transform = `translate3d(${-dir * W()}px,0,0)`; b.style.opacity = '0';
+  b.style.transition = 'transform 170ms cubic-bezier(.4,0,1,1), opacity 170ms linear'; b.style.transform = `translate3d(${-dir * W() * 0.6}px,0,0)`; b.style.opacity = '0';
   setTimeout(() => {
-    ui.accF = next; render(); accFilterDom();
-    $(`[data-act="accF"][data-k="${next}"]`)?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); // la píldora elegida se ve arriba
+    accGo(next);
     const nb = $('#accRows');
-    if (nb) { nb.style.transform = `translate3d(${dir * W() * 0.4}px,0,0)`; nb.style.opacity = '0';
-      requestAnimationFrame(() => requestAnimationFrame(() => { nb.style.transition = 'transform 220ms cubic-bezier(.2,.7,.3,1), opacity 220ms ease'; nb.style.transform = ''; nb.style.opacity = ''; })); }
-    setTimeout(() => { acs.busy = false; }, 240);
-  }, 150);
+    if (nb) { nb.style.transition = 'none'; nb.style.transform = `translate3d(${dir * W() * 0.35}px,0,0)`; nb.style.opacity = '0';
+      requestAnimationFrame(() => requestAnimationFrame(() => { nb.style.transition = 'transform 300ms cubic-bezier(.16,1,.3,1), opacity 240ms ease-out'; nb.style.transform = ''; nb.style.opacity = ''; })); }
+    setTimeout(() => { acs.busy = false; }, 300);
+  }, 170);
 }
 document.addEventListener('touchend', accSwipeEnd, { passive: true });
 document.addEventListener('touchcancel', accSwipeEnd, { passive: true });
@@ -8491,7 +8499,7 @@ const actions = {
   libNewSee: () => { libMarkSeen(); go('train'); ui.trainHome = true; render(); },
   libNewHide: () => { libMarkSeen(); render(); },
   accRow: b => { ui.accOpenH = ui.accOpenH === b.dataset.hash ? null : b.dataset.hash; render(); accFilterDom(); },
-  accF: b => { ui.accF = b.dataset.k; render(); accFilterDom(); $(`[data-act="accF"][data-k="${b.dataset.k}"]`)?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); },
+  accF: b => accGo(b.dataset.k),
   delAccess: b => delAccess(b.dataset.hash),
   ghConnect: () => ghConnectModal(),
   ghDisconnect: () => { if (!confirm('¿Desconectar GitHub? Se borra la llave guardada en este móvil.')) return; try { localStorage.removeItem(GH_KEY); } catch { /* nada */ } render(); toast('GitHub desconectado'); },
@@ -9590,7 +9598,7 @@ function accFilterHTML(list) {
   const hoy = list.filter(x => !x.admin && ui.usage?.[x.hash]?.last === todayISO()).length;
   const F = [['all', 'Todos', list.length], ['today', '🟢 Hoy', ui.usage ? hoy : null], ['soon', 'Caducan pronto', n('soon')], ['exp', 'Caducados', n('exp')], ['idle', 'Sin usar +7 d', ui.usage ? idle : null], ['duo', '👥 DÚO', new Set(list.filter(x => duoMate(x)).map(x => x.duo)).size], ['ind', '👤 Individual', list.filter(x => !x.admin && !duoMate(x) && isPaidPlan(x.plan || '')).length], ['free', 'Free', n('free')], ['trial', '🧪 En prueba', ui.usage ? trialRows().length : null]];
   return `<input class="field" id="accSearch" placeholder="🔎 Buscar por nombre o correo" autocomplete="off" value="${esc(ui.accQ || '')}" />
-    <div class="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" data-noswipe>${F.filter(f => f[2] !== null).map(([k, l, c]) => `<button class="chip chip-sm shrink-0 ${(ui.accF || 'all') === k ? 'chip-on' : ''}" data-act="accF" data-k="${k}" type="button">${l} <span class="opacity-70">${c}</span></button>`).join('')}</div>`;
+    <div class="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" id="accChips" data-noswipe>${F.filter(f => f[2] !== null).map(([k, l, c]) => `<button class="chip chip-sm shrink-0 ${(ui.accF || 'all') === k ? 'chip-on' : ''}" data-act="accF" data-k="${k}" type="button">${l} <span class="opacity-70">${c}</span></button>`).join('')}</div>`;
 }
 function accFilterDom() {
   const q = normTxt(($('#accSearch')?.value || '').trim()); ui.accQ = $('#accSearch')?.value || '';
