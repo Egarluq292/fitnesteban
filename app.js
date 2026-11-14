@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.4.2';
+const APP_VERSION = '5.4.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -2968,7 +2968,7 @@ function trainWeekHTML() {
   // días con algo hecho (fuerza, retos o cardio), de lunes a domingo; sin «de X» para no chocar con el contador de cada bloque
   const cal = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/><path d="M7.5 13.5h2M11 13.5h2M14.5 13.5h2M7.5 17h2M11 17h2"/></svg>';
   return `<div class="week-strip">
-    <button class="flex items-center gap-2 w-full text-left" data-act="openCalDay" data-d="${T}" type="button" aria-label="Abrir calendario"><span class="flex-1 text-[12.5px] text-mute">Esta semana ${ne ? `llevas <b class="text-emerald-300">${ne} ${ne === 1 ? 'entreno' : 'entrenos'}</b>` : '<b class="text-slate-300">aún no has entrenado</b>'}</span><span class="text-brand shrink-0">${cal}</span></button>
+    <button class="flex items-center gap-2 w-full text-left" data-act="openCalDay" data-d="${T}" type="button" aria-label="Abrir calendario"><span class="flex-1 text-[12.5px] text-mute">${n ? `Esta semana: <b class="text-emerald-300">${n} ${n === 1 ? 'día' : 'días'}</b>${ne > n ? ` · ${ne} entrenos` : ` ${n === 1 ? 'entrenado' : 'entrenados'}`}` : 'Esta semana <b class="text-slate-300">aún no has entrenado</b>'}</span><span class="text-brand shrink-0">${cal}</span></button>
     <span class="flex justify-between mt-1.5">${days.map((d, i) => d > T ? `<span class="ws-d">${'LMXJVSD'[i]}</span>` : `<button class="ws-d ${did(d) ? 'on' : ''} ${d === T ? 'now' : ''}" data-act="openCalDay" data-d="${d}" type="button" aria-label="Ver el ${fmtDate(d)}">${'LMXJVSD'[i]}</button>`).join('')}</span>${trainMonthLine(T)}</div>`;
 }
 function goHistory() { // baja hasta «Historial de sesiones» de Progreso (espera a que se pinte y se asiente la pantalla)
@@ -6665,6 +6665,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.4.3', ['Entreno: la línea de la semana cuenta los días entrenados, como los puntos de debajo (y, si un día hiciste dos cosas, también los entrenos).'], 'quiet'],
   ['5.4.2', ['🧍 Nuevas animaciones 3D para brazos: Curl predicador (banco Scott), Curl Zottman (con el giro de muñecas), Curl 21 con barra Z (las tres fases, con el contador en pantalla) y Extensión en polea con agarre invertido (la misma animación que la extensión en polea, con sus propias claves).']],
   ['5.4.1', ['✎ Edita tus sesiones desde donde las ves: en «Hoy has hecho» (Entreno) y al tocar un día del calendario, con «✎ Editar». Al guardar vuelves a donde estabas.']],
   ['5.4.0', ['✎ Ya puedes editar una sesión guardada: en Progreso → Historial de sesiones, toca «✎ Editar» para cambiar pesos y repeticiones, añadir o quitar series y ejercicios del día, y corregir la fecha o la duración.', '＋ Si guardas el mismo día dos veces, ahora eliges: sumar las series a la sesión de hoy (ideal para ir haciendo flexiones a lo largo del día) o sustituirla.']],
