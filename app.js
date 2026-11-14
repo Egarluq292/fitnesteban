@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.4.0';
+const APP_VERSION = '5.4.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -2383,7 +2383,7 @@ function personalRecords() {
   return [...map.values()].filter(r => r.bestW >= 0).sort((a, b) => (a.lastPR < b.lastPR ? 1 : -1));
 }
 /* ✎ Editar una sesión ya guardada: series (peso y reps o segundos), añadir o quitar series y ejercicios, fecha y duración */
-function editSessionModal(id) {
+function editSessionModal(id, back = null) { // back: volver a donde estabas (Hoy has hecho, calendario…)
   const s0 = state.sessions.find(x => x.id === id); if (!s0) return;
   const S = clone(s0), day = allDays().find(d => d.id === S.dayId);
   const sync = root => {
@@ -2405,10 +2405,11 @@ function editSessionModal(id) {
       <button class="btn-ghost w-full mt-2 !py-2 text-[13px]" data-mact="addSet" data-ei="${ei}" type="button">＋ Serie</button></div>`; }).join('')}
     ${miss.length ? `<div><div class="lbl mb-1.5">Añadir un ejercicio de este día</div><div class="flex flex-wrap gap-1.5">${miss.map(e => `<button class="chip chip-sm" data-mact="addEx" data-id="${esc(e.id)}" type="button">＋ ${esc(variantOf(e).variant.name)}</button>`).join('')}</div></div>` : ''}
     <p class="text-[11px] text-mute">Las series sin repeticiones (o segundos) no se guardan. El coach y tus récords usarán los datos corregidos.</p>
-    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-close type="button">Cancelar</button><button class="btn-primary" data-mact="save" type="button">Guardar cambios</button></div>`;
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="cancel" type="button">${back ? '‹ Volver' : 'Cancelar'}</button><button class="btn-primary" data-mact="save" type="button">Guardar cambios</button></div>`;
   };
   const redraw = root => { const sh = root.querySelector('.modal-sheet'), y = sh.scrollTop; sh.innerHTML = html(); sh.scrollTop = y; };
   openModal(html(), {
+    cancel: () => { if (back) back(); else closeModal(); },
     addSet: (root, b) => { sync(root); const e = S.exercises[+b.dataset.ei], last = e.sets[e.sets.length - 1]; e.sets.push(last ? { ...last } : { w: 0, r: 0 }); redraw(root); },
     delSet: (root, b) => { sync(root); S.exercises[+b.dataset.ei].sets.splice(+b.dataset.si, 1); redraw(root); },
     delEx: (root, b) => { sync(root); S.exercises.splice(+b.dataset.ei, 1); redraw(root); },
@@ -2426,7 +2427,7 @@ function editSessionModal(id) {
         const last = state.sessions.filter(x => x.exercises?.some(e => e.exKey === k)).sort((a, b) => a.date.localeCompare(b.date) || (a.endedAt || 0) - (b.endedAt || 0)).pop();
         if (last) state.memory[k] = { date: last.date, sets: last.exercises.find(e => e.exKey === k).sets }; else delete state.memory[k];
       }
-      if (!persist()) return; closeModal(); render(); toast('Sesión corregida ✓'); setTimeout(silentDriveBackup, 1500);
+      if (!persist()) return; closeModal(); render(); if (back) back(); toast('Sesión corregida ✓'); setTimeout(silentDriveBackup, 1500);
     }
   });
 }
@@ -2987,13 +2988,14 @@ function trainTodayModal(T0 = todayISO(), fromCal = false) {
         ${can3D() && gym3dOf(e.name) ? `<button class="hh-3d${seen3D() ? '' : ' is-new'}" data-mact="g3d" data-n="${esc(e.name)}" type="button" aria-label="Ver el movimiento en 3D">▶ 3D</button>` : ''}</div>`).join('')}</div>
       ${x.skipped?.length ? `<div class="text-[11px] text-mute mt-1">⏭ Hoy no: ${x.skipped.map(esc).join(' · ')}</div>` : ''}
       ${x.notes?.length ? x.notes.map(nn => `<div class="text-[11px] text-amber-200/90 mt-1">💬 ${esc(nn.name)}: ${esc(noteTxt(nn))}</div>`).join('') : ''}
-      <button class="text-[12px] underline text-brand mt-2" data-mact="card" data-id="${esc(x.id)}" type="button">📸 Tarjeta para compartir</button></div>`; }).join('')}
+      <div class="flex flex-wrap gap-x-4 mt-2"><button class="text-[12px] underline text-brand" data-mact="edit" data-id="${esc(x.id)}" type="button">✎ Editar</button><button class="text-[12px] underline text-brand" data-mact="card" data-id="${esc(x.id)}" type="button">📸 Tarjeta para compartir</button></div></div>`; }).join('')}
     ${ret.map(x => `<div class="card-in"><b>🏆 ${x.h.test ? 'Test de máximo' : 'Reto'} ${esc(x.r.name)}</b>${x.h.test ? '' : ` <span class="text-[11px] text-mute">· nivel ${x.h.level}</span>`}<div class="font-mono text-[12.5px] text-mute mt-1">${retoLine(x)}</div></div>`).join('')}
     ${car.map(c => `<div class="card-in"><b>${ctOf(c).icon} ${esc(ctOf(c).label)}</b> <span class="text-[12.5px] text-mute">· ${c.minutes} min${c.km ? ` · ${fmtNum(c.km)} km` : ''}${c.kcal ? ` · <span class="${MAC.kcal.text}">~${Math.round(c.kcal)} kcal</span>` : ''}</span>${c.id ? `<div><button class="text-[12px] underline text-brand mt-1.5" data-mact="ccard" data-id="${esc(c.id)}" type="button">📸 Tarjeta para compartir</button></div>` : ''}</div>`).join('')}
     ${fromCal ? '<button class="btn-ghost w-full mt-3" data-mact="cal" type="button">‹ Volver al calendario</button>' : ''}
     <button class="btn-ghost w-full mt-${fromCal ? 2 : 3}" data-mact="hist" type="button">📚 Ver todo el historial</button>`, {
     cal: () => openCalendar(T0),
     card: (_, b) => { closeModal(); openShareCard(b.dataset.id); },
+    edit: (_, b) => editSessionModal(b.dataset.id, () => trainTodayModal(T0, fromCal)),
     g3d: (_, b) => gym3dModal(b.dataset.n, () => trainTodayModal(T0, fromCal)),
     ccard: (_, b) => { closeModal(); openCardioCard(b.dataset.id); },
     hist: () => { closeModal(); openKeys.history = true; ui.view = 'progress'; ui.accessOpen = false; render(); goHistory(); }
@@ -3789,7 +3791,7 @@ function renderCalDetail(date) {
       ${act.sessions.length ? act.sessions.map(s => `<div class="mt-1">
           <div class="text-xs font-semibold">${esc(s.dayTitle || 'Sesión')}${s.durationMin ? ` · ⏱ ${s.durationMin} min` : ''}${gymKcalOf(s) ? ` · <span class="${MAC.kcal.text}">~${gymKcalOf(s)} kcal</span>` : ''}${s.deload ? ' · 🔋 descarga' : ''}</div>
           ${s.exercises.map(e => `<div class="text-[11px] text-mute leading-snug">· ${esc(e.name)}: <span class="font-mono">${e.sets.map(x => setStr(x, isBwEx(e.exId), isTimedEx(e))).join(' · ')}</span></div>`).join('')}
-          <button class="cal-card" data-mact="calCard" data-id="${esc(s.id)}" type="button">📸 Ver tarjeta</button>
+          <span class="flex gap-3"><button class="cal-card" data-mact="calEdit" data-id="${esc(s.id)}" type="button">✎ Editar</button><button class="cal-card" data-mact="calCard" data-id="${esc(s.id)}" type="button">📸 Ver tarjeta</button></span>
         </div>`).join('') : ''}
       ${act.retos.map(x => x.h.test ? `<div class="mt-1"><div class="text-xs font-semibold">🎯 Test de máximo · ${esc(x.r.name)}</div><div class="text-[11px] text-mute font-mono">${retoLine(x)} seguid${x.r.unit === 's' ? 'os' : 'as'}</div></div>` : `<div class="mt-1"><div class="text-xs font-semibold">🏆 Reto ${esc(x.r.name)} · nivel ${x.h.level}${x.h.kcal ? ` · <span class="${MAC.kcal.text}">~${x.h.kcal} kcal</span>` : ''}</div><div class="text-[11px] text-mute font-mono">${retoLine(x)} ${(RETO_FEEL.find(f => f[0] === x.h.feel) || ['', ''])[1]}</div></div>`).map((html, k) => html.replace(/<\/div>$/, `<button class="cal-card" data-mact="calReto" data-reto="${esc(act.retos[k].id)}" data-at="${esc(String(act.retos[k].h.at))}" type="button">📸 Ver tarjeta</button></div>`)).join('')}
       ${!act.sessions.length && !act.retos.length ? '<div class="text-xs text-mute mt-0.5">Sin entreno de fuerza.</div>' : ''}
@@ -3852,6 +3854,7 @@ function openCalendar(sel = ui.dietDate) {
       calSwapDetail();
     },
     calCard: (r, b) => openShareCard(b.dataset.id),
+    calEdit: (r, b) => { const d0 = ui.calSel; editSessionModal(b.dataset.id, () => openCalendar(d0)); },
     calReto: (r, b) => openRetoCard(b.dataset.reto, b.dataset.at),
     calTrain: () => trainTodayModal(ui.calSel, true),
     calGo: () => { ui.editing = null; ui.aiResult = null; ui.dietDate = ui.calSel; ui.view = 'diet'; ui.accessOpen = false; ui._animRings = true; closeModal(); render(); window.scrollTo({ top: 0 }); }
@@ -6662,6 +6665,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.4.1', ['✎ Edita tus sesiones desde donde las ves: en «Hoy has hecho» (Entreno) y al tocar un día del calendario, con «✎ Editar». Al guardar vuelves a donde estabas.']],
   ['5.4.0', ['✎ Ya puedes editar una sesión guardada: en Progreso → Historial de sesiones, toca «✎ Editar» para cambiar pesos y repeticiones, añadir o quitar series y ejercicios del día, y corregir la fecha o la duración.', '＋ Si guardas el mismo día dos veces, ahora eliges: sumar las series a la sesión de hoy (ideal para ir haciendo flexiones a lo largo del día) o sustituirla.']],
   ['5.3.3', ['📢 Si cambias un bloque que tienes compartido, la app te avisa dentro del bloque y lo actualizas para todos con un toque. Quien ya lo tenía añadido conserva su copia.'], 'admin'],
   ['5.3.2', ['👣 Pasos más sencillos: se apuntan escribiendo el número (hoy o ayer). Fuera la lectura con captura, que era más lenta que escribirlo.'], 'quiet'],
@@ -7007,7 +7011,7 @@ const GUIDE = [
     'Cada vez que lo abres empieza de cero; «Ver la última conversación» recupera la anterior. Usa tu clave de Gemini (Ajustes → IA). Nunca se envían la clave ni el PIN.'
   ]],
   ['📈 Progreso', [
-    '✎ <b>Editar una sesión</b>: en Historial de sesiones, abre una y toca «✎ Editar». Puedes cambiar pesos y repeticiones, añadir o quitar series y ejercicios de ese día, y corregir la fecha o la duración. Si guardas el mismo día dos veces, la app te deja sumar las series a la sesión de hoy.',
+    '✎ <b>Editar una sesión</b>: toca «✎ Editar» en «Hoy has hecho», en un día del calendario o en Historial de sesiones. Puedes cambiar pesos y repeticiones, añadir o quitar series y ejercicios de ese día, y corregir la fecha o la duración. Si guardas el mismo día dos veces, la app te deja sumar las series a la sesión de hoy.',
     '👣 <b>Pasos</b>: apúntalos con la píldora de la tarjeta Progreso de Inicio (de hoy o de ayer). <b>Para qué sirven:</b> la app usa tu media para comprobar si el nivel de actividad de tu perfil es el correcto; con al menos 5 días en dos semanas, si no encaja, te avisa en Progreso → Pasos y lo ajusta por ti con un toque (tú decides si aplicas las calorías nuevas). <b>No restan calorías del día</b>: eso ya lo tiene en cuenta tu objetivo. Las caminatas que haces como ejercicio, en Cardio.',
     '⚖️ <b>Peso y cintura</b>: pésate al levantarte, después del baño y antes de comer; la cintura, una vez por semana a la altura del ombligo. <b>Registra siempre, también los días que sube</b>: un pesaje suelto no dice nada.',
     'La línea es tu <b>tendencia</b> (los puntos, cada pesaje). El peso de un día sube y baja 1–2 kg por agua y glucógeno (hidratos, sal, entreno, ciclo, descanso); 1 kg de grasa son ~7.700 kcal, así que un salto de un día no es grasa. Con unos 10 pesajes en 3 semanas (o 6 en 4) verás tu ritmo real en kg/semana.',
