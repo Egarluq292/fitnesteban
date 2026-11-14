@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.3.2';
+const APP_VERSION = '5.3.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -285,6 +285,17 @@ function blockForLib(p) {
   return p.days.map(d => ({ label: d.label, rotation: d.rotation, title: d.title, subtitle: d.subtitle,
     exercises: d.exercises.map(e => ({ id: e.id, block: e.block, sets: e.sets, minReps: e.minReps, maxReps: e.maxReps, increment: e.increment, rest: e.rest, bw: e.bw, ...(e.timed ? { timed: true } : {}), alts27: true, variants: e.variants.map(v => ({ name: v.name, note: v.note || '' })) })) }));
 }
+/* ¿Has cambiado en tu app un bloque que compartiste? Se compara con la copia publicada (sin ids) */
+const libSig = days => JSON.stringify((days || []).map(d => ({ label: d.label, rotation: d.rotation, title: d.title, subtitle: d.subtitle, exercises: (d.exercises || []).map(({ id, ...e }) => e) })));
+function libDirty(p) {
+  if (!p || p.type !== 'strength' || !access.me?.admin || !lsGet(GH_KEY)) return null;
+  const L = remoteLib.find(x => x.lib && (x.lib === p.pubId || x.lib === p.lib));
+  return L && libSig(blockForLib(p)) !== libSig(L.days) ? L : null;
+}
+function libDirtyHTML() {
+  const p = prog(); if (!libDirty(p)) return '';
+  return `<button class="lib-dirty" data-act="publishProg" data-prog="${esc(p.id)}" type="button"><span class="text-lg">📢</span><span class="flex-1 min-w-0 text-left"><b>Has cambiado «${esc(p.name)}»</b><small>Los demás siguen viendo la versión anterior. ¿La actualizo para todos?</small></span><span class="text-lg">›</span></button>`;
+}
 async function ghEditJson(pin, file, fn, message) {
   const token = await ghToken(pin);
   const cur = await ghApi(token, 'GET', null, file);
@@ -339,7 +350,7 @@ function publishBlockModal(progId) {
   const pubId = p.pubId || ('pub_' + uid('').slice(0, 10));
   const existing = remoteLib.find(x => x.lib === pubId) || remoteLib.find(x => libKey(x.name) === libKey(p.name)); // mismo nombre = mismo bloque
   openModal(`<h3 class="modal-title">📤 Compartir «${esc(p.name)}» con todos</h3>
-    <p class="text-xs text-mute">Aparecerá en «＋ Añadir bloque» de todos los usuarios. Se comparte una copia: si después cambias tu bloque, vuelve aquí para actualizarla.</p>
+    <p class="text-xs text-mute">${existing ? 'Se actualiza la versión que ven los demás en «＋ Añadir bloque». <b>Quien ya lo tiene añadido conserva su copia tal cual</b>: no se le cambia nada.' : 'Aparecerá en «＋ Añadir bloque» de todos los usuarios. Se comparte una copia: si después cambias tu bloque, la app te avisará para actualizarla.'}</p>
     <label class="lbl">Descripción (una o dos frases)<textarea class="field mt-1" name="desc" rows="6" maxlength="700" placeholder="Ej: Circuito de 30 min con mancuernas para días con poco tiempo.">${esc(existing?.desc || '')}</textarea></label>
     <button class="btn-primary w-full" data-mact="go" type="button">${existing ? 'Actualizar' : 'Compartir'}</button>
     ${existing ? '<button class="btn-danger w-full" data-mact="remove" type="button">Dejar de compartir</button>' : ''}`, {
@@ -1044,7 +1055,7 @@ function renderProgHeader() {
     <div class="chips-row flex-1 relative" id="progRow">${progRow}</div>
     <button class="iconbtn iconbtn-sm shrink-0 text-brand font-black" data-act="addProg" type="button" aria-label="Añadir bloque" title="Añadir bloque">＋</button>
     <button class="iconbtn iconbtn-sm shrink-0" data-act="editProg" type="button" aria-label="Editar bloque">✎</button>
-  </div>${blockHeroHTML()}${libCtaHTML() ? '' : libNewHTML()}`;
+  </div>${blockHeroHTML()}${libDirtyHTML()}${libCtaHTML() ? '' : libNewHTML()}`;
 }
 /* Sin bloques de fuerza propios: invitación grande a la biblioteca */
 /* 📚 Aviso de bloques nuevos en la biblioteca (para quien ya tiene sus bloques). Desaparece al verlos o con ✕ */
@@ -1285,7 +1296,7 @@ function blockBackHTML() {
     <button class="back-btn" data-act="trainHome" type="button">‹ Bloques</button>
     <span class="flex-1 min-w-0 truncate text-[13px] font-extrabold text-mute text-center">${p.type === 'strength' && p.id !== 'free' ? '' : esc(progLabel(p).replace(/<[^>]+>/g, ''))}</span>
     ${strength ? '<button class="iconbtn iconbtn-sm shrink-0" data-act="editProg" type="button" aria-label="Editar bloque">✎</button>' : ''}
-  </div>${strength && p.id !== 'free' ? blockHeroHTML() : ''}`;
+  </div>${strength && p.id !== 'free' ? blockHeroHTML() + libDirtyHTML() : ''}`;
 }
 function renderTrain() {
   npRestoreSwaps();
@@ -6590,6 +6601,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.3.3', ['📢 Si cambias un bloque que tienes compartido, la app te avisa dentro del bloque y lo actualizas para todos con un toque. Quien ya lo tenía añadido conserva su copia.'], 'admin'],
   ['5.3.2', ['👣 Pasos más sencillos: se apuntan escribiendo el número (hoy o ayer). Fuera la lectura con captura, que era más lenta que escribirlo.'], 'quiet'],
   ['5.3.1', ['Vuelven «Dieta sin culpa» y «Comida fuera o copas» (acceso anticipado), que se habían perdido al publicar las versiones 5.2.x.'], 'admin'],
   ['5.3.0', ['🧪 Acceso anticipado · Dieta sin culpa: el día que te pasas sale «Hoy, por encima +X kcal» sin rojo, y debajo de los 7 días aparece el balance de la semana (lunes a domingo, solo días apuntados).', '🧪 Nuevo botón «🍽️ Comida fuera o copas»: comida ligera, normal o copiosa y copas según el tipo (con zero, con refresco normal, cerveza o vino), en dos toques y editable después. De madrugada pregunta si es de anoche (marcado por defecto) o de hoy.'], 'admin'],
