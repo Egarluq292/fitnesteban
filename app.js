@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.6.1';
+const APP_VERSION = '5.6.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6704,6 +6704,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.6.2', ['👥 Usuarios: el buscador ya no toca el título ni los filtros.'], 'quiet'],
   ['5.6.1', ['👥 Usuarios: desliza el dedo a izquierda o derecha sobre la lista para pasar de un filtro a otro (Todos, Hoy, Caducan pronto, Caducados…).'], 'admin'],
   ['5.6.0', ['✨ Acabado nuevo en el tema oscuro: tarjetas en titanio sobre fondo negro, más limpias y con un filo de luz. Todo funciona igual; solo se ve más cuidado.']],
   ['5.5.5', ['🧪 Acceso anticipado: en Ajustes → Aplicación, «Acabados en pruebas» para probar las tarjetas en titanio (fondo negro) y un tema claro más suave.'], 'admin'],
