@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.5.2';
+const APP_VERSION = '5.5.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -2838,6 +2838,17 @@ function muscleVolume(days) {
   for (const w of muscleWork(days - 1)) for (const [m, wt] of Object.entries(w.m)) v[m] = (v[m] || 0) + w.sets * wt;
   return v;
 }
+// series por músculo en cada una de las 4 últimas semanas (la más antigua primero), para ver la tendencia
+function muscleWeeks() {
+  const out = {}, now = Date.now();
+  for (const w of muscleWork(27)) { const k = Math.min(3, Math.floor((now - w.t) / (7 * 864e5))); for (const [m, wt] of Object.entries(w.m)) { (out[m] ||= [0, 0, 0, 0])[3 - k] += w.sets * wt; } }
+  return out;
+}
+function mmTrendHTML(wk) {
+  if (!wk) return ''; const mx = Math.max(...wk, 1), a = wk[0] + wk[1], b = wk[2] + wk[3];
+  const tr = a + b < 4 ? '' : b > a * 1.2 ? '<span class="text-emerald-300">↑</span>' : b < a * 0.8 ? '<span class="text-amber-300">↓</span>' : '<span class="text-mute">=</span>';
+  return `<span class="mm-wk" title="Series por semana: ${wk.map(x => fmtNum(Math.round(x * 2) / 2)).join(' · ')}">${wk.map((x, i) => `<i style="height:${Math.max(8, Math.round(x / mx * 100))}%;opacity:${x ? 1 : .25}" class="${i === 3 ? 'is-now' : ''}"></i>`).join('')}</span>${tr}`;
+}
 const MM_SCALE = ['#2c3b44', '#164e63', '#0e7490', '#0891b2', '#06b6d4', '#22d3ee', '#67e8f9'];
 const mmColor = v => v <= 0.03 ? MM_SCALE[0] : MM_SCALE[Math.min(6, 1 + Math.floor(v * 6))];
 function bodySVG(vals, width) {
@@ -2862,11 +2873,12 @@ function muscleMapHTML() {
     const days = tab === 'd7' ? 7 : 30, v = muscleVolume(days), max = Math.max(0, ...Object.values(v));
     for (const [m, x] of Object.entries(v)) vals[m] = max ? x / max : 0;
     const all = Object.keys(MUSCLE_NAMES).map(m => [m, v[m] || 0]).sort((a, b) => b[1] - a[1]);
-    rows = all.filter(([, x]) => x > 0).map(([m, x]) => `<div class="flex items-center justify-between bg-ink rounded-lg px-3 py-1.5 text-[13px]"><span class="font-semibold">${MUSCLE_NAMES[m]}</span><span class="text-mute text-[12px]"><b class="text-white">${fmtNum(Math.round(x * 2) / 2)}</b> series</span></div>`).join('');
+    const W4 = days === 30 ? muscleWeeks() : null;
+    rows = all.filter(([, x]) => x > 0).map(([m, x]) => `<div class="flex items-center justify-between gap-2 bg-ink rounded-lg px-3 py-1.5 text-[13px]"><span class="font-semibold flex-1 min-w-0">${MUSCLE_NAMES[m]}</span>${W4 ? `<span class="flex items-center gap-1.5 text-[12px] font-bold">${mmTrendHTML(W4[m])}</span>` : ''}<span class="text-mute text-[12px] w-[4.6rem] text-right shrink-0"><b class="text-white">${fmtNum(Math.round(x * 2) / 2)}</b> series</span></div>`).join('');
     const forgotten = all.filter(([, x]) => x === 0).map(([m]) => MUSCLE_NAMES[m]);
     if (!rows) rows = `<p class="text-xs text-mute text-center py-2">Sin entrenos registrados en los últimos ${days} días.</p>`;
     else if (forgotten.length) rows += `<div class="rounded-lg px-3 py-2 text-[12px] text-amber-200" style="background:rgba(252,211,77,.08);border:1px solid rgba(252,211,77,.3)">⚠️ Sin trabajar en ${days} días: ${forgotten.join(', ')}</div>`;
-    foot = `Series acumuladas en ${days} días (principal 100 %, secundarios 50 %). El color compara cada músculo con el que más has trabajado.`;
+    foot = `Series acumuladas en ${days} días (principal 100 %, secundarios 50 %). El color compara cada músculo con el que más has trabajado.${days === 30 ? ' Las barritas son tus 4 últimas semanas (la de la derecha, esta): ↑ subes, ↓ bajas, = igual.' : ''}`;
   }
   const grad = `linear-gradient(90deg,${MM_SCALE.join(',')})`;
   const unknown = [...new Set(state.sessions.filter(s => s.date >= addDays(todayISO(), -29)).flatMap(s => s.exercises.filter(x => !Object.keys(musclesOf(x.name)).length).map(x => x.name)))];
@@ -4933,7 +4945,7 @@ function renderProgress() {
   }
 
   const backupAge = st.lastBackup ? daysBetween(st.lastBackup, todayISO()) : null;
-  const needBackup = state.sessions.length > 0 && (backupAge === null || backupAge > 7);
+  const needBackup = (state.sessions.length > 0 || Object.keys(state.meals || {}).length >= 7) && (backupAge === null || backupAge > 7); // también para quien solo apunta comidas
   const hist = [...sortedSessions().map(x => ({ ...x, _t: x.endedAt || 0 })), ...retoEntries().map(x => ({ reto: x, date: x.h.date, _t: x.h.at || 0 }))].sort((a, b) => (a.date === b.date ? a._t - b._t : a.date < b.date ? -1 : 1)).slice(-20).reverse();
 
   return `
@@ -6686,6 +6698,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.5.3', ['🔥 Mapa muscular · 30 días: cada músculo muestra sus 4 últimas semanas con una flecha (↑ subes, ↓ bajas, = igual).', 'El aviso de copia de seguridad sale también a quien solo apunta comidas.'], 'quiet'],
   ['5.5.2', ['Dieta: quitado el reparto de proteína por comida de la casilla «Proteína que falta».'], 'quiet'],
   ['5.5.1', ['Dieta: el reparto de proteína por comida va ahora en la misma línea que la cifra («≈20 g × 2»), sin agrandar la casilla.'], 'quiet'],
   ['5.5.0', ['📊 Tus calorías, con tus datos reales: si llevas unas semanas apuntando casi todo y pesándote, la app calcula tu gasto real (lo que comes y cómo cambia tu peso) y, si tu objetivo no encaja, te lo propone en Dieta. Tú decides si lo aplicas.', '🚶 Revisa tu perfil: la actividad diaria ahora se elige contando tus entrenos, con ejemplos. Si trabajas sentado, aunque entrenes 3–4 días, lo tuyo es «Sentada».']],
