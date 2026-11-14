@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.3.1';
+const APP_VERSION = '5.3.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6590,6 +6590,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.3.2', ['👣 Pasos más sencillos: se apuntan escribiendo el número (hoy o ayer). Fuera la lectura con captura, que era más lenta que escribirlo.'], 'quiet'],
   ['5.3.1', ['Vuelven «Dieta sin culpa» y «Comida fuera o copas» (acceso anticipado), que se habían perdido al publicar las versiones 5.2.x.'], 'admin'],
   ['5.3.0', ['🧪 Acceso anticipado · Dieta sin culpa: el día que te pasas sale «Hoy, por encima +X kcal» sin rojo, y debajo de los 7 días aparece el balance de la semana (lunes a domingo, solo días apuntados).', '🧪 Nuevo botón «🍽️ Comida fuera o copas»: comida ligera, normal o copiosa y copas según el tipo (con zero, con refresco normal, cerveza o vino), en dos toques y editable después. De madrugada pregunta si es de anoche (marcado por defecto) o de hoy.'], 'admin'],
   ['5.2.4', ['🧍 Remo renegado corregido: ahora rema una mano y luego la otra, con agarre neutro (palmas enfrentadas), y sus 3 claves lo explican.'], 'quiet'],
@@ -6932,7 +6933,7 @@ const GUIDE = [
     'Cada vez que lo abres empieza de cero; «Ver la última conversación» recupera la anterior. Usa tu clave de Gemini (Ajustes → IA). Nunca se envían la clave ni el PIN.'
   ]],
   ['📈 Progreso', [
-    '👣 <b>Pasos</b>: apúntalos con la píldora de la tarjeta Progreso de Inicio (escribiendo el número o con una captura del reloj o del móvil, de hoy o de ayer). <b>Para qué sirven:</b> la app usa tu media para comprobar si el nivel de actividad de tu perfil es el correcto; con al menos 5 días en dos semanas, si no encaja, te avisa en Progreso → Pasos y lo ajusta por ti con un toque (tú decides si aplicas las calorías nuevas). <b>No restan calorías del día</b>: eso ya lo tiene en cuenta tu objetivo. Las caminatas que haces como ejercicio, en Cardio.',
+    '👣 <b>Pasos</b>: apúntalos con la píldora de la tarjeta Progreso de Inicio (de hoy o de ayer). <b>Para qué sirven:</b> la app usa tu media para comprobar si el nivel de actividad de tu perfil es el correcto; con al menos 5 días en dos semanas, si no encaja, te avisa en Progreso → Pasos y lo ajusta por ti con un toque (tú decides si aplicas las calorías nuevas). <b>No restan calorías del día</b>: eso ya lo tiene en cuenta tu objetivo. Las caminatas que haces como ejercicio, en Cardio.',
     '⚖️ <b>Peso y cintura</b>: pésate al levantarte, después del baño y antes de comer; la cintura, una vez por semana a la altura del ombligo. <b>Registra siempre, también los días que sube</b>: un pesaje suelto no dice nada.',
     'La línea es tu <b>tendencia</b> (los puntos, cada pesaje). El peso de un día sube y baja 1–2 kg por agua y glucógeno (hidratos, sal, entreno, ciclo, descanso); 1 kg de grasa son ~7.700 kcal, así que un salto de un día no es grasa. Con unos 10 pesajes en 3 semanas (o 6 en 4) verás tu ritmo real en kg/semana.',
     'La app lo interpreta según <b>tu objetivo</b> (Ajustes): perder grasa = bajar al ritmo que elegiste (suave 0,25–0,5 %, moderado 0,5–0,75 % o rápido 0,75–1 % de tu peso por semana); recomposición = peso estable con la cintura bajando y la fuerza subiendo (peso estable no es fracaso); ganar músculo = subida lenta; mantener o salud y rendimiento = peso estable. Usa también lo que registras en Dieta y tu fuerza.',
@@ -7557,36 +7558,19 @@ function stepsCardHTML() {
       <p class="text-[11px] text-mute leading-snug">👣 <b>Para qué sirven:</b> la app usa tu media de pasos para comprobar si el nivel de actividad de tu perfil es el correcto. Si no encaja, te avisa aquí y lo ajusta por ti con un toque, y con él tus calorías. No restan calorías del día: eso ya lo hace tu objetivo. Las caminatas que haces como ejercicio, apúntalas en Cardio.</p>
     </div></details>`;
 }
-const stepsFile = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*', hidden: true });
-document.body.appendChild(stepsFile);
-stepsFile.addEventListener('change', async e => {
-  const f = e.target.files[0], d0 = ui.stepsD || todayISO(); e.target.value = ''; if (!f) return;
-  let img; try { img = await compressImage(f, 1400); } catch (err) { return toast(err.message, 'error'); }
-  openModal(`<div class="text-center py-6"><span class="spinner" style="width:34px;height:34px;border-width:3px;border-color:rgba(34,211,238,.25);border-top-color:#22d3ee"></span><h3 class="modal-title mt-3">Leyendo tus pasos…</h3></div>`);
-  try {
-    const r = parseJSONLoose(await callGemini([{ text: `Es una captura de una app de salud o deportiva (Salud de Apple, Google Fit, Samsung Health, Huawei Salud, Garmin, Xiaomi, Fitbit…) o una foto de la pantalla de un reloj. Extrae SOLO el número de PASOS de un día (no la distancia, ni las calorías, ni el objetivo de pasos) y la fecha a la que corresponde: AAAA-MM-DD si se ve; «hoy» si pone Hoy; «ayer» si pone Ayer; si no se ve, null. Si hay una gráfica de varios días, coge el día destacado o el total del día. No inventes nada. Responde SOLO con JSON: {"pasos": número | null, "fecha": "…" | null}` }, { inlineData: { mimeType: 'image/jpeg', data: img.split(',')[1] } }], { timeout: 30000 }));
-    const n = Math.round(num(r?.pasos) || 0), fd = String(r?.fecha || '').toLowerCase();
-    const d = fd === 'ayer' ? addDays(todayISO(), -1) : /^\d{4}-\d{2}-\d{2}$/.test(fd) && fd <= todayISO() ? fd : fd === 'hoy' ? todayISO() : d0;
-    if (!(n > 0 && n < 150000)) throw new Error('No veo el número de pasos en la imagen. Prueba con otra captura o escríbelo.');
-    stepsModal(d, n, true);
-  } catch (err) { stepsModal(d0); toast(err.message || 'No he podido leer la imagen', 'warn'); }
-});
-function stepsModal(d = todayISO(), val = null, fromPhoto = false) {
+function stepsModal(d = todayISO(), val = null) {
   const T = todayISO(), Y = addDays(T, -1), st = state.settings;
   ui.stepsD = d;
   const cur = val ?? stepsOf(d);
   openModal(`<h3 class="modal-title">👣 Pasos</h3>
     <div class="flex gap-1.5">${[[T, 'Hoy'], [Y, 'Ayer']].map(([x, l]) => `<button class="chip chip-sm ${d === x ? 'chip-on' : ''}" data-mact="day" data-d="${x}" type="button">${l}</button>`).join('')}${d !== T && d !== Y ? `<span class="chip chip-sm chip-on">${esc(fmtDate(d))}</span>` : ''}</div>
-    ${fromPhoto ? '<p class="text-[12px] text-emerald-300">📷 Leído de tu captura. Comprueba el número y la fecha antes de guardar.</p>' : ''}
     <label class="lbl">Pasos del día<input class="field mt-1 text-2xl font-black text-center tracking-wide" name="n" inputmode="numeric" placeholder="Ej: 8500" value="${cur !== null ? cur : ''}" /></label>
-    ${st.apiKey ? '<button class="btn-ghost w-full" data-mact="photo" type="button">📷 Leerlos de una captura del reloj o del móvil</button>' : ''}
     <label class="lbl">Meta diaria <span class="text-mute font-normal">(opcional)</span><input class="field mt-1" name="g" inputmode="numeric" placeholder="Ej: 8000" value="${st.stepGoal || ''}" /></label>
     <p class="text-[11px] text-mute leading-snug">👣 <b>Para qué sirven:</b> la app usa tu media de pasos para comprobar si el nivel de actividad de tu perfil es el correcto y, si no encaja, te propone ajustarlo (y con él tus calorías). No restan calorías del día. Necesita al menos 5 días apuntados en dos semanas.</p>
     <button class="btn-primary w-full" data-mact="save" type="button">Guardar</button>
     ${stepsOf(d) !== null ? '<button class="text-[12px] text-rose-300 underline w-full" data-mact="del" type="button">Borrar los pasos de este día</button>' : ''}
     <button class="text-[12px] text-mute underline w-full" data-mact="off" type="button">${st.stepsOff ? 'Volver a mostrar los pasos en Inicio' : 'No me interesa: quitar los pasos de Inicio'}</button>`, {
     day: (root, b) => { const v = mval(root, 'n'); stepsModal(b.dataset.d, v ? Math.round(num(v)) : null); },
-    photo: () => { stepsFile.click(); },
     save: root => {
       const n = Math.round(num(String(mval(root, 'n')).replace(/[.\s]/g, ''))), g = Math.round(num(String(mval(root, 'g')).replace(/[.\s]/g, '')));
       if (!(n >= 0 && n < 150000) || !String(mval(root, 'n')).trim()) return toast('Escribe tus pasos', 'warn');
