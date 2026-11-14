@@ -1,5 +1,357 @@
 [
  {
+  "lib": "pub_brazos1",
+  "name": "BRAZOS",
+  "icon": "💪",
+  "desc": "Día dias completos y exclusivos de brazos: primero lo pesado (press cerrado y curl con barra Z) y después aislamientos que trabajan cada cabeza del bíceps y del tríceps, alternando para que uno descanse mientras trabaja el otro. Unas 10 series de tríceps y 12 de bíceps, ~55 min.\nCómo usarlo: añádelo como días extra a tu rutina, mejor separado al menos 48 h de tus días de empuje y tirón. Para más volumen, hazlo 2 veces por semana. Bíceps y tríceps grandes se ven de verdad con poca grasa: cuida también la dieta.",
+  "author": "Esteban",
+  "at": "2026-11-01",
+  "perWeek": 2,
+  "days": [
+   {
+    "label": "BRAZOS",
+    "rotation": true,
+    "title": "Brazos de acero",
+    "subtitle": "Press cerrado y curl Z pesados + cada cabeza del brazo",
+    "exercises": [
+     {
+      "id": "c_mw4nom9epuvnm",
+      "block": "🔱 Tríceps pesado",
+      "sets": 4,
+      "minReps": 6,
+      "maxReps": 12,
+      "increment": 2.5,
+      "rest": 120,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Press cerrado con barra",
+        "note": "Manos al ancho de hombros, codos pegados al cuerpo."
+       },
+       {
+        "name": "Fondos en paralelas",
+        "note": "Torso vertical para cargar el tríceps."
+       },
+       {
+        "name": "Press cerrado con mancuernas",
+        "note": "Mancuernas juntas, bajada controlada."
+       }
+      ]
+     },
+     {
+      "id": "c_mw4nom9ecjld6",
+      "block": "💪 Bíceps pesado",
+      "sets": 4,
+      "minReps": 6,
+      "maxReps": 10,
+      "increment": 2.5,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl con barra Z",
+        "note": "Codos quietos, sin balanceo."
+       },
+       {
+        "name": "Curl con barra",
+        "note": "Agarre al ancho de hombros."
+       },
+       {
+        "name": "Curl en polea",
+        "note": "Tensión constante."
+       }
+      ]
+     },
+     {
+      "id": "c_mw4nom9e69won",
+      "block": "🔱 Tríceps cabeza larga",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 75,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Extensión sobre la cabeza con mancuerna",
+        "note": "Baja detrás de la cabeza hasta notar el estiramiento."
+       },
+       {
+        "name": "Extensión sobre la cabeza en polea",
+        "note": "De espaldas a la polea, codos al frente."
+       },
+       {
+        "name": "Press francés con barra Z",
+        "note": "Barra hacia la frente, codos fijos."
+       }
+      ]
+     },
+     {
+      "id": "c_mw4nom9ezk9js",
+      "block": "💪 Bíceps cabeza larga",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 1,
+      "rest": 75,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl en banco inclinado",
+        "note": "Brazos colgando por detrás del torso."
+       },
+       {
+        "name": "Curl spider",
+        "note": "Pecho apoyado en banco inclinado."
+       },
+       {
+        "name": "Curl con mancuernas alterno",
+        "note": "Gira la muñeca al subir."
+       }
+      ]
+     },
+     {
+      "id": "c_mw4nom9em2fte",
+      "block": "🔱 Tríceps cabeza lateral",
+      "sets": 3,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Extensión en polea con cuerda",
+        "note": "Abre la cuerda abajo y aprieta 1 s."
+       },
+       {
+        "name": "Patada de tríceps",
+        "note": "Codo alto y quieto."
+       },
+       {
+        "name": "Extensión de tríceps en polea",
+        "note": "Codos pegados a los costados."
+       }
+      ]
+     },
+     {
+      "id": "c_mw4nom9em6b9j",
+      "block": "🦾 Braquial y antebrazo",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 1,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl martillo",
+        "note": "Agarre neutro, sin girar."
+       },
+       {
+        "name": "Curl martillo en polea con cuerda",
+        "note": "Codos pegados."
+       },
+       {
+        "name": "Curl inverso",
+        "note": "Agarre prono, trabaja el antebrazo."
+       }
+      ]
+     },
+     {
+      "id": "c_mw4nom9eq9txs",
+      "block": "💪 Remate de bíceps",
+      "sets": 2,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 1,
+      "rest": 45,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl concentrado",
+        "note": "Sube despacio y aprieta arriba 1 s."
+       },
+       {
+        "name": "Curl predicador",
+        "note": "Sin rebotar abajo."
+       },
+       {
+        "name": "Curl en polea",
+        "note": "Última serie al fallo."
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "label": "DÍA 2",
+    "rotation": true,
+    "title": "Brazos: Volumen y Detalle",
+    "subtitle": "",
+    "exercises": [
+     {
+      "id": "c_mwgbf9evhvh1f",
+      "block": "💪 Tríceps",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 12,
+      "increment": 2.5,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Press francés con barra Z",
+        "note": "Baja la barra hacia la frente controlando el peso."
+       },
+       {
+        "name": "Press francés con mancuernas",
+        "note": "Más libertad de movimiento para los codos."
+       },
+       {
+        "name": "Extensión tras nuca con disco",
+        "note": "Mantén codos cerrados."
+       }
+      ]
+     },
+     {
+      "id": "c_mwgbf9evlu45d",
+      "block": "💪 Bíceps",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2.5,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl predicador",
+        "note": "Extiende casi por completo sin bloquear codos."
+       },
+       {
+        "name": "Curl concentrado",
+        "note": "Apoya el codo en el muslo."
+       },
+       {
+        "name": "Curl araña en banco",
+        "note": "Máxima tensión en acortamiento."
+       }
+      ]
+     },
+     {
+      "id": "c_mwgbf9evf02ay",
+      "block": "💪 Tríceps",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 90,
+      "bw": true,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Fondos en paralelas",
+        "note": "Cuerpo erguido para enfocar más el tríceps."
+       },
+       {
+        "name": "Fondos entre bancos",
+        "note": "Pies elevados para más dificultad."
+       },
+       {
+        "name": "Flexiones diamante",
+        "note": "Manos juntas bajo el pecho."
+       }
+      ]
+     },
+     {
+      "id": "c_mwgbf9ev4eupi",
+      "block": "💪 Bíceps",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 12,
+      "increment": 2.5,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl Zottman",
+        "note": "Sube normal, gira palmas y baja lento."
+       },
+       {
+        "name": "Curl martillo",
+        "note": "Agarre neutro constante."
+       },
+       {
+        "name": "Curl con barra inversa",
+        "note": "Enfoca el braquial y antebrazo."
+       }
+      ]
+     },
+     {
+      "id": "c_mwgbf9eva5wmv",
+      "block": "💪 Tríceps",
+      "sets": 3,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Extensión en polea agarre invertido",
+        "note": "Palmas hacia arriba para variar el estímulo."
+       },
+       {
+        "name": "Extensión polea con barra recta",
+        "note": "Palmas hacia abajo."
+       },
+       {
+        "name": "Patada de tríceps con mancuerna",
+        "note": "Brazo paralelo al suelo."
+       }
+      ]
+     },
+     {
+      "id": "c_mwgc2l6kj00pv",
+      "block": "⚡ Brazos",
+      "sets": 3,
+      "minReps": 21,
+      "maxReps": 21,
+      "increment": 2.5,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Curl 21 con barra Z",
+        "note": "7 parciales bajas, 7 altas, 7 completas"
+       },
+       {
+        "name": "Curl con barra Z",
+        "note": "Rango completo estándar"
+       },
+       {
+        "name": "Curl martillo",
+        "note": "Enfocado en braquial"
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
   "lib": "pub_gluteo1",
   "name": "GLÚTEO",
   "icon": "🍑",
@@ -1967,200 +2319,6 @@
    }
   ],
   "perWeek": 3
- },
- {
-  "lib": "pub_brazos1",
-  "name": "BRAZOS",
-  "icon": "💪",
-  "author": "Esteban",
-  "at": "2026-11-01",
-  "desc": "Un día completo de brazos: primero lo pesado (press cerrado y curl con barra Z) y después aislamientos que trabajan cada cabeza del bíceps y del tríceps, alternando para que uno descanse mientras trabaja el otro. Unas 10 series de tríceps y 12 de bíceps, ~55 min.\nCómo usarlo: añádelo como día extra a tu rutina, mejor separado al menos 48 h de tus días de empuje y tirón. Para más volumen, repítelo 2 veces por semana. Bíceps y tríceps grandes se ven de verdad con poca grasa: cuida también la dieta.",
-  "days": [
-   {
-    "label": "BRAZOS",
-    "rotation": true,
-    "title": "Brazos de acero",
-    "subtitle": "Press cerrado y curl Z pesados + cada cabeza del brazo",
-    "exercises": [
-     {
-      "id": "br_cgbench",
-      "block": "🔱 Tríceps pesado",
-      "sets": 4,
-      "minReps": 6,
-      "maxReps": 8,
-      "increment": 2.5,
-      "rest": 120,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Press cerrado con barra",
-        "note": "Manos al ancho de hombros, codos pegados al cuerpo."
-       },
-       {
-        "name": "Fondos en paralelas",
-        "note": "Torso vertical para cargar el tríceps."
-       },
-       {
-        "name": "Press cerrado con mancuernas",
-        "note": "Mancuernas juntas, bajada controlada."
-       }
-      ]
-     },
-     {
-      "id": "br_ezcurl",
-      "block": "💪 Bíceps pesado",
-      "sets": 4,
-      "minReps": 6,
-      "maxReps": 10,
-      "increment": 2.5,
-      "rest": 90,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Curl con barra Z",
-        "note": "Codos quietos, sin balanceo."
-       },
-       {
-        "name": "Curl con barra",
-        "note": "Agarre al ancho de hombros."
-       },
-       {
-        "name": "Curl en polea",
-        "note": "Tensión constante."
-       }
-      ]
-     },
-     {
-      "id": "br_ohext",
-      "block": "🔱 Tríceps cabeza larga",
-      "sets": 3,
-      "minReps": 10,
-      "maxReps": 12,
-      "increment": 2,
-      "rest": 75,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Extensión sobre la cabeza con mancuerna",
-        "note": "Baja detrás de la cabeza hasta notar el estiramiento."
-       },
-       {
-        "name": "Extensión sobre la cabeza en polea",
-        "note": "De espaldas a la polea, codos al frente."
-       },
-       {
-        "name": "Press francés con barra Z",
-        "note": "Barra hacia la frente, codos fijos."
-       }
-      ]
-     },
-     {
-      "id": "br_inclcurl",
-      "block": "💪 Bíceps cabeza larga",
-      "sets": 3,
-      "minReps": 10,
-      "maxReps": 12,
-      "increment": 1,
-      "rest": 75,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Curl en banco inclinado",
-        "note": "Brazos colgando por detrás del torso."
-       },
-       {
-        "name": "Curl spider",
-        "note": "Pecho apoyado en banco inclinado."
-       },
-       {
-        "name": "Curl con mancuernas alterno",
-        "note": "Gira la muñeca al subir."
-       }
-      ]
-     },
-     {
-      "id": "br_rope",
-      "block": "🔱 Tríceps cabeza lateral",
-      "sets": 3,
-      "minReps": 12,
-      "maxReps": 15,
-      "increment": 2.5,
-      "rest": 60,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Extensión en polea con cuerda",
-        "note": "Abre la cuerda abajo y aprieta 1 s."
-       },
-       {
-        "name": "Patada de tríceps",
-        "note": "Codo alto y quieto."
-       },
-       {
-        "name": "Extensión de tríceps en polea",
-        "note": "Codos pegados a los costados."
-       }
-      ]
-     },
-     {
-      "id": "br_hammer",
-      "block": "🦾 Braquial y antebrazo",
-      "sets": 3,
-      "minReps": 10,
-      "maxReps": 12,
-      "increment": 1,
-      "rest": 60,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Curl martillo",
-        "note": "Agarre neutro, sin girar."
-       },
-       {
-        "name": "Curl martillo en polea con cuerda",
-        "note": "Codos pegados."
-       },
-       {
-        "name": "Curl inverso",
-        "note": "Agarre prono, trabaja el antebrazo."
-       }
-      ]
-     },
-     {
-      "id": "br_conc",
-      "block": "💪 Remate de bíceps",
-      "sets": 2,
-      "minReps": 12,
-      "maxReps": 15,
-      "increment": 1,
-      "rest": 45,
-      "bw": false,
-      "alts27": true,
-      "variants": [
-       {
-        "name": "Curl concentrado",
-        "note": "Sube despacio y aprieta arriba 1 s."
-       },
-       {
-        "name": "Curl predicador",
-        "note": "Sin rebotar abajo."
-       },
-       {
-        "name": "Curl en polea",
-        "note": "Última serie al fallo."
-       }
-      ]
-     }
-    ]
-   }
-  ],
-  "perWeek": 1
  },
  {
   "lib": "pub_piernas1",
