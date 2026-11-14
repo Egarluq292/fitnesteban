@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.5.3';
+const APP_VERSION = '5.5.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -727,8 +727,13 @@ function persist() {
     if (state._sig === undefined) { state._sig = sig; if (!state.dataAt) state.dataAt = dataAtOf(state); }
     else if (sig !== state._sig) { state._sig = sig; state.dataAt = Date.now(); }
   } catch { /* no es grave */ }
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); return true; }
-  catch (e) { toast('No se pudo guardar en el móvil: ' + e.message, 'error'); return false; }
+  const raw = JSON.stringify(state);
+  try { localStorage.setItem(STORE_KEY, raw); return true; }
+  catch (e) {
+    // sin espacio: primero se sacrifica la copia de «antes de actualizar» (los datos de hoy valen más) y se reintenta
+    if (localStorage.getItem(PREV_KEY)) { try { localStorage.removeItem(PREV_KEY); localStorage.setItem(STORE_KEY, raw); return true; } catch { /* sigue sin caber */ } }
+    toast('No se pudo guardar en el móvil: ' + e.message, 'error'); return false;
+  }
 }
 function persistSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(persist, 350); }
 if (state._migrated) { delete state._migrated; persist(); }
@@ -771,6 +776,7 @@ if (!state.settings.habitsFix252) {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* nada */ }
 }
 { const seen = state.settings.lastSeenVersion; if (bootRaw && seen && seen !== APP_VERSION && prevCopy()?.ver !== seen) savePrevCopy(bootRaw, seen); }
+{ const pc = prevCopy(); if (pc && Date.now() - Date.parse(pc.at) > 10 * 864e5) try { localStorage.removeItem(PREV_KEY); } catch { /* nada */ } } // la copia de «antes de actualizar» solo se guarda 10 días: así no ocupa la mitad del espacio
 
 /* ---------- Estado de interfaz ---------- */
 const ui = {
@@ -6698,6 +6704,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.5.4', ['Más espacio para tus datos en el móvil: la copia de «antes de actualizar» se guarda 10 días (y, si faltara espacio, se libera para que nunca se deje de guardar lo de hoy).'], 'quiet'],
   ['5.5.3', ['🔥 Mapa muscular · 30 días: cada músculo muestra sus 4 últimas semanas con una flecha (↑ subes, ↓ bajas, = igual).', 'El aviso de copia de seguridad sale también a quien solo apunta comidas.'], 'quiet'],
   ['5.5.2', ['Dieta: quitado el reparto de proteína por comida de la casilla «Proteína que falta».'], 'quiet'],
   ['5.5.1', ['Dieta: el reparto de proteína por comida va ahora en la misma línea que la cifra («≈20 g × 2»), sin agrandar la casilla.'], 'quiet'],
