@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.5.5';
+const APP_VERSION = '5.6.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -5163,10 +5163,6 @@ function renderSettings() {
     ${planOf(access.me) ? `<div class="text-[11px] text-mute">⏳ Tu acceso: ${planLabel(access.me)}</div>` : ''}
     ${access.usageUrl ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span class="min-w-0">🔑 Este dispositivo: <span class="${/✓/.test(deviceDiag) ? 'text-emerald-300' : 'text-amber-300'}">${esc(deviceDiag || 'sin comprobar')}</span><br><span class="opacity-70">${esc(deviceLabel())} · script …${esc(access.usageUrl.replace(/\/exec.*$/, '').slice(-6))}</span></span><button class="underline text-brand shrink-0" data-act="devCheck" type="button">Comprobar</button></div>` : ''}
     <div><div class="lbl mb-1.5">Tema</div><div class="grid grid-cols-3 gap-1.5">${[['dark', '🌙 Oscuro'], ['light', '☀️ Claro'], ['auto', '📱 Auto']].map(([k, l]) => `<button class="chip justify-center whitespace-nowrap px-2 ${themePref() === k ? 'chip-on' : ''}" data-act="setTheme" data-k="${k}" type="button">${l}</button>`).join('')}</div>
-    ${canBeta() ? `<div class="rounded-xl p-3 space-y-2" style="border:1px dashed rgba(34,211,238,.35)"><div class="lbl">🧪 Acabados en pruebas</div>
-      <div class="flex items-center justify-between gap-2 text-[13px]"><span>Tarjetas</span><span class="flex gap-1.5">${[['0', 'Normal'], ['1', 'Titanio']].map(([v, l]) => `<button class="chip chip-sm ${(lookPref('titan') ? '1' : '0') === v ? 'chip-on' : ''}" data-act="setLook" data-k="titan" data-v="${v}" type="button">${l}</button>`).join('')}</span></div>
-      <div class="flex items-center justify-between gap-2 text-[13px]"><span>Tema claro</span><span class="flex gap-1.5">${[['0', 'Normal'], ['1', 'Suave']].map(([v, l]) => `<button class="chip chip-sm ${(lookPref('soft') ? '1' : '0') === v ? 'chip-on' : ''}" data-act="setLook" data-k="soft" data-v="${v}" type="button">${l}</button>`).join('')}</span></div>
-      <p class="text-[11px] text-mute">Solo para ti y quien tenga acceso anticipado. Cámbialos para comparar.</p></div>` : ''}
       <p class="text-[11px] text-mute mt-1.5">«Auto» sigue el modo claro u oscuro de tu móvil.</p></div>
     <button class="btn-danger w-full" data-act="wipe" type="button">Borrar todo</button>
     <p class="text-[11px] text-mute">Versión ${APP_VERSION} · ${state.sessions.length} sesiones · ${Object.keys(state.meals).length} días de dieta</p>
@@ -6708,6 +6704,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.6.0', ['✨ Acabado nuevo en el tema oscuro: tarjetas en titanio sobre fondo negro, más limpias y con un filo de luz. Todo funciona igual; solo se ve más cuidado.']],
   ['5.5.5', ['🧪 Acceso anticipado: en Ajustes → Aplicación, «Acabados en pruebas» para probar las tarjetas en titanio (fondo negro) y un tema claro más suave.'], 'admin'],
   ['5.5.4', ['Más espacio para tus datos en el móvil: la copia de «antes de actualizar» se guarda 10 días (y, si faltara espacio, se libera para que nunca se deje de guardar lo de hoy).'], 'quiet'],
   ['5.5.3', ['🔥 Mapa muscular · 30 días: cada músculo muestra sus 4 últimas semanas con una flecha (↑ subes, ↓ bajas, = igual).', 'El aviso de copia de seguridad sale también a quien solo apunta comidas.'], 'quiet'],
@@ -8445,7 +8442,6 @@ const actions = {
   v5Open: () => profileModal(),
   v5Close: () => { state.settings.v5x = true; persist(); render(); },
   pays: b => paysModal(b.dataset.hash || ''),
-  setLook: b => { try { localStorage.setItem('fitnesteban_' + b.dataset.k, b.dataset.v); } catch { /* nada */ } applyTheme(); render(); },
   setTheme: b => { try { localStorage.setItem(THEME_KEY, b.dataset.k); } catch { /* nada */ } applyTheme(); render(); },
   retoCard: b => openRetoCard(b.dataset.reto, b.dataset.at),
   libNewSee: () => { libMarkSeen(); go('train'); ui.trainHome = true; render(); },
@@ -8621,11 +8617,9 @@ async function checkRemoteVersion(force = false) {
 /* 🌗 Tema: oscuro (por defecto), claro o automático (según el móvil) */
 const THEME_KEY = 'fitnesteban_theme';
 const themePref = () => { try { return localStorage.getItem(THEME_KEY) || 'dark'; } catch { return 'dark'; } };
-const lookPref = k => { try { return localStorage.getItem('fitnesteban_' + k) === '1'; } catch { return false; } }; // 🧪 acabados en pruebas: tarjetas titanio y claro suave
 function applyTheme() {
   const t = themePref(), light = t === 'light' || (t === 'auto' && matchMedia('(prefers-color-scheme: light)').matches);
   document.documentElement.classList.toggle('light', light);
-  document.documentElement.classList.toggle('titan', lookPref('titan')); document.documentElement.classList.toggle('soft', lookPref('soft'));
   const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = light ? '#ffffff' : '#05080a';
 }
 try { matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (themePref() === 'auto') applyTheme(); }); } catch { /* nada */ }
