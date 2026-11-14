@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.4.3';
+const APP_VERSION = '5.5.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4198,9 +4198,10 @@ function renderDiet() {
     ${ringsCard(t, st, budget, st.eatBackCardio && burned > 0)}
     <div class="grid grid-cols-2 gap-2 mt-4">
       <div class="d2-left"><div class="d2-left-l">${over ? (canBeta() ? 'Hoy, por encima' : 'Te has pasado') : 'Te quedan'}</div><div class="d2-left-v ${over && !canBeta() ? 'text-rose-300' : MAC.kcal.text}">${over && canBeta() ? '+' : ''}${Math.abs(leftK)}<span> kcal</span></div></div>
-      <div class="d2-left"><div class="d2-left-l">${leftP > 0 ? 'Proteína que falta' : 'Proteína'}</div><div class="d2-left-v ${MAC.prot.text}">${leftP > 0 ? `${leftP}<span> g</span>` : '✓<span> cumplida</span>'}</div></div>
+      <div class="d2-left"><div class="d2-left-l">${leftP > 0 ? 'Proteína que falta' : 'Proteína'}</div><div class="d2-left-v ${MAC.prot.text}">${leftP > 0 ? `${leftP}<span> g</span>` : '✓<span> cumplida</span>'}</div>${protLeftHint(leftP, date)}</div>
     </div>
     ${isToday && mealsOf(date).length && (leftK > 60 || qcProtMode(qcLeft())) ? `<button class="qc-btn ${MAC.kcal.text}" data-act="queComo" type="button">¿Qué como?</button>` : `<p class="text-xs text-mute mt-2.5 leading-relaxed">${esc(hint)}</p>`}
+    ${isToday ? realTdeeHintHTML() : ''}
     ${burned ? `<button class="text-[11px] mt-2 text-mute text-left w-full" data-act="netInfo" type="button">${cardioK ? `🔥 Cardio <b class="${MAC.kcal.text}">−${cardioK}</b> · ` : ''}${gymK ? `🏋️ Gym <b class="${MAC.kcal.text}">−${gymK}</b> · ` : ''}Neto <b class="text-white">${String(Math.round(t.kcal - burned)).replace('-', '−')}</b> kcal <span class="text-brand font-bold">ⓘ</span></button>` : ''}
   </section>
 
@@ -5799,7 +5800,8 @@ function habitStep(name, delta) {
 let habPress = null; // pulsación larga en hábitos (los listeners van junto a los de #app)
 
 /* ---------- Primeros pasos (solo dispositivos nuevos, no administrador) ---------- */
-const ACTIVITY = { low: ['Sentada', 1.35], mid: ['Algo activa', 1.5], high: ['Muy activa', 1.65] };
+const ACTIVITY = { low: ['Sentada', 1.35], mid: ['Algo activa', 1.5], high: ['Muy activa', 1.65] }; // el multiplicador ya incluye tus entrenos
+const ACT_HELP = '<p class="text-[11px] text-mute leading-snug mt-1"><b>Sentada:</b> trabajo sentado y poco paseo, aunque entrenes 3–4 días. <b>Algo activa:</b> de pie o andando buena parte del día. <b>Muy activa:</b> trabajo físico o muchísimo movimiento a diario.</p>';
 function needsOnboarding(me) {
   const st = state.settings;
   return !me?.admin && !st.onboarded && !st.profile && !state.sessions.length && !Object.keys(state.meals).length && !state.bodyMetrics.length;
@@ -5828,7 +5830,7 @@ function calcTargets(d) {
   const bmr = 10 * w + 6.25 * h - 5 * a + (d.sex === 'h' ? 5 : d.sex === 'm' ? -161 : -78);
   const goal = GOALS[d.goal] ? d.goal : 'recomp', lv = goalLv({ goal, goalLv: d.goalLv });
   const adj = lv ? GOAL_LV[goal][lv][2] : { recomp: 0.92, maint: 1, health: 1 }[goal];
-  let kcal = Math.round(bmr * (ACTIVITY[d.activity] || ACTIVITY.mid)[1] * adj / 10) * 10;
+  let kcal = Math.round((d.tdee || bmr * (ACTIVITY[d.activity] || ACTIVITY.low)[1]) * adj / 10) * 10; // con datos suficientes, el gasto real (lo que comes y cómo cambia tu peso) manda sobre la fórmula
   if (adj < 1) kcal = Math.max(kcal, Math.round(bmr / 10) * 10, d.sex === 'm' ? 1200 : 1500); // nunca por debajo de un mínimo
   const prot = Math.round(w * ({ fat: lv === 'fast' ? 2 : 1.8, recomp: 2, muscle: 1.8, maint: 1.4, health: 1.3 }[goal]));
   const fat = Math.round(w * (goal === 'health' ? 0.9 : 0.8));
@@ -5836,19 +5838,51 @@ function calcTargets(d) {
   return { kcal, prot, carbs, fat };
 }
 // objetivos que le corresponderían con su perfil actual y su último peso (null si falta algo)
+/* 📊 Gasto real: lo que comes de media menos lo que cambia tu peso (7.700 kcal por kg), en las 4 últimas semanas.
+   Solo si hay datos de sobra: 14+ días apuntados y 4+ pesajes que abarquen 14+ días. Si no, null y manda la fórmula. */
+function realTdee() {
+  const T = todayISO(), from = addDays(T, -28), kc = [];
+  for (let i = 1; i <= 28; i++) { const k = totalsOf(addDays(T, -i)).kcal; if (k >= 900) kc.push(k); } // días a medio apuntar no cuentan
+  if (kc.length < 14) return null;
+  const W = state.bodyMetrics.filter(m => m.weight && m.date >= from && m.date < T).map(m => [daysBetween(from, m.date), +m.weight]);
+  if (W.length < 4 || Math.max(...W.map(x => x[0])) - Math.min(...W.map(x => x[0])) < 14) return null;
+  const n = W.length, mx = W.reduce((a, x) => a + x[0], 0) / n, my = W.reduce((a, x) => a + x[1], 0) / n;
+  const slope = W.reduce((a, x) => a + (x[0] - mx) * (x[1] - my), 0) / (W.reduce((a, x) => a + (x[0] - mx) ** 2, 0) || 1); // kg al día (tendencia)
+  const eat = kc.reduce((a, x) => a + x, 0) / kc.length, tdee = Math.round((eat - slope * 7700) / 10) * 10;
+  if (!(tdee >= 1200 && tdee <= 4500)) return null;
+  return { tdee, eat: Math.round(eat), kgWeek: +(slope * 7).toFixed(2), days: kc.length, weighs: n };
+}
+function realTdeeHintHTML() { // en Dieta: cuando tus datos reales piden otro objetivo
+  const r = realTdee(), t = r && suggestedTargets(); if (!t || !targetsOff(t)) return '';
+  return `<button class="tdee-hint" data-act="sugTargets" type="button">📊 Con lo que comes y cómo cambia tu peso, tu objetivo sería unas <b>${t.kcal} kcal</b> (ahora ${state.settings.targetKcal}). <span class="text-brand font-bold">Ver ›</span></button>`;
+}
 function suggestedTargets(p = profileOf()) {
   const w = latestWeight(), a = profileAge(p);
   if (!p || !w || !p.sex || !a || !(+p.height >= 100)) return null;
-  return calcTargets({ ...p, weight: w, activity: p.activity || 'mid' });
+  const real = realTdee(); return calcTargets({ ...p, weight: w, activity: p.activity || 'low', ...(real ? { tdee: real.tdee } : {}) });
 }
 const tgtSig = t => `${Math.round(t.kcal / 50)}|${Math.round(t.prot / 5)}`; // si decides mantener los tuyos, no se vuelve a avisar hasta que la propuesta cambie
 function targetsOff(t) { const st = state.settings; return !!t && st.tgtKeep !== tgtSig(t) && (Math.abs(st.targetKcal - t.kcal) / t.kcal > 0.12 || Math.abs(st.targetProt - t.prot) / t.prot > 0.15); }
 const MED_NOTE = 'Información orientativa. No sustituye el consejo de un profesional sanitario: ante cualquier duda de salud, consulta con tu médico.';
 const medNote = (cls = '') => `<p class="med-note ${cls}">🩺 ${MED_NOTE}</p>`;
+/* 🥩 Proteína por comida: las comidas que sueles hacer (según lo que apuntas) y cuánta toca en cada una */
+const MEAL_DE = { Desayuno: 'el desayuno', Comida: 'la comida', Puente: 'el puente', Cena: 'la cena' };
+function usualMeals() {
+  const cnt = {}; let days = 0;
+  for (let i = 1; i <= 14; i++) { const ms = mealsOf(addDays(todayISO(), -i)); if (!ms.length) continue; days++; for (const tp of new Set(ms.map(m => m.type))) if (MEAL_DE[tp]) cnt[tp] = (cnt[tp] || 0) + 1; }
+  const L = ['Desayuno', 'Comida', 'Puente', 'Cena'].filter(tp => days >= 4 && cnt[tp] >= days * .4);
+  return L.length >= 2 ? L : ['Desayuno', 'Comida', 'Puente', 'Cena'];
+}
+function protLeftHint(leftP, date) { // cuánta proteína en cada comida que te queda hoy
+  if (date !== todayISO() || leftP <= 0) return '';
+  const done = new Set(mealsOf(date).map(m => m.type)), rest = usualMeals().filter(tp => !done.has(tp)); if (!rest.length) return '';
+  const g = Math.max(5, Math.round(leftP / rest.length / 5) * 5);
+  return `<div class="text-[11px] text-mute leading-snug mt-0.5">${rest.length === 1 ? `≈ ${g} g en ${MEAL_DE[rest[0]]}` : `≈ ${g} g por comida (quedan ${rest.length})`}</div>`;
+}
 function targetsModal(t, why = '') {
   const st = state.settings, cell = (l, a, b) => `<div><div class="text-[10px] text-mute">${l}</div><div class="text-[12px] text-mute line-through">${a}</div><div class="text-lg font-black ${a === b ? '' : 'text-brand'}">${b}</div></div>`;
   openModal(`<h3 class="modal-title">🎯 Tus objetivos</h3>
-    <p class="text-[13px] leading-snug">${why || 'Con tu perfil actual te corresponderían estos objetivos.'} <span class="text-mute">Calculados con tu último peso (${fmtNum(latestWeight())} kg) y tu actividad.</span></p>
+    <p class="text-[13px] leading-snug">${why || 'Con tu perfil actual te corresponderían estos objetivos.'} <span class="text-mute">${(() => { const r = realTdee(); return r ? `Calculados con tu <b>gasto real</b>: en las últimas 4 semanas has comido unas ${r.eat} kcal de media y tu peso ha ido ${r.kgWeek > 0 ? 'subiendo' : r.kgWeek < 0 ? 'bajando' : 'estable'} (${r.kgWeek > 0 ? '+' : ''}${String(r.kgWeek).replace('.', ',')} kg/semana), así que tu mantenimiento ronda las ${r.tdee} kcal.` : `Calculados con tu último peso (${fmtNum(latestWeight())} kg) y tu actividad. Cuando lleves 2–3 semanas apuntando casi todo y pesándote, la app usará tu gasto real.`; })()}</span></p>
     <div class="card p-3 grid grid-cols-4 gap-1 text-center">${cell('kcal', st.targetKcal, t.kcal)}${cell('proteína', `${st.targetProt} g`, `${t.prot} g`)}${cell('hidratos', `${st.targetCarbs} g`, `${t.carbs} g`)}${cell('grasa', `${st.targetFat} g`, `${t.fat} g`)}</div>
     <p class="text-[11px] text-mute">Son orientativos: si en 2–3 semanas el peso no va como esperas, la app te propondrá ajustarlos.</p>
     ${medNote()}
@@ -5931,7 +5965,7 @@ function maybeAskEmail(tries = 0) {
 }
 
 function onboarding() {
-  const d = { step: 0, ok: false, email: state.settings.email || '', birth: '', name: '', sex: '', age: '', height: '', weight: '', activity: 'mid', goal: 'recomp', diet: 'omni', key: '', keyOk: false, testing: false };
+  const d = { step: 0, ok: false, email: state.settings.email || '', birth: '', name: '', sex: '', age: '', height: '', weight: '', activity: 'low', goal: 'recomp', diet: 'omni', key: '', keyOk: false, testing: false };
   // lo rellenado se guarda al momento: si sales a crear la clave y el móvil cierra la app, sigues donde ibas
   const OB_KEY = 'fitnesteban_ob'; Object.assign(d, lsGet(OB_KEY) || {}, { testing: false });
   const save = () => lsSet(OB_KEY, { ...d, testing: false });
@@ -5967,7 +6001,7 @@ function onboarding() {
       <label class="lbl">Altura (cm)<input class="field mt-1" name="height" inputmode="numeric" maxlength="3" placeholder="170" value="${esc(d.height)}" /></label>
       <label class="lbl">Peso (kg)<input class="field mt-1" name="weight" inputmode="decimal" maxlength="5" value="${esc(d.weight)}" /></label>
     </div>
-    <div><div class="lbl mb-1">Actividad diaria (sin contar el entreno)</div>${seg('activity', ACTIVITY, 3)}</div>
+    <div><div class="lbl mb-1">Actividad diaria, contando tus entrenos</div>${seg('activity', ACTIVITY, 3)}${ACT_HELP}</div>
     <div><div class="lbl mb-1">Objetivo</div>${goalPickHTML(d.goal || 'recomp', goalLv({ goal: d.goal || 'recomp', goalLv: d.goalLv }))}</div>
     <div><div class="lbl mb-1">Alimentación</div>${seg('diet', DIETS, 2)}</div>
     <div class="card p-3" id="obTargets">${t ? `<div class="text-[11px] text-mute mb-1">Tus objetivos de partida</div>
@@ -6091,7 +6125,7 @@ function profileModal(after) {
       <label class="lbl col-span-2">Fecha de nacimiento (opcional) <span class="text-brand font-bold" id="pfAge">${birthHint(draft.birth)}</span><input class="field mt-1" name="birth" type="date" min="${BIRTH_MIN}" max="${birthMax()}" value="${esc(draft.birth || '')}" />${!draft.birth && p.age ? `<span class="block text-[11px] text-amber-300 font-normal mt-1">Ahora pone ${esc(p.age)} años. Pon tu fecha y se actualizará sola en cada cumpleaños.</span>` : ''}</label>
       <label class="lbl">Altura en cm (opcional)<input class="field mt-1" name="height" inputmode="numeric" maxlength="3" placeholder="Ej: 175" value="${esc(draft.height || '')}" /></label>
     </div>
-    <div><div class="lbl mb-1">Actividad diaria (sin contar el entreno)</div>${seg('activity', ACTIVITY, draft.activity || 'mid')}</div>
+    <div><div class="lbl mb-1">Actividad diaria, contando tus entrenos</div>${seg('activity', ACTIVITY, draft.activity || 'low')}${ACT_HELP}</div>
     <div><div class="lbl mb-1">Objetivo</div>${goalPickHTML(draft.goal || 'recomp', goalLv(draft))}</div>
     <div><div class="lbl mb-1">Alimentación</div>${seg('diet', DIETS, draft.diet || 'omni')}</div>
     <div class="card p-3 space-y-2"><div class="lbl">✉️ Correo de contacto${access.me?.admin ? '' : ' (opcional)'}</div>
@@ -6113,7 +6147,7 @@ function profileModal(after) {
       if (draft.height && (+draft.height < 100 || +draft.height > 230)) return toast('La altura va en centímetros (ej. 175)', 'warn');
       if (draft.birth && !(ageFrom(draft.birth) >= 10)) return toast('Revisa la fecha de nacimiento', 'warn');
       const lv = goalLv({ goal: draft.goal || 'recomp', goalLv: draft.goalLv });
-      state.settings.profile = { activity: draft.activity || 'mid', name: draft.name.slice(0, 24), sex: draft.sex, ...(draft.birth ? { birth: draft.birth } : p.age ? { age: p.age } : {}), height: draft.height || '', goal: draft.goal || 'recomp', ...(lv ? { goalLv: lv } : {}), diet: draft.diet || 'omni' };
+      state.settings.profile = { activity: draft.activity || 'low', name: draft.name.slice(0, 24), sex: draft.sex, ...(draft.birth ? { birth: draft.birth } : p.age ? { age: p.age } : {}), height: draft.height || '', goal: draft.goal || 'recomp', ...(lv ? { goalLv: lv } : {}), diet: draft.diet || 'omni' };
       if ((state.settings.email || '') !== draft.email) setEmail(draft.email);
       persist(); closeModal(); render(); toast('Perfil guardado ✓');
       const t = suggestedTargets(); if (targetsOff(t)) setTimeout(() => targetsModal(t, `Tus objetivos diarios no encajan con tu perfil (${esc(goalName(state.settings.profile))}).`), 350);
@@ -6165,6 +6199,7 @@ function chatContext() {
     cardio_14_dias: state.cardio.filter(c => c.date >= addDays(T, -13)).map(c => ({ fecha: c.date, tipo: cardioType(c.type).label, min: c.minutes, intensidad: c.intensity, kcal: c.kcal, ...(watchLine(c) ? { reloj: watchLine(c) } : {}) })),
     medidas_corporales: [...state.bodyMetrics].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8).map(m => ({ fecha: m.date, peso: m.weight, cintura: m.waist })),
     analisis_peso_de_la_app: bodyForAI(),
+    gasto_real: realTdee(),
     pasos: stepsForAI(),
     semana_de_descarga: deloadActive(),
     retos: RETO_IDS.filter(id => state.retos[id]).map(id => { const r = RETOS[id], st = state.retos[id]; return { reto: r.name, unidad: r.unit, nivel: st.level, meta: r.max, mejor_marca: st.best, proxima_sesion: retoSets(id, st.level), ultimas: st.history.slice(-3).map(h => ({ fecha: h.date, hecho: h.got, sensacion: h.feel })) }; })
@@ -6665,6 +6700,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.5.0', ['📊 Tus calorías, con tus datos reales: si llevas unas semanas apuntando casi todo y pesándote, la app calcula tu gasto real (lo que comes y cómo cambia tu peso) y, si tu objetivo no encaja, te lo propone en Dieta. Tú decides si lo aplicas.', '🚶 Revisa tu perfil: la actividad diaria ahora se elige contando tus entrenos, con ejemplos. Si trabajas sentado, aunque entrenes 3–4 días, lo tuyo es «Sentada».', '🥩 En Dieta, bajo «Proteína que falta», verás cuánta te toca en cada comida que te queda hoy.']],
   ['5.4.3', ['Entreno: la línea de la semana cuenta los días entrenados, como los puntos de debajo (y, si un día hiciste dos cosas, también los entrenos).'], 'quiet'],
   ['5.4.2', ['🧍 Nuevas animaciones 3D para brazos: Curl predicador (banco Scott), Curl Zottman (con el giro de muñecas), Curl 21 con barra Z (las tres fases, con el contador en pantalla) y Extensión en polea con agarre invertido (la misma animación que la extensión en polea, con sus propias claves).']],
   ['5.4.1', ['✎ Edita tus sesiones desde donde las ves: en «Hoy has hecho» (Entreno) y al tocar un día del calendario, con «✎ Editar». Al guardar vuelves a donde estabas.']],
@@ -7013,6 +7049,7 @@ const GUIDE = [
     'Cada vez que lo abres empieza de cero; «Ver la última conversación» recupera la anterior. Usa tu clave de Gemini (Ajustes → IA). Nunca se envían la clave ni el PIN.'
   ]],
   ['📈 Progreso', [
+    '📊 <b>Gasto real</b>: con 14 días apuntados (o más) y 4 pesajes en dos semanas, la app calcula tu mantenimiento con lo que comes y cómo cambia tu peso, en lugar de la fórmula. Si tu objetivo se aleja mucho, te lo propone en Dieta; tú decides si lo aplicas. Funciona bien si apuntas todo lo que comes, también los picoteos.',
     '✎ <b>Editar una sesión</b>: toca «✎ Editar» en «Hoy has hecho», en un día del calendario o en Historial de sesiones. Puedes cambiar pesos y repeticiones, añadir o quitar series y ejercicios de ese día, y corregir la fecha o la duración. Si guardas el mismo día dos veces, la app te deja sumar las series a la sesión de hoy.',
     '👣 <b>Pasos</b>: apúntalos con la píldora de la tarjeta Progreso de Inicio (de hoy o de ayer). <b>Para qué sirven:</b> la app usa tu media para comprobar si el nivel de actividad de tu perfil es el correcto; con al menos 5 días en dos semanas, si no encaja, te avisa en Progreso → Pasos y lo ajusta por ti con un toque (tú decides si aplicas las calorías nuevas). <b>No restan calorías del día</b>: eso ya lo tiene en cuenta tu objetivo. Las caminatas que haces como ejercicio, en Cardio.',
     '⚖️ <b>Peso y cintura</b>: pésate al levantarte, después del baño y antes de comer; la cintura, una vez por semana a la altura del ombligo. <b>Registra siempre, también los días que sube</b>: un pesaje suelto no dice nada.',
@@ -7613,7 +7650,7 @@ function stepsAvg(days, end = todayISO()) {
 const STEP_LV = n => n < 5500 ? 'low' : n <= 9500 ? 'mid' : 'high'; // orientativo: <5.500 sentada · 5.500–9.500 algo activa · >9.500 muy activa
 function stepsMismatch() { // ¿la media de 14 días encaja con la actividad del perfil? (con al menos 5 días apuntados)
   const a = stepsAvg(14), p = profileOf(); if (!a || a.n < 5 || !p) return null;
-  const lv = STEP_LV(a.avg), cur = p.activity || 'mid';
+  const lv = STEP_LV(a.avg), cur = p.activity || 'low';
   return lv === cur ? null : { avg: a.avg, lv, cur };
 }
 function stepsForAI() {
