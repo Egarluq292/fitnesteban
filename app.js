@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.2.1';
+const APP_VERSION = '5.2.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -1219,6 +1219,7 @@ function renderTrainHome() {
   <div class="grid grid-cols-2 gap-2 mt-3">
     <button class="gal-btn" data-act="openBlock" data-key="free" type="button"><span class="text-xl">🎲</span><span><b>FREE</b><small>Entreno libre</small></span></button>
     <button class="gal-btn" data-act="openBlock" data-key="cardio" type="button"><span class="text-xl">🔥</span><span><b>CARDIO</b><small>Correr, bici…</small></span></button>
+    ${isAdminUser() ? `<button class="gal-btn col-span-2" data-act="gal3d" type="button"><span class="text-xl">🧍</span><span><b>ANIMACIONES 3D</b><small>Mira cómo se hace cada ejercicio</small></span></button>` : ''}
   </div>
   ${inUse.length ? `<div class="gal-h"><span>En uso</span></div>${inUse.map(x => x.html()).join('')}` : ''}
   ${ppTop.length ? `<div class="gal-h"><span>¿Empiezas de cero?</span></div>${ppTop.map(x => x.html()).join('')}` : ''}
@@ -6534,7 +6535,8 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
-  ['5.2.1', ['🧍 Nuevas animaciones 3D: Prensa de piernas, Curl en polea y Curl martillo en polea con cuerda, cada una con sus 3 claves.', 'Pulsa el botón 3D del ejercicio en tu entreno o en la lista de ejercicios del bloque.']],
+  ['5.2.2', ['🧍 Galería de animaciones 3D en Entreno (de momento solo para ti): las 60 animaciones agrupadas por zona, con buscador. Al cerrar una, vuelves a la galería.'], 'admin'],
+  ['5.2.1', ['🧍 Nuevas animaciones 3D: Prensa de piernas, Curl en polea y Curl martillo en polea con cuerda, cada una con sus 3 claves.', 'Pulsa el botón 3D del ejercicio en tu entreno o en «Hoy has hecho».']],
   ['5.2.0', ['👣 Nuevo: Pasos. Apúntalos desde la tarjeta Progreso de Inicio, escribiendo el número o con una captura del reloj o del móvil (hoy o ayer), y ponte una meta si quieres.', '🎯 Para qué sirven: la app usa tu media de pasos para comprobar si el nivel de actividad de tu perfil es el correcto. Si no encaja, te avisa en Progreso → Pasos y lo ajusta por ti con un toque, y con él tus calorías (tú decides si las aplicas).', 'Los pasos no restan calorías del día: eso ya lo tiene en cuenta tu objetivo. Las caminatas que haces como ejercicio, en Cardio como siempre.']],
   ['5.1.5', ['🔥 Dieta: toca la línea «Cardio · Neto» (ⓘ) para ver qué significa cada número y por qué «Te quedan» no suma lo que quemas.'], 'quiet'],
   ['5.1.4', ['Usuarios: arreglada la versión que salía como una fecha («Sun Jan 05 2003…»). Google convertía «5.1.3» en el 5 de enero de 2003; ahora la app la manda como «v5.1.4» y recupera las que ya estaban convertidas.', '«Desactualizada» solo sale si van una versión MENOR por detrás (5.0 frente a 5.1), y en tu fila sale siempre la versión que tienes abierta. Los dispositivos ya no se cortan con «…».'], 'admin'],
@@ -7393,6 +7395,28 @@ const gym3dCues = name => { const id = gym3dOf(name); return id ? GYM3D_CUES[id.
 const canBeta = () => isAdminUser() || !!access.me?.beta; // 🧪 administrador y quien tenga «beta» en su código
 const can3D = () => true;
 const seen3D = () => !!lsGet('fitnesteban_3dseen'); // hasta que abres tu primera animación, los botones 3D brillan // 🧍 animaciones 3D de los ejercicios: abiertas a todos desde la 4.96.0
+const GYM3D_GAL = [
+  ["Pecho", ["Press de banca con barra", "Press inclinado con mancuernas", "Aperturas en banco inclinado", "Aperturas con mancuernas", "Flexiones", "Flexiones con rodillas", "Fondos en paralelas"]],
+  ["Espalda", ["Dominadas", "Remo con barra", "Remo a una mano con mancuerna", "Remo con mancuernas en banco inclinado", "Remo gorilla", "Remo renegado", "Remo invertido", "Remo invertido en TRX", "Remo con toalla", "Face pull en TRX"]],
+  ["Hombros", ["Press militar con barra", "Press con kettlebell", "Elevaciones laterales"]],
+  ["Brazos", ["Curl de bíceps con mancuernas", "Curl martillo", "Curl inclinado", "Curl concentrado", "Curl en polea", "Curl martillo en polea con cuerda", "Press cerrado con barra", "Press francés", "Extensión de tríceps sobre la cabeza", "Extensión de tríceps en polea", "Fondos en banco"]],
+  ["Pierna y glúteo", ["Sentadilla", "Sentadilla con barra", "Sentadilla goblet", "Sentadilla sumo", "Sentadilla búlgara", "Zancadas", "Zancadas con kettlebell", "Step-up con mancuernas", "Prensa de piernas", "Extensión de cuádriceps", "Curl femoral sentado", "Curl femoral tumbado", "Peso muerto", "Peso muerto rumano", "Peso muerto a una pierna", "Buenos días", "Hip thrust con barra", "Hip thrust a una pierna", "Puente de glúteo", "Puente de glúteo a una pierna", "Elevación de gemelos"]],
+  ["Core", ["Plancha", "Plancha lateral", "Hollow", "Crunch", "Escaladores"]],
+  ["Cuerpo completo", ["Burpees", "Jumping jacks", "Swing con kettlebell"]]
+]; // 🧍 galería: un nombre por animación, que gym3dOf reconoce
+function gym3dGalleryModal(q = '') {
+  const tot = GYM3D_GAL.reduce((a, [, L]) => a + L.length, 0);
+  openModal(`<h3 class="modal-title">🧍 Animaciones 3D</h3>
+    <p class="text-[12.5px] text-mute -mt-1">${tot} ejercicios. Toca uno para ver cómo se hace y sus 3 claves.</p>
+    <input class="field" id="g3dq" type="search" placeholder="Buscar ejercicio…" value="${esc(q)}" autocomplete="off" />
+    <div id="g3dList" class="space-y-3">${GYM3D_GAL.map(([g, L]) => `<div class="g3d-grp"><div class="lbl mb-1.5">${esc(g)}</div><div class="flex flex-wrap gap-1.5">${L.map(n => `<button class="g3d-it" data-mact="g" data-n="${esc(n)}" data-s="${esc(normTxt(n + ' ' + g))}" type="button">${esc(n)}</button>`).join('')}</div></div>`).join('')}</div>
+    <p class="text-[12px] text-mute text-center hidden" id="g3dNone">No hay animación para eso todavía. Irán llegando más.</p>
+    <button class="btn-ghost w-full" data-close type="button">Cerrar</button>`, {
+    g: (root, b) => { const qq = root.querySelector('#g3dq')?.value || ''; gym3dModal(b.dataset.n, () => gym3dGalleryModal(qq)); }
+  });
+  const inp = $('#g3dq'), filt = () => { const t = normTxt(inp.value.trim()); let n = 0; document.querySelectorAll('#g3dList .g3d-grp').forEach(gr => { let k = 0; gr.querySelectorAll('.g3d-it').forEach(b => { const ok = !t || b.dataset.s.includes(t); b.hidden = !ok; if (ok) k++; }); gr.hidden = !k; n += k; }); $('#g3dNone').classList.toggle('hidden', n > 0); };
+  inp.addEventListener('input', filt); if (q) filt();
+}
 let gym3dMod = null;
 function gym3dModal(name, back = null) { // back: volver a la ventana de la que vienes (p. ej. «Hoy has hecho»)
   const id = gym3dOf(name); if (!id) return;
@@ -7850,6 +7874,7 @@ const actions = {
   advOn: () => advActivate(),
   advInfo: () => advInfoModal(),
   gym3d: b => { if (can3D()) gym3dModal(b.dataset.n); },
+  gal3d: () => gym3dGalleryModal(),
   queComo: () => queComoModal(),
   cdWatch: () => { keepCardioInputs(); state.settings.watchOpen = !state.settings.watchOpen; persist(); render(); },
   cdUseWatch: () => { const e = ui.cardio.est; if (!e?.wkcal) return; keepCardioInputs(); e.appKcal = e.appKcal ?? e.kcal; e.kcal = +e.wkcal; e.usedWatch = true; render(); toast('Puestas las kcal del reloj'); },
