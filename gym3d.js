@@ -26,6 +26,7 @@ function build() {
     B['sh' + k] = node(B.spine, .44, .2 * s); B['sh' + k].add(ball(.055)); B['sh' + k].add(cap(.045, .28));
     B['el' + k] = node(B['sh' + k], -.28); B['el' + k].add(ball(.045)); B['el' + k].add(cap(.04, .27));
     B['hd' + k] = node(B['el' + k], -.27); B['hd' + k].add(sh(new T.Mesh(new T.SphereGeometry(.045, 12, 10), M)));
+    { const th = sh(new T.Mesh(new T.SphereGeometry(.024, 10, 8), M)); th.scale.set(1, 1.6, 1); th.position.set(.05 * s, -.025, .012); th.visible = false; B['hd' + k].add(th); B['th' + k] = th; } // pulgar: solo se ve cuando la muñeca gira (Zottman)
     B['hp' + k] = node(B.pelvis, -.04, .1 * s); B['hp' + k].add(ball(.06)); B['hp' + k].add(cap(.065, .42));
     B['kn' + k] = node(B['hp' + k], -.42); B['kn' + k].add(ball(.05)); B['kn' + k].add(cap(.052, .42));
     B['an' + k] = node(B['kn' + k], -.42); { const ft = sh(new T.Mesh(new T.BoxGeometry(.09, .06, .22), M)); ft.position.set(0, -.02, .05); B['an' + k].add(ft); }
@@ -120,6 +121,9 @@ const P = {
   press: { cam: [3.1, 1.3, .6], ang: 1.0, pin: ['pelvis', [0, .48, -.45]], base: { rootX: -48, spine: 0, neck: 8, sh: -4, shAb: 24, el: 18, hip: 118, knee: 105, hipAb: 4 }, a: { slide: 0 }, b: { slide: .34 }, sled: 42, fix: ['anL', 'anR'], incline: 'back' },
   curlc: { cam: [4, 1.35, .85], ang: .55, base: { knee: 6, hip: 4, spine: 4, shAb: 0 }, a: { el: 6, sh: 0 }, b: { el: 135, sh: 8 }, strap: [0, .14, .55], tower: [0, .62], handle: true },
   curlhc: { cam: [4, 1.35, .85], ang: .55, base: { knee: 6, hip: 4, spine: 4, shAb: 4 }, a: { el: 6, sh: 0 }, b: { el: 135, sh: 8 }, strap: [0, .14, .55], tower: [0, .62] },
+  preach: { cam: [3, 1.3, .7], ang: -.2, pin: ['pelvis', [0, .52, 0]], fix: ['anL', 'anR'], base: { rootX: 14, hip: 80, knee: 85, neck: -8, sh: 48, shAb: 6 }, a: { el: 8 }, b: { el: 128 }, handle: true, seat: true, scott: true },
+  zott: { cam: [2.5, 1.35, 1.05], ang: -.5, k: [{ el: 0, tw: 0 }, { el: 140, tw: 0 }, { el: 140, tw: 180 }, { el: 0, tw: 180 }], db: true, twist: true, base: { sh: 0 } },
+  c21: { k: [{ el: 0 }, { el: 85 }, { el: 0 }, { el: 85 }, { el: 0 }, { el: 85 }, { el: 0 }, { el: 85 }, { el: 0 }, { el: 85 }, { el: 0 }, { el: 85 }, { el: 0 }, { el: 85 }, { el: 85 }, { el: 140 }, { el: 85 }, { el: 140 }, { el: 85 }, { el: 140 }, { el: 85 }, { el: 140 }, { el: 85 }, { el: 140 }, { el: 85 }, { el: 140 }, { el: 85 }, { el: 140 }, { el: 0 }, { el: 140 }, { el: 0 }, { el: 140 }, { el: 0 }, { el: 140 }, { el: 0 }, { el: 140 }, { el: 0 }, { el: 140 }, { el: 0 }, { el: 140 }, { el: 0 }, { el: 140 }], db: true, lab: t => { const i = Math.floor(t * 42) % 42, f = Math.floor(i / 14), r = Math.floor((i % 14) / 2) + 1; return `Fase ${f + 1} · ${['mitad inferior', 'mitad superior', 'recorrido completo'][f]} · ${r}/7`; } },
   pushd: { cam: [3.6, 1.5, 1.2], base: { spine: 12, hip: 8, knee: 8, neck: -6, sh: 6, shAb: 8 }, a: { el: 100 }, b: { el: 4 }, strap: [0, 1.95, .5], tower: [0, .62] },
   csrow: { base: { rootX: 55, hip: 50, knee: 15, neck: -10 }, a: { sh: 55, el: 0, shAb: 6 }, b: { sh: -15, el: 100, shAb: 18 }, db: true, incline: 'front' },
   benchc: { base: { rootX: -90, hip: 8, knee: 92, neck: 0 }, a: { sh: 90, el: 0, shAb: 0 }, b: { sh: 12, shAb: 5, el: 112 }, ground: ['anL', 'anR'], bench: [.4, .45, 1.3, 0, -.45], bar: 'hands' },
@@ -213,7 +217,9 @@ function apply(p, ex) {
   if (ex.bar === 'back') { B.neck.getWorldPosition(a); const f = new T.Vector3(0, -.02, -.12).applyEuler(root.rotation); bar.position.copy(a.add(f)); }
   if (ex.bar === 'hips') { B.pelvis.getWorldPosition(a); bar.position.set(a.x, a.y + .14, a.z); }
   if (ex.db === true) { B.hdL.getWorldPosition(a); B.hdR.getWorldPosition(b); dbs[0].position.copy(a); dbs[1].position.copy(b); dbs[0].rotation.set(0, 0, 0); }
-  if (ex.hammer) dbs.forEach((x, i) => { B[i ? 'elR' : 'elL'].getWorldQuaternion(qTmp); x.quaternion.copy(qTmp).multiply(qHam); }); // agarre neutro: la pesa gira con el antebrazo
+  for (const k of ['L', 'R']) { B['th' + k].visible = !!ex.twist; B['hd' + k].rotation.y = ex.twist ? (k === 'L' ? -1 : 1) * (p.tw || 0) * d : 0; }
+  if (ex.twist) dbs.forEach((x, i) => { B[i ? 'hdR' : 'hdL'].getWorldQuaternion(qTmp); x.quaternion.copy(qTmp); }); // la pesa gira con la mano: 0 supino, 90 neutro, 180 prono
+  else if (ex.hammer) dbs.forEach((x, i) => { B[i ? 'elR' : 'elL'].getWorldQuaternion(qTmp); x.quaternion.copy(qTmp).multiply(qHam); }); // agarre neutro: la pesa gira con el antebrazo
   else dbs.forEach(x => { if (!ex.db || ex.db === true) x.quaternion.identity(); });
 }
 function props(ex, pA) {
@@ -230,6 +236,14 @@ function props(ex, pA) {
   if (ex.restL) { apply(pA, ex); const a = new T.Vector3(); B.hdL.getWorldPosition(a); box(.4, a.y - .04, .45, a.x, (a.y - .04) / 2, a.z); }
   if (ex.fixBar && FIX?.hdL) { const pb = new T.Mesh(new T.CylinderGeometry(.02, .02, 1.2, 16), new T.MeshStandardMaterial({ color: 0x9ca3af, metalness: .8, roughness: .3 })); pb.rotation.z = Math.PI / 2; pb.position.copy(FIX.hdL.clone().add(FIX.hdR).multiplyScalar(.5)); pb.position.y += .02; prop.add(pb); for (const x of [-.6, .6]) box(.05, pb.position.y, .05, x, pb.position.y / 2, pb.position.z); }
   if (ex.anchor) { const AP = anchorOf(ex); if (ex.Ls) { const ank = new T.Mesh(new T.SphereGeometry(.045, 12, 10), m); ank.position.copy(AP); prop.add(ank); } else { const pb = new T.Mesh(new T.CylinderGeometry(.02, .02, 1.2, 16), new T.MeshStandardMaterial({ color: 0x9ca3af, metalness: .8, roughness: .3 })); pb.rotation.z = Math.PI / 2; pb.position.copy(AP); prop.add(pb); box(1.2, .04, .7, 0, AP.y + .04, AP.z - .25); for (const x of [-.55, .55]) box(.05, AP.y, .05, x, AP.y / 2, AP.z); } }
+  if (ex.scott) { // banco Scott: atril inclinado bajo los brazos, con su poste
+    apply(pA, ex); const s1 = new T.Vector3(), e1 = new T.Vector3(); B.elL.getWorldPosition(e1); B.shL.getWorldPosition(s1); 
+    const mid = s1.clone().add(e1).multiplyScalar(.5); mid.x = 0;
+    const dir = e1.clone().sub(s1).normalize(); dir.x = 0; dir.normalize(); const nrm = new T.Vector3(0, dir.z, -dir.y); if (nrm.y > 0) nrm.negate();
+    const pad = new T.Mesh(new T.BoxGeometry(.62, .09, .42), new T.MeshStandardMaterial({ color: 0x64748b, roughness: .6 })); pad.position.copy(mid).addScaledVector(dir, .04).addScaledVector(nrm, .075);
+    pad.quaternion.setFromRotationMatrix(new T.Matrix4().makeBasis(new T.Vector3(1, 0, 0), nrm.clone().negate(), dir)); pad.castShadow = pad.receiveShadow = true; prop.add(pad);
+    const base0 = pad.position.clone().addScaledVector(nrm, .05); box(.06, base0.y, .06, 0, base0.y / 2, base0.z - .05);
+  }
   if (ex.sled && FIX?.anL) { // carriles de la prensa, su apoyo al suelo y las asas del asiento
     const u = new T.Vector3(0, Math.sin(ex.sled * d), Math.cos(ex.sled * d)), c = FIX.anL.clone().add(FIX.anR).multiplyScalar(.5);
     const SM = new T.MeshStandardMaterial({ color: 0x9ca3af, metalness: .8, roughness: .3 }), a0 = c.clone().addScaledVector(u, -.25), a1 = c.clone().addScaledVector(u, .75);
@@ -253,6 +267,7 @@ function props(ex, pA) {
     else box(.9, hy, .55, 0, hy / 2, hz + .15);
   }
 }
+P.pushdr = P.pushd; // agarre invertido: la misma animación que la extensión en polea (cambian las claves)
 export function mount(el, id, lv = 1) {
   const [pid, eq] = String(id).split(':'), base = P[pid];
   let ex = base;
@@ -270,6 +285,7 @@ export function mount(el, id, lv = 1) {
   if (!R) { R = new T.WebGLRenderer({ antialias: true, alpha: true }); R.shadowMap.enabled = true; }
   if (!W) W = build();
   cv = R.domElement; el.innerHTML = ''; el.appendChild(cv);
+  let labEl = null; if (ex.lab) { if (getComputedStyle(el).position === 'static') el.style.position = 'relative'; labEl = Object.assign(document.createElement('div'), { className: 'm3d-lab' }); el.appendChild(labEl); } // fase en curso (curl 21)
   const w = el.clientWidth || 320, h = el.clientHeight || 260; R.setPixelRatio(Math.min(2, devicePixelRatio || 1)); R.setSize(w, h);
   const cam = new T.PerspectiveCamera(38, w / h, .1, 50);
   const K = ex.k || [ex.a, ex.b];
@@ -286,12 +302,13 @@ export function mount(el, id, lv = 1) {
     if (ex.pin?.[1] === 'auto') FIX.pin = FIX[ex.pin[0]];
   }
   props(ex, poseAt(0));
-  const per = { pull: 3, hipth: 2.6, lat: 2.4, curl: 2.2, curlh: 2.2, burpee: 4.5, plank: 4, hollow: 3.5, gorilla: 4.4, swing: 1.8, legext: 3.2, legcs: 3.2, legcl: 3.2, fly: 4, flyf: 4, pushd: 3.2, press: 3.4, curlc: 2.6, curlhc: 2.6 }[id] || 2.8;
+  const per = { pull: 3, hipth: 2.6, lat: 2.4, curl: 2.2, curlh: 2.2, burpee: 4.5, plank: 4, hollow: 3.5, gorilla: 4.4, swing: 1.8, legext: 3.2, legcs: 3.2, legcl: 3.2, fly: 4, flyf: 4, pushd: 3.2, pushdr: 3.2, press: 3.4, curlc: 2.6, curlhc: 2.6, preach: 2.8, zott: 4.4, c21: 31.5 }[id] || 2.8;
   const t0 = performance.now();
   const frame = now => {
     if (!cv.isConnected) { stop(); return; }
     const t = window.__man3dT ?? ((((now - t0) / (per * 1000)) % 1) + 1) % 1, e = (1 - Math.cos(t * Math.PI * 2)) / 2;
     apply(ex.k ? seqAt(t) : poseAt(e), ex);
+    if (ex.lab && labEl) { const tx = ex.lab(t); if (labEl.textContent !== tx) labEl.textContent = tx; }
     const ang = (window.__man3dA ?? (.9 + Math.sin(now / 5000) * .35)) + (ex.ang || 0);
     const [cd, cy, ly] = ex.cam || [3.6, 1.5, .65]; cam.position.set(Math.sin(ang) * cd, cy, Math.cos(ang) * cd); cam.lookAt(0, ly, 0);
     R.render(W.S, cam); raf = requestAnimationFrame(frame);

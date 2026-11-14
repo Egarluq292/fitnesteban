@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.4.1';
+const APP_VERSION = '5.4.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6665,6 +6665,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.4.2', ['🧍 Nuevas animaciones 3D para brazos: Curl predicador (banco Scott), Curl Zottman (con el giro de muñecas), Curl 21 con barra Z (las tres fases, con el contador en pantalla) y Extensión en polea con agarre invertido (la misma animación que la extensión en polea, con sus propias claves).']],
   ['5.4.1', ['✎ Edita tus sesiones desde donde las ves: en «Hoy has hecho» (Entreno) y al tocar un día del calendario, con «✎ Editar». Al guardar vuelves a donde estabas.']],
   ['5.4.0', ['✎ Ya puedes editar una sesión guardada: en Progreso → Historial de sesiones, toca «✎ Editar» para cambiar pesos y repeticiones, añadir o quitar series y ejercicios del día, y corregir la fecha o la duración.', '＋ Si guardas el mismo día dos veces, ahora eliges: sumar las series a la sesión de hoy (ideal para ir haciendo flexiones a lo largo del día) o sustituirla.']],
   ['5.3.3', ['📢 Si cambias un bloque que tienes compartido, la app te avisa dentro del bloque y lo actualizas para todos con un toque. Quien ya lo tenía añadido conserva su copia.'], 'admin'],
@@ -7437,6 +7438,7 @@ function man3dStop() { try { man3dMod?.stop(); } catch { /* nada */ } }
 /* 🧍 Ejercicio (por su nombre) → animación 3D (gym3d.js). De lo más concreto a lo más general.
    Máquinas, poleas y superseries («+»): sin animación (se quedan con YouTube). El material sale del nombre. */
 const GYM3D_MAP = [
+  [/predicador|scott/i, 'preach'], [/zottman/i, 'zott'], [/curl 21|\b21s\b/i, 'c21'], [/extensi[oó]n.*polea.*(invertid|invers|supin)/i, 'pushdr'],
   [/extensi[oó]n de (cu[aá]driceps|piernas)|leg extension/i, 'legext'], [/curl femoral sentado/i, 'legcs'], [/curl femoral (tumbado|acostado)/i, 'legcl'],
   [/^prensa( de piernas)?( con (los )?pies altos)?$/i, 'press'], [/curl martillo.*(polea|cuerda)/i, 'curlhc'], [/^curl (de b[ií]ceps )?en polea( baja)?( con barra)?$/i, 'curlc'],
   [/aperturas?.*inclinad/i, 'fly'], [/^aperturas? (con mancuernas|en banco plano)/i, 'flyf'], [/^extensi[oó]n (de tr[ií]ceps )?en polea( con cuerda)?$/i, 'pushd'],
@@ -7460,7 +7462,7 @@ const GYM3D_MAP = [
   [/remo/i, 'bbrow'], [/curl/i, 'curl']
 ];
 const GYM3D_EQ = n => /mancuerna/i.test(n) ? 'db' : /kettlebell/i.test(n) ? 'kb' : /barra|\bez\b|\bz\b/i.test(n) ? 'bar' : /toalla|banda|trx|mesa/i.test(n) ? 'none' : '';
-const GYM3D_DEF = { fly: 'db', flyf: 'db', benchc: 'bar', csrow: 'db', curlh: 'db', curlinc: 'db', curlconc: 'db', sldl: 'db', gorilla: 'db', lungekb: 'kb', dbrow1: 'db', bench: 'bar', incl: 'db', ohp: 'bar', rdl: 'bar', dl: 'bar', bbrow: 'bar', curl: 'db', hipth: 'bar', skull: 'bar', lunge: 'db', calfdb: 'db', stepdb: 'db', bulg: 'db', sumo: 'db', goblet: 'db', gm: 'bar', sqbar: 'bar', ohext: 'db' };
+const GYM3D_DEF = { c21: 'db', zott: 'db', fly: 'db', flyf: 'db', benchc: 'bar', csrow: 'db', curlh: 'db', curlinc: 'db', curlconc: 'db', sldl: 'db', gorilla: 'db', lungekb: 'kb', dbrow1: 'db', bench: 'bar', incl: 'db', ohp: 'bar', rdl: 'bar', dl: 'bar', bbrow: 'bar', curl: 'db', hipth: 'bar', skull: 'bar', lunge: 'db', calfdb: 'db', stepdb: 'db', bulg: 'db', sumo: 'db', goblet: 'db', gm: 'bar', sqbar: 'bar', ohext: 'db' };
 function gym3dOf(name) {
   for (const [re, id] of GYM3D_MAP) if (re.test(name || '')) { if (!id) return null; const eq = GYM3D_EQ(name); return eq && eq !== GYM3D_DEF[id] && GYM3D_DEF[id] ? `${id}:${eq}` : id; }
   return null;
@@ -7468,6 +7470,10 @@ function gym3dOf(name) {
 
 /* 💡 Las 3 claves de cada movimiento (texto propio): se leen antes de empezar y se cuida una en cada serie */
 const GYM3D_CUES = {
+  preach: ['Pecho pegado al atril y la parte de atrás de los brazos apoyada del todo', 'Sube la barra solo doblando los codos, sin despegar los brazos ni mover los hombros', 'Baja despacio hasta estirar casi del todo, sin rebotar abajo'],
+  zott: ['De pie, una mancuerna en cada mano con las palmas hacia el techo y los codos pegados', 'Sube así y, arriba, gira las muñecas hasta que las palmas miren al suelo', 'Baja despacio con las palmas hacia el suelo y, abajo, vuelve a girarlas hacia el techo'],
+  pushdr: ['Agarra la barra (o la empuñadura) con las palmas hacia arriba y los codos pegados al cuerpo', 'Empuja hacia abajo solo con los codos, hasta estirar casi del todo; aprieta el tríceps un instante', 'Sube despacio sin separar los codos ni echar los hombros hacia delante'],
+  c21: ['21 repeticiones seguidas: 7 de abajo hasta la mitad, 7 de la mitad hasta arriba y 7 completas', 'Codos pegados al cuerpo y quietos en las 21: solo se mueven los antebrazos', 'Sin balanceos ni impulso de cadera: si no llegas a 21, baja el peso'],
   press: ['Espalda y cadera pegadas al respaldo, y agárrate a las asas', 'Pies a la anchura de la cadera en el centro de la plataforma; rodillas en la línea de los pies', 'Baja sin que la cadera se despegue del asiento y empuja con todo el pie, sin bloquear las rodillas arriba'],
   curlc: ['Codos pegados al cuerpo y quietos: solo se mueven los antebrazos', 'Sube hasta la altura del pecho sin echar el cuerpo hacia atrás', 'Baja despacio hasta estirar casi del todo: que la polea no te arrastre'],
   curlhc: ['Agarra la cuerda con las palmas enfrentadas y los codos pegados al cuerpo', 'Sube sin girar las muñecas, hasta la altura del pecho', 'Baja despacio y controlado, sin balancear el cuerpo'],
@@ -7530,6 +7536,7 @@ const GYM3D_CUES = {
   sldl: ['Empieza de pie con las dos piernas', 'Al bajar el tronco, una pierna sube recta hacia atrás', 'Sube a la vez: el tronco arriba, la pierna abajo'],
   burpee: ['Manos al suelo y salta atrás a plancha', 'En la plancha, cuerpo recto', 'Vuelve y salta estirándote arriba']
 };
+const GYM3D_VAR = { preach: 'con una mancuerna y a una mano. Apoya el brazo entero en el atril, sube igual y cambia de brazo al terminar la serie.' };
 const gym3dCues = name => { const id = gym3dOf(name); return id ? GYM3D_CUES[id.split(':')[0]] || null : null; };
 const canBeta = () => isAdminUser() || !!access.me?.beta; // 🧪 administrador y quien tenga «beta» en su código
 const can3D = () => true;
@@ -7538,7 +7545,7 @@ const GYM3D_GAL = [
   ["Pecho", ["Press de banca con barra", "Press inclinado con mancuernas", "Aperturas en banco inclinado", "Aperturas con mancuernas", "Flexiones", "Flexiones con rodillas", "Fondos en paralelas"]],
   ["Espalda", ["Dominadas", "Remo con barra", "Remo a una mano con mancuerna", "Remo con mancuernas en banco inclinado", "Remo gorilla", "Remo renegado", "Remo invertido", "Remo invertido en TRX", "Remo con toalla", "Face pull en TRX"]],
   ["Hombros", ["Press militar con barra", "Press con kettlebell", "Elevaciones laterales"]],
-  ["Brazos", ["Curl de bíceps con mancuernas", "Curl martillo", "Curl inclinado", "Curl concentrado", "Curl en polea", "Curl martillo en polea con cuerda", "Press cerrado con barra", "Press francés", "Extensión de tríceps sobre la cabeza", "Extensión de tríceps en polea", "Fondos en banco"]],
+  ["Brazos", ["Curl de bíceps con mancuernas", "Curl martillo", "Curl inclinado", "Curl concentrado", "Curl en polea", "Curl martillo en polea con cuerda", "Curl predicador", "Curl Zottman", "Curl 21 con barra Z", "Press cerrado con barra", "Press francés", "Extensión de tríceps sobre la cabeza", "Extensión de tríceps en polea", "Fondos en banco"]],
   ["Pierna y glúteo", ["Sentadilla", "Sentadilla con barra", "Sentadilla goblet", "Sentadilla sumo", "Sentadilla búlgara", "Zancadas", "Zancadas con kettlebell", "Step-up con mancuernas", "Prensa de piernas", "Extensión de cuádriceps", "Curl femoral sentado", "Curl femoral tumbado", "Peso muerto", "Peso muerto rumano", "Peso muerto a una pierna", "Buenos días", "Hip thrust con barra", "Hip thrust a una pierna", "Puente de glúteo", "Puente de glúteo a una pierna", "Elevación de gemelos"]],
   ["Core", ["Plancha", "Plancha lateral", "Hollow", "Crunch", "Escaladores"]],
   ["Cuerpo completo", ["Burpees", "Jumping jacks", "Swing con kettlebell"]]
@@ -7562,7 +7569,7 @@ function gym3dModal(name, back = null) { // back: volver a la ventana de la que 
   if (!seen3D()) { lsSet('fitnesteban_3dseen', 1); setTimeout(() => document.querySelectorAll('.is-new').forEach(b => b.classList.remove('is-new')), 0); }
   openModal(`<h3 class="text-lg font-black leading-tight">${esc(name)}</h3>
     <div class="man3d mt-3" id="gym3d"><span class="text-mute text-sm">Cargando animación…</span></div>
-    ${gym3dCues(name) ? `<div class="lbl mt-3">💡 Las 3 claves</div><ol class="cues">${gym3dCues(name).map(c => `<li>${esc(c)}</li>`).join('')}</ol><p class="text-[11px] text-mute mt-1">Léelas antes de empezar y cuida una en cada serie.</p>` : '<p class="text-[11px] text-mute mt-2 text-center">Muestra el movimiento básico. Para la técnica fina, mira el vídeo.</p>'}
+    ${gym3dCues(name) ? `<div class="lbl mt-3">💡 Las 3 claves</div><ol class="cues">${gym3dCues(name).map(c => `<li>${esc(c)}</li>`).join('')}</ol><p class="text-[11px] text-mute mt-1">Léelas antes de empezar y cuida una en cada serie.</p>${GYM3D_VAR[gym3dOf(name)?.split(':')[0]] ? `<div class="g3d-var">🔁 <b>Variante:</b> ${esc(GYM3D_VAR[gym3dOf(name).split(':')[0]])}</div>` : ''}` : '<p class="text-[11px] text-mute mt-2 text-center">Muestra el movimiento básico. Para la técnica fina, mira el vídeo.</p>'}
     <div class="grid grid-cols-2 gap-2 mt-3"><a class="btn-ghost text-center" href="${esc(videoUrl({ name }))}" target="_blank" rel="noopener">▶ YouTube</a>${back ? '<button class="btn-primary" data-mact="back" type="button">‹ Volver</button>' : '<button class="btn-primary" data-close type="button">Cerrar</button>'}</div>`, back ? { back } : undefined);
   (async () => { const el = $('#gym3d'); try { gym3dMod ||= await import('./gym3d.js'); if (el?.isConnected) gym3dMod.mount(el, id); } catch { if (el) el.innerHTML = '<span class="text-mute text-sm">No se pudo cargar la animación. Mira el vídeo.</span>'; } })();
 }
