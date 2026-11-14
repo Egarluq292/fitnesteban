@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.6.0';
+const APP_VERSION = '5.6.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6704,6 +6704,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.6.1', ['👥 Usuarios: desliza el dedo a izquierda o derecha sobre la lista para pasar de un filtro a otro (Todos, Hoy, Caducan pronto, Caducados…).'], 'admin'],
   ['5.6.0', ['✨ Acabado nuevo en el tema oscuro: tarjetas en titanio sobre fondo negro, más limpias y con un filo de luz. Todo funciona igual; solo se ve más cuidado.']],
   ['5.5.5', ['🧪 Acceso anticipado: en Ajustes → Aplicación, «Acabados en pruebas» para probar las tarjetas en titanio (fondo negro) y un tema claro más suave.'], 'admin'],
   ['5.5.4', ['Más espacio para tus datos en el móvil: la copia de «antes de actualizar» se guarda 10 días (y, si faltara espacio, se libera para que nunca se deje de guardar lo de hoy).'], 'quiet'],
@@ -7952,6 +7953,7 @@ document.addEventListener('touchstart', e => {
   const t = e.touches[0], edge = 28;
   if (t.clientX < edge || t.clientX > W() - edge) return;
   if (!appEl.contains(e.target) || e.target.closest(NO_SWIPE)) return;
+  if (ui.view === 'settings' && ui.accPage) return; // en Usuarios, deslizar cambia de filtro (abajo)
   Object.assign(swipe, { on: true, x0: t.clientX, y0: t.clientY, dx: 0, dir: 0 });
 }, { passive: true });
 document.addEventListener('touchmove', e => {
@@ -8002,6 +8004,41 @@ function swipeEnd() {
 }
 document.addEventListener('touchend', swipeEnd, { passive: true });
 document.addEventListener('touchcancel', swipeEnd, { passive: true });
+
+/* 👥 Usuarios: deslizar el dedo pasa por los filtros (Todos · Hoy · Caducan pronto · Caducados · Sin usar · DÚO · Individual · Free · En prueba) */
+const acs = { on: false, axis: null, x0: 0, y0: 0, dx: 0, busy: false };
+const accKeys = () => [...document.querySelectorAll('[data-act="accF"]')].map(b => b.dataset.k);
+document.addEventListener('touchstart', e => {
+  acs.on = false; acs.axis = null;
+  if (acs.busy || ui.view !== 'settings' || !ui.accPage || e.touches.length !== 1 || $('#modalRoot').classList.contains('open') || !(appEl.contains(e.target) || e.target === document.body || e.target === document.documentElement) || e.target.closest('.users-top, nav, input, textarea, [data-noswipe]')) return; // toda la pantalla salvo la cabecera fija
+  const t = e.touches[0]; Object.assign(acs, { on: true, x0: t.clientX, y0: t.clientY, dx: 0 });
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  if (!acs.on) return;
+  const t = e.touches[0], dx = t.clientX - acs.x0, dy = t.clientY - acs.y0;
+  if (!acs.axis) { if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return; acs.axis = Math.abs(dx) > Math.abs(dy) * 1.6 ? 'x' : 'y'; if (acs.axis === 'y') { acs.on = false; return; } }
+  const K = accKeys(), i = K.indexOf(ui.accF || 'all'), has = K[i + (dx < 0 ? 1 : -1)];
+  acs.dx = dx; const b = $('#accRows'); if (b) { b.style.transition = ''; b.style.transform = `translate3d(${has ? dx : dx * 0.15}px,0,0)`; b.style.opacity = has ? String(1 - Math.min(0.6, Math.abs(dx) / W())) : ''; }
+}, { passive: true });
+function accSwipeEnd() {
+  if (!acs.on) return; acs.on = false;
+  if (acs.axis !== 'x') return;
+  const b = $('#accRows'); if (!b) return;
+  const dir = acs.dx < 0 ? 1 : -1, K = accKeys(), next = K[K.indexOf(ui.accF || 'all') + dir];
+  if (!next || Math.abs(acs.dx) < 60) { b.style.transition = 'transform 200ms ease, opacity 200ms ease'; b.style.transform = ''; b.style.opacity = ''; return; }
+  acs.busy = true;
+  b.style.transition = 'transform 150ms ease, opacity 150ms ease'; b.style.transform = `translate3d(${-dir * W()}px,0,0)`; b.style.opacity = '0';
+  setTimeout(() => {
+    ui.accF = next; render(); accFilterDom();
+    $(`[data-act="accF"][data-k="${next}"]`)?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); // la píldora elegida se ve arriba
+    const nb = $('#accRows');
+    if (nb) { nb.style.transform = `translate3d(${dir * W() * 0.4}px,0,0)`; nb.style.opacity = '0';
+      requestAnimationFrame(() => requestAnimationFrame(() => { nb.style.transition = 'transform 220ms cubic-bezier(.2,.7,.3,1), opacity 220ms ease'; nb.style.transform = ''; nb.style.opacity = ''; })); }
+    setTimeout(() => { acs.busy = false; }, 240);
+  }, 150);
+}
+document.addEventListener('touchend', accSwipeEnd, { passive: true });
+document.addEventListener('touchcancel', accSwipeEnd, { passive: true });
 
 /* Mapa muscular: deslizar el dedo cambia entre Ahora · 7 días · 30 días */
 const MM_TABS = ['now', 'd7', 'd30'];
@@ -8447,7 +8484,7 @@ const actions = {
   libNewSee: () => { libMarkSeen(); go('train'); ui.trainHome = true; render(); },
   libNewHide: () => { libMarkSeen(); render(); },
   accRow: b => { ui.accOpenH = ui.accOpenH === b.dataset.hash ? null : b.dataset.hash; render(); accFilterDom(); },
-  accF: b => { ui.accF = b.dataset.k; render(); accFilterDom(); },
+  accF: b => { ui.accF = b.dataset.k; render(); accFilterDom(); $(`[data-act="accF"][data-k="${b.dataset.k}"]`)?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); },
   delAccess: b => delAccess(b.dataset.hash),
   ghConnect: () => ghConnectModal(),
   ghDisconnect: () => { if (!confirm('¿Desconectar GitHub? Se borra la llave guardada en este móvil.')) return; try { localStorage.removeItem(GH_KEY); } catch { /* nada */ } render(); toast('GitHub desconectado'); },
@@ -9553,7 +9590,7 @@ function accFilterDom() {
   let n = 0;
   document.querySelectorAll('#accRows .acc-row').forEach(r => { const okF = !r.dataset.f; const hit = !q || r.dataset.s.includes(q); r.style.display = hit ? '' : 'none'; if (hit && !r.hidden) n++; });
   document.querySelectorAll('#accRows .acc-row-h').forEach(h => { h.style.display = q ? 'none' : ''; });
-  $('#accNone')?.classList.toggle('hidden', n > 0);
+  const none = $('#accNone'); if (none) { none.classList.toggle('hidden', n > 0); none.textContent = q ? 'Nadie coincide con la búsqueda.' : 'Nadie en este filtro.'; }
 }
 document.addEventListener('input', e => { if (e.target.id === 'accSearch') accFilterDom(); });
 /* 🟢 Activos hoy: el script da solo el número (sin PIN). Se pide al ver Ajustes, como mucho una vez por minuto */
