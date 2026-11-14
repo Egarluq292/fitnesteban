@@ -87,7 +87,7 @@ const P = {
   sumo: { ang: -.75, base: { hipAb: 32, sh: 0, el: 0 }, a: {}, b: { hip: 90, knee: 105, ankle: -10, spine: 22 }, db: 'one', dbRot: true },
   stepdb: { cam: [4, 1.6, .9], ang: .5, pin: ['pelvis', 'p'], fix: ['anL'], foot: 'anL', base: { hipL: 62, kneeL: 78, ankleL: 0 }, a: { py: .92, pz: -.18, spine: 14, hipR: 0, kneeR: 0 }, b: { py: 1.18, pz: .02, spine: 2, hipR: 25, kneeR: 70 }, db: true },
   gm: { base: { shAb: 75, sh: 20, el: 150 }, a: {}, b: { rootX: 70, hip: 75, knee: 15, neck: -20 }, bar: 'back' },
-  reneg: { base: { rootX: 76, hip: 0, knee: 0, ankle: -50, neck: -10, sh: 78, shAb: 8, el: 0, hipAb: 8 }, a: {}, b: { shR: 5, elR: 100, shAbR: 15 }, ground: ['hdL', 'anL', 'anR'], lift: .05, db: true },
+  reneg: { base: { rootX: 76, hip: 0, knee: 0, ankle: -50, neck: -10, sh: 78, shAb: 8, el: 0, hipAb: 8 }, k: [{}, { shR: 5, elR: 100, shAbR: 15 }, {}, { shL: 5, elL: 100, shAbL: 15 }], ground: ['hdL', 'hdR', 'anL', 'anR'], lift: .05, db: true, hammer: true }, // alterno y con agarre neutro (palmas enfrentadas)
   plank: { base: { rootX: 80, sh: 90, el: 90, neck: -10, ankle: -60 }, a: {}, b: { rootX: 82 }, ground: ['elL', 'elR', 'anL', 'anR'], lift: .05 },
   hollow: { base: { rootX: -90 }, a: { sh: 160, hip: 10, spine: 5 }, b: { sh: 175, hip: 35, spine: 22, neck: 15 }, ground: ['pelvis'], lift: .12 },
   crunch: { base: { rootX: -90, hip: 45, knee: 95, sh: 150, shAb: 40, el: 150 }, a: { spine: 0, neck: 0 }, b: { spine: 35, neck: 15 }, ground: ['pelvis', 'anL', 'anR'], lift: .1 },

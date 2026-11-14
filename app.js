@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.2.3';
+const APP_VERSION = '5.2.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6535,6 +6535,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.2.4', ['🧍 Remo renegado corregido: ahora rema una mano y luego la otra, con agarre neutro (palmas enfrentadas), y sus 3 claves lo explican.'], 'quiet'],
   ['5.2.3', ['Entreno: el acceso a las animaciones 3D pasa a ser una línea fina, «VER ANIMACIONES 3D ›», en lugar de un botón grande.'], 'admin'],
   ['5.2.2', ['🧍 Galería de animaciones 3D en Entreno (de momento solo para ti): las 60 animaciones agrupadas por zona, con buscador. Al cerrar una, vuelves a la galería.'], 'admin'],
   ['5.2.1', ['🧍 Nuevas animaciones 3D: Prensa de piernas, Curl en polea y Curl martillo en polea con cuerda, cada una con sus 3 claves.', 'Pulsa el botón 3D del ejercicio en tu entreno o en «Hoy has hecho».']],
@@ -7354,7 +7355,7 @@ const GYM3D_CUES = {
   gm: ['Barra en la parte alta de la espalda', 'Cadera atrás con las rodillas un poco flexionadas', 'Espalda neutra en todo el recorrido'],
   bbrow: ['Tronco inclinado y quieto, espalda neutra', 'Tira con los codos hacia la cadera', 'Junta las escápulas arriba y baja controlado'],
   invrow: ['Cuerpo recto de talones a cabeza; los talones no se mueven', 'Lleva el pecho a la barra con los codos pegados al cuerpo', 'Baja hasta estirar los brazos del todo'],
-  reneg: ['Pies separados para que la cadera no gire', 'El codo va hacia la cadera', 'La cadera no se mueve mientras remas'],
+  reneg: ['Plancha sobre las mancuernas con agarre neutro (palmas enfrentadas) y pies separados', 'Rema con una mano y luego con la otra: el codo va hacia la cadera', 'La cadera no gira ni se mueve mientras remas'],
   pull: ['Empieza colgado con los brazos estirados', 'Pecho a la barra, codos hacia los bolsillos', 'Baja despacio, sin dejarte caer'],
   dips: ['Hombros lejos de las orejas', 'Baja hasta que los codos formen unos 90°', 'Tronco un poco inclinado hacia delante'],
   dp: ['Silla firme y manos en el borde', 'Codos hacia atrás, no abiertos', 'Baja hasta unos 90° y sube sin bloquear de golpe'],
