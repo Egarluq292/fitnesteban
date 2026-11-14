@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.5.1';
+const APP_VERSION = '5.5.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4198,7 +4198,7 @@ function renderDiet() {
     ${ringsCard(t, st, budget, st.eatBackCardio && burned > 0)}
     <div class="grid grid-cols-2 gap-2 mt-4">
       <div class="d2-left"><div class="d2-left-l">${over ? (canBeta() ? 'Hoy, por encima' : 'Te has pasado') : 'Te quedan'}</div><div class="d2-left-v ${over && !canBeta() ? 'text-rose-300' : MAC.kcal.text}">${over && canBeta() ? '+' : ''}${Math.abs(leftK)}<span> kcal</span></div></div>
-      <div class="d2-left"><div class="d2-left-l">${leftP > 0 ? 'Proteína que falta' : 'Proteína'}</div><div class="d2-left-v ${MAC.prot.text}">${leftP > 0 ? `${leftP}<span> g</span>${protLeftHint(leftP, date)}` : '✓<span> cumplida</span>'}</div></div>
+      <div class="d2-left"><div class="d2-left-l">${leftP > 0 ? 'Proteína que falta' : 'Proteína'}</div><div class="d2-left-v ${MAC.prot.text}">${leftP > 0 ? `${leftP}<span> g</span>` : '✓<span> cumplida</span>'}</div></div>
     </div>
     ${isToday && mealsOf(date).length && (leftK > 60 || qcProtMode(qcLeft())) ? `<button class="qc-btn ${MAC.kcal.text}" data-act="queComo" type="button">¿Qué como?</button>` : `<p class="text-xs text-mute mt-2.5 leading-relaxed">${esc(hint)}</p>`}
     ${isToday ? realTdeeHintHTML() : ''}
@@ -5865,20 +5865,6 @@ const tgtSig = t => `${Math.round(t.kcal / 50)}|${Math.round(t.prot / 5)}`; // s
 function targetsOff(t) { const st = state.settings; return !!t && st.tgtKeep !== tgtSig(t) && (Math.abs(st.targetKcal - t.kcal) / t.kcal > 0.12 || Math.abs(st.targetProt - t.prot) / t.prot > 0.15); }
 const MED_NOTE = 'Información orientativa. No sustituye el consejo de un profesional sanitario: ante cualquier duda de salud, consulta con tu médico.';
 const medNote = (cls = '') => `<p class="med-note ${cls}">🩺 ${MED_NOTE}</p>`;
-/* 🥩 Proteína por comida: las comidas que sueles hacer (según lo que apuntas) y cuánta toca en cada una */
-const MEAL_DE = { Desayuno: 'el desayuno', Comida: 'la comida', Puente: 'el puente', Cena: 'la cena' };
-function usualMeals() {
-  const cnt = {}; let days = 0;
-  for (let i = 1; i <= 14; i++) { const ms = mealsOf(addDays(todayISO(), -i)); if (!ms.length) continue; days++; for (const tp of new Set(ms.map(m => m.type))) if (MEAL_DE[tp]) cnt[tp] = (cnt[tp] || 0) + 1; }
-  const L = ['Desayuno', 'Comida', 'Puente', 'Cena'].filter(tp => days >= 4 && cnt[tp] >= days * .4);
-  return L.length >= 2 ? L : ['Desayuno', 'Comida', 'Puente', 'Cena'];
-}
-function protLeftHint(leftP, date) { // cuánta proteína en cada comida que te queda hoy
-  if (date !== todayISO() || leftP <= 0) return '';
-  const done = new Set(mealsOf(date).map(m => m.type)), rest = usualMeals().filter(tp => !done.has(tp)); if (!rest.length) return '';
-  const g = Math.max(5, Math.round(leftP / rest.length / 5) * 5);
-  return `<span class="d2-per">${rest.length === 1 ? `en ${MEAL_DE[rest[0]].split(' ')[1]}` : `≈${g} g × ${rest.length}`}</span>`; // en la misma línea que el número: no agranda la casilla
-}
 function targetsModal(t, why = '') {
   const st = state.settings, cell = (l, a, b) => `<div><div class="text-[10px] text-mute">${l}</div><div class="text-[12px] text-mute line-through">${a}</div><div class="text-lg font-black ${a === b ? '' : 'text-brand'}">${b}</div></div>`;
   openModal(`<h3 class="modal-title">🎯 Tus objetivos</h3>
@@ -6700,8 +6686,9 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.5.2', ['Dieta: quitado el reparto de proteína por comida de la casilla «Proteína que falta».'], 'quiet'],
   ['5.5.1', ['Dieta: el reparto de proteína por comida va ahora en la misma línea que la cifra («≈20 g × 2»), sin agrandar la casilla.'], 'quiet'],
-  ['5.5.0', ['📊 Tus calorías, con tus datos reales: si llevas unas semanas apuntando casi todo y pesándote, la app calcula tu gasto real (lo que comes y cómo cambia tu peso) y, si tu objetivo no encaja, te lo propone en Dieta. Tú decides si lo aplicas.', '🚶 Revisa tu perfil: la actividad diaria ahora se elige contando tus entrenos, con ejemplos. Si trabajas sentado, aunque entrenes 3–4 días, lo tuyo es «Sentada».', '🥩 En Dieta, junto a «Proteína que falta», verás cuánta te toca en cada comida que te queda hoy.']],
+  ['5.5.0', ['📊 Tus calorías, con tus datos reales: si llevas unas semanas apuntando casi todo y pesándote, la app calcula tu gasto real (lo que comes y cómo cambia tu peso) y, si tu objetivo no encaja, te lo propone en Dieta. Tú decides si lo aplicas.', '🚶 Revisa tu perfil: la actividad diaria ahora se elige contando tus entrenos, con ejemplos. Si trabajas sentado, aunque entrenes 3–4 días, lo tuyo es «Sentada».']],
   ['5.4.3', ['Entreno: la línea de la semana cuenta los días entrenados, como los puntos de debajo (y, si un día hiciste dos cosas, también los entrenos).'], 'quiet'],
   ['5.4.2', ['🧍 Nuevas animaciones 3D para brazos: Curl predicador (banco Scott), Curl Zottman (con el giro de muñecas), Curl 21 con barra Z (las tres fases, con el contador en pantalla) y Extensión en polea con agarre invertido (la misma animación que la extensión en polea, con sus propias claves).']],
   ['5.4.1', ['✎ Edita tus sesiones desde donde las ves: en «Hoy has hecho» (Entreno) y al tocar un día del calendario, con «✎ Editar». Al guardar vuelves a donde estabas.']],
