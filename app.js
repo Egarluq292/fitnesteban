@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.7.4';
+const APP_VERSION = '5.8.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -1237,7 +1237,7 @@ function renderTrainHome() {
     <button class="gal-btn" data-act="openBlock" data-key="free" type="button"><span class="text-xl">🎲</span><span><b>FREE</b><small>Entreno libre</small></span></button>
     <button class="gal-btn" data-act="openBlock" data-key="cardio" type="button"><span class="text-xl">🔥</span><span><b>CARDIO</b><small>Correr, bici…</small></span></button>
   </div>
-  ${isAdminUser() ? '<button class="g3d-link" data-act="gal3d" type="button"><span></span>VER ANIMACIONES 3D ›<span></span></button>' : ''}
+  <button class="g3d-link" data-act="gal3d" type="button"><span></span>VER ANIMACIONES 3D ›<span></span></button>
   ${inUse.length ? `<div class="gal-h"><span>En uso</span></div>${inUse.map(x => x.html()).join('')}` : ''}
   ${ppTop.length ? `<div class="gal-h"><span>¿Empiezas de cero?</span></div>${ppTop.map(x => x.html()).join('')}` : ''}
   <div class="h-1"></div>
@@ -6720,6 +6720,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.8.0', ['🧍 Nuevo en Entreno: «VER ANIMACIONES 3D ›». Todas las animaciones de ejercicios en un mismo sitio, ordenadas por grupos y con buscador. Toca una para verla moverse con sus 3 claves de técnica.']],
   ['5.7.4', ['🧍 Momentos clave corregidos en el remo invertido y el face pull en TRX, a juego con sus animaciones.'], 'quiet'],
   ['5.7.3', ['🧍 Animaciones 3D corregidas: remo invertido en TRX (muñecas a la cadera y codos atrás) y face pull en TRX (codos abiertos y manos junto a las orejas).'], 'quiet'],
   ['5.7.2', ['🍽️ Dieta · balance de la semana: el día de hoy ya no cuenta hasta que acaba (salía «muy por debajo» cada mañana), y el lunes te recibe con «Tu semana empieza hoy» y cómo acabó la semana pasada.'], 'quiet'],
@@ -7017,6 +7018,7 @@ const GUIDE = [
     'Para montar el tuyo: «＋ Crear bloque» (en Tus bloques) → nombre y cuántos días tiene → se abre en el Día 1. Pulsa «＋ Añadir ejercicio», cambia de día con las pestañas y repite; «＋ Día» añade otro día. También desde Ajustes → Bloques («＋ Día» y «＋ Ejercicios»). Para eliminar un bloque tuyo: ⋯ de su tarjeta → «🗑 Eliminar este bloque», o la 🗑 en Ajustes → Bloques.',
     'Los bloques preparados (Full Body, PPT, Híbrido 5, Brazos, Tren inferior, Glúteo, Calistenia en casa, Kettlebell…) traen su descripción y «Cómo usarlo»: la ves en el ⋯ de su tarjeta. Los que acaban de salir llevan la etiqueta <b>NUEVO</b> hasta que los abres.',
     '🧍 El botón <b>3D</b> junto a un ejercicio (en tu entreno y en «Hoy has hecho») abre una animación del movimiento con sus 3 claves de técnica; la cámara gira sola para que lo veas desde varios ángulos. Si un ejercicio aún no tiene animación, usa el ▶ de YouTube.',
+    '🧍 <b>VER ANIMACIONES 3D ›</b>, en Entreno: todas las animaciones juntas, por grupos y con buscador. Toca una para verla con sus 3 claves.',
     'Para cambiar ejercicios, usa «＋ Añadir ejercicio» (crear uno o elegir entre los preparados) y el ✎ de cada ejercicio. «＋ Día» añade días. El ✎ del bloque o del día permite renombrar, reordenar (◀ ▶) o eliminar. El historial nunca se borra al eliminar.'
   ]],
   ['🧭 Cómo decide el coach el peso', [
