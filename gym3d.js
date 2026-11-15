@@ -130,9 +130,9 @@ const P = {
   curlinc: { pin: ['pelvis', [0, .55, 0]], fix: ['anL', 'anR'], base: { rootX: -55, hip: 35, knee: 90, shAb: 6, sh: -55 }, a: { el: 0 }, b: { el: 135 }, db: true, incline: 'back' },
   curlconc: { pin: ['pelvis', [0, .5, 0]], fix: ['anL', 'anR'], base: { rootX: 35, hip: 125, knee: 90, hipAb: 22, neck: -15, shL: 70, elL: 25, shAbL: 10, shR: 38, shAbR: -10 }, a: { elR: 0 }, b: { elR: 130 }, db: 'R', seat: true },
   hipth1: { pin: ['neck', 'auto'], fix: ['anL'], base: { sh: 20, shAb: 40, el: 70, hipR: 0, kneeR: 0 }, a: { rootX: -62, hipL: 52, kneeL: 100 }, b: { rootX: -90, hipL: 0, kneeL: 92 }, ground: ['anL', 'anR'], bench: [1.2, .42, .35, 0, -.62] },
-  trxfp: { cam: [4.4, 1.5, 1], pin: ['anL', 'auto'], base: { hip: 0, knee: 0, neck: 10, shAb: 6, ankle: 10 }, anchor: [2.4, .9], Ls: 1.7, a: { reach: .53 }, b: { reach: .14 }, pinA: -60 },
+  trxfp: { cam: [4.4, 1.5, 1], pin: ['anL', 'auto'], base: { hip: 0, knee: 0, neck: 10, shAb: 6, ankle: 10 }, anchor: [2.4, .9], Ls: 1.7, a: { reach: .53, fk: 0, fsh: 90, fab: 80, fel: 125 }, b: { reach: .2, fk: 1, fsh: 90, fab: 80, fel: 125 }, pinA: -60 },
   towel: { cam: [4.2, 1.3, .7], pin: ['anL', 'auto'], base: { hip: 0, knee: 0, neck: 10, shAb: 6, ankle: 10 }, anchor: [1.0, .95], Ls: .55, a: { reach: .53 }, b: { reach: .18 }, pinA: -50 },
-  trxrow: { cam: [4.4, 1.5, 1], pin: ['anL', 'auto'], base: { hip: 0, knee: 0, neck: 10, shAb: 6, ankle: 10 }, anchor: [2.4, .9], Ls: 1.7, a: { reach: .53 }, b: { reach: .1 }, pinA: -60 },
+  trxrow: { cam: [4.4, 1.5, 1], pin: ['anL', 'auto'], base: { hip: 0, knee: 0, neck: 10, shAb: 6, ankle: 10 }, anchor: [2.4, .9], Ls: 1.7, a: { reach: .53, fk: 0, fsh: -45, fab: 12, fel: 90 }, b: { reach: .1, fk: 1, fsh: -45, fab: 12, fel: 90 }, pinA: -60 },
   lungekb: { base: { sh: 15, el: 125, shAb: 22 }, a: {}, b: { hipL: 85, kneeL: 85, hipR: -25, kneeR: 95, ankleR: 40, spine: 3 }, ground: ['anL', 'knR'], kb: true },
   gorilla: { base: { hipAb: 16, rootX: 62, hip: 70, knee: 40, ankle: -10, neck: -20, sh: 62, el: 0 }, k: [{}, { shR: 0, elR: 100 }, {}, { shL: 0, elL: 100 }], db: true },
   sldl: { a: { rootX: 0, hip: 0, knee: 5, sh: 0, neck: 0 }, b: { rootX: 80, hipL: 80, kneeL: 15, hipR: 0, kneeR: 0, sh: 80, neck: -15 }, ground: ['anL'], db: true }
@@ -180,6 +180,11 @@ function apply(p, ex) {
     for (let i = 0; i < 22; i++) { const mid = (lo + hi) / 2; if (place(mid) > want) lo = mid; else hi = mid; }
     place((lo + hi) / 2);
     for (const k of SIDES) { const sp = new T.Vector3(); B['sh' + k].getWorldPosition(sp); const tgt = sp.clone().add(new T.Vector3(sp.x, A.y, A.z).sub(sp).normalize().multiplyScalar(reach)); ikTo('hd' + k, tgt); }
+    if (p.fk > 0) for (const k of SIDES) { // al final del tirón, el brazo pasa a una postura propia (remo: muñeca a la cadera; face pull: codos abiertos y manos a las orejas)
+      const sg = k === 'L' ? 1 : -1, J = B['sh' + k], E = B['el' + k], qi = J.quaternion.clone(), ei = E.rotation.x;
+      const qf = new T.Quaternion().setFromEuler(new T.Euler(-(p.fsh || 0) * d, 0, (p.fab || 0) * d * sg, 'XYZ'));
+      J.quaternion.copy(qi.slerp(qf, Math.min(1, p.fk))); E.rotation.x = ei + (-(p.fel || 0) * d - ei) * Math.min(1, p.fk); J.updateMatrixWorld(true);
+    }
   }
   if (FIX) for (const j of ex.fix || []) if (FIX[j]) ikTo(j, FIX[j]);
   if (ex.sled && FIX?.anL) { // prensa: los pies empujan la plataforma por un carril inclinado; la planta siempre pegada a ella

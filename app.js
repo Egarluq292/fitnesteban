@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.7.2';
+const APP_VERSION = '5.7.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6720,6 +6720,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.7.3', ['🧍 Animaciones 3D corregidas: remo invertido en TRX (muñecas a la cadera y codos atrás) y face pull en TRX (codos abiertos y manos junto a las orejas).'], 'quiet'],
   ['5.7.2', ['🍽️ Dieta · balance de la semana: el día de hoy ya no cuenta hasta que acaba (salía «muy por debajo» cada mañana), y el lunes te recibe con «Tu semana empieza hoy» y cómo acabó la semana pasada.'], 'quiet'],
   ['5.7.1', ['👥 Usuarios: el paso de un filtro a otro es más suave y fuera la barrita gris bajo los filtros.'], 'quiet'],
   ['5.7.0', ['🏋️ Perfil: nueva pregunta «Días que entrenas a la semana» (0, 1–2, 3–4 o 5 o más). Así tus calorías se ajustan también si no entrenas o si entrenas mucho. Si no la tocas, todo sigue igual (3–4 días).', 'La actividad diaria se elige ahora sin contar el entreno: solo cómo es el resto de tu día.']],
