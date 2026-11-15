@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.7.3';
+const APP_VERSION = '5.7.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6720,6 +6720,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.7.4', ['🧍 Momentos clave corregidos en el remo invertido y el face pull en TRX, a juego con sus animaciones.'], 'quiet'],
   ['5.7.3', ['🧍 Animaciones 3D corregidas: remo invertido en TRX (muñecas a la cadera y codos atrás) y face pull en TRX (codos abiertos y manos junto a las orejas).'], 'quiet'],
   ['5.7.2', ['🍽️ Dieta · balance de la semana: el día de hoy ya no cuenta hasta que acaba (salía «muy por debajo» cada mañana), y el lunes te recibe con «Tu semana empieza hoy» y cómo acabó la semana pasada.'], 'quiet'],
   ['5.7.1', ['👥 Usuarios: el paso de un filtro a otro es más suave y fuera la barrita gris bajo los filtros.'], 'quiet'],
@@ -7598,8 +7599,8 @@ const GYM3D_CUES = {
   curlinc: ['Sentado en un banco inclinado, espalda apoyada', 'Los brazos cuelgan por detrás del tronco', 'Sube sin despegar los codos del cuerpo'],
   curlconc: ['Sentado, el codo apoyado en la cara interna del muslo', 'Sube el peso sin mover el brazo', 'Baja despacio hasta estirar del todo'],
   hipth1: ['Escápulas en el banco y un pie bien apoyado', 'La otra pierna estirada, en línea con el cuerpo', 'Sube la cadera hasta quedar recto y aprieta el culo'],
-  trxfp: ['Colgado boca arriba, cuerpo recto y pies fijos', 'Tira con los codos pegados al cuerpo: el cuerpo sube hacia el agarre', 'Baja controlado hasta estirar los brazos'],
-  trxrow: ['Cuerpo recto e inclinado hacia atrás, pies fijos', 'Tira con los codos pegados al cuerpo hasta llevar el pecho a las manos', 'Baja controlado hasta estirar los brazos'],
+  trxfp: ['Colgado boca arriba, cuerpo recto y pies fijos', 'Tira abriendo los codos a la altura de los hombros hasta llevar las manos junto a las orejas', 'Baja controlado hasta estirar los brazos'],
+  trxrow: ['Cuerpo recto e inclinado hacia atrás, pies fijos', 'Tira llevando los codos atrás, pegados al cuerpo, hasta que las manos lleguen a la cadera', 'Baja controlado hasta estirar los brazos'],
   towel: ['Colgado de la toalla, cuerpo recto inclinado hacia atrás', 'Tira con los codos pegados al cuerpo', 'Pies fijos: el cuerpo gira hacia la puerta'],
   lungekb: ['Kettlebell delante del pecho con las dos manos', 'Paso largo y tronco recto', 'Vuelve empujando con el talón de delante'],
   gorilla: ['Piernas abiertas y cadera atrás, espalda neutra', 'Rema con una mano y luego con la otra', 'La mancuerna que no rema se queda apoyada abajo'],
