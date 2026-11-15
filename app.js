@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.9.1';
+const APP_VERSION = '5.9.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6741,6 +6741,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.9.2', ['👥 El botón de Usuarios de la cabecera muestra cuántas personas han usado la app hoy.', '👆 Al entrar en Usuarios, la huella salta sola, y el PIN vale 2 horas mientras la app siga abierta.'], 'admin'],
   ['5.9.1', ['🧍 Nueva animación 3D: pájaros con mancuernas (deltoides posterior).'], 'quiet'],
   ['5.9.0', ['🔢 Dieta: si una comida empieza por un número («2 cervezas», «3 huevos»), en su fila tienes − 2 ＋ para cambiar la cantidad sin volver a apuntarla. Las kcal y los macros se ajustan solos.'], 'quiet'],
   ['5.8.0', ['🧍 Nuevo en Entreno: «VER ANIMACIONES 3D ›». Todas las animaciones de ejercicios en un mismo sitio, ordenadas por grupos y con buscador. Toca una para verla moverse con sus 3 claves de técnica.']],
@@ -7259,7 +7260,7 @@ function maybeShowNews() {
    ========================================================================= */
 function render() {
   const adm = isAdminUser() || (!access.me && lsGet('fitnesteban_adm') === 1); if (access.me) { try { if (access.me.admin) localStorage.setItem('fitnesteban_adm', '1'); else localStorage.removeItem('fitnesteban_adm'); } catch { /* nada */ } } const ub = $('#usersBtn'), mb = $('#mailBtn'); if (ub) ub.style.display = adm ? '' : 'none'; if (mb) mb.style.display = adm ? 'none' : ''; $('#usersBtn')?.classList.toggle('is-on', adm && ui.view === 'settings' && !!ui.accPage); const hd = document.querySelector('header'); if (hd) document.documentElement.style.setProperty('--hdr-h', hd.offsetHeight + 'px');
-  try { renderInner(); }
+  try { renderInner(); usersBadge(); }
   catch (e) {
     console.error(e);
     $('#app').innerHTML = `<section class="card p-4 mt-1 space-y-3 border-rose-500/40">
@@ -8461,7 +8462,7 @@ const actions = {
   trialCode: b => newAccessModal(b.dataset.who || '', '1m', b.dataset.from || ''),
   openAccess: then => {
     if (typeof then !== 'function') then = null;
-    // el PIN vale para toda la sesión: hasta cerrar la app o 15 min sin tocar nada de Acceso
+    // el PIN vale para toda la sesión: hasta cerrar la app o 2 horas sin tocar nada de Acceso
     const done = pin => { ui.accessOpen = true; if (pin) { ui.accessPin = pin; ui.pinAt = Date.now(); } ui.accessReveal = ui.accessReveal || {}; ui.usageErr = ''; if (then) then(); else render(); loadUsage(); };
     if (pinOk()) return done(ui.accessPin);
     if (state.settings.pinHash) return askPinOnly('🔑 Acceso', 'Escribe tu PIN para abrir esta sección.', pin => done(pin));
@@ -9543,6 +9544,7 @@ function askPinOnly(title, text, onOk) {
       closeModal(); onOk(pin);
     }
   });
+  if (bioOn()) setTimeout(() => { const r = $('#modalRoot'); if (r?.classList.contains('open') && r.querySelector('[data-mact=bio]')) bioFill(r); }, 0); // 👆 la huella salta sola; si la cancelas, queda el PIN
 }
 function askPin({ title, text, onPin }) {
   if (!state.settings.pinHash) return toast('Primero crea un PIN en Ajustes → Seguridad', 'warn');
@@ -9652,8 +9654,19 @@ function accFilterDom() {
 }
 document.addEventListener('input', e => { if (e.target.id === 'accSearch') accFilterDom(); });
 /* 🟢 Activos hoy: el script da solo el número (sin PIN). Se pide al ver Ajustes, como mucho una vez por minuto */
+const activeN = () => ui.usage ? Object.entries(ui.usage).filter(([h, u]) => u.last === todayISO() && !(access.list || []).find(x => x.hash === h)?.admin).length : ui.hoyN;
+/* 🟢 Numerito de activos hoy sobre el botón 👥 de la cabecera (solo admin; sin nombres, solo la cifra) */
+function usersBadge() {
+  const ub = $('#usersBtn'); if (!ub) return;
+  const n = activeN(); let b = ub.querySelector('.ub-n');
+  if (typeof n !== 'number' || n < 1) { b?.remove(); return; }
+  if (!b) { b = document.createElement('span'); b.className = 'ub-n'; ub.appendChild(b); }
+  b.textContent = n > 99 ? '99+' : String(n); ub.setAttribute('aria-label', `Usuarios · ${n} activo${n === 1 ? '' : 's'} hoy`);
+}
+setTimeout(loadActiveCount, 2500); setInterval(() => { if (document.visibilityState === 'visible') loadActiveCount(); }, 5 * 60000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') loadActiveCount(); });
 function activeChip() {
-  const n = ui.usage ? Object.entries(ui.usage).filter(([h, u]) => u.last === todayISO() && !(access.list || []).find(x => x.hash === h)?.admin).length : ui.hoyN;
+  const n = activeN();
   return typeof n === 'number' ? `<span class="active-chip"><span class="active-dot"></span>${n} activo${n === 1 ? '' : 's'} hoy</span>` : '';
 }
 async function loadActiveCount() {
@@ -9661,7 +9674,7 @@ async function loadActiveCount() {
   ui.hoyAt = Date.now();
   try {
     const d = await (await fetch(`${access.usageUrl}?op=hoy&t=${Date.now()}`, { cache: 'no-store' })).json();
-    if (typeof d.hoy === 'number') { ui.hoyN = d.hoy; if (ui.view === 'settings') render(); }
+    if (typeof d.hoy === 'number') { ui.hoyN = d.hoy; usersBadge(); if (ui.view === 'settings') render(); }
   } catch { /* sin dato: no se muestra */ }
 }
 /* 🧪 Quien está en periodo de prueba (filas de la hoja que no son de ningún código de acceso.txt) */
@@ -9687,7 +9700,7 @@ function trialRowsHTML() {
         <p class="text-[11px] text-mute">Cuando le des un código, lo escribe en la pantalla de acceso y sigue con todos sus datos.</p></div>` : ''}</div>`;
   }).join('');
 }
-const PIN_TTL = 15 * 60e3, pinOk = () => !!ui.accessPin && Date.now() - (ui.pinAt || 0) < PIN_TTL;
+const PIN_TTL = 2 * 60 * 60e3, pinOk = () => !!ui.accessPin && Date.now() - (ui.pinAt || 0) < PIN_TTL;
 const accDot = h => { const u = ui.usage?.[h], ago = u ? daysBetween(u.last, todayISO()) : null; return !u ? 'u-none' : ago === 0 ? 'u-today' : ago <= 7 ? 'u-week' : 'u-old'; };
 function accPersonRowHTML(x) {
   const me = x.hash === access.me.hash, st = accStatus(x), u = ui.usage?.[x.hash], ago = u ? daysBetween(u.last, todayISO()) : null;
