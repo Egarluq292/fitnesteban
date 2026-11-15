@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.8.0';
+const APP_VERSION = '5.9.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4189,9 +4189,9 @@ function renderDiet() {
         ${items.length ? `<button class="d2-fold ${open ? 'd2-fold-on' : ''}" data-act="dietFold" data-type="${tp}" type="button" aria-label="${open ? 'Plegar' : 'Desplegar'} ${tp}"><span class="d2-tri"></span></button>` : ''}
         <button class="d2-plus" data-act="addFor" data-type="${tp}" type="button" aria-label="Añadir a ${tp}">＋</button>
       </div>
-      ${!open ? '' : items.map(m => `<button class="d2-meal ${ui.editing?.id === m.id ? 'd2-meal-on' : ''}" data-act="mealMenu" data-id="${esc(m.id)}" type="button">
+      ${!open ? '' : items.map(m => { const q = mealQty(m); return `<div class="relative"><button class="d2-meal ${ui.editing?.id === m.id ? 'd2-meal-on' : ''} ${q ? 'd2-meal-q' : ''}" data-act="mealMenu" data-id="${esc(m.id)}" type="button">
         <span class="min-w-0 flex-1 text-left"><span class="block text-sm font-semibold truncate">${isFavMeal(normName(m.desc)) ? '<span class="text-amber-300">★ </span>' : ''}${esc(m.desc || tp)}</span>
-        <span class="block text-[11px] font-mono mt-0.5">${macroLine(m)}</span></span><span class="text-mute text-lg leading-none">⋯</span></button>`).join('')}
+        <span class="block text-[11px] font-mono mt-0.5">${macroLine(m)}</span></span><span class="text-mute text-lg leading-none">⋯</span></button>${q ? `<span class="d2-qty"><button data-act="mealQty" data-id="${esc(m.id)}" data-d="-1" type="button" aria-label="Una menos" ${q.n <= 1 ? 'disabled' : ''}>−</button><b>${q.n}</b><button data-act="mealQty" data-id="${esc(m.id)}" data-d="1" type="button" aria-label="Una más">＋</button></span>` : ''}</div>`; }).join('')}
       ${!items.length && yd.length ? `<button class="d2-add-empty" data-act="repeatYday" data-type="${tp}" type="button">↻ Repetir el de ayer <span class="text-mute font-normal">· ${esc(yd.map(m => m.desc).join(' + ').slice(0, 38))}</span></button>` : ''}
     </div>`;
   }).join('') + (canBeta() ? `<button class="d2-add-empty d2-add-otro" data-act="outMeal" type="button">🍽️ Comida fuera o copas</button>` : '');
@@ -4865,6 +4865,27 @@ function loadMealIntoPanel(m, extra = {}) {
   ui.mealType = m.type || ui.mealType;
   render();
   setTimeout(() => $('#mealCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30);
+}
+/* 🔢 Cantidad en la propia fila: «2 cervezas» → − 2 ＋ (las kcal y los macros se escalan; el texto cambia de número) */
+function mealQty(m) { const x = /^(\d{1,2}) (\S.*)$/.exec(m.desc || ''); return x && +x[1] >= 1 && +x[1] <= 30 ? { n: +x[1], rest: x[2] } : null; }
+function qtyWord(rest, from, to) { // singular ↔ plural de la primera palabra al pasar por 1 («1 cerveza» · «2 cervezas»)
+  if ((from === 1) === (to === 1)) return rest;
+  const d = OUT_DRINK.find(o => rest.startsWith(to === 1 ? o[2] : o[1]));
+  if (d) return (to === 1 ? d[1] : d[2]) + rest.slice((to === 1 ? d[2] : d[1]).length);
+  const STOP = /^(de|del|con|sin|en|a|al|y|o|para|por|\(.*)$/i, AC = { á: 'a', é: 'e', í: 'i', ó: 'o', ú: 'u' }, words = rest.split(' ');
+  const one = w => /ones$/i.test(w) ? w.slice(0, -4) + 'ón' : /[^aeiouáéíóú]es$/i.test(w) ? w.slice(0, -2) : w.replace(/s$/i, ''); // «salmones» → «salmón», «panes» → «pan»
+  const many = w => /[áéíóú]n$/i.test(w) ? w.slice(0, -2) + AC[w.slice(-2, -1).toLowerCase()] + 'nes' : /[aeiouáéíóú]$/i.test(w) ? w + 's' : w + 'es'; // «salmón» → «salmones»
+  let stop = false; // el nombre y sus adjetivos («huevos fritos»), hasta «con», «de»…
+  return words.map(w => { if (stop || STOP.test(w)) { stop = true; return w; } return to === 1 ? one(w) : many(w); }).join(' ');
+}
+function mealQtyStep(id, dlt) {
+  const m = mealsOf(ui.dietDate).find(x => x.id === id), q = m && mealQty(m); if (!q) return;
+  const to = Math.max(1, Math.min(30, q.n + dlt)); if (to === q.n) return;
+  const f = to / q.n;
+  for (const k of ['kcal', 'prot', 'carbs', 'fat']) m[k] = r2((m[k] || 0) * f);
+  for (const it of m.items || []) { it.grams = r2((it.grams || 0) * f); it.sel = 'x'; }
+  m.desc = `${to} ${qtyWord(q.rest, q.n, to)}`;
+  persist(); render();
 }
 function addMeal(date, m) {
   if (!state.meals[date]) state.meals[date] = [];
@@ -6720,6 +6741,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.9.0', ['🔢 Dieta: si una comida empieza por un número («2 cervezas», «3 huevos»), en su fila tienes − 2 ＋ para cambiar la cantidad sin volver a apuntarla. Las kcal y los macros se ajustan solos.'], 'quiet'],
   ['5.8.0', ['🧍 Nuevo en Entreno: «VER ANIMACIONES 3D ›». Todas las animaciones de ejercicios en un mismo sitio, ordenadas por grupos y con buscador. Toca una para verla moverse con sus 3 claves de técnica.']],
   ['5.7.4', ['🧍 Momentos clave corregidos en el remo invertido y el face pull en TRX, a juego con sus animaciones.'], 'quiet'],
   ['5.7.3', ['🧍 Animaciones 3D corregidas: remo invertido en TRX (muñecas a la cadera y codos atrás) y face pull en TRX (codos abiertos y manos junto a las orejas).'], 'quiet'],
@@ -7068,6 +7090,7 @@ const GUIDE = [
     'Anillo exterior = kcal (ámbar); dentro, proteína (cian), carbohidratos (verde) y grasas (rosa). Si te pasas, el exceso da una segunda vuelta y sale «+…».',
     '«Te quedan» dice las kcal y la proteína que te faltan. Los días con cardio o gym verás también lo quemado y el neto (la app estima el gym con la duración, las series, los kilos y tu peso).',
     '📊 <b>Últimos 7 días</b>: la altura de cada barra son las kcal (la raya es tu objetivo) y su relleno, tus macros (proteína, grasas, carbohidratos). Apagada = te quedas corto; viva = en tu objetivo; tope rojo = te pasas. El punto azul, si llegaste a la proteína. Toca un día para verlo.',
+    '🔢 Si una comida empieza por un número («2 cervezas», «3 huevos»), en su fila sale <b>− 2 ＋</b>: cambia la cantidad sin repetirla y las kcal y los macros se ajustan solos.',
     'Toca una comida para <b>editarla</b>, guardarla en ☆ favoritas, duplicarla (o «comerla hoy» si es de otro día) o borrarla. Al añadir, «Tus habituales» muestra primero tus favoritas y luego lo que más repites; el buscador (arriba) encuentra cualquiera del historial: sin tildes, por varias palabras («pollo arroz») y con lo buscado resaltado. Toca un resultado para apuntarlo.',
     '📅 Toca la <b>fecha</b> para abrir el calendario del mes: punto verde/ámbar/rojo según la dieta, 🏋️ pesas, 🏆 retos y 🔥 cardio. Desliza el dedo a los lados para cambiar de día.'
   ]],
@@ -8257,6 +8280,7 @@ const actions = {
   favMeal: b => toggleFavMeal(b.dataset.key),
   dietFold: b => { const o = ui.dietOpen ||= {}; o[b.dataset.type] = !o[b.dataset.type]; render(); },
   mealMenu: b => mealMenu(b.dataset.id),
+  mealQty: b => mealQtyStep(b.dataset.id, +b.dataset.d),
   addFor: b => { ui.mealType = b.dataset.type; ui.addOpen = true; ui.mealSearch = ''; render(); setTimeout(() => $('#mealCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30); },
   addClose: () => { ui.addOpen = false; ui.aiResult = null; ui.editing = null; ui.img = null; render(); },
   dietGo: b => { if (dietPending()) return toast('Termina o cierra la comida que estás añadiendo', 'warn'); ui.dietDate = b.dataset.date; ui._animRings = true; render(); },
