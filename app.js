@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.9.0';
+const APP_VERSION = '5.9.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6741,6 +6741,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.9.1', ['🧍 Nueva animación 3D: pájaros con mancuernas (deltoides posterior).'], 'quiet'],
   ['5.9.0', ['🔢 Dieta: si una comida empieza por un número («2 cervezas», «3 huevos»), en su fila tienes − 2 ＋ para cambiar la cantidad sin volver a apuntarla. Las kcal y los macros se ajustan solos.'], 'quiet'],
   ['5.8.0', ['🧍 Nuevo en Entreno: «VER ANIMACIONES 3D ›». Todas las animaciones de ejercicios en un mismo sitio, ordenadas por grupos y con buscador. Toca una para verla moverse con sus 3 claves de técnica.']],
   ['5.7.4', ['🧍 Momentos clave corregidos en el remo invertido y el face pull en TRX, a juego con sus animaciones.'], 'quiet'],
@@ -7538,6 +7539,7 @@ const GYM3D_MAP = [
   [/extensi[oó]n de (cu[aá]driceps|piernas)|leg extension/i, 'legext'], [/curl femoral sentado/i, 'legcs'], [/curl femoral (tumbado|acostado)/i, 'legcl'],
   [/^prensa( de piernas)?( con (los )?pies altos)?$/i, 'press'], [/curl martillo.*(polea|cuerda)/i, 'curlhc'], [/^curl (de b[ií]ceps )?en polea( baja)?( con barra)?$/i, 'curlc'],
   [/aperturas?.*inclinad/i, 'fly'], [/^aperturas? (con mancuernas|en banco plano)/i, 'flyf'], [/^extensi[oó]n (de tr[ií]ceps )?en polea( con cuerda)?$/i, 'pushd'],
+  [/^(?!.*(m[aá]quina|polea|cable|contractora|pec ?deck)).*(p[aá]jaros?\b|rear delt|deltoides posterior)/i, 'rdfly'], // pájaros con mancuernas o banda, no en máquina
   [/m[aá]quina|polea|prensa|smith|multipower|jal[oó]n|contractora|cable|pec ?deck|hack|extensi[oó]n de cu[aá]driceps|curl femoral|curl n[oó]rdico|\+|gemelos sentado|pica|sissy|thruster|hiperextensi|patada|p[aá]jaro|apertura|abducci|aducci|paseo lateral|clean/i, null],
   [/martillo/i, 'curlh'], [/curl concentrado/i, 'curlconc'], [/curl (en banco )?inclinado|curl inclinado/i, 'curlinc'],
   [/gorilla/i, 'gorilla'], [/toalla/i, 'towel'], [/remo invertido en trx/i, 'trxrow'], [/face ?pull|trx/i, 'trxfp'], [/remo (a una mano|con mancuerna a una mano)/i, 'dbrow1'], [/remo con (2|dos) mancuernas|remo con mancuernas en banco inclinado/i, 'csrow'],
@@ -7558,7 +7560,7 @@ const GYM3D_MAP = [
   [/remo/i, 'bbrow'], [/curl/i, 'curl']
 ];
 const GYM3D_EQ = n => /mancuerna/i.test(n) ? 'db' : /kettlebell/i.test(n) ? 'kb' : /barra|\bez\b|\bz\b/i.test(n) ? 'bar' : /toalla|banda|trx|mesa/i.test(n) ? 'none' : '';
-const GYM3D_DEF = { c21: 'db', zott: 'db', fly: 'db', flyf: 'db', benchc: 'bar', csrow: 'db', curlh: 'db', curlinc: 'db', curlconc: 'db', sldl: 'db', gorilla: 'db', lungekb: 'kb', dbrow1: 'db', bench: 'bar', incl: 'db', ohp: 'bar', rdl: 'bar', dl: 'bar', bbrow: 'bar', curl: 'db', hipth: 'bar', skull: 'bar', lunge: 'db', calfdb: 'db', stepdb: 'db', bulg: 'db', sumo: 'db', goblet: 'db', gm: 'bar', sqbar: 'bar', ohext: 'db' };
+const GYM3D_DEF = { rdfly: 'db', c21: 'db', zott: 'db', fly: 'db', flyf: 'db', benchc: 'bar', csrow: 'db', curlh: 'db', curlinc: 'db', curlconc: 'db', sldl: 'db', gorilla: 'db', lungekb: 'kb', dbrow1: 'db', bench: 'bar', incl: 'db', ohp: 'bar', rdl: 'bar', dl: 'bar', bbrow: 'bar', curl: 'db', hipth: 'bar', skull: 'bar', lunge: 'db', calfdb: 'db', stepdb: 'db', bulg: 'db', sumo: 'db', goblet: 'db', gm: 'bar', sqbar: 'bar', ohext: 'db' };
 function gym3dOf(name) {
   for (const [re, id] of GYM3D_MAP) if (re.test(name || '')) { if (!id) return null; const eq = GYM3D_EQ(name); return eq && eq !== GYM3D_DEF[id] && GYM3D_DEF[id] ? `${id}:${eq}` : id; }
   return null;
@@ -7602,6 +7604,7 @@ const GYM3D_CUES = {
   ohext: ['Codos hacia el techo y cerrados', 'Baja el peso por detrás de la cabeza', 'Estira los brazos sin arquear la espalda'],
   curl: ['Codos pegados al cuerpo', 'Sube sin balancear el tronco', 'Baja despacio hasta estirar el brazo'],
   lat: ['Codos un poco flexionados', 'Sube hasta la altura de los hombros, no más', 'Baja controlado, sin dejar caer el peso'],
+  rdfly: ['Tronco inclinado unos 45–60°, espalda recta y rodillas un poco flexionadas', 'Abre los brazos hacia los lados hasta formar una T, sin pasar de los hombros y con los codos fijos', 'Pausa arriba y baja despacio por el mismo camino, sin encoger los hombros'],
   facep: ['Tira hacia la cara con los codos altos', 'Las manos acaban a los lados de la cabeza', 'Junta las escápulas un segundo'],
   calfdb: ['Sube todo lo alto que puedas', 'Pausa de un segundo arriba', 'Baja despacio hasta estirar el gemelo'],
   swing: ['La fuerza sale de la cadera, no de los brazos', 'Espalda neutra: la pesa pasa entre las piernas', 'Arriba, culo apretado y cuerpo recto'],
@@ -7640,7 +7643,7 @@ const seen3D = () => !!lsGet('fitnesteban_3dseen'); // hasta que abres tu primer
 const GYM3D_GAL = [
   ["Pecho", ["Press de banca con barra", "Press inclinado con mancuernas", "Aperturas en banco inclinado", "Aperturas con mancuernas", "Flexiones", "Flexiones con rodillas", "Fondos en paralelas"]],
   ["Espalda", ["Dominadas", "Remo con barra", "Remo a una mano con mancuerna", "Remo con mancuernas en banco inclinado", "Remo gorilla", "Remo renegado", "Remo invertido", "Remo invertido en TRX", "Remo con toalla", "Face pull en TRX"]],
-  ["Hombros", ["Press militar con barra", "Press con kettlebell", "Elevaciones laterales"]],
+  ["Hombros", ["Press militar con barra", "Press con kettlebell", "Elevaciones laterales", "Pájaros con mancuernas"]],
   ["Brazos", ["Curl de bíceps con mancuernas", "Curl martillo", "Curl inclinado", "Curl concentrado", "Curl en polea", "Curl martillo en polea con cuerda", "Curl predicador", "Curl Zottman", "Curl 21 con barra Z", "Press cerrado con barra", "Press francés", "Extensión de tríceps sobre la cabeza", "Extensión de tríceps en polea", "Fondos en banco"]],
   ["Pierna y glúteo", ["Sentadilla", "Sentadilla con barra", "Sentadilla goblet", "Sentadilla sumo", "Sentadilla búlgara", "Zancadas", "Zancadas con kettlebell", "Step-up con mancuernas", "Prensa de piernas", "Extensión de cuádriceps", "Curl femoral sentado", "Curl femoral tumbado", "Peso muerto", "Peso muerto rumano", "Peso muerto a una pierna", "Buenos días", "Hip thrust con barra", "Hip thrust a una pierna", "Puente de glúteo", "Puente de glúteo a una pierna", "Elevación de gemelos"]],
   ["Core", ["Plancha", "Plancha lateral", "Hollow", "Crunch", "Escaladores"]],

@@ -70,6 +70,7 @@ const P = {
   curl: { a: { el: 0, sh: 0 }, b: { el: 140, sh: 5 }, db: true },
   // 9 Elevaciones laterales
   lat: { a: { shAb: 8, el: 10 }, b: { shAb: 85, el: 15 }, db: true },
+  rdfly: { cam: [2.8, 1.4, .9], base: { rootX: 52, hip: 80, knee: 50, ankle: 22, neck: -24, sh: 52, el: 14, tw: 90 }, k: [{ shAb: 6 }, { shAb: 78 }, { shAb: 78 }, { shAb: 6 }], db: true, twist: true }, // pájaros: abducción horizontal con el tronco inclinado
   // 10 Sentadilla búlgara con mancuernas
   bulg: { pin: ['pelvis', 'p'], fix: ['anL', 'anR'], base: { hipR: -35, kneeR: 80, ankleR: 30, hipL: 30, kneeL: 0 }, a: { py: .8, spine: 6 }, b: { py: .6, spine: 12 }, foot: 'anR', flat: ['anL'], db: true },
   // ---- tanda 2 ----
@@ -307,7 +308,7 @@ export function mount(el, id, lv = 1) {
     if (ex.pin?.[1] === 'auto') FIX.pin = FIX[ex.pin[0]];
   }
   props(ex, poseAt(0));
-  const per = { pull: 3, hipth: 2.6, lat: 2.4, curl: 2.2, curlh: 2.2, burpee: 4.5, plank: 4, hollow: 3.5, gorilla: 4.4, swing: 1.8, legext: 3.2, legcs: 3.2, legcl: 3.2, fly: 4, flyf: 4, pushd: 3.2, pushdr: 3.2, press: 3.4, curlc: 2.6, curlhc: 2.6, preach: 2.8, zott: 4.4, c21: 31.5 }[id] || 2.8;
+  const per = { pull: 3, hipth: 2.6, lat: 2.4, curl: 2.2, curlh: 2.2, burpee: 4.5, plank: 4, hollow: 3.5, gorilla: 4.4, swing: 1.8, legext: 3.2, legcs: 3.2, legcl: 3.2, fly: 4, flyf: 4, pushd: 3.2, pushdr: 3.2, press: 3.4, curlc: 2.6, curlhc: 2.6, preach: 2.8, zott: 4.4, c21: 31.5, rdfly: 3.6 }[id] || 2.8;
   const t0 = performance.now();
   const frame = now => {
     if (!cv.isConnected) { stop(); return; }
