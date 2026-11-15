@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.7.1';
+const APP_VERSION = '5.7.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4273,15 +4273,26 @@ function macroStackBar(t, h, state2 = 'ok') {
 }
 /* 🧪 Balance de la semana (lunes a domingo de la fecha elegida): solo cuentan los días con comidas apuntadas */
 function weekBalanceHTML(sel) {
-  const st = state.settings, T = todayISO(), dow = (parseISO(sel).getDay() + 6) % 7, mon = addDays(sel, -dow);
-  const days = Array.from({ length: 7 }, (_, i) => addDays(mon, i)).filter(d => d <= T && mealsOf(d).length);
-  if (!days.length || !st.targetKcal) return '';
-  const diff = Math.round(days.reduce((a, d) => a + totalsOf(d).kcal - st.targetKcal, 0)), n = days.length;
-  const [txt, cls] = Math.abs(diff) <= 150 ? ['vas en tu objetivo', 'text-emerald-300']
-    : diff < 0 ? [`${fmtNum(-diff)} kcal por debajo de tu objetivo`, 'text-emerald-300']
-    : [`${fmtNum(diff)} kcal por encima de tu objetivo (unas ${fmtNum(Math.round(diff / n))} al día)`, 'text-amber-300'];
-  return `<div class="mt-2 mx-1 mb-1 rounded-xl bg-white/5 px-3 py-2"><div class="text-[11px] text-mute">Esta semana · ${n} ${n === 1 ? 'día apuntado' : 'días apuntados'}</div>
-    <div class="text-sm font-bold ${cls}">${txt}</div>${diff > 150 ? '' : '<div class="text-[10px] text-mute mt-0.5">Un día alto no estropea una semana ordenada.</div>'}</div>`;
+  const st = state.settings, T = todayISO(), dow = (parseISO(sel).getDay() + 6) % 7, mon = addDays(sel, -dow), monT = addDays(T, -((parseISO(T).getDay() + 6) % 7));
+  if (!st.targetKcal) return '';
+  const box = inner => `<div class="mt-2 mx-1 mb-1 rounded-xl bg-white/5 px-3 py-2">${inner}</div>`;
+  // hoy no cuenta hasta que acabe (saldría «muy por debajo» cada mañana), salvo que ya te hayas pasado: ese exceso ya es seguro
+  const bal = m0 => {
+    const days = Array.from({ length: 7 }, (_, i) => addDays(m0, i)).filter(d => mealsOf(d).length && (d < T || (d === T && totalsOf(d).kcal > st.targetKcal)));
+    if (!days.length) return null;
+    const diff = Math.round(days.reduce((a, d) => a + totalsOf(d).kcal - st.targetKcal, 0)), n = days.length, perDay = fmtNum(Math.round(Math.abs(diff) / n));
+    return Math.abs(diff) <= 100 * n ? { txt: 'Vas en tu objetivo', short: 'en tu objetivo', cls: 'text-emerald-300', ok: true }
+      : diff < 0 ? { txt: `${fmtNum(-diff)} kcal por debajo · unas ${perDay} al día`, short: `unas ${perDay} kcal por debajo al día`, cls: 'text-emerald-300' }
+      : { txt: `${fmtNum(diff)} kcal por encima · unas ${perDay} al día`, short: `unas ${perDay} kcal por encima al día`, cls: 'text-amber-300' };
+  };
+  const b = bal(mon);
+  if (!b) { // lunes: aún no hay días cerrados → bienvenida y cómo acabó la semana pasada (lo que se ve en las barras)
+    if (mon !== monT || T !== mon) return '';
+    const p = bal(addDays(mon, -7));
+    return box(`<div class="text-[11px] text-mute">Esta semana</div><div class="text-sm font-bold text-cyan-300">Tu semana empieza hoy 🚀</div><div class="text-[10px] text-mute mt-0.5">${p ? `La semana pasada, ${p.short}. ` : ''}Mañana, tu primer balance.</div>`);
+  }
+  return box(`<div class="text-[11px] text-mute">${mon < monT ? 'Esa semana' : 'Esta semana'}</div>
+    <div class="text-sm font-bold ${b.cls}">${b.txt}</div>${b.ok ? '<div class="text-[10px] text-mute mt-0.5">Un día alto no estropea una semana ordenada.</div>' : ''}`);
 }
 
 /* 🧪 Comida fuera y copas: estimación en dos toques, sin pesar nada */
@@ -6709,6 +6720,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.7.2', ['🍽️ Dieta · balance de la semana: el día de hoy ya no cuenta hasta que acaba (salía «muy por debajo» cada mañana), y el lunes te recibe con «Tu semana empieza hoy» y cómo acabó la semana pasada.'], 'quiet'],
   ['5.7.1', ['👥 Usuarios: el paso de un filtro a otro es más suave y fuera la barrita gris bajo los filtros.'], 'quiet'],
   ['5.7.0', ['🏋️ Perfil: nueva pregunta «Días que entrenas a la semana» (0, 1–2, 3–4 o 5 o más). Así tus calorías se ajustan también si no entrenas o si entrenas mucho. Si no la tocas, todo sigue igual (3–4 días).', 'La actividad diaria se elige ahora sin contar el entreno: solo cómo es el resto de tu día.']],
   ['5.6.2', ['👥 Usuarios: el buscador ya no toca el título ni los filtros.'], 'quiet'],
