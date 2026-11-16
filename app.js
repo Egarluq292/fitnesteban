@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.10.2';
+const APP_VERSION = '5.10.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -926,7 +926,7 @@ function coachCore(e, exKey) {
     return { tone: 'new', title: 'Sesión de calibración', text: e.bw ? `Haz ${min}–${max} reps con tu peso dejando 1–2 en recámara; si te sobran, ${inc ? 'añade lastre' : 'hazlo más lento'}. A partir de la próxima te digo qué hacer.` : `Busca un peso con el que hagas ${min}–${max} reps dejando 1–2 en recámara. A partir de la próxima te digo qué peso poner.`, weight: null, targets: fill(`${min}-${max}`), last: '' };
   }
   const last = hist[hist.length - 1];
-  const { t: topW, valid, work } = lastTop;
+  const { t: topW, valid } = lastTop, work = lastTop.work.slice(0, n); // solo cuentan las series planificadas: una serie extra no te penaliza
   const bw = topW === 0;
   const lastStr = valid.map(s => setStr(s, e.bw, e.timed)).join(' · ');
   const gap = daysBetween(last.date, todayISO());
@@ -944,14 +944,14 @@ function coachCore(e, exKey) {
   const below = work.some(s => s.r < min);
   if (below && !bw && hist.length > 1) {
     const p = topOf(hist[hist.length - 2].sets);
-    if (p && p.t === topW && p.work.some(s => s.r < min)) {
+    if (p && p.t === topW && p.work.slice(0, n).some(s => s.r < min)) {
       return { tone: 'down', title: `Baja a ${K(deloadW)}`, text: `Dos sesiones seguidas sin llegar a ${min} reps con ${K(topW)}. Descarga un 10 %, reps limpias y vuelve a subir.`, weight: deloadW, targets: fill(max), last: lastStr };
     }
   }
   if (hist.length >= 3) {
     const l3 = hist.slice(-3).map(h => topOf(h.sets));
     if (l3.every(x => x && x.t === topW)) {
-      const reps = l3.map(x => x.work.reduce((a, s) => a + s.r, 0));
+      const reps = l3.map(x => x.work.slice(0, n).reduce((a, s) => a + s.r, 0));
       if (reps[2] <= reps[0]) {
         return bw
           ? { tone: 'stall', title: 'Estancado: 3 sesiones igual', text: 'Tres sesiones sin sumar reps. Cambia de variante o ponlo antes en la sesión, cuando estés fresco.', weight: 0, targets: fill(min), last: lastStr }
@@ -6760,6 +6760,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.10.3', ['🎯 Coach: si haces una serie de más, ya no cuenta para decidir si subes, mantienes o bajas el peso. Solo cuentan las series que tocaban.'], 'quiet'],
   ['5.10.2', ['👁 Botón de Usuarios: la cifra de activos va tapada con un ojo cerrado. Un toque la enseña unos segundos; otro toque entra.'], 'admin'],
   ['5.10.1', ['🧍 Animación 3D del press inclinado corregida: los brazos suben en vertical y las mancuernas bajan a los lados de la parte alta del pecho.'], 'quiet'],
   ['5.10.0', ['⏱ Retos por tiempo (como la plancha): el test de máximo trae su propio crono. Toca «Cronometrar», tienes 3 segundos para colocarte y, al parar, los segundos se apuntan solos.'], 'quiet'],
