@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.10.3';
+const APP_VERSION = '5.10.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -1177,8 +1177,8 @@ function blockNameHTML(name, icon, size = 22) {
   const fs = `font-size:clamp(15px, calc((100vw - 120px) / ${(len * 0.68).toFixed(2)}), ${size}px)`;
   return `<span class="bh-name1" style="${fs}">${icon ? `<span class="mr-1.5">${esc(icon)}</span>` : ''}${esc(a)}</span>${b ? `<span class="bh-name2">${esc(b)}</span>` : ''}`;
 }
-function galleryCard({ key, name, icon, look, sub, tag, extra = '', menu = true, dim = false, isNew = false }) {
-  return `<div class="bh bh-sm ${dim ? 'opacity-50' : ''} ${isNew ? 'bh-isnew' : ''}" style="--bh:${look.c}" data-act="openBlock" data-key="${esc(key)}" role="button" tabindex="0">
+function galleryCard({ key, name, icon, look, sub, tag, extra = '', menu = true, dim = false, isNew = false, slim = false }) {
+  return `<div class="bh bh-sm ${slim ? 'bh-slim' : ''} ${dim ? 'opacity-50' : ''} ${isNew ? 'bh-isnew' : ''}" style="--bh:${look.c}" data-act="openBlock" data-key="${esc(key)}" role="button" tabindex="0">
     <img class="bh-img" src="blk-${look.img}.webp" alt="" loading="lazy"${look.f ? ` style="filter:${look.f}"` : ''} />${look.tint ? '<span class="bh-tint"></span>' : ''}
     <span class="bh-shade"></span>
     ${menu ? `<button class="bh-menu" data-act="blockMenu" data-key="${esc(key)}" type="button" aria-label="Opciones">⋯</button>` : ''}
@@ -1231,7 +1231,7 @@ function renderTrainHome() {
   const nNew = libs.filter(x => x.nw).length;
   const tc0 = todayCardHTML(), done = tc0.includes('today-done'), tc = done ? '' : tc0, td = trainTodayHTML(), tpk = tc ? todayPick() : null;
   return `${td}${td && tc ? '<div class="h-2"></div>' : ''}${tc}${tpk?.day?.exercises.length ? '<button class="qc-btn np-btn" data-act="noPuedo" type="button">¿Y si hoy no puedo?</button>' : ''}${trainWeekHTML()}${td || tc ? '<div class="h-3"></div>' : ''}
-  ${retos ? galleryCard({ key: 'retos', name: 'RETOS', icon: '🏆', look: RETOS_LOOK, tag: 'Retos de calistenia', menu: false,
+  ${retos ? galleryCard({ key: 'retos', name: 'RETOS', icon: '🏆', look: RETOS_LOOK, tag: 'Retos de calistenia', menu: false, slim: true,
       sub: rs ? `${rs} ${rs === 1 ? 'reto en marcha' : 'retos en marcha'} · niveles que suben contigo` : 'Flexiones, dominadas, sentadillas… a tu ritmo' }) : ''}
   <div class="grid grid-cols-2 gap-2 mt-3">
     <button class="gal-btn" data-act="openBlock" data-key="free" type="button"><span class="text-xl">🎲</span><span><b>FREE</b><small>Entreno libre</small></span></button>
@@ -6760,6 +6760,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.10.4', ['🏆 Entreno: la tarjeta de Retos es más fina y se distingue mejor de los bloques de entrenamiento.'], 'quiet'],
   ['5.10.3', ['🎯 Coach: si haces una serie de más, ya no cuenta para decidir si subes, mantienes o bajas el peso. Solo cuentan las series que tocaban.'], 'quiet'],
   ['5.10.2', ['👁 Botón de Usuarios: la cifra de activos va tapada con un ojo cerrado. Un toque la enseña unos segundos; otro toque entra.'], 'admin'],
   ['5.10.1', ['🧍 Animación 3D del press inclinado corregida: los brazos suben en vertical y las mancuernas bajan a los lados de la parte alta del pecho.'], 'quiet'],
