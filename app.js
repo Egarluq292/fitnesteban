@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.11.0';
+const APP_VERSION = '5.12.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -2894,9 +2894,11 @@ function muscleMapHTML() {
     <div id="mmBody">
     <div class="mt-3">${bodySVG(vals, 150)}</div>
     <div class="flex items-center gap-2 mt-3 text-[10px] text-mute"><span>${tab === 'now' ? 'Descansado' : 'Poco'}</span><span class="flex-1 h-2 rounded-full" style="background:${grad}"></span><span>${tab === 'now' ? 'Muy cargado' : 'Mucho'}</span></div>
-    <div class="mt-3 space-y-1">${rows}</div>
+    <details class="mm-list mt-3" ${openAttr('mmList')}><summary class="flex items-center justify-between cursor-pointer select-none text-[12px] text-mute"><span>Detalle por músculo</span><span class="tri"></span></summary>
+    <div class="mt-2 space-y-1">${rows}</div>
     <p class="text-[11px] text-mute mt-2">${foot}</p>
     ${unknown.length ? `<p class="text-[11px] text-mute mt-1">Sin mapa (no reconozco el ejercicio): ${unknown.map(esc).join(', ')}.</p>` : ''}
+    </details>
     </div>
   </section>`;
 }
@@ -5067,10 +5069,8 @@ function reportData(months) {
     name: profileOf()?.name || '', goal: profileOf() ? goalName(profileOf()) : '', tK: st.targetKcal || 0, tP: st.targetProt || 0 };
 }
 
-function reportHTML(months, light) {
-  const P = REP_PAL[light ? 'light' : 'dark'], D = reportData(months), card = `background:linear-gradient(160deg,${P.card1},${P.card2});border:1px solid ${P.line}`;
-  const none = t => `<p class="none">${t}</p>`;
-  const per = months ? (months === 1 ? 'ÚLTIMO MES' : `ÚLTIMOS ${months} MESES`) : 'TODO TU HISTORIAL';
+/* Cifras clave del periodo (las comparten el informe y la tarjeta «Tu evolución» de Progreso) */
+function reportSummary(D, P) {
   const dW = D.W.length >= 2 ? D.W[D.W.length - 1][1] - D.W[0][1] : null, dC = D.C.length >= 2 ? D.C[D.C.length - 1][1] - D.C[0][1] : null;
   const sgn = v => (v > 0 ? '+' : v < 0 ? '−' : '') + repN(Math.abs(v));
   const strAvg = D.ex.length ? D.ex.reduce((a, e) => a + e.pct, 0) / D.ex.length : null;
@@ -5086,13 +5086,21 @@ function reportHTML(months, light) {
     ['Días entrenados', String(nT), `${repN(perWk)} por semana`, P.am],
     ['Proteína', dp !== null ? `${repN(dp, 0)} g/día` : '—', dp !== null ? `objetivo ${D.tP} g · ${Math.round(D.protOk / D.dietDays.length * 100)} % de días` : 'sin comidas apuntadas', P.ro],
     ['Pasos', sAvg !== null ? `${repN(sAvg, 0)}/día` : '—', sAvg !== null ? `${D.allSteps.length} días apuntados` : 'sin pasos apuntados', P.cy]
-  ].map(([a, b, c, k]) => `<div class="kpi" style="--k:${k};${card}"><small>${a}</small><b>${b}</b><span>${c}</span></div>`).join('');
+  ];
   // resumen en texto, solo con lo que hay
   const sum = [];
   if (dW !== null) sum.push(`Tu peso ha ${dW < -0.2 ? `bajado <b>${repN(-dW)} kg</b>` : dW > 0.2 ? `subido <b>${repN(dW)} kg</b>` : 'quedado <b>estable</b>'}${dC !== null && Math.abs(dC) >= .5 ? ` y tu cintura ha ${dC < 0 ? `bajado <b>${repN(-dC)} cm</b>` : `subido <b>${repN(dC)} cm</b>`}` : ''}.`);
   if (strAvg !== null) sum.push(`Tu fuerza estimada ha ${strAvg >= 0 ? 'subido' : 'bajado'} de media un <b>${repN(Math.abs(strAvg), 0)} %</b>${best && best.pct > 0 ? `; donde más, en <b>${esc(best.name.toLowerCase())}</b> (+${repN(best.pct, 0)} %)` : ''}.`);
   if (nT) sum.push(`Has entrenado <b>${nT} días</b>, unos <b>${repN(perWk)} por semana</b>.`);
   if (dp !== null && D.tP) sum.push(`Has cumplido la proteína en <b>${Math.round(D.protOk / D.dietDays.length * 100)} %</b> de los días apuntados.`);
+  return { kpis, sum, dW, dC, sgn, strAvg, best, dp, nT, perWk };
+}
+function reportHTML(months, light) {
+  const P = REP_PAL[light ? 'light' : 'dark'], D = reportData(months), card = `background:linear-gradient(160deg,${P.card1},${P.card2});border:1px solid ${P.line}`;
+  const none = t => `<p class="none">${t}</p>`;
+  const per = months ? (months === 1 ? 'ÚLTIMO MES' : `ÚLTIMOS ${months} MESES`) : 'TODO TU HISTORIAL';
+  const { kpis: K, sum, dW, dC, sgn, nT, perWk } = reportSummary(D, P);
+  const kpis = K.map(([a, b, c, k]) => `<div class="kpi" style="--k:${k};${card}"><small>${a}</small><b>${b}</b><span>${c}</span></div>`).join('');
   const xl = () => { const n = D.nDays; return `<div class="xl">${[0, n / 3, 2 * n / 3, n].map(i => `<span>${repDay(addDays(D.from, Math.round(i)))}</span>`).join('')}</div>`; };
   const logo = 'icons/logo-128.png';
   const head = (t, s) => `<div class="ph"><img src="${logo}" alt=""/><div><h2>${t}</h2><p>${s}</p></div></div>`;
@@ -5200,15 +5208,74 @@ function reportModal() {
     <p class="text-xs text-mute mt-1">Un PDF de 4 páginas con tu evolución: peso, cintura, fuerza, récords, constancia, dieta y pasos. Se crea en tu móvil con tus datos; no se envía a ningún sitio.</p>
     <div class="lbl mt-4 mb-1.5">Periodo</div><div class="grid grid-cols-4 gap-1.5">${[[1, '1 mes'], [3, '3 meses'], [6, '6 meses'], [0, 'Todo']].map(([v, t]) => opt('per', v, months === v, t)).join('')}</div>
     <div class="lbl mt-4 mb-1.5">Versión</div><div class="grid grid-cols-2 gap-1.5">${opt('ver', 0, !light, '🌙 Digital (oscura)')}${opt('ver', 1, light, '🖨️ Para imprimir (clara)')}</div>
-    <p class="text-[11px] text-mute mt-3 leading-snug">Al pulsar <b>Crear PDF</b> se abre la ventana de imprimir: elige <b>Guardar como PDF</b> como impresora.</p>
-    <button class="btn-primary w-full mt-4" data-mact="go" type="button">Crear PDF</button>`;
+    <button class="btn-primary w-full mt-4" data-mact="go" type="button">Crear informe</button>`;
   const redraw = () => openModal(html(), acts);
   const acts = {
     per: (root, b) => { months = +b.dataset.v; redraw(); },
     ver: (root, b) => { light = b.dataset.v === '1'; redraw(); },
-    go: () => { closeModal(); printReport(months, light); }
+    go: () => makeReportPDF(months, light)
   };
   openModal(html(), acts);
+}
+/* Crea el PDF directamente (sin la ventana de imprimir): cada página se «fotografía» y se monta en un PDF A4 */
+const loadJs = src => new Promise((ok, ko) => { if (document.querySelector(`script[src="${src}"]`)) return ok(); const t = document.createElement('script'); t.src = src; t.onload = ok; t.onerror = ko; document.head.appendChild(t); });
+async function makeReportPDF(months, light) {
+  const busy = t => openModal(`<div class="text-center py-6"><div class="text-3xl">📄</div><p class="font-bold mt-2">Creando tu informe…</p><p class="text-xs text-mute mt-1">${t}</p></div>`, { noClose: true });
+  busy('Preparando');
+  let stage;
+  try {
+    await Promise.all([loadJs('vendor/html2canvas.min.js'), loadJs('vendor/jspdf.umd.min.js')]);
+    stage = document.createElement('div'); stage.id = 'printRoot'; $('#printRoot')?.remove();
+    stage.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;width:210mm;z-index:-1;pointer-events:none';
+    stage.innerHTML = reportHTML(months, light); document.body.appendChild(stage);
+    await Promise.all([...stage.querySelectorAll('img')].map(i => i.complete ? 0 : new Promise(ok => { i.onload = i.onerror = ok; })));
+    await document.fonts?.ready;
+    const pages = [...stage.querySelectorAll('.page')], pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', compress: true });
+    for (let k = 0; k < pages.length; k++) {
+      busy(`Página ${k + 1} de ${pages.length}`);
+      const c = await window.html2canvas(pages[k], { scale: 2, backgroundColor: light ? '#ffffff' : '#05080a', useCORS: true, logging: false });
+      if (k) pdf.addPage();
+      pdf.addImage(c.toDataURL('image/jpeg', 0.86), 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+    }
+    const name = `Informe_FITNESTEBAN_${months ? months + (months === 1 ? 'mes' : 'meses') : 'completo'}_${light ? 'papel_' : ''}${todayISO()}.pdf`;
+    reportReady(pdf.output('blob'), name);
+  } catch (e) {
+    console.error(e); closeModal();
+    toast('No se pudo crear el PDF aquí. Abro la ventana de imprimir: elige «Guardar como PDF».', 'warn');
+    printReport(months, light);
+  } finally { stage?.remove(); }
+}
+function reportReady(blob, name) {
+  const file = new File([blob], name, { type: 'application/pdf' }), mb = (blob.size / 1048576).toLocaleString('es-ES', { maximumFractionDigits: 1 });
+  const canShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+  openModal(`<div class="text-center"><div class="text-4xl">✅</div><h2 class="text-lg font-black mt-1">Informe listo</h2><p class="text-xs text-mute mt-1 break-all">${esc(name)} · ${mb} MB</p></div>
+    <div class="grid gap-2 mt-4">
+      <button class="btn-primary w-full" data-mact="drive" type="button">☁️ Guardar en Drive</button>
+      ${canShare ? '<button class="btn-ghost w-full" data-mact="share" type="button">📤 Compartir</button>' : ''}
+      <button class="btn-ghost w-full" data-mact="dl" type="button">⬇️ Descargar</button>
+    </div>
+    <p class="text-[11px] text-mute mt-3 text-center">En Drive se guarda en tu carpeta de FITNESTEBAN, dentro de «Informes».</p>`, {
+    drive: async (root, b) => {
+      b.disabled = true; b.textContent = 'Subiendo…';
+      try { await driveSaveReport(blob, name); closeModal(); toast('☁️ Informe guardado en Drive › FITNESTEBAN › Informes'); }
+      catch (e) { console.error(e); b.disabled = false; b.textContent = '☁️ Guardar en Drive'; toast('No se pudo subir a Drive. Revisa la conexión o vuelve a conectar Drive en Ajustes.', 'warn'); }
+    },
+    share: async () => { try { await navigator.share({ files: [file], title: 'Informe de progreso · FITNESTEBAN' }); } catch { /* cancelado */ } },
+    dl: () => { const u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 60000); }
+  });
+}
+/* Los informes van a una subcarpeta «Informes» dentro de la carpeta de las copias (la limpieza de copias no la toca) */
+async function driveSaveReport(blob, name) {
+  const parent = await driveFolder(true);
+  const q = encodeURIComponent(`name='Informes' and '${parent}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const found = await (await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id)&pageSize=5`, {}, true)).json();
+  const folder = found.files?.[0]?.id || (await (await driveFetch('https://www.googleapis.com/drive/v3/files?fields=id', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Informes', mimeType: 'application/vnd.google-apps.folder', parents: [parent] })
+  }, true)).json()).id;
+  const boundary = 'fr' + Math.random().toString(36).slice(2);
+  const body = new Blob([`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [folder], mimeType: 'application/pdf' })}\r\n--${boundary}\r\nContent-Type: application/pdf\r\n\r\n`, blob, `\r\n--${boundary}--`]);
+  const r = await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body }, true);
+  if (r && r.ok === false) throw new Error('drive ' + r.status);
 }
 function printReport(months, light) {
   let r = $('#printRoot'); if (!r) { r = document.createElement('div'); r.id = 'printRoot'; document.body.appendChild(r); }
@@ -5217,6 +5284,23 @@ function printReport(months, light) {
   Promise.all(imgs).then(() => setTimeout(() => { window.print(); }, 150));
 }
 
+/* Quien ha entrenado en 2 semanas ve primero el mapa muscular (cambia cada día); quien no (solo dieta o en pausa), primero «Tu evolución» */
+function trainedRecently() {
+  const from = addDays(todayISO(), -14);
+  return state.sessions.some(s => s.date >= from) || Object.values(state.retos || {}).some(r => [...(r.history || []), ...(r.tests || [])].some(h => h.date >= from));
+}
+/* 📈 Tu evolución: las cifras clave del informe, siempre a la vista en Progreso */
+function evoCardHTML() {
+  const m = ui.evoM ?? 3, P = REP_PAL[document.documentElement.classList.contains('light') ? 'light' : 'dark'];
+  let R; try { R = reportSummary(reportData(m), P); } catch { return ''; }
+  const per = [[1, '1 mes'], [3, '3 meses'], [6, '6 meses'], [0, 'Todo']];
+  return `<section class="card p-4 mb-3 evo">
+    <h3 class="section-title">📈 Tu evolución</h3>
+      <div class="evo-per">${per.map(([v, t]) => `<button class="${m === v ? 'on' : ''}" data-act="evoM" data-v="${v}" type="button">${t}</button>`).join('')}</div>
+    <div class="evo-grid">${R.kpis.map(([a, b, c, k], i) => `<div class="evo-k" style="--k:${k}"><small>${['Peso', 'Cintura', 'Fuerza', 'Entrenos', 'Proteína', 'Pasos'][i] || a}</small><b>${b}</b><span>${c}</span></div>`).join('')}</div>
+    ${R.sum.length ? `<p class="evo-sum">${R.sum.slice(0, 2).join(' ')}</p>` : '<p class="evo-sum">Aún hay pocos datos en este periodo. Sigue apuntando y aquí verás tu evolución.</p>'}
+  </section>`;
+}
 function renderProgress() {
   const st = state.settings;
   const w = weekStats();
@@ -5253,7 +5337,7 @@ function renderProgress() {
   const hist = [...sortedSessions().map(x => ({ ...x, _t: x.endedAt || 0 })), ...retoEntries().map(x => ({ reto: x, date: x.h.date, _t: x.h.at || 0 }))].sort((a, b) => (a.date === b.date ? a._t - b._t : a.date < b.date ? -1 : 1)).slice(-20).reverse();
 
   return `
-  ${muscleMapHTML()}
+  ${trainedRecently() ? muscleMapHTML() + evoCardHTML() : evoCardHTML() + muscleMapHTML()}
   ${needBackup ? `<div class="banner-warn mb-3"><span>${backupAge === null ? 'Aún no has hecho copia de seguridad.' : `Última copia hace ${backupAge} días.`} Si borras datos del navegador, lo pierdes todo.</span>${state.settings.driveConnected ? '<button class="btn-banner btn-banner-warn shrink-0" data-act="driveBackup" type="button">☁️ Drive</button>' : '<button class="btn-banner btn-banner-warn shrink-0" data-act="share" type="button">📤 Copia</button>'}</div>` : ''}
 
   <section class="grid grid-cols-3 gap-2">
@@ -5301,7 +5385,7 @@ function renderProgress() {
 
   ${renderRecords()}
 
-  ${isAdminUser() ? `<button class="card p-4 mt-3 w-full flex items-center gap-3 text-left" data-act="pdfReport" type="button"><span class="flex-1 min-w-0"><span class="section-title">📄 Informe de progreso</span><span class="block text-[11px] text-mute mt-1">Tu evolución en un PDF: digital o para imprimir</span></span><span class="text-mute text-xl">›</span></button>` : ''}
+  <button class="card p-4 mt-3 w-full flex items-center gap-3 text-left" data-act="pdfReport" type="button"><span class="flex-1 min-w-0"><span class="section-title">📄 Informe de progreso</span><span class="block text-[11px] text-mute mt-1">Tu evolución en un PDF: digital o para imprimir</span></span><span class="text-mute text-xl">›</span></button>
 
   <details class="card p-4 mt-3" ${openAttr('history')}>
     <summary class="flex items-center justify-between cursor-pointer select-none"><h3 class="section-title">📚 Historial de sesiones</h3><span class="flex items-center gap-2 text-[11px] text-mute">${hist.length ? `${hist.length === 20 ? 'últimas 20' : hist.length + (hist.length === 1 ? ' sesión' : ' sesiones')} · ${esc(fmtDateShort(hist[0].date))}` : 'sin sesiones'}<span class="tri"></span></span></summary>
@@ -5710,7 +5794,7 @@ async function driveFolder(interactive) {
 
 async function driveList(interactive) {
   const folder = await driveFolder(interactive);
-  const q = encodeURIComponent(`'${folder}' in parents and trashed=false`);
+  const q = encodeURIComponent(`'${folder}' in parents and trashed=false and mimeType != 'application/vnd.google-apps.folder' and mimeType != 'application/pdf'`); // solo copias: ni la carpeta «Informes» ni PDF
   const r = await (await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime desc&fields=files(id,name,createdTime,size,appProperties)&pageSize=100`, {}, interactive)).json();
   return r.files || [];
 }
@@ -7009,6 +7093,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.12.0', ['📈 Progreso: nueva tarjeta «Tu evolución» con tu peso, cintura, fuerza, entrenos, proteína y pasos del último mes, 3 meses, 6 meses o de todo tu historial. Si entrenas, sale debajo del mapa muscular; si no, arriba del todo.', '🔥 Mapa muscular más compacto: el detalle por músculo va plegado (tócalo para verlo).', '📄 Nuevo: «Informe de progreso», al final de Progreso. Un PDF de 4 páginas con tu evolución (peso, cintura, fuerza, récords, constancia, dieta y pasos), en versión digital (oscura) o para imprimir (clara). Guárdalo en Drive, compártelo o descárgalo en un toque.']],
   ['5.11.0', ['📄 Nuevo en Progreso: «Informe de progreso». Un PDF de 4 páginas con tu evolución (peso, cintura, fuerza, récords, constancia, dieta y pasos) del último mes, 3 meses, 6 meses o todo tu historial. En versión digital (oscura) o para imprimir (clara). Se crea en tu móvil y no se envía a ningún sitio.'], 'admin'],
   ['5.10.5', ['📈 Progreso · Fuerza por ejercicio: las series de más de 12 repeticiones ya no inflan el 1RM estimado. La gráfica refleja mejor tu fuerza real y no baja cuando subes de peso.'], 'quiet'],
   ['5.10.4', ['🏆 Entreno: la tarjeta de Retos es más fina y se distingue mejor de los bloques de entrenamiento.'], 'quiet'],
@@ -7396,6 +7481,8 @@ const GUIDE = [
     'Nunca te dirá que has ganado músculo con pocos días de datos: solo «probable» tras 4 semanas o más con peso al alza, cintura estable, fuerza subiendo y comida suficiente. El Coach IA usa exactamente este mismo análisis.',
     '🔥 <b>Mapa muscular</b>: «Ahora» muestra qué músculos siguen cargados y cuándo estarán listos; «7 días» y «30 días», cuánto has trabajado cada uno. Desliza sobre el mapa para cambiar. La figura es femenina o masculina según el sexo de tu perfil (Ajustes).',
     '🧠 <b>Resumen semanal</b>: analiza 7 días de fuerza, dieta, cardio y peso y te da 3 acciones para la semana siguiente.',
+    '📈 <b>Tu evolución</b>: peso, cintura, fuerza, entrenos, proteína y pasos del periodo que elijas (1, 3 o 6 meses, o todo). Si entrenas, sale debajo del mapa muscular; si no, arriba.',
+    '📄 <b>Informe de progreso</b>: un PDF de 4 páginas con toda tu evolución, en versión digital (oscura) o para imprimir (clara). Se crea en tu móvil en unos segundos y luego eliges: ☁️ guardarlo en Drive (carpeta FITNESTEBAN › Informes), 📤 compartirlo o ⬇️ descargarlo.',
     '🏆 <b>Récords</b> y «Fuerza por ejercicio» (1RM estimado). En el <b>historial</b> ves sesiones, retos y tests; puedes borrar una sesión mal guardada.'
   ]],
   ['🔒 Datos, copias y PIN', [
@@ -8624,6 +8711,7 @@ const actions = {
   retoDone: b => { const id = b.dataset.reto, i = +b.dataset.i, d = retoDraft(id); d.done[i] = !d.done[i]; if (d.done[i] && d.got[i] === '') d.got[i] = String(d.target[i]); persist(); render(); if (d.done[i] && d.done.some(x => !x)) startTimer(RETOS[id].rest); },
   holdSW: b => holdSW(b),
   pdfReport: () => reportModal(),
+  evoM: b => { ui.evoM = +b.dataset.v; render(); },
   retoHold: b => { const id = b.dataset.reto, d = retoDraft(id), i = +b.dataset.i; const sec = parseInt(d.got[i], 10) || d.target[i]; startTimer(sec); toast(`Aguanta ${sec} s`); },
   retoFinish: b => retoFinish(b.dataset.reto),
   retoTest: b => retoTestModal(b.dataset.reto),
