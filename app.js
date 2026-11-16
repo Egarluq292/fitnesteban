@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.9.2';
+const APP_VERSION = '5.9.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -5210,7 +5210,7 @@ async function hashPin(pin) {
   }
   let h = 5381; for (const b of data) h = ((h << 5) + h + b) >>> 0; return 'djb2-' + h.toString(16);
 }
-const pinField = (name, label) => `<label class="lbl">${label}<input class="field mt-1 text-center text-2xl tracking-[0.5em] font-black" name="${name}" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" /></label>`;
+const pinField = (name, label) => `<label class="lbl">${label}<input class="field mt-1 text-center text-2xl tracking-[0.5em] font-black" name="${name}" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;text-security:disc" data-lpignore="true" /></label>`;
 const pinVal = (root, name) => mval(root, name).trim();
 
 /* Pide el PIN (o la palabra BORRAR si no hay PIN) y ejecuta onOk si es correcto */
@@ -6741,6 +6741,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.9.3', ['🔑 Al escribir tu PIN correcto, la sección se abre sola, sin pulsar «Abrir». Y el navegador deja de ofrecer guardar el PIN como contraseña.'], 'admin'],
   ['5.9.2', ['👥 El botón de Usuarios de la cabecera muestra cuántas personas han usado la app hoy.', '👆 Al entrar en Usuarios, la huella salta sola, y el PIN vale 2 horas mientras la app siga abierta.'], 'admin'],
   ['5.9.1', ['🧍 Nueva animación 3D: pájaros con mancuernas (deltoides posterior).'], 'quiet'],
   ['5.9.0', ['🔢 Dieta: si una comida empieza por un número («2 cervezas», «3 huevos»), en su fila tienes − 2 ＋ para cambiar la cantidad sin volver a apuntarla. Las kcal y los macros se ajustan solos.'], 'quiet'],
@@ -9545,6 +9546,8 @@ function askPinOnly(title, text, onOk) {
     }
   });
   if (bioOn()) setTimeout(() => { const r = $('#modalRoot'); if (r?.classList.contains('open') && r.querySelector('[data-mact=bio]')) bioFill(r); }, 0); // 👆 la huella salta sola; si la cancelas, queda el PIN
+  const f = $('#modalRoot [name="pin"]'); // al escribir el PIN correcto entra solo, sin pulsar «Abrir»
+  f?.addEventListener('input', async () => { const v = f.value.trim(); if (/^\d{4,8}$/.test(v) && await hashPin(v) === state.settings.pinHash && f.value.trim() === v) $('#modalRoot [data-mact=ok]')?.click(); });
 }
 function askPin({ title, text, onPin }) {
   if (!state.settings.pinHash) return toast('Primero crea un PIN en Ajustes → Seguridad', 'warn');
