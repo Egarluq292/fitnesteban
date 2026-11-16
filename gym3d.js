@@ -74,7 +74,7 @@ const P = {
   // 10 Sentadilla búlgara con mancuernas
   bulg: { pin: ['pelvis', 'p'], fix: ['anL', 'anR'], base: { hipR: -35, kneeR: 80, ankleR: 30, hipL: 30, kneeL: 0 }, a: { py: .8, spine: 6 }, b: { py: .6, spine: 12 }, foot: 'anR', flat: ['anL'], db: true },
   // ---- tanda 2 ----
-  incl: { base: { rootX: -55, hip: 55, knee: 90 }, a: { sh: 90, el: 0, shAb: 8 }, b: { sh: 25, shAb: 30, el: 100 }, ground: ['anL', 'anR'], incline: true, db: true },
+  incl: { base: { rootX: -55, hip: 55, knee: 90 }, a: { sh: 125, el: 8, shAb: 6 }, b: { sh: 40, shAb: 50, el: 100 }, ground: ['anL', 'anR'], incline: true, db: true },
   lunge: { a: {}, b: { hipL: 85, kneeL: 85, hipR: -25, kneeR: 95, ankleR: 40, spine: 3 }, ground: ['anL', 'knR'], db: true },
   dips: { cam: [3.9, 1.5, 1], base: { knee: 70, hip: 20 }, a: { sh: 0, el: 0, shAb: 6, rootX: 8 }, b: { sh: -50, el: 95, shAb: 8, rootX: 18 }, dip: 1.25 },
   skull: { base: { rootX: -90, hip: 8, knee: 92, neck: 0 }, a: { sh: 95, el: 0, shAb: 6 }, b: { sh: 110, el: 115, shAb: 6 }, ground: ['anL', 'anR'], bench: [.4, .45, 1.3, 0, -.45], bar: 'hands' },

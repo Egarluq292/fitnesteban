@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.10.0';
+const APP_VERSION = '5.10.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6760,6 +6760,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.10.1', ['🧍 Animación 3D del press inclinado corregida: los brazos suben en vertical y las mancuernas bajan a los lados de la parte alta del pecho.'], 'quiet'],
   ['5.10.0', ['⏱ Retos por tiempo (como la plancha): el test de máximo trae su propio crono. Toca «Cronometrar», tienes 3 segundos para colocarte y, al parar, los segundos se apuntan solos.'], 'quiet'],
   ['5.9.3', ['🔑 Al escribir tu PIN correcto, la sección se abre sola, sin pulsar «Abrir». Y el navegador deja de ofrecer guardar el PIN como contraseña.'], 'admin'],
   ['5.9.2', ['👥 El botón de Usuarios de la cabecera muestra cuántas personas han usado la app hoy.', '👆 Al entrar en Usuarios, la huella salta sola, y el PIN vale 2 horas mientras la app siga abierta.'], 'admin'],
