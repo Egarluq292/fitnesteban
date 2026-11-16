@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.9.3';
+const APP_VERSION = '5.10.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -3200,7 +3200,7 @@ function renderRetoDetail(id) {
   if (!st) return `${back}<section class="card p-4 mt-1 space-y-3">
       <div class="flex items-center gap-3"><span class="reto-ic text-3xl">${r.icon}</span><div><h2 class="font-extrabold text-lg">${r.name}</h2><p class="text-[11px] text-mute">${r.tag ? esc(r.tag) + ' · ' : ''}Niveles de ${retoU(r, r.min)} a ${retoU(r, r.max)}</p></div></div>${note}
       <label class="lbl">${r.unit === 's' ? '¿Cuántos segundos aguantas seguidos?' : '¿Cuántas haces seguidas, sin parar?'}
-        <input class="field mt-1 text-center text-2xl font-black" id="retoMax" inputmode="numeric" placeholder="${r.unit === 's' ? 'Ej: 45' : 'Ej: 8'}" /></label>
+        <input class="field mt-1 text-center text-2xl font-black" id="retoMax" inputmode="numeric" placeholder="${r.unit === 's' ? 'Ej: 45' : 'Ej: 8'}" /></label>${r.unit === 's' ? '<button class="btn-ghost w-full mt-2 text-base font-bold" data-act="holdSW" data-for="#retoMax" type="button">⏱ Cronometrar</button>' : ''}
       <p class="text-[11px] text-mute">Haz la prueba ahora, con buena técnica y sin parar. Empiezas un poco por debajo (≈70 %) para tener margen de subir; tu máximo queda como marca a batir. Si no llegas a ${retoU(r, r.min)}, pon lo que hagas (aunque sea 0) y te doy una variante más fácil.</p>
       <button class="btn-primary w-full" data-act="retoStart" data-reto="${id}" type="button">Empezar reto</button>
     </section>`;
@@ -3273,13 +3273,32 @@ function retoFinish(id) {
     }
   });
 }
+/* ⏱ Crono para los test por tiempo (plancha…): 3-2-1, cuenta hacia arriba y al parar deja los segundos en la casilla */
+function holdSW(b) {
+  const f = $(b.dataset.for); if (!f) return;
+  if (b._sw) { // parar
+    const s = b._sw; clearInterval(s.iv); b._sw = null;
+    if (s.t0) { const sec = Math.floor((Date.now() - s.t0) / 1000); f.value = String(sec); beep(); toast(`⏱ ${sec} s`); }
+    b.textContent = '⏱ Repetir'; b.classList.remove('btn-danger'); if (!timer.endAt) wakeOff(); return;
+  }
+  unlockAudio(); wakeOn(); f.value = '';
+  const s = b._sw = { t0: 0, p0: Date.now(), iv: 0 }; b.classList.add('btn-danger');
+  const tick = () => {
+    if (!b.isConnected) { clearInterval(s.iv); if (!timer.endAt) wakeOff(); return; }
+    if (!s.t0) { const left = 3 - Math.floor((Date.now() - s.p0) / 1000); if (left > 0) { b.textContent = `Prepárate… ${left}  ·  toca para cancelar`; return; } s.t0 = s.p0 + 3000; beep(); }
+    const sec = Math.floor((Date.now() - s.t0) / 1000); f.value = String(sec);
+    b.textContent = `■ Parar  ·  ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+  };
+  tick(); s.iv = setInterval(tick, 200);
+}
 function retoTestModal(id) {
   const r = RETOS[id], st = retoOf(id);
   openModal(`<h3 class="modal-title">🎯 Test de máximo · ${r.name}</h3>
     <p class="text-xs text-mute">Calienta bien y haz ${r.unit === 's' ? 'una plancha hasta no poder más' : 'todas las que puedas seguidas'}. Mejor en un día de descanso del reto.</p>
     <label class="lbl">${r.unit === 's' ? 'Segundos aguantados' : 'Repeticiones seguidas'}<input class="field mt-1 text-center text-2xl font-black" name="max" inputmode="numeric" /></label>
-    <button class="btn-primary w-full" data-mact="save" type="button">Guardar test</button>`, {
-    autofocus: true,
+    ${r.unit === 's' ? '<button class="btn-ghost w-full mt-2 text-base font-bold" data-act="holdSW" data-for="#modalRoot [name=max]" type="button">⏱ Cronometrar</button>' : ''}
+    <button class="btn-primary w-full mt-2" data-mact="save" type="button">Guardar test</button>`, {
+    autofocus: r.unit !== 's',
     save: root => {
       const v = parseInt(mval(root, 'max'), 10);
       if (!(v > 0)) return toast('Pon un número', 'warn');
@@ -6741,6 +6760,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.10.0', ['⏱ Retos por tiempo (como la plancha): el test de máximo trae su propio crono. Toca «Cronometrar», tienes 3 segundos para colocarte y, al parar, los segundos se apuntan solos.'], 'quiet'],
   ['5.9.3', ['🔑 Al escribir tu PIN correcto, la sección se abre sola, sin pulsar «Abrir». Y el navegador deja de ofrecer guardar el PIN como contraseña.'], 'admin'],
   ['5.9.2', ['👥 El botón de Usuarios de la cabecera muestra cuántas personas han usado la app hoy.', '👆 Al entrar en Usuarios, la huella salta sola, y el PIN vale 2 horas mientras la app siga abierta.'], 'admin'],
   ['5.9.1', ['🧍 Nueva animación 3D: pájaros con mancuernas (deltoides posterior).'], 'quiet'],
@@ -7074,6 +7094,7 @@ const GUIDE = [
     'Al terminar, elige 😣 Me ha costado (repites; si pasa dos veces, bajas un nivel), 🙂 Bien (+1 nivel) o 😎 Voy sobrado (+2). Si no completas las series, cuenta como «me ha costado».',
     '🛞 <b>Rueda abdominal</b>: fase 1 de rodillas hasta el nivel 30; al completarla se desbloquea la fase 2, de pie.',
     'Deja 48 h entre sesiones del mismo reto. Cada 6 sesiones te propone un 🎯 test de máximo. Los tests salen en el historial y el calendario y cuentan en el mapa muscular.',
+    '⏱ En los retos por tiempo (plancha), la prueba inicial y el test de máximo tienen <b>Cronometrar</b>: 3 segundos para colocarte, cuenta hacia arriba y al parar apunta los segundos solo.',
     '📸 Al terminar un reto o un test, «Tarjeta» crea una imagen para compartir. Las kcal se suman al gym del día en Dieta.'
   ]],
   ['🔥 Cardio', [
@@ -8339,6 +8360,7 @@ const actions = {
     else toast(`Empiezas en nivel ${state.retos[id].level}`);
   },
   retoDone: b => { const id = b.dataset.reto, i = +b.dataset.i, d = retoDraft(id); d.done[i] = !d.done[i]; if (d.done[i] && d.got[i] === '') d.got[i] = String(d.target[i]); persist(); render(); if (d.done[i] && d.done.some(x => !x)) startTimer(RETOS[id].rest); },
+  holdSW: b => holdSW(b),
   retoHold: b => { const id = b.dataset.reto, d = retoDraft(id), i = +b.dataset.i; const sec = parseInt(d.got[i], 10) || d.target[i]; startTimer(sec); toast(`Aguanta ${sec} s`); },
   retoFinish: b => retoFinish(b.dataset.reto),
   retoTest: b => retoTestModal(b.dataset.reto),
