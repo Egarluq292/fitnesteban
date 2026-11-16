@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.10.4';
+const APP_VERSION = '5.10.5';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -524,7 +524,7 @@ const r2 = n => Math.round(n * 100) / 100;
 const roundStep = (n, step) => (step > 0 ? r2(Math.round(n / step) * step) : r2(n));
 const fmtNum = n => String(r2(n)).replace('.', ',');
 const fmtKg = w => `${fmtNum(w)} kg`;
-const e1rm = (w, r) => (w > 0 && r > 0 ? w * (1 + Math.min(r, 15) / 30) : 0);
+const e1rm = (w, r) => (w > 0 && r > 0 ? w * (1 + Math.min(r, 12) / 30) : 0); // Epley es fiable hasta ~12 reps: más allá inflaba la fuerza y luego parecía que bajabas
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 
@@ -6760,6 +6760,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.10.5', ['📈 Progreso · Fuerza por ejercicio: las series de más de 12 repeticiones ya no inflan el 1RM estimado. La gráfica refleja mejor tu fuerza real y no baja cuando subes de peso.'], 'quiet'],
   ['5.10.4', ['🏆 Entreno: la tarjeta de Retos es más fina y se distingue mejor de los bloques de entrenamiento.'], 'quiet'],
   ['5.10.3', ['🎯 Coach: si haces una serie de más, ya no cuenta para decidir si subes, mantienes o bajas el peso. Solo cuentan las series que tocaban.'], 'quiet'],
   ['5.10.2', ['👁 Botón de Usuarios: la cifra de activos va tapada con un ojo cerrado. Un toque la enseña unos segundos; otro toque entra.'], 'admin'],
