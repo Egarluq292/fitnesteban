@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.10.1';
+const APP_VERSION = '5.10.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6760,6 +6760,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.10.2', ['👁 Botón de Usuarios: la cifra de activos va tapada con un ojo cerrado. Un toque la enseña unos segundos; otro toque entra.'], 'admin'],
   ['5.10.1', ['🧍 Animación 3D del press inclinado corregida: los brazos suben en vertical y las mancuernas bajan a los lados de la parte alta del pecho.'], 'quiet'],
   ['5.10.0', ['⏱ Retos por tiempo (como la plancha): el test de máximo trae su propio crono. Toca «Cronometrar», tienes 3 segundos para colocarte y, al parar, los segundos se apuntan solos.'], 'quiet'],
   ['5.9.3', ['🔑 Al escribir tu PIN correcto, la sección se abre sola, sin pulsar «Abrir». Y el navegador deja de ofrecer guardar el PIN como contraseña.'], 'admin'],
@@ -7258,7 +7259,14 @@ function openGuide() {
   `, { news: () => openNews(null), shareApp: () => actions.shareLink() });
 }
 $('#helpBtn').addEventListener('click', openGuide);
-$('#usersBtn')?.addEventListener('click', () => { if (ui.accPage && ui.view === 'settings') return; actions.usersGo(); });
+$('#usersBtn')?.addEventListener('click', () => {
+  const n = activeN();
+  if (typeof n === 'number' && n > 0 && !ui.ubShow) { // 👁 1.º toque: el ojo se abre y enseña la cifra unos segundos; 2.º toque: entra
+    ui.ubShow = true; usersBadge(); clearTimeout(ui.ubT); ui.ubT = setTimeout(() => { ui.ubShow = false; usersBadge(); }, 8000); return;
+  }
+  clearTimeout(ui.ubT); ui.ubShow = false; usersBadge();
+  if (ui.accPage && ui.view === 'settings') return; actions.usersGo();
+});
 
 const USAGE_NOTICE_VER = '4.26.2';
 function maybeShowNews() {
@@ -9687,7 +9695,9 @@ function usersBadge() {
   const n = activeN(); let b = ub.querySelector('.ub-n');
   if (typeof n !== 'number' || n < 1) { b?.remove(); return; }
   if (!b) { b = document.createElement('span'); b.className = 'ub-n'; ub.appendChild(b); }
-  b.textContent = n > 99 ? '99+' : String(n); ub.setAttribute('aria-label', `Usuarios · ${n} activo${n === 1 ? '' : 's'} hoy`);
+  b.classList.toggle('ub-eye', !ui.ubShow);
+  if (!ui.ubShow) { b.innerHTML = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12c2.5 3 5.5 4.5 9 4.5s6.5-1.5 9-4.5"/><path d="M6.5 15l-1.5 2.5M12 16.5V19M17.5 15l1.5 2.5"/></svg>'; ub.setAttribute('aria-label', 'Usuarios · toca para ver los activos de hoy'); return; }
+  b.textContent = n > 99 ? '99+' : String(n); ub.setAttribute('aria-label', `Usuarios · ${n} activo${n === 1 ? '' : 's'} hoy · toca para entrar`);
 }
 setTimeout(loadActiveCount, 2500); setInterval(() => { if (document.visibilityState === 'visible') loadActiveCount(); }, 5 * 60000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') loadActiveCount(); });
