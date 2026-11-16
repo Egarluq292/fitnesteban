@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.10.5';
+const APP_VERSION = '5.11.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -3669,6 +3669,7 @@ const IC = {
   ruler: '<rect x="3" y="8" width="18" height="8" rx="1.5"/><path d="M7 8v3M11 8v4M15 8v3M19 8v2"/>', phone: '<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
   key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 8.5-8.5M16 7l2.5 2.5M14 9l2 2"/>', lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
   calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>', sparkles: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>',
+  file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
   chart: '<path d="M4 19h16"/><path d="M5 15l4-4 3 3 6-7"/><path d="M15 7h3v3"/>',
   share: '<path d="M12 3v12M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-7"/>',
   send: '<path d="M21.5 2.5 2.5 10l7 3 3 8.5z"/><path d="M21.5 2.5 9.5 13"/>',
@@ -3676,7 +3677,7 @@ const IC = {
 };
 const icon = (k, cls = 'w-4 h-4') => `<svg viewBox="0 0 24 24" class="${cls}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[k] || ''}</svg>`;
 const MEAL_IC = { Desayuno: 'coffee', Comida: 'utensils', Puente: 'apple', Cena: 'moon', Otro: 'dots' };
-const TITLE_IC = { '➕': 'plus', '⭐': 'star', '🍽️': 'utensils', '✅': 'check', '🏋️': 'dumbbell', '🔥': 'flame', '📚': 'book', '🏆': 'trophy', '🎯': 'target', '👤': 'user', '💾': 'save', '📏': 'ruler', '📱': 'phone', '🔑': 'key', '🔒': 'lock', '🗓️': 'calendar', '🤖': 'sparkles', '🧠': 'chart', '📈': 'chart', '⚖️': 'ruler' };
+const TITLE_IC = { '➕': 'plus', '⭐': 'star', '🍽️': 'utensils', '✅': 'check', '🏋️': 'dumbbell', '🔥': 'flame', '📚': 'book', '🏆': 'trophy', '🎯': 'target', '👤': 'user', '💾': 'save', '📏': 'ruler', '📱': 'phone', '🔑': 'key', '🔒': 'lock', '🗓️': 'calendar', '🤖': 'sparkles', '🧠': 'chart', '📈': 'chart', '⚖️': 'ruler', '📄': 'file' };
 function ui2Titles(root) {
   if (!isUI2()) return;
   root.querySelectorAll('.section-title').forEach(h => {
@@ -4970,6 +4971,252 @@ function weekStats() {
   return { sessionsWeek, avgK: n ? Math.round(k / n) : null, avgP: n ? Math.round(p / n) : null, daysLogged: n };
 }
 
+/* =========================================================================
+   📄 INFORME DE PROGRESO (PDF) — se genera en el propio móvil con tus datos y se guarda con «Imprimir → Guardar como PDF».
+   Dos versiones: digital (oscura, como la app) y papel (clara, para imprimir sin gastar tinta).
+   ========================================================================= */
+const REP_PAL = {
+  dark: { bg: '#05080a', card1: '#262f35', card2: '#10161a', line: 'rgba(255,255,255,.07)', grid: '#2a343b', tx: '#e8eef1', tx2: '#c9d4da', mu: '#8a9aa5', dot: '#0b1114',
+    cy: '#22d3ee', em: '#34d399', am: '#fbbf24', ro: '#fb7185', vi: '#a78bfa', ref: 'rgba(255,255,255,.7)', soft: 'rgba(255,255,255,.05)' },
+  light: { bg: '#ffffff', card1: '#f6f8fa', card2: '#eef2f5', line: '#dde5ea', grid: '#e2e8ee', tx: '#0f172a', tx2: '#334155', mu: '#64748b', dot: '#ffffff',
+    cy: '#0891b2', em: '#059669', am: '#d97706', ro: '#e11d48', vi: '#7c3aed', ref: 'rgba(15,23,42,.55)', soft: 'rgba(15,23,42,.05)' }
+};
+const repN = (v, d = 1) => { const [a, b] = Math.abs(Number.isFinite(v) ? v : 0).toFixed(d).split('.'); return (v < 0 ? '-' : '') + a.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + (b ? ',' + b : ''); }; // 6.257 · 85,4
+const REP_MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const repDay = iso => { const d = parseISO(iso); return `${d.getDate()} ${REP_MES[d.getMonth()]}`; };
+const repDays = (a, b) => Math.round((parseISO(b) - parseISO(a)) / 864e5);
+let repGid = 0;
+
+/* Línea (con área o con media de 7 días). pts: [[x, y]] con x = día desde el inicio del periodo */
+function repLine(P, pts, { W = 520, H = 160, col, n, avg = null, dots = false, labels = true, fmt = v => repN(v), pad = [34, 10, 18, 22] }) {
+  if (!pts.length) return '';
+  const [l, t, r, b] = pad, vs = pts.map(p => p[1]).concat(avg ? avg.map(p => p[1]) : []);
+  let lo = Math.min(...vs), hi = Math.max(...vs); const sp = (hi - lo) || 1; lo -= sp * .1; hi += sp * .1;
+  const X = i => l + (W - l - r) * i / (n || 1), Y = v => t + (H - t - b) * (1 - (v - lo) / (hi - lo));
+  const path = a => a.map((p, k) => `${k ? 'L' : 'M'}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(' ');
+  const g = [], id = 'rg' + (++repGid);
+  for (let k = 0; k < 3; k++) { const v = lo + (hi - lo) * (k + .5) / 3, y = Y(v).toFixed(1); g.push(`<line x1="${l}" x2="${W - r}" y1="${y}" y2="${y}" stroke="${P.grid}" stroke-width=".7"/>`); if (labels) g.push(`<text x="${l - 6}" y="${(+y + 3).toFixed(1)}" text-anchor="end" class="ax">${fmt(v)}</text>`); }
+  const last = pts[pts.length - 1];
+  if (avg) {
+    g.push(`<path d="${path(pts)}" fill="none" stroke="${col}" stroke-opacity=".3" stroke-width="1.2"/>`);
+    pts.forEach(p => g.push(`<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="1.5" fill="${col}" fill-opacity=".5"/>`));
+    g.push(`<path d="${path(avg)}" fill="none" stroke="${col}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`);
+  } else {
+    if (pts.length > 1) {
+      g.push(`<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".32"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>`);
+      g.push(`<path d="${path(pts)} L${X(last[0]).toFixed(1)},${H - b} L${X(pts[0][0]).toFixed(1)},${H - b} Z" fill="url(#${id})"/>`);
+    }
+    g.push(`<path d="${path(pts)}" fill="none" stroke="${col}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`);
+    if (dots) pts.forEach(p => g.push(`<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="2.4" fill="${P.dot}" stroke="${col}" stroke-width="1.4"/>`));
+  }
+  g.push(`<circle cx="${X(last[0]).toFixed(1)}" cy="${Y(last[1]).toFixed(1)}" r="3.6" fill="${col}"/>`);
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;height:auto">${g.join('')}</svg>`;
+}
+/* Barras semanales con línea de referencia (objetivo o media). ge: «brilla» si llega a la referencia; si no, si está a ±5 % */
+function repBars(P, vals, ref, { col, W = 250, H = 110, fmt = v => repN(v, 0), lab = 'objetivo', ge = false }) {
+  const ok = vals.filter(v => v !== null); if (!ok.length) return '';
+  const [l, t, r, b] = [6, 18, 6, 6], hi = Math.max(...ok, ref || 0) * 1.08, lo = Math.min(...ok, ref || hi) * .88;
+  const n = vals.length, bw = (W - l - r) / n, Y = v => t + (H - t - b) * (1 - (v - lo) / ((hi - lo) || 1)), g = [];
+  vals.forEach((v, k) => { if (v === null) return; const x = l + k * bw + bw * .18, y = Y(v), good = ref ? (ge ? v >= ref * .97 : Math.abs(v - ref) / ref < .05) : true;
+    g.push(`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw * .64).toFixed(1)}" height="${Math.max(1, H - b - y).toFixed(1)}" rx="2.5" fill="${col}" fill-opacity="${good ? 1 : .42}"/>`); });
+  if (ref) { const ty = Y(ref).toFixed(1); g.push(`<line x1="${l}" x2="${W - r}" y1="${ty}" y2="${ty}" stroke="${P.ref}" stroke-dasharray="3 3" stroke-width="1"/>`, `<text x="${W - r}" y="9" text-anchor="end" class="ax">- - - ${lab} ${fmt(ref)}</text>`); }
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;height:auto">${g.join('')}</svg>`;
+}
+
+/* Todos los datos del informe, del periodo [from, to] */
+function reportData(months) {
+  const to = todayISO(), st = state.settings;
+  const firstAny = [...state.sessions.map(s => s.date), ...state.bodyMetrics.map(m => m.date), ...Object.keys(state.meals || {}).filter(d => mealsOf(d).length)].sort()[0] || to;
+  let from = months ? addDays(to, -Math.round(months * 30.44)) : firstAny; if (from < firstAny) from = firstAny;
+  const nDays = Math.max(1, repDays(from, to)), weeks = Math.max(1, (nDays + 1) / 7), inR = d => d >= from && d <= to;
+  const bm = [...state.bodyMetrics].filter(m => inR(m.date)).sort((a, b) => (a.date < b.date ? -1 : 1));
+  const W = bm.filter(m => m.weight !== null).map(m => [repDays(from, m.date), m.weight]);
+  const C = bm.filter(m => m.waist !== null).map(m => [repDays(from, m.date), m.waist]);
+  const avg7 = W.map(([i]) => { const a = W.filter(([j]) => j >= i - 6 && j <= i).map(p => p[1]); return [i, a.reduce((x, y) => x + y, 0) / a.length]; });
+  const ses = sortedSessions().filter(s => inR(s.date));
+  const trainDays = new Set(ses.map(s => s.date));
+  for (const r of Object.values(state.retos || {})) for (const h of [...(r.history || []), ...(r.tests || [])]) if (inR(h.date)) trainDays.add(h.date);
+  // fuerza: los ejercicios con más sesiones en el periodo (mejor 1RM de cada sesión)
+  const exMap = new Map();
+  for (const s of ses) for (const e of s.exercises) {
+    if (!e.exKey || isTimedEx(e) || !e.sets.some(x => x.r > 0)) continue;
+    const best = Math.max(...e.sets.map(x => oneRM(e, x, s.date))); if (!(best > 0)) continue;
+    const o = exMap.get(e.exKey) || { name: e.name, pts: [] }; o.name = e.name;
+    const lastP = o.pts[o.pts.length - 1]; if (lastP && lastP.d === s.date) lastP.v = Math.max(lastP.v, best); else o.pts.push({ d: s.date, v: best });
+    exMap.set(e.exKey, o);
+  }
+  const ex = [...exMap.values()].filter(o => o.pts.length >= 2).sort((a, b) => b.pts.length - a.pts.length).slice(0, 6)
+    .map(o => ({ ...o, first: o.pts[0].v, last: o.pts[o.pts.length - 1].v, best: Math.max(...o.pts.map(p => p.v)), pct: (o.pts[o.pts.length - 1].v / o.pts[0].v - 1) * 100,
+      muscle: MUSCLE_NAMES[Object.entries(musclesOf(o.name)).sort((a, b) => b[1] - a[1])[0]?.[0]] || '' }));
+  const prs = personalRecords().filter(r => !r.timed && !r.bw && r.best1 > 0 && inR(r.best1Date)).sort((a, b) => b.best1 - a.best1).slice(0, 8);
+  // semanas del periodo (de lunes a domingo)
+  const mon0 = addDays(from, -((parseISO(from).getDay() + 6) % 7)), nW = Math.floor(repDays(mon0, to) / 7) + 1;
+  const wk = Array.from({ length: nW }, (_, k) => Array.from({ length: 7 }, (_, j) => addDays(mon0, k * 7 + j)).filter(inR));
+  const avgOf = (days, f) => { const v = days.map(f).filter(x => x !== null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  const kcalW = wk.map(ds => avgOf(ds, d => mealsOf(d).length ? totalsOf(d).kcal : null));
+  const protW = wk.map(ds => avgOf(ds, d => mealsOf(d).length ? totalsOf(d).prot : null));
+  const stepsW = wk.map(ds => avgOf(ds, d => stepsOf(d)));
+  const tonW = wk.map(ds => { let t = 0; for (const s of ses) if (ds.includes(s.date)) for (const e of s.exercises) for (const x of e.sets) if (x.w > 0 && x.r > 0 && !isTimedEx(e)) t += x.w * x.r; return t || null; });
+  const sesW = wk.map(ds => ds.filter(d => trainDays.has(d)).length);
+  const dietDays = Object.keys(state.meals || {}).filter(d => inR(d) && mealsOf(d).length);
+  const protOk = dietDays.filter(d => totalsOf(d).prot >= (st.targetProt || 0) * .95).length;
+  const allSteps = Object.keys(state.steps || {}).filter(inR).map(stepsOf).filter(v => v !== null);
+  const mv = muscleVolume(Math.min(28, nDays + 1)), mw = Math.min(4, weeks);
+  const mus = Object.entries(mv).map(([m, v]) => [MUSCLE_NAMES[m] || m, v / mw]).filter(x => x[1] >= .5).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  return { from, to, months, nDays, weeks, W, C, avg7, ses, trainDays, ex, prs, mon0, nW, wk, kcalW, protW, stepsW, tonW, sesW, dietDays, protOk, allSteps, mus,
+    name: profileOf()?.name || '', goal: profileOf() ? goalName(profileOf()) : '', tK: st.targetKcal || 0, tP: st.targetProt || 0 };
+}
+
+function reportHTML(months, light) {
+  const P = REP_PAL[light ? 'light' : 'dark'], D = reportData(months), card = `background:linear-gradient(160deg,${P.card1},${P.card2});border:1px solid ${P.line}`;
+  const none = t => `<p class="none">${t}</p>`;
+  const per = months ? (months === 1 ? 'ÚLTIMO MES' : `ÚLTIMOS ${months} MESES`) : 'TODO TU HISTORIAL';
+  const dW = D.W.length >= 2 ? D.W[D.W.length - 1][1] - D.W[0][1] : null, dC = D.C.length >= 2 ? D.C[D.C.length - 1][1] - D.C[0][1] : null;
+  const sgn = v => (v > 0 ? '+' : v < 0 ? '−' : '') + repN(Math.abs(v));
+  const strAvg = D.ex.length ? D.ex.reduce((a, e) => a + e.pct, 0) / D.ex.length : null;
+  const best = D.ex.length ? [...D.ex].sort((a, b) => b.pct - a.pct)[0] : null;
+  const dk = D.dietDays.length ? D.dietDays.reduce((a, d) => a + totalsOf(d).kcal, 0) / D.dietDays.length : null;
+  const dp = D.dietDays.length ? D.dietDays.reduce((a, d) => a + totalsOf(d).prot, 0) / D.dietDays.length : null;
+  const sAvg = D.allSteps.length ? D.allSteps.reduce((a, b) => a + b, 0) / D.allSteps.length : null;
+  const nT = D.trainDays.size, perWk = nT / D.weeks;
+  const kpis = [
+    ['Peso', dW !== null ? `${sgn(dW)} kg` : '—', D.W.length ? `${repN(D.W[0][1])} → ${repN(D.W[D.W.length - 1][1])} kg` : 'sin pesajes', P.cy],
+    ['Cintura', dC !== null ? `${sgn(dC)} cm` : '—', D.C.length ? `${repN(D.C[0][1])} → ${repN(D.C[D.C.length - 1][1])} cm` : 'sin medidas', P.vi],
+    ['Fuerza media', strAvg !== null ? `${strAvg >= 0 ? '+' : '−'}${repN(Math.abs(strAvg), 0)} %` : '—', strAvg !== null ? `1RM de tus ${D.ex.length} ejercicios clave` : 'pocas sesiones repetidas', P.em],
+    ['Días entrenados', String(nT), `${repN(perWk)} por semana`, P.am],
+    ['Proteína', dp !== null ? `${repN(dp, 0)} g/día` : '—', dp !== null ? `objetivo ${D.tP} g · ${Math.round(D.protOk / D.dietDays.length * 100)} % de días` : 'sin comidas apuntadas', P.ro],
+    ['Pasos', sAvg !== null ? `${repN(sAvg, 0)}/día` : '—', sAvg !== null ? `${D.allSteps.length} días apuntados` : 'sin pasos apuntados', P.cy]
+  ].map(([a, b, c, k]) => `<div class="kpi" style="--k:${k};${card}"><small>${a}</small><b>${b}</b><span>${c}</span></div>`).join('');
+  // resumen en texto, solo con lo que hay
+  const sum = [];
+  if (dW !== null) sum.push(`Tu peso ha ${dW < -0.2 ? `bajado <b>${repN(-dW)} kg</b>` : dW > 0.2 ? `subido <b>${repN(dW)} kg</b>` : 'quedado <b>estable</b>'}${dC !== null && Math.abs(dC) >= .5 ? ` y tu cintura ha ${dC < 0 ? `bajado <b>${repN(-dC)} cm</b>` : `subido <b>${repN(dC)} cm</b>`}` : ''}.`);
+  if (strAvg !== null) sum.push(`Tu fuerza estimada ha ${strAvg >= 0 ? 'subido' : 'bajado'} de media un <b>${repN(Math.abs(strAvg), 0)} %</b>${best && best.pct > 0 ? `; donde más, en <b>${esc(best.name.toLowerCase())}</b> (+${repN(best.pct, 0)} %)` : ''}.`);
+  if (nT) sum.push(`Has entrenado <b>${nT} días</b>, unos <b>${repN(perWk)} por semana</b>.`);
+  if (dp !== null && D.tP) sum.push(`Has cumplido la proteína en <b>${Math.round(D.protOk / D.dietDays.length * 100)} %</b> de los días apuntados.`);
+  const xl = () => { const n = D.nDays; return `<div class="xl">${[0, n / 3, 2 * n / 3, n].map(i => `<span>${repDay(addDays(D.from, Math.round(i)))}</span>`).join('')}</div>`; };
+  const logo = 'icons/logo-128.png';
+  const head = (t, s) => `<div class="ph"><img src="${logo}" alt=""/><div><h2>${t}</h2><p>${s}</p></div></div>`;
+  const foot = n => `<div class="foot"><span>FITNESTEBAN · Informe de progreso${D.name ? ' · ' + esc(D.name) : ''} · ${repDay(D.from)} – ${repDay(D.to)}</span><span>${n} / 4</span></div>`;
+  // calendario (máx. 26 semanas, las más recientes)
+  const wks = D.wk.slice(-26), heat = `<div class="heat"><div class="wd">${'LMXJVSD'.split('').map(c => `<span>${c}</span>`).join('')}</div>${wks.map((ds, k) => {
+    const mon = addDays(D.mon0, (D.nW - wks.length + k) * 7);
+    return `<div class="wk">${Array.from({ length: 7 }, (_, j) => { const d = addDays(mon, j); return `<i class="${d < D.from || d > D.to ? 'c0' : D.trainDays.has(d) ? 'c2' : 'c1'}"></i>`; }).join('')}</div>`; }).join('')}</div>`;
+  const exCards = D.ex.map((e, k) => { const c = [P.cy, P.em, P.am, P.vi, P.ro, P.cy][k];
+    return `<div class="exc" style="${card}"><div class="exh"><div><b>${esc(e.name)}</b><small>${e.muscle ? e.muscle + ' · ' : ''}1RM estimado · ${e.pts.length} sesiones</small></div><div class="exv"><span>${repN(e.first)} → <b style="color:${c}">${repN(e.last)} kg</b></span><em style="color:${c}">${e.pct >= 0 ? '+' : '−'}${repN(Math.abs(e.pct), 0)} %</em></div></div>${repLine(P, e.pts.map(p => [repDays(D.from, p.d), p.v]), { W: 230, H: 118, col: c, n: D.nDays, labels: false, dots: e.pts.length <= 12, pad: [4, 8, 6, 6] })}</div>`; }).join('');
+  const prs = D.prs.map(r => `<tr><td>${esc(r.name)}</td><td class="mu">${fmtKg(r.bestW)} × ${r.bestWReps}</td><td class="r"><b>${repN(r.best1)}</b> kg</td><td class="r mu">${repDay(r.best1Date)}</td></tr>`).join('');
+  const mx = Math.max(22, ...D.mus.map(m => m[1]));
+  const mus = D.mus.map(([n, v]) => `<div class="mrow"><span>${n}</span><div class="mbar"><i class="zone" style="left:${(10 / mx * 100).toFixed(1)}%;width:${(10 / mx * 100).toFixed(1)}%"></i><i class="fill" style="width:${(v / mx * 100).toFixed(1)}%;background:${v >= 10 && v <= 20 ? P.em : P.am}"></i></div><b>${repN(v, v < 10 ? 1 : 0)}</b></div>`).join('');
+  const tips = [];
+  const inZ = D.mus.filter(m => m[1] >= 10 && m[1] <= 20).map(m => m[0]), lowZ = D.mus.filter(m => m[1] < 6 && m[1] >= 1).map(m => m[0]), hiZ = D.mus.filter(m => m[1] > 22).map(m => m[0]);
+  if (inZ.length) tips.push(`✅ <b>${inZ.slice(0, 4).join(', ')}</b> ${inZ.length === 1 ? 'está' : 'están'} en la zona de 10–20 series por semana.`);
+  if (lowZ.length) tips.push(`⚠️ <b>${lowZ.slice(0, 3).join(', ')}</b> ${lowZ.length === 1 ? 'va' : 'van'} con poco volumen: si es un objetivo, súmale 2–4 series por semana.`);
+  if (hiZ.length) tips.push(`🔁 <b>${hiZ.slice(0, 3).join(', ')}</b> ${hiZ.length === 1 ? 'acumula' : 'acumulan'} mucho volumen: vigila la recuperación.`);
+  if (dW !== null && D.W.length >= 4) { const r = dW / D.weeks; tips.push(Math.abs(r) < .1 ? '⚖️ Tu peso se mantiene estable.' : r < 0 ? `📉 Bajas unos ${repN(-r, 2)} kg por semana${-r > .9 ? ': es un ritmo rápido, cuida la proteína y la fuerza.' : ', un ritmo que conserva el músculo.'}` : `📈 Subes unos ${repN(r, 2)} kg por semana${r > .5 ? ': si buscas músculo sin grasa, frena un poco.' : '.'}`); }
+  const css = `@page{size:A4;margin:0}*{box-sizing:border-box;margin:0;padding:0}
+  #printRoot{font-family:Inter,system-ui,sans-serif;color:${P.tx};-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #printRoot .page{width:210mm;height:297mm;padding:14mm 13mm 12mm;position:relative;overflow:hidden;break-after:page;page-break-after:always;background:${light ? '#fff' : `radial-gradient(120% 60% at 100% 0%,rgba(34,211,238,.10),transparent 60%),radial-gradient(90% 50% at 0% 100%,rgba(167,139,250,.07),transparent 60%),${P.bg}`}}
+  #printRoot .page:last-child{break-after:auto;page-break-after:auto}
+  #printRoot .rp-card{border-radius:16px;padding:12px 14px;${card};break-inside:avoid}
+  #printRoot h3{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:${P.cy};font-weight:800;margin-bottom:8px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  #printRoot h3 span{color:${P.mu};letter-spacing:0;text-transform:none;font-weight:500;font-size:10px}
+  #printRoot .ax{font-size:8.5px;fill:${P.mu};font-family:Inter,sans-serif}
+  #printRoot .xl{display:flex;justify-content:space-between;font-size:8.5px;color:${P.mu};padding:0 10px 0 34px;margin-top:-2px}
+  #printRoot .none{font-size:11px;color:${P.mu};padding:14px 0;text-align:center}
+  #printRoot .brand{display:flex;align-items:center;gap:12px}#printRoot .brand img{width:46px;height:46px}
+  #printRoot .wm{font-size:26px;font-weight:900;font-style:italic;letter-spacing:-.01em;color:${P.tx}}#printRoot .wm i{color:${P.cy}}
+  #printRoot .brand small{display:block;color:${P.mu};font-size:10px;margin-top:1px;letter-spacing:.04em}
+  #printRoot .hero{margin-top:34mm}
+  #printRoot .tag{display:inline-block;font-size:10px;letter-spacing:.24em;font-weight:800;color:${P.cy};border:1px solid ${P.cy}66;border-radius:999px;padding:5px 11px}
+  #printRoot .hero h1{font-size:50px;line-height:1.02;font-weight:900;margin-top:12px;letter-spacing:-.02em}
+  #printRoot .hero h1 em{font-style:normal;color:${P.cy};${light ? '' : 'text-shadow:0 0 24px rgba(34,211,238,.45)'}}
+  #printRoot .hero p{color:${P.tx2};font-size:13px;margin-top:10px}
+  #printRoot .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}#printRoot .meta span{font-size:10.5px;background:${P.soft};border:1px solid ${P.line};border-radius:999px;padding:5px 10px;color:${P.tx2}}
+  #printRoot .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:22mm}
+  #printRoot .kpi{position:relative;border-radius:16px;padding:16px 14px 16px 17px;overflow:hidden}
+  #printRoot .kpi::before{content:'';position:absolute;left:0;top:12px;bottom:12px;width:3px;border-radius:3px;background:var(--k)}
+  #printRoot .kpi small{font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:${P.mu};font-weight:700}
+  #printRoot .kpi b{display:block;font-size:26px;font-weight:900;margin-top:4px;color:var(--k);letter-spacing:-.01em}
+  #printRoot .kpi span{display:block;font-size:10px;color:${P.mu};margin-top:2px}
+  #printRoot .summary{margin-top:10px;padding:16px 18px}#printRoot .summary p{font-size:12.5px;line-height:1.6;color:${P.tx2}}#printRoot .summary b{color:${P.tx}}
+  #printRoot .note{font-size:9px!important;color:${P.mu}!important;margin-top:8px;line-height:1.45!important}
+  #printRoot .ph{display:flex;align-items:center;gap:10px;margin-bottom:10px}#printRoot .ph img{width:30px;height:30px}
+  #printRoot .ph h2{font-size:20px;font-weight:900;letter-spacing:-.01em}#printRoot .ph p{font-size:10px;color:${P.mu}}
+  #printRoot .g2{display:grid;grid-template-columns:1fr 1fr;gap:9px}#printRoot .stack>*+*{margin-top:9px}
+  #printRoot .rp-stat{display:flex;gap:8px;margin-top:6px}#printRoot .rp-stat div{flex:1;background:${P.soft};border-radius:10px;padding:7px 9px}
+  #printRoot .rp-stat small{font-size:8.5px;color:${P.mu};text-transform:uppercase;letter-spacing:.12em;font-weight:700}#printRoot .rp-stat b{display:block;font-size:14px;margin-top:2px}
+  #printRoot .exg{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  #printRoot .exc{border-radius:16px;padding:13px 13px 8px;break-inside:avoid}#printRoot .exc svg{margin-top:6px}
+  #printRoot .exh{display:flex;justify-content:space-between;gap:8px}#printRoot .exh b{font-size:11.5px;display:block}#printRoot .exh small{font-size:9px;color:${P.mu}}
+  #printRoot .exv{text-align:right;white-space:nowrap}#printRoot .exv span{display:block;font-size:10px;color:${P.tx2}}#printRoot .exv em{font-style:normal;font-weight:900;font-size:15px}
+  #printRoot table{width:100%;border-collapse:collapse;font-size:11px}#printRoot td{padding:7px 4px;border-top:1px solid ${P.line}}#printRoot tr:first-child td{border-top:0}
+  #printRoot td.mu{color:${P.mu}}#printRoot td.r{text-align:right;white-space:nowrap}
+  #printRoot .mrow{display:grid;grid-template-columns:76px 1fr 26px;align-items:center;gap:8px;font-size:11px;margin:7px 0}#printRoot .mrow b{text-align:right}
+  #printRoot .mbar{position:relative;height:10px;border-radius:6px;background:${P.soft}}
+  #printRoot .mbar .zone{position:absolute;top:0;bottom:0;background:${P.em}22;border-left:1px dashed ${P.em}88;border-right:1px dashed ${P.em}88}
+  #printRoot .mbar .fill{position:absolute;left:0;top:2px;bottom:2px;border-radius:4px}
+  #printRoot .leg{display:flex;gap:12px;font-size:9px;color:${P.mu};margin-top:6px}#printRoot .leg i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+  #printRoot .heat{display:flex;gap:4px;margin-top:4px}#printRoot .heat .wd,#printRoot .heat .wk{display:grid;grid-template-rows:repeat(7,${wks.length > 18 ? 14 : 19}px);gap:4px}
+  #printRoot .heat .wd span{font-size:9px;color:${P.mu};line-height:${wks.length > 18 ? 14 : 19}px;width:12px}
+  #printRoot .heat i{display:block;width:${wks.length > 18 ? 14 : 19}px;height:${wks.length > 18 ? 14 : 19}px;border-radius:4px}
+  #printRoot .c0{background:transparent}#printRoot .c1{background:${P.soft}}#printRoot .c2{background:${P.em}}
+  #printRoot .tips p{font-size:11px;line-height:1.7;color:${P.tx2}}#printRoot .tips b{color:${P.tx}}
+  #printRoot .foot{position:absolute;left:13mm;right:13mm;bottom:8mm;display:flex;justify-content:space-between;font-size:8.5px;color:${P.mu};letter-spacing:.04em;border-top:1px solid ${P.line};padding-top:6px}`;
+  const wmark = '<div class="wm">FITNES<i>T</i>EBAN</div>';
+  return `<style>${css}</style>
+<section class="page"><div class="brand"><img src="${logo}" alt=""/><div>${wmark}<small>Informe de progreso</small></div></div>
+  <div class="hero"><span class="tag">${per}</span><h1>${D.name ? esc(D.name) + ',<br/>' : ''}tu evolución <em>en datos</em></h1>
+    ${D.goal ? `<p>Objetivo: <b>${esc(D.goal)}</b></p>` : ''}
+    <div class="meta"><span>📅 ${repDay(D.from)} ${parseISO(D.from).getFullYear()} → ${repDay(D.to)} ${parseISO(D.to).getFullYear()}</span><span>⚖️ ${D.W.length} pesajes</span><span>🏋️ ${D.ses.length} sesiones</span><span>🍽️ ${D.dietDays.length} días apuntados</span></div></div>
+  <div class="kpis">${kpis}</div>
+  <div class="rp-card summary"><h3>En resumen</h3><p>${sum.join(' ') || 'Aún hay pocos datos en este periodo. Sigue apuntando y el informe se irá llenando.'}</p>
+    <p class="note">Fuerza: 1RM estimado con la fórmula de Epley (tope de 12 repeticiones). Informe orientativo generado por FITNESTEBAN el ${repDay(todayISO())} ${parseISO(todayISO()).getFullYear()}: no sustituye el consejo de un profesional sanitario.</p></div>
+  ${foot(1)}</section>
+<section class="page">${head('Cuerpo y alimentación', 'Peso, cintura, calorías, proteína y pasos')}<div class="stack">
+  <div class="rp-card"><h3>Peso corporal <span>media de 7 días · cada punto, un pesaje</span></h3>${D.W.length ? repLine(P, D.W, { W: 520, H: 165, col: P.cy, n: D.nDays, avg: D.avg7 }) + xl() : none('Sin pesajes en este periodo.')}
+    ${D.W.length >= 2 ? `<div class="rp-stat"><div><small>Inicio</small><b>${repN(D.W[0][1])} kg</b></div><div><small>Ahora</small><b>${repN(D.W[D.W.length - 1][1])} kg</b></div><div><small>Cambio</small><b style="color:${P.cy}">${sgn(dW)} kg</b></div><div><small>Ritmo</small><b>${dW / D.weeks < 0 ? '−' : '+'}${repN(Math.abs(dW / D.weeks), 2)} kg/sem</b></div></div>` : ''}</div>
+  <div class="rp-card"><h3>Cintura <span>cada punto, una medida</span></h3>${D.C.length ? repLine(P, D.C, { W: 520, H: 115, col: P.vi, n: D.nDays, dots: true }) + xl() : none('Sin medidas de cintura en este periodo.')}</div>
+  <div class="g2"><div class="rp-card"><h3>Calorías <span>media semanal</span></h3>${D.kcalW.some(v => v !== null) ? repBars(P, D.kcalW, D.tK, { col: P.am }) : none('Sin comidas apuntadas.')}</div>
+    <div class="rp-card"><h3>Proteína <span>media semanal · g</span></h3>${D.protW.some(v => v !== null) ? repBars(P, D.protW, D.tP, { col: P.em, ge: true }) : none('Sin comidas apuntadas.')}</div></div>
+  <div class="rp-card"><h3>Pasos <span>media semanal</span></h3>${D.stepsW.some(v => v !== null) ? repBars(P, D.stepsW, state.settings.stepGoal || null, { col: P.cy, W: 520, H: 90, ge: true }) : none('Sin pasos apuntados.')}</div>
+</div>${foot(2)}</section>
+<section class="page">${head('Fuerza', '1RM estimado de los ejercicios que más has repetido')}
+  ${D.ex.length ? `<div class="exg">${exCards}</div>` : `<div class="rp-card">${none('Hacen falta al menos 2 sesiones de un mismo ejercicio para ver su evolución.')}</div>`}
+  ${prs ? `<div class="rp-card" style="margin-top:9px"><h3>Récords del periodo <span>mejor serie · 1RM estimado · fecha</span></h3><table>${prs}</table></div>` : ''}
+  ${foot(3)}</section>
+<section class="page">${head('Constancia y volumen', 'Cuánto y cómo has entrenado')}<div class="stack">
+  <div class="rp-card"><h3>Días entrenados <span>${wks.length < D.nW ? `últimas ${wks.length} semanas · ` : ''}verde = has entrenado</span></h3>${heat}
+    <div class="rp-stat"><div><small>Días</small><b>${nT}</b></div><div><small>Por semana</small><b>${repN(perWk)}</b></div><div><small>Mejor semana</small><b>${Math.max(0, ...D.sesW)} días</b></div><div><small>Semanas sin entrenar</small><b>${D.sesW.filter(c => !c).length}</b></div></div></div>
+  <div class="rp-card"><h3>Series semanales por músculo <span>media de las últimas ${Math.round(Math.min(4, D.weeks))} semanas</span></h3>${mus || none('Sin series en las últimas semanas.')}
+    ${mus ? `<div class="leg"><span><i style="background:${P.em}55"></i>zona orientativa 10–20</span><span><i style="background:${P.em}"></i>dentro</span><span><i style="background:${P.am}"></i>fuera</span></div>` : ''}</div>
+  <div class="rp-card"><h3>Volumen total por semana <span>kg × repeticiones de todas tus series</span></h3>${D.tonW.some(v => v) ? repBars(P, D.tonW, D.tonW.filter(v => v).reduce((a, b) => a + b, 0) / D.tonW.filter(v => v).length, { col: P.vi, W: 520, H: 95, lab: 'media', ge: true, fmt: v => repN(v, 0) + ' kg' }) : none('Sin series con peso en este periodo.')}</div>
+  ${tips.length ? `<div class="rp-card tips"><h3>Claves del periodo</h3>${tips.map(t => `<p>${t}</p>`).join('')}</div>` : ''}
+</div>${foot(4)}</section>`;
+}
+
+function reportModal() {
+  let months = 3, light = false;
+  const opt = (k, v, cur, t) => `<button class="chip ${cur ? 'chip-on' : ''} justify-center whitespace-nowrap !px-2 !py-2.5 text-[13px] font-bold" data-mact="${k}" data-v="${v}" type="button">${t}</button>`;
+  const html = () => `<h2 class="text-lg font-black">📄 Informe de progreso</h2>
+    <p class="text-xs text-mute mt-1">Un PDF de 4 páginas con tu evolución: peso, cintura, fuerza, récords, constancia, dieta y pasos. Se crea en tu móvil con tus datos; no se envía a ningún sitio.</p>
+    <div class="lbl mt-4 mb-1.5">Periodo</div><div class="grid grid-cols-4 gap-1.5">${[[1, '1 mes'], [3, '3 meses'], [6, '6 meses'], [0, 'Todo']].map(([v, t]) => opt('per', v, months === v, t)).join('')}</div>
+    <div class="lbl mt-4 mb-1.5">Versión</div><div class="grid grid-cols-2 gap-1.5">${opt('ver', 0, !light, '🌙 Digital (oscura)')}${opt('ver', 1, light, '🖨️ Para imprimir (clara)')}</div>
+    <p class="text-[11px] text-mute mt-3 leading-snug">Al pulsar <b>Crear PDF</b> se abre la ventana de imprimir: elige <b>Guardar como PDF</b> como impresora.</p>
+    <button class="btn-primary w-full mt-4" data-mact="go" type="button">Crear PDF</button>`;
+  const redraw = () => openModal(html(), acts);
+  const acts = {
+    per: (root, b) => { months = +b.dataset.v; redraw(); },
+    ver: (root, b) => { light = b.dataset.v === '1'; redraw(); },
+    go: () => { closeModal(); printReport(months, light); }
+  };
+  openModal(html(), acts);
+}
+function printReport(months, light) {
+  let r = $('#printRoot'); if (!r) { r = document.createElement('div'); r.id = 'printRoot'; document.body.appendChild(r); }
+  try { r.innerHTML = reportHTML(months, light); } catch (e) { console.error(e); toast('No se pudo crear el informe', 'warn'); return; }
+  const imgs = [...r.querySelectorAll('img')].map(i => i.complete ? null : new Promise(ok => { i.onload = i.onerror = ok; })).filter(Boolean);
+  Promise.all(imgs).then(() => setTimeout(() => { window.print(); }, 150));
+}
+
 function renderProgress() {
   const st = state.settings;
   const w = weekStats();
@@ -5053,6 +5300,8 @@ function renderProgress() {
   </details>
 
   ${renderRecords()}
+
+  ${isAdminUser() ? `<button class="card p-4 mt-3 w-full flex items-center gap-3 text-left" data-act="pdfReport" type="button"><span class="flex-1 min-w-0"><span class="section-title">📄 Informe de progreso</span><span class="block text-[11px] text-mute mt-1">Tu evolución en un PDF: digital o para imprimir</span></span><span class="text-mute text-xl">›</span></button>` : ''}
 
   <details class="card p-4 mt-3" ${openAttr('history')}>
     <summary class="flex items-center justify-between cursor-pointer select-none"><h3 class="section-title">📚 Historial de sesiones</h3><span class="flex items-center gap-2 text-[11px] text-mute">${hist.length ? `${hist.length === 20 ? 'últimas 20' : hist.length + (hist.length === 1 ? ' sesión' : ' sesiones')} · ${esc(fmtDateShort(hist[0].date))}` : 'sin sesiones'}<span class="tri"></span></span></summary>
@@ -6760,6 +7009,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.11.0', ['📄 Nuevo en Progreso: «Informe de progreso». Un PDF de 4 páginas con tu evolución (peso, cintura, fuerza, récords, constancia, dieta y pasos) del último mes, 3 meses, 6 meses o todo tu historial. En versión digital (oscura) o para imprimir (clara). Se crea en tu móvil y no se envía a ningún sitio.'], 'admin'],
   ['5.10.5', ['📈 Progreso · Fuerza por ejercicio: las series de más de 12 repeticiones ya no inflan el 1RM estimado. La gráfica refleja mejor tu fuerza real y no baja cuando subes de peso.'], 'quiet'],
   ['5.10.4', ['🏆 Entreno: la tarjeta de Retos es más fina y se distingue mejor de los bloques de entrenamiento.'], 'quiet'],
   ['5.10.3', ['🎯 Coach: si haces una serie de más, ya no cuenta para decidir si subes, mantienes o bajas el peso. Solo cuentan las series que tocaban.'], 'quiet'],
@@ -8373,6 +8623,7 @@ const actions = {
   },
   retoDone: b => { const id = b.dataset.reto, i = +b.dataset.i, d = retoDraft(id); d.done[i] = !d.done[i]; if (d.done[i] && d.got[i] === '') d.got[i] = String(d.target[i]); persist(); render(); if (d.done[i] && d.done.some(x => !x)) startTimer(RETOS[id].rest); },
   holdSW: b => holdSW(b),
+  pdfReport: () => reportModal(),
   retoHold: b => { const id = b.dataset.reto, d = retoDraft(id), i = +b.dataset.i; const sec = parseInt(d.got[i], 10) || d.target[i]; startTimer(sec); toast(`Aguanta ${sec} s`); },
   retoFinish: b => retoFinish(b.dataset.reto),
   retoTest: b => retoTestModal(b.dataset.reto),
