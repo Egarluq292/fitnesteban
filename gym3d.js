@@ -64,6 +64,13 @@ const P = {
   ohp: { cam: [3.9, 1.6, .95], a: { sh: 75, shAb: 30, el: 140 }, b: { sh: 178, shAb: 8, el: 0 }, bar: 'hands' },
   // 6 Dominadas
   pull: { cam: [4.4, 1.7, 1.35], base: { knee: 60, hip: 10 }, a: { sh: 180, shAb: 18, el: 0 }, b: { sh: 25, shAb: 10, el: 150, neck: -12, rootX: -8 }, pull: 2.25 },
+  // 🎯 Taller de dominadas: variantes de la dominada
+  hang: { cam: [4.4, 1.7, 1.35], base: { knee: 60, hip: 10, sh: 180, el: 0 }, a: { shAb: 15 }, b: { shAb: 19, neck: 4 }, pull: 2.25 }, // colgado activo: casi quieto, respira
+  scap: { cam: [4.4, 1.7, 1.35], base: { knee: 60, hip: 10, sh: 180, el: 0 }, a: { shAb: 13, neck: 4 }, b: { shAb: 27, neck: -4 }, pull: 2.25 }, // encogimientos de escápula: brazos estirados, el cuerpo sube unos cm
+  tophold: { cam: [4.4, 1.7, 1.35], base: { knee: 60, hip: 10, sh: 25, shAb: 10, neck: -12, rootX: -8 }, a: { el: 148 }, b: { el: 152 }, pull: 2.25 }, // aguantar arriba: barbilla sobre la barra
+  negpull: { cam: [4.4, 1.7, 1.35], base: { knee: 60, hip: 10 }, pull: 2.25, // bajadas lentas: sube rápido y baja muy despacio
+    k: [{ sh: 180, shAb: 18, el: 0, neck: 0, rootX: 0 }, { sh: 25, shAb: 10, el: 150, neck: -12, rootX: -8 }, { sh: 25, shAb: 10, el: 150, neck: -12, rootX: -8 }, { sh: 77, shAb: 12.7, el: 100, neck: -8, rootX: -5.3 }, { sh: 128, shAb: 15.3, el: 50, neck: -4, rootX: -2.7 }, { sh: 180, shAb: 18, el: 0, neck: 0, rootX: 0 }, { sh: 180, shAb: 18, el: 0, neck: 0, rootX: 0 }],
+    lab: t => t < 1 / 7 ? 'Sube' : t < 2 / 7 ? 'Arriba' : t < 5 / 7 ? 'Baja despacio…' : 'Abajo' },
   // 7 Hip thrust con barra (espalda en el banco)
   hipth: { base: { sh: 20, shAb: 40, el: 70 }, a: { rootX: -62, hip: 52, knee: 100 }, b: { rootX: -90, hip: 0, knee: 92 }, ground: ['anL', 'anR'], bar: 'hips', bench: [1.2, .42, .35, 0, -.62] },
   // 8 Curl de bíceps con mancuernas
@@ -308,7 +315,7 @@ export function mount(el, id, lv = 1) {
     if (ex.pin?.[1] === 'auto') FIX.pin = FIX[ex.pin[0]];
   }
   props(ex, poseAt(0));
-  const per = { pull: 3, hipth: 2.6, lat: 2.4, curl: 2.2, curlh: 2.2, burpee: 4.5, plank: 4, hollow: 3.5, gorilla: 4.4, swing: 1.8, legext: 3.2, legcs: 3.2, legcl: 3.2, fly: 4, flyf: 4, pushd: 3.2, pushdr: 3.2, press: 3.4, curlc: 2.6, curlhc: 2.6, preach: 2.8, zott: 4.4, c21: 31.5, rdfly: 3.6 }[id] || 2.8;
+  const per = { pull: 3, hipth: 2.6, lat: 2.4, curl: 2.2, curlh: 2.2, burpee: 4.5, plank: 4, hollow: 3.5, gorilla: 4.4, swing: 1.8, legext: 3.2, legcs: 3.2, legcl: 3.2, fly: 4, flyf: 4, pushd: 3.2, pushdr: 3.2, press: 3.4, curlc: 2.6, curlhc: 2.6, preach: 2.8, zott: 4.4, c21: 31.5, hang: 3, scap: 2.2, tophold: 3, negpull: 7.5, rdfly: 3.6 }[id] || 2.8;
   const t0 = performance.now();
   const frame = now => {
     if (!cv.isConnected) { stop(); return; }

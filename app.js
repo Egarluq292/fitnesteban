@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.12.2';
+const APP_VERSION = '5.13.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -619,6 +619,7 @@ function normalize(s) {
   if (!out.accessPays || typeof out.accessPays !== 'object' || Array.isArray(out.accessPays)) out.accessPays = {};
   if (!out.accessCodes || typeof out.accessCodes !== 'object' || Array.isArray(out.accessCodes)) out.accessCodes = {};
   if (!out.retos || typeof out.retos !== 'object' || Array.isArray(out.retos)) out.retos = {};
+  if (out.taller && (typeof out.taller !== 'object' || Array.isArray(out.taller))) out.taller = null;
   for (const k of Object.keys(out.retos)) { const r = out.retos[k]; if (!r || !Array.isArray(r.history)) { delete out.retos[k]; continue; } if (!Array.isArray(r.tests)) r.tests = []; }
   if (!out.chat || typeof out.chat !== 'object' || !Array.isArray(out.chat.msgs)) out.chat = null;
   if (!Array.isArray(out.chats)) out.chats = [];
@@ -708,7 +709,7 @@ let saveTimer = null;
 function hashStr(t) { let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0; return h; }
 function dataSig() {
   const retos = {}; for (const [k, r] of Object.entries(state.retos || {})) retos[k] = { level: r.level, best: r.best, history: r.history, tests: r.tests };
-  return hashStr(JSON.stringify([state.plan, state.sessions, state.meals, state.cardio, state.bodyMetrics, retos, state.reports, state.selectedVariants, state.habitLog, state.habitCount, state.advent]));
+  return hashStr(JSON.stringify([state.plan, state.sessions, state.meals, state.cardio, state.bodyMetrics, retos, state.reports, state.selectedVariants, state.habitLog, state.habitCount, state.advent, state.taller?.log, state.taller?.test0, state.taller?.final]));
 }
 function latestContentDate(st) {
   let d = '';
@@ -717,6 +718,7 @@ function latestContentDate(st) {
   for (const x of st.cardio || []) if (x.date > d) d = x.date;
   for (const x of st.bodyMetrics || []) if (x.date > d) d = x.date;
   for (const r of Object.values(st.retos || {})) for (const h of r.history || []) if (h.date > d) d = h.date;
+  for (const h of st.taller?.log || []) if (h.date > d) d = h.date;
   return d;
 }
 function dataAtOf(st) { if (st.dataAt) return st.dataAt; const d = latestContentDate(st); return d ? parseISO(d).getTime() + 12 * 3600000 : 0; }
@@ -1008,7 +1010,12 @@ function draftHasData(dayId) {
   if (!d) return false;
   return Object.values(d.sets || {}).some(arr => (arr || []).some(c => c && (c.r !== undefined && c.r !== '')));
 }
-function setCount(e, key, d) { return d.counts[key] ?? (deloadActive() ? Math.max(1, Math.ceil(e.sets / 2)) : e.sets); }
+/* 🎯 Foco del Taller de dominadas: mientras está en marcha, los ejercicios de dorsal de tus bloques bajan ~30 % de series y no suben de peso */
+const tallerFoco = () => !!(state.taller && state.taller.level !== undefined && !state.taller.final);
+function isLatEx(e) { const m = musclesOf((e.variants?.length ? variantOf(e).variant?.name : '') || e.name || ''), top = Object.entries(m).sort((a, b) => b[1] - a[1])[0]; return !!top && top[0] === 'upper-back'; }
+const tallerToday = () => (state.taller?.log || []).some(h => h.date === todayISO());
+function baseSets(e) { return deloadActive() ? Math.max(1, Math.ceil(e.sets / 2)) : tallerFoco() && isLatEx(e) ? Math.max(1, Math.round(e.sets * 0.7)) : e.sets; }
+function setCount(e, key, d) { return d.counts[key] ?? baseSets(e); }
 /* Comentarios al Coach por ejercicio */
 const NOTE_TAGS = { pain: '😣 Molestia', hard: '🥵 Muy duro', easy: '😌 Fácil', time: '⏱ Poco tiempo' };
 const noteTxt = n => [...(n.tags || []).map(t => NOTE_TAGS[t]).filter(Boolean), n.text ? `«${n.text}»` : ''].filter(Boolean).join(' · ');
@@ -1031,6 +1038,11 @@ function coachFor(e, key) {
     c = { ...c, tone: 'hold', title: `Mantén ${wTxt}`, text: `Llegaste a las reps, pero la última vez anotaste ${(n.tags || []).filter(t => t === 'pain' || t === 'hard').map(t => NOTE_TAGS[t]).join(' y ')}. Hoy no subimos: repite ${wTxt} y comprueba sensaciones.`, weight: w };
   }
   c = deloadActive() ? deloadCoach(c, e, key) : c;
+  if (!deloadActive() && tallerFoco() && isLatEx(e)) {
+    if (c.tone === 'up') { const w = Math.max(0, r2((c.weight || 0) - e.increment)), wTxt = e.bw ? (w ? `PC + ${fmtKg(w)}` : 'tu peso') : fmtKg(w); c = { ...c, tone: 'hold', title: `Mantén ${wTxt}`, weight: w }; }
+    const n = baseSets(e);
+    c = { ...c, text: `${c.text} 🎯 Taller de dominadas: ${tallerToday() ? 'hoy ya lo has hecho, así que puedes saltarte este ejercicio (⏭).' : `${n < e.sets ? `${n} series en vez de ${e.sets} y ` : ''}mantienes el peso para que el dorsal llegue fresco al taller.`}` };
+  }
   return e.timed ? { ...c, title: timedTxt(c.title), text: timedTxt(c.text) } : c;
 }
 function cellValue(d, key, i, field, c) {
@@ -1233,6 +1245,8 @@ function renderTrainHome() {
   return `${td}${td && tc ? '<div class="h-2"></div>' : ''}${tc}${tpk?.day?.exercises.length ? '<button class="qc-btn np-btn" data-act="noPuedo" type="button">¿Y si hoy no puedo?</button>' : ''}${trainWeekHTML()}${td || tc ? '<div class="h-3"></div>' : ''}
   ${retos ? galleryCard({ key: 'retos', name: 'RETOS', icon: '🏆', look: RETOS_LOOK, tag: 'Retos de calistenia', menu: false, slim: true,
       sub: rs ? `${rs} ${rs === 1 ? 'reto en marcha' : 'retos en marcha'} · niveles que suben contigo` : 'Flexiones, dominadas, sentadillas… a tu ritmo' }) : ''}
+  <div class="h-2"></div>${galleryCard({ key: 'taller', name: 'TALLER DE DOMINADAS', icon: '🎯', look: TALLER_LOOK, tag: 'Taller · 6 semanas', menu: false,
+      sub: state.taller?.final ? `Terminado · ${state.taller.test0.reps} → ${state.taller.final.reps} dominadas` : state.taller ? `Semana ${Math.min(state.taller.week, 6)} de 6 · ${TALLER_PHASE(state.taller.week)}` : 'Más dominadas en 6 semanas, a tu nivel' })}
   <div class="grid grid-cols-2 gap-2 mt-3">
     <button class="gal-btn" data-act="openBlock" data-key="free" type="button"><span class="text-xl">🎲</span><span><b>FREE</b><small>Entreno libre</small></span></button>
     <button class="gal-btn" data-act="openBlock" data-key="cardio" type="button"><span class="text-xl">🔥</span><span><b>CARDIO</b><small>Correr, bici…</small></span></button>
@@ -1260,6 +1274,8 @@ function renderBlocksAll() {
   <button class="btn-ghost w-full mt-3" data-act="blocksBack" type="button">‹ Volver a Entreno</button>`;
 }
 function openBlock(key) {
+  if (key === 'taller') { ui.taller = true; ui.blocksAll = false; ui.trainHome = false; if (ui.view !== 'train') { ui.view = 'train'; ui.accessOpen = false; } render(); window.scrollTo({ top: 0 }); return; }
+  ui.taller = false;
   if (key === 'all') { ui.blocksAll = true; render(); window.scrollTo({ top: 0 }); return; }
   ui.blocksAll = false;
   let p = null;
@@ -1306,6 +1322,7 @@ function blockBackHTML() {
 }
 function renderTrain() {
   npRestoreSwaps();
+  if (ui.taller) return renderTaller();
   if (ui.trainHome) return renderTrainHome();
   if (prog().type === 'cardio') return blockBackHTML() + renderCardio();
   if (prog().type === 'retos') return blockBackHTML() + (ui.retoId ? '' : '') + renderRetos();
@@ -1544,7 +1561,7 @@ function estimateMinutes(day, d) {
   for (const e of day.exercises) {
     if (sk.includes(e.id)) continue;
     const { key } = variantOf(e);
-    const n = d ? setCount(e, key, d) : (deloadActive() ? Math.max(1, Math.ceil(e.sets / 2)) : e.sets);
+    const n = d ? setCount(e, key, d) : baseSets(e);
     const reps = (e.minReps + e.maxReps) / 2;
     sec += n * (reps * 3 + 15) + Math.max(0, n - 1) * e.rest + 60; // trabajo + descansos + cambio de ejercicio
   }
@@ -2817,6 +2834,7 @@ function muscleWork(sinceDays) {
     if (h.date < from || !RETO_MUSCLES[id]) continue;
     out.push({ t: h.at || Math.min(Date.now(), parseISO(h.date).getTime() + 19 * 3600000), sets: (h.got || []).filter(v => v > 0).length || 3, m: musclesOf(RETO_MUSCLES[id]) });
   }
+  for (const h of state.taller?.log || []) if (h.date >= from) out.push({ t: h.at || parseISO(h.date).getTime() + 19 * 3600000, sets: h.sets || 4, m: musclesOf('Dominadas') }); // 🎯 Taller de dominadas
   // el test de máximo también cansa: 2 series, o 3 si es un máximo largo (20+ reps o 60+ s)
   for (const [id, r] of Object.entries(state.retos || {})) for (const tt of r.tests || []) {
     if (tt.date < from || !RETO_MUSCLES[id]) continue;
@@ -3165,6 +3183,225 @@ function noPuedoModal() {
       <button class="np-opt" data-mact="hurt" type="button"><span class="text-2xl">🩹</span><span><b>Algo me molesta</b><small>Quito lo que carga esa zona</small></span></button>
     </div>`, { time, home, hurt });
 }
+/* =========================================================================
+   🎯 TALLER DE DOMINADAS — 6 semanas: test inicial → nivel 0-3 → días A/B (48 h entre ellos) → descarga + test final.
+   La app avanza sola: con menos del 80 % de lo previsto o «Muy duro», repite la semana; dos «Fácil» seguidos, adelanta;
+   «Me ha molestado algo» baja el volumen de la siguiente sesión. Los datos viven en state.taller.
+   ========================================================================= */
+const TALLER_LOOK = { img: 'taller', c: '#ef4444', tag: 'Taller' };
+const TALLER_GRIPS = { prono: 'palmas al frente', supino: 'palmas hacia ti', neutro: 'palmas enfrentadas' };
+const TALLER_ROW = { trx: 'TRX', mesa: 'una mesa robusta', none: 'sin material' };
+const TALLER_PHASE = w => w <= 2 ? 'Técnica' : w <= 4 ? 'Volumen' : w === 5 ? 'Pico' : 'Descarga y test';
+const tallerLevelOf = reps => reps <= 2 ? 0 : reps <= 5 ? 1 : reps <= 10 ? 2 : 3;
+const TALLER_LEVEL_NAME = ['Nivel 0 · Primeras dominadas', 'Nivel 1 · Base', 'Nivel 2 · Volumen', 'Nivel 3 · Con lastre'];
+function tallerRowItem(T, sets = 3, reps = 10) {
+  if (T.row === 'none') return { name: 'Encogimientos de escápula colgado', how: 'Colgado, sin doblar los codos: baja y sube los hombros', sets, per: reps, unit: 'reps' };
+  return { name: T.row === 'trx' ? 'Remo invertido en TRX' : 'Remo invertido bajo una mesa', how: 'Cuerpo recto, lleva el pecho hacia el agarre', sets, per: reps, unit: 'reps' };
+}
+/* Lo que toca un día: lista de ejercicios { name, how, sets, per, unit: 'reps'|'s', emom?: minutos } */
+function tallerPlan(T, w, day) {
+  const L = T.level, g = TALLER_GRIPS[T.grip] || '', up = w >= 3 ? 1 : 0, pk = w >= 5 ? 1 : 0, P = [];
+  const dom = `Dominadas (${g})`;
+  if (L === 0) {
+    if (day === 'A') P.push({ name: 'Bajadas lentas', how: `Sube con un salto o un apoyo y baja en ${up ? 6 : 5} s`, sets: 5 + pk, per: 3, unit: 'reps' },
+      { name: 'Colgado activo', how: 'Hombros abajo y lejos de las orejas', sets: 3, per: up ? 30 : 25, unit: 's' });
+    else P.push({ name: 'Encogimientos de escápula colgado', how: 'Colgado, sin doblar los codos: baja y sube los hombros', sets: 3, per: up ? 10 : 8, unit: 'reps' },
+      { name: 'Aguantar arriba', how: 'Barbilla por encima de la barra (sube con un salto)', sets: 4, per: pk ? 15 : up ? 12 : 10, unit: 's' }, tallerRowItem(T));
+  } else if (L === 1) {
+    if (day === 'A') {
+      const min = pk ? 12 : up ? 10 : 8;
+      P.push({ name: dom, how: `EMOM: al empezar cada minuto, ${pk ? '3 los 4 primeros minutos y 2 el resto' : '2 dominadas'}; descansa lo que quede`, sets: 1, per: pk ? 4 * 3 + (min - 4) * 2 : min * 2, unit: 'reps', emom: min },
+        { name: 'Bajadas lentas', how: 'Sube con un salto y baja en 5 s', sets: 3, per: 2, unit: 'reps' });
+    } else {
+      const per = Math.max(1, (T.test0?.reps || 4) - 2) + up;
+      P.push({ name: dom, how: 'Con pausa de 1 s a mitad de recorrido, sin balanceo', sets: 4, per, unit: 'reps' }, tallerRowItem(T),
+        { name: 'Barco (hollow)', how: 'Tumbado boca arriba, lumbar pegada al suelo, brazos y piernas estirados en el aire', sets: 3, per: up ? 25 : 20, unit: 's' });
+    }
+  } else if (L === 2) {
+    if (day === 'A') P.push({ name: dom, how: 'Pausa de 1 s abajo y arriba · 2 min de descanso', sets: 5 + pk, per: up ? 4 : 3, unit: 'reps' },
+      { name: 'Bajadas lentas', how: 'Baja en 4 s', sets: 2, per: 3, unit: 'reps' });
+    else P.push({ name: dom, how: `Escalera 3-4-5 (12 por vuelta) · 90 s de descanso`, sets: up ? 3 : 2, per: 12, unit: 'reps' },
+      { name: 'Barco (hollow)', how: 'Tumbado boca arriba, lumbar pegada al suelo, brazos y piernas estirados en el aire', sets: 3, per: 25, unit: 's' });
+  } else {
+    if (day === 'A') P.push({ name: `${dom} con lastre`, how: `+2,5–5 kg · bajada de 3 s · deja 1–2 en reserva`, sets: 4 + pk, per: up ? 5 : 4, unit: 'reps' });
+    else P.push({ name: dom, how: 'EMOM: 4 al empezar cada minuto, sin lastre', sets: 1, per: (up ? 12 : 10) * 4, unit: 'reps', emom: up ? 12 : 10 },
+      { name: 'Barco (hollow)', how: 'Tumbado boca arriba, lumbar pegada al suelo, brazos y piernas estirados en el aire', sets: 3, per: 30, unit: 's' });
+  }
+  if (w === 6) return P.map(x => ({ ...x, sets: x.emom ? 1 : Math.max(1, Math.ceil(x.sets / 2)), per: x.emom ? Math.ceil(x.per / 2) : x.per, emom: x.emom ? Math.ceil(x.emom / 2) : 0, how: x.emom ? x.how.replace(/EMOM/, `EMOM de ${Math.ceil(x.emom / 2)} min`) : x.how }));
+  if (T.soft) return P.map(x => ({ ...x, sets: x.emom ? 1 : Math.max(1, x.sets - 1), per: x.emom ? Math.round(x.per * .7) : x.per }));
+  return P;
+}
+const tallerTarget = it => it.sets * it.per;
+const tallerGoal = it => it.unit === 's' ? it.sets : it.emom ? it.per : tallerTarget(it); // lo que se apunta: series hechas (tiempo) o repeticiones totales
+/* Estado del taller: qué toca ahora */
+function tallerNow(T) {
+  const T0 = todayISO(), log = T.log || [], last = log[log.length - 1];
+  if (T.final) return { kind: 'done' };
+  const wk = log.filter(s => s.week === T.week && !s.void);
+  if (T.week >= 6 && wk.length >= 1) {
+    const wait = last ? 2 - daysBetween(last.date, T0) : 0;
+    return { kind: 'test', wait };
+  }
+  const day = T.week >= 6 || !wk.length ? 'A' : wk[wk.length - 1].day === 'A' ? 'B' : 'A';
+  const wait = last ? 2 - daysBetween(last.date, T0) : 0;
+  return { kind: 'session', day, wait };
+}
+function tallerWaitText(wait) {
+  const d = addDays(todayISO(), wait), dn = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'][parseISO(d).getDay()];
+  return wait === 1 ? 'mañana' : `el ${dn}`;
+}
+
+function renderTaller() {
+  const T = state.taller, back = '<div class="flex items-center gap-2 mb-2.5"><button class="back-btn" data-act="trainHome" type="button">‹ Bloques</button></div>';
+  const hero = `<div class="bh bh-sm" style="--bh:${TALLER_LOOK.c};min-height:110px"><img class="bh-img" src="blk-taller.webp" alt="" /><div class="bh-body"><span class="bh-tag">Taller · 6 semanas</span><span class="bh-name">🎯 TALLER DE DOMINADAS</span>${T?.level !== undefined && !T?.final ? `<span class="bh-sub">${TALLER_LEVEL_NAME[T.level]} · semana ${Math.min(T.week, 6)} de 6 · ${TALLER_PHASE(T.week)}</span>` : '<span class="bh-sub">Más dominadas en 6 semanas, a tu nivel</span>'}</div></div>`;
+  if (!T || T.level === undefined) return back + hero + tallerIntroHTML();
+  const N = tallerNow(T);
+  if (N.kind === 'done') return back + hero + tallerResultHTML(T);
+  const prog = `<div class="tl-weeks">${[1, 2, 3, 4, 5, 6].map(w => `<span class="${w < T.week ? 'ok' : w === T.week ? 'on' : ''}">${w}</span>`).join('')}</div>`;
+  const notes = [T.soft ? '<p class="tl-note">🩹 Hoy toca algo más suave porque algo te molestó la última vez. Si vuelve a molestarte, para y consúltalo con un profesional.</p>' : '',
+    T.repeat ? '<p class="tl-note">🔁 Repites esta semana: la anterior quedó por debajo de lo previsto o te resultó muy dura. Es normal y forma parte del plan.</p>' : '',
+    T.ahead ? '<p class="tl-note">⚡ Te ha resultado fácil dos veces seguidas: adelantamos una semana.</p>' : '',
+    (() => { const from = addDays(todayISO(), -1), s = state.sessions.filter(x => x.date >= from).find(x => x.exercises.some(ex => { const m = musclesOf(ex.name), t = Object.entries(m).sort((a, b) => b[1] - a[1])[0]; return t && t[0] === 'upper-back' && ex.sets.length >= 2; }));
+      return s ? `<p class="tl-note">⚠️ Entrenaste espalda ${s.date === todayISO() ? 'hoy' : 'ayer'} (${esc(s.dayTitle || 'otro bloque')}). Si puedes, deja el taller para dentro de 48 horas: rendirás más.</p>` : ''; })()].join('');
+  if (N.kind === 'test') {
+    return back + hero + `<section class="card p-4 mt-3">${prog}<h3 class="font-extrabold text-lg mt-3">🎯 Test final</h3>
+      ${N.wait > 0 ? `<p class="text-sm text-mute mt-2">Descansa 48 horas desde la última sesión: el test final estará disponible <b class="text-white">${tallerWaitText(N.wait)}</b>.</p>` : `${tallerTestRulesHTML(T)}
+      <label class="lbl mt-3 block">¿Cuántas dominadas limpias seguidas?<input class="field mt-1 text-center text-2xl font-black" id="tlFinal" inputmode="numeric" placeholder="Ej: 7" /></label>
+      <label class="lbl mt-3 block">Tu peso hoy (kg)<input class="field mt-1 text-center" id="tlFinalW" inputmode="decimal" value="${latestWeight() ?? ''}" /></label>
+      <button class="btn-primary w-full mt-3" data-act="tallerFinal" type="button">Guardar test final</button>`}</section>`;
+  }
+  const items = tallerPlan(T, T.week, N.day), dr = T.draft && T.draft.week === T.week && T.draft.day === N.day ? T.draft : null;
+  const rows = items.map((it, i) => `<div class="tl-ex">
+      <div class="min-w-0 flex-1"><b>${esc(it.name)}</b><small>${esc(it.how)}</small>
+        <span class="tl-tg">${it.emom ? `${it.emom} min · ${it.per} en total` : `${it.sets} × ${it.per}${it.unit === 's' ? ' s' : ''}`}</span>
+        <span class="flex gap-1.5 mt-2">${gym3dOf(it.name) ? `<button class="btn-3d" data-act="gym3d" data-n="${esc(it.name)}" type="button" aria-label="Ver el movimiento en 3D">🧍 3D</button>` : ''}<a class="btn-video" href="${esc(videoUrl({ name: it.name.replace(/ \(.*\)$/, '').replace(/^Barco$/, 'hollow body') }))}" target="_blank" rel="noopener noreferrer">▶ Técnica 🔎</a></span></div>
+      <label class="tl-in"><input class="field text-center font-black" data-tl="${i}" inputmode="numeric" placeholder="${tallerGoal(it)}" value="${esc(dr?.got?.[i] ?? '')}" ${N.wait > 0 ? 'disabled' : ''}/><span>${it.unit === 's' ? 'series hechas' : 'reps hechas'}</span></label>
+    </div>`).join('');
+  return back + hero + `<section class="card p-4 mt-3">${prog}${notes}
+    <div class="flex items-baseline justify-between mt-3"><h3 class="font-extrabold text-lg">Día ${N.day}${T.week >= 6 ? ' · suave' : N.day === 'A' ? ' · fuerza' : ' · volumen'}</h3><span class="text-[11px] text-mute">Semana ${T.week} · ${TALLER_PHASE(T.week)}</span></div>
+    ${N.wait > 0 ? `<p class="tl-note">⏳ Entre un día y otro hacen falta 48 horas. Tu siguiente sesión estará lista <b>${tallerWaitText(N.wait)}</b>.</p>` : ''}
+    <details class="tl-warm mt-3"><summary>🔥 Calentamiento (5 min)</summary><ol><li>Colgarte de la barra: 2 × 20 s</li><li>Encogimientos de escápula colgado: 2 × 6</li><li>Una serie fácil del primer ejercicio</li></ol></details>
+    <div class="space-y-2 mt-3">${rows}</div>
+    <p class="text-[11px] text-mute mt-2">Nunca al fallo: deja 1–2 repeticiones en reserva. Cuenta solo las limpias. Si una serie de tiempo no la completas, no la cuentes.</p>
+    ${N.wait > 0 ? '' : `<button class="btn-primary w-full mt-3" data-act="tallerDone" data-day="${N.day}" type="button">Terminar sesión</button>`}
+  </section>
+  <button class="text-[11px] text-mute underline mx-auto block mt-3" data-act="tallerMenu" type="button">Opciones del taller</button>`;
+}
+function tallerTestRulesHTML(T) {
+  return `<ul class="tl-rules">
+    <li>Hazlo al empezar la sesión, después del calentamiento, y sin haber entrenado espalda en las últimas 48 horas.</li>
+    <li>Agarre: <b>${esc(TALLER_GRIPS[T?.grip] || 'el que elijas')}</b>, a la anchura de los hombros. Siempre el mismo.</li>
+    <li>Cuenta si sales colgado con los brazos estirados y la barbilla pasa por encima de la barra, sin balanceo ni patada.</li>
+    <li>Una sola serie, hasta que no puedas hacer una repetición limpia más.</li></ul>`;
+}
+function tallerIntroHTML() {
+  const d = ui.tlIntro || (ui.tlIntro = { grip: 'prono', row: 'trx' });
+  const pick = (k, opts) => `<div class="grid grid-cols-3 gap-1.5">${Object.entries(opts).map(([v, t]) => `<button class="chip ${d[k] === v ? 'chip-on' : ''} justify-center !px-1.5 !py-2 text-[12px] font-bold text-center leading-tight" data-act="tlPick" data-k="${k}" data-v="${v}" type="button">${t}</button>`).join('')}</div>`;
+  return `<section class="card p-4 mt-3 space-y-3">
+    <p class="text-sm text-slate-300 leading-relaxed">6 semanas para hacer más dominadas: <b>2 días por semana</b> (A y B, con 48 horas entre ellos), con un <b>test al principio y otro al final</b>. El plan se adapta a tu nivel y a cómo te va cada sesión.</p>
+    <p class="text-[12px] text-mute leading-relaxed">Lo normal es ganar unas 2–4 dominadas en 6 semanas. Necesitas una barra fija.</p>
+    <div><div class="lbl mb-1.5">Agarre (será el mismo todo el taller)</div>${pick('grip', { prono: 'Palmas al frente', supino: 'Palmas hacia ti', neutro: 'Palmas enfrentadas' })}</div>
+    <div><div class="lbl mb-1.5">Para el remo invertido tienes…</div>${pick('row', { trx: 'TRX o anillas', mesa: 'Una mesa robusta', none: 'Nada' })}
+      ${d.row === 'none' ? '<p class="text-[11px] text-mute mt-1">Sin material, el remo se cambia por encogimientos de escápula colgado en la barra.</p>' : ''}</div>
+    <div class="tl-test"><h3 class="font-extrabold">🎯 Test inicial</h3>${tallerTestRulesHTML(d)}
+      <label class="lbl mt-2 block">¿Cuántas dominadas limpias seguidas?<input class="field mt-1 text-center text-2xl font-black" id="tlTest" inputmode="numeric" placeholder="Ej: 4 (pon 0 si aún no te sale ninguna)" /></label>
+      <label class="lbl mt-2 block">Tu peso hoy (kg)<input class="field mt-1 text-center" id="tlW" inputmode="decimal" value="${latestWeight() ?? ''}" /></label></div>
+    <button class="btn-primary w-full" data-act="tallerStart" type="button">Empezar el taller</button>
+  </section>`;
+}
+function tallerResultHTML(T) {
+  const a = T.test0, b = T.final, dr = b.reps - a.reps, dw = a.weight && b.weight ? b.weight - a.weight : null;
+  return `<section class="card p-4 mt-3 text-center">
+    <div class="text-4xl">🏁</div><h3 class="font-extrabold text-xl mt-1">¡Taller terminado!</h3>
+    <div class="grid grid-cols-2 gap-2 mt-4">
+      <div class="tl-res"><small>Al empezar</small><b>${a.reps}</b><span>dominadas${a.weight ? ` · ${fmtKg(a.weight)} kg` : ''}</span></div>
+      <div class="tl-res on"><small>Ahora</small><b>${b.reps}</b><span>dominadas${b.weight ? ` · ${fmtKg(b.weight)} kg` : ''}</span></div>
+    </div>
+    <p class="text-sm text-slate-300 mt-3">${dr > 0 ? `<b class="text-emerald-300">+${dr} ${dr === 1 ? 'dominada' : 'dominadas'}</b> en ${(n => `${n} ${n === 1 ? 'semana' : 'semanas'}`)(Math.max(1, Math.round(daysBetween(a.date, b.date) / 7)))}.` : dr === 0 ? 'Mismas dominadas que al empezar.' : `${-dr} ${dr === -1 ? 'dominada' : 'dominadas'} menos que al empezar.`}
+      ${dw !== null && Math.abs(dw) >= .5 ? ` Y lo has hecho ${dw > 0 ? `pesando ${fmtKg(dw)} kg más` : `pesando ${fmtKg(-dw)} kg menos`}.` : ''}</p>
+    ${dr <= 0 ? '<p class="text-[12px] text-mute mt-2">A veces el progreso tarda más en notarse en el test que en las sesiones. Un segundo taller suele sacarlo a la luz.</p>' : ''}
+    <button class="btn-primary w-full mt-4" data-act="tallerAgain" type="button">Empezar otro taller</button>
+  </section>`;
+}
+function tallerFeelModal(day, got, items) {
+  let feel = '', pain = false;
+  const pct = Math.round(items.reduce((a, it, i) => a + Math.min(got[i] || 0, tallerGoal(it)) / tallerGoal(it), 0) / items.length * 100);
+  const html = () => `<h3 class="modal-title">¿Cómo ha ido?</h3>
+    <p class="text-xs text-mute -mt-1">Has hecho el ${pct} % de lo previsto. Con tu respuesta ajusto la siguiente sesión.</p>
+    <div class="grid grid-cols-3 gap-2">${[['easy', '😌', 'Fácil'], ['ok', '💪', 'Justo'], ['hard', '😵', 'Muy duro']].map(([k, e, t]) => `<button class="tl-feel ${feel === k ? 'on' : ''}" data-mact="f" data-v="${k}" type="button"><span>${e}</span>${t}</button>`).join('')}</div>
+    <button class="chip ${pain ? 'chip-on' : ''} w-full justify-center !py-2.5" data-mact="pain" type="button">🩹 Me ha molestado algo</button>
+    <button class="btn-primary w-full" data-mact="save" type="button" ${feel ? '' : 'disabled'}>Guardar sesión</button>`;
+  const acts = {
+    f: (r, b) => { feel = b.dataset.v; openModal(html(), acts); },
+    pain: () => { pain = !pain; openModal(html(), acts); },
+    save: () => { closeModal(); tallerSave(day, got, items, pct, feel, pain); }
+  };
+  openModal(html(), acts);
+}
+function tallerSave(day, got, items, pct, feel, pain) {
+  const T = state.taller;
+  T.log = T.log || [];
+  T.log.push({ date: todayISO(), at: Date.now(), week: T.week, day, got, pct, feel, pain, sets: items.reduce((a, it, i) => a + (it.unit === 's' ? Math.min(got[i] || 0, it.sets) : it.emom ? Math.round(it.emom / 2 * Math.min(1, (got[i] || 0) / it.per)) : Math.min(it.sets, Math.ceil((got[i] || 0) / Math.max(1, it.per)))), 0) });
+  T.draft = null; T.ahead = false;
+  const prevPain = T.soft; T.soft = !!pain;
+  const wk = T.log.filter(s => s.week === T.week && !s.void);
+  if (T.week >= 6) { /* sesión suave hecha: toca el test final */ }
+  else if (wk.length >= 2) { // semana completa (A y B)
+    const bad = wk.some(s => s.pct < 80 || s.feel === 'hard');
+    const easy2 = T.log.length >= 2 && T.log.slice(-2).every(s => s.feel === 'easy');
+    if (bad) { T.log.forEach(s => { if (s.week === T.week) s.void = true; }); T.repeat = true; }
+    else { T.repeat = false; T.week += easy2 && T.week <= 3 ? 2 : 1; T.ahead = easy2 && T.week <= 5; if (T.week > 6) T.week = 6; }
+  }
+  persist(); render(); window.scrollTo({ top: 0 });
+  toast(pain && prevPain ? '🩹 Te ha molestado dos veces seguidas: para unos días y, si sigue, consúltalo con un profesional.' : 'Sesión guardada ✓', pain && prevPain ? 'warn' : 'ok');
+}
+function tallerMenuModal() {
+  const T = state.taller;
+  openModal(`<h3 class="modal-title">🎯 Taller de dominadas</h3>
+    <p class="text-xs text-mute -mt-1">${TALLER_LEVEL_NAME[T.level]} · agarre ${esc(TALLER_GRIPS[T.grip])} · remo con ${esc(TALLER_ROW[T.row])} · test inicial: ${T.test0.reps} dominadas</p>
+    <div class="grid gap-2">
+      ${T.level === 0 ? '<button class="btn-ghost" data-mact="up" type="button">⬆️ Ya hago 3 dominadas seguidas: pasar al nivel 1</button>' : ''}
+      <button class="btn-ghost" data-mact="row" type="button">🔁 Cambiar el material del remo</button>
+      <button class="btn-danger" data-mact="reset" type="button">Abandonar y empezar de cero</button>
+    </div>`, {
+    up: () => openModal(`<h3 class="modal-title">⬆️ Pasar al nivel 1</h3><p class="text-xs text-mute -mt-1">Hazlo con las mismas reglas del test: brazos estirados abajo, barbilla sobre la barra y sin balanceo.</p>
+      <label class="lbl">¿Cuántas dominadas limpias seguidas haces ahora?<input class="field mt-1 text-center text-2xl font-black" name="v" inputmode="numeric" /></label>
+      <button class="btn-primary w-full" data-mact="ok" type="button">Comprobar</button>`, { ok: r => { const v = parseInt(r.querySelector('[name=v]').value, 10); if (v >= 3) { T.level = 1; T.test0 = { ...T.test0, reps: v }; persist(); closeModal(); render(); toast('¡Nivel 1! 💪'); } else toast('Aún no: necesitas al menos 3 seguidas', 'warn'); } }),
+    row: () => { const o = Object.keys(TALLER_ROW), i = o.indexOf(T.row); T.row = o[(i + 1) % o.length]; persist(); closeModal(); render(); toast(`Remo con ${TALLER_ROW[T.row]}`); },
+    reset: (r, b) => { if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Pulsa otra vez para borrar el progreso del taller'; return; } state.taller = null; persist(); closeModal(); render(); }
+  });
+}
+const tallerActions = {
+  tlPick: b => { ui.tlIntro = { ...(ui.tlIntro || {}), [b.dataset.k]: b.dataset.v }; render(); },
+  tallerStart: () => {
+    const v = parseInt($('#tlTest')?.value, 10), w = parseFloat(String($('#tlW')?.value || '').replace(',', '.'));
+    if (!(v >= 0)) return toast('Escribe cuántas dominadas haces (0 si ninguna)', 'warn');
+    const d = ui.tlIntro || { grip: 'prono', row: 'trx' };
+    state.taller = { start: todayISO(), grip: d.grip, row: d.row, level: tallerLevelOf(v), week: 1, test0: { date: todayISO(), reps: v, weight: w > 0 ? w : null }, log: [] };
+    persist(); render(); window.scrollTo({ top: 0 }); toast(`${TALLER_LEVEL_NAME[state.taller.level]} · ¡a por ello!`);
+  },
+  tallerDone: b => {
+    const T = state.taller, day = b.dataset.day, items = tallerPlan(T, T.week, day);
+    const got = items.map((_, i) => { const x = parseInt($(`[data-tl="${i}"]`)?.value, 10); return x >= 0 ? x : 0; });
+    if (got.every(x => !x)) return toast('Apunta lo que has hecho en cada ejercicio', 'warn');
+    tallerFeelModal(day, got, items);
+  },
+  tallerFinal: () => {
+    const v = parseInt($('#tlFinal')?.value, 10), w = parseFloat(String($('#tlFinalW')?.value || '').replace(',', '.'));
+    if (!(v >= 0)) return toast('Escribe cuántas dominadas has hecho', 'warn');
+    state.taller.final = { date: todayISO(), reps: v, weight: w > 0 ? w : null }; persist(); render(); window.scrollTo({ top: 0 });
+  },
+  tallerAgain: () => { const T = state.taller; state.tallerPast = [...(state.tallerPast || []), { start: T.start, test0: T.test0, final: T.final, level: T.level }]; ui.tlIntro = { grip: T.grip, row: T.row }; state.taller = null; persist(); render(); window.scrollTo({ top: 0 }); },
+  tallerMenu: () => tallerMenuModal()
+};
+/* Lo que vas escribiendo se guarda (si sales y vuelves, sigue ahí) */
+document.addEventListener('input', e => {
+  const i = e.target.dataset?.tl; if (i === undefined || !state.taller) return;
+  const T = state.taller, N = tallerNow(T); if (N.kind !== 'session') return;
+  if (!T.draft || T.draft.week !== T.week || T.draft.day !== N.day) T.draft = { week: T.week, day: N.day, got: [] };
+  T.draft.got[+i] = e.target.value; persist();
+});
+
 function renderRetos() {
   if (ui.retoId && RETOS[ui.retoId]) return renderRetoDetail(ui.retoId);
   const cards = RETO_IDS.map(id => {
@@ -5038,6 +5275,7 @@ function reportData(months) {
   const ses = sortedSessions().filter(s => inR(s.date));
   const trainDays = new Set(ses.map(s => s.date));
   for (const r of Object.values(state.retos || {})) for (const h of [...(r.history || []), ...(r.tests || [])]) if (inR(h.date)) trainDays.add(h.date);
+  for (const h of state.taller?.log || []) if (inR(h.date)) trainDays.add(h.date);
   // fuerza: los ejercicios con más sesiones en el periodo (mejor 1RM de cada sesión)
   const exMap = new Map();
   for (const s of ses) for (const e of s.exercises) {
@@ -5287,7 +5525,7 @@ function printReport(months, light) {
 /* Quien ha entrenado en 2 semanas ve primero el mapa muscular (cambia cada día); quien no (solo dieta o en pausa), primero «Tu evolución» */
 function trainedRecently() {
   const from = addDays(todayISO(), -14);
-  return state.sessions.some(s => s.date >= from) || Object.values(state.retos || {}).some(r => [...(r.history || []), ...(r.tests || [])].some(h => h.date >= from));
+  return state.sessions.some(s => s.date >= from) || (state.taller?.log || []).some(h => h.date >= from) || Object.values(state.retos || {}).some(r => [...(r.history || []), ...(r.tests || [])].some(h => h.date >= from));
 }
 /* 📈 Tu evolución: las cifras clave del informe, siempre a la vista en Progreso */
 function evoCardHTML() {
@@ -7093,6 +7331,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.13.0', ['🎯 Nuevo en Entreno: TALLER DE DOMINADAS. 6 semanas para hacer más dominadas, a tu nivel: un test al empezar, 2 días por semana y un test final para ver cuánto has mejorado. El plan se ajusta solo según cómo te vaya cada sesión. Mientras lo haces, tus otros bloques bajan un poco el trabajo de espalda para que llegues fresco. Cada ejercicio trae su animación 3D y su vídeo de técnica.']],
   ['5.12.2', ['🤖 Cuando la IA principal de Google está ocupada y responde la de reserva, el aviso es más tranquilo y explica que la principal volverá sola.'], 'quiet'],
   ['5.12.1', ['📈 «Tu evolución» con un aspecto más sobrio: fichas neutras, cifras en blanco y el color solo como un punto junto a cada dato.'], 'quiet'],
   ['5.12.0', ['📈 Progreso: nueva tarjeta «Tu evolución» con tu peso, cintura, fuerza, entrenos, proteína y pasos del último mes, 3 meses, 6 meses o de todo tu historial. Si entrenas, sale debajo del mapa muscular; si no, arriba del todo.', '🔥 Mapa muscular más compacto: el detalle por músculo va plegado (tócalo para verlo).', '📄 Nuevo: «Informe de progreso», al final de Progreso. Un PDF de 4 páginas con tu evolución (peso, cintura, fuerza, récords, constancia, dieta y pasos), en versión digital (oscura) o para imprimir (clara). Guárdalo en Drive, compártelo o descárgalo en un toque.']],
@@ -7429,6 +7668,13 @@ const GUIDE = [
     '💬 <b>Comenta al Coach</b> (bajo las series): marca 😣 Molestia, 🥵 Muy duro, 😌 Fácil o ⏱ Poco tiempo y escribe o dicta con 🎤 lo que notes. Lo verá el Coach IA y te lo recordaré la próxima vez; con 😣 o 🥵 no te subo peso.',
     '⏱ Bajo el título del día ves la <b>duración estimada</b>; la <b>real</b> se mide desde tu primera serie ✓ hasta «Guardar sesión» (las pausas de más de 20 min no cuentan).',
     'Al final, «Guardar sesión»: resumen, volumen, récords personales y 📸 <b>Tarjeta</b> para compartir, con la foto del bloque. La de un entreno pasado la recuperas en Progreso → Historial o en el calendario (Dieta → toca la fecha → toca el día → «📸 Ver tarjeta»). 🗑️ «Abandonar» borra lo apuntado hoy, con confirmación.'
+  ]],
+  ['🎯 Taller de dominadas', [
+    'Un programa de <b>6 semanas</b> para hacer más dominadas. Empieza con un <b>test</b> (tus dominadas limpias seguidas) que decide tu nivel: 0 (aún no te sale ninguna), 1, 2 o 3 (con lastre).',
+    'Son <b>2 días por semana</b>, A (fuerza) y B (volumen), con 48 horas entre ellos. Eliges tu agarre (se mantiene todo el taller) y con qué haces el remo invertido: TRX, una mesa o nada.',
+    'Al terminar cada sesión apuntas lo que has hecho y dices cómo te ha ido. Si te quedas por debajo del 80 % o fue muy duro, repites la semana; si te resulta fácil dos veces seguidas, adelanta; si te molesta algo, la siguiente es más suave.',
+    'La semana 6 es de descarga y <b>test final</b>: verás tus dominadas de antes y de ahora, con tu peso al lado.',
+    '<b>Foco:</b> mientras el taller está en marcha, en tus otros bloques los ejercicios de espalda (remo, jalón, dominadas) llevan un 30 % menos de series y el Coach te pide mantener el peso. Si ese día ya hiciste el taller, te sugiere saltarlos; y si entrenaste espalda hace menos de 48 horas, el taller te avisa.'
   ]],
   ['🏆 Retos', [
     'En Entreno → <b>🏆 RETOS</b>: dominadas, flexiones, fondos, sentadillas, burpees, plancha y rueda abdominal. Al empezar haces un test (todas las que puedas seguidas) y la app te coloca en un nivel (≈70 % de tu máximo).',
@@ -7920,7 +8166,7 @@ const GYM3D_MAP = [
   [/press cerrado/i, 'benchc'], [/peso muerto (rumano )?a una pierna/i, 'sldl'], [/hip thrust a una pierna/i, 'hipth1'], [/zancadas?.*kettlebell/i, 'lungekb'],
   [/burpee/i, 'burpee'], [/hollow/i, 'hollow'], [/crunch/i, 'crunch'], [/plancha lateral/i, 'sk'], [/plancha/i, 'plank'],
   [/mountain|escalador/i, 'mc'], [/jumping|tijera/i, 'jj'],
-  [/renegad/i, 'reneg'], [/remo invertido/i, 'invrow'], [/dominada/i, 'pull'], [/fondos en paralelas/i, 'dips'], [/fondos/i, 'dp'],
+  [/renegad/i, 'reneg'], [/remo invertido/i, 'invrow'], [/colgado activo|dead hang/i, 'hang'], [/encogimientos? de esc[aá]pula|tirones? de esc[aá]pula|scap(ular)? pull/i, 'scap'], [/aguantar arriba|isom[eé]trico arriba/i, 'tophold'], [/bajadas? lentas?|dominadas? negativas?/i, 'negpull'], [/dominada/i, 'pull'], [/fondos en paralelas/i, 'dips'], [/fondos/i, 'dp'],
   [/press franc[eé]s/i, 'skull'], [/extensi[oó]n.*cabeza/i, 'ohext'],
  [/elevaci(o|ó)n(es)? lateral/i, 'lat'], [/gemelo|talones/i, 'calfdb'],
   [/swing/i, 'swing'], [/(press|push press).*kettlebell/i, 'kbpress'],
@@ -7972,6 +8218,10 @@ const GYM3D_CUES = {
   invrow: ['Cuerpo recto de talones a cabeza; los talones no se mueven', 'Lleva el pecho a la barra con los codos pegados al cuerpo', 'Baja hasta estirar los brazos del todo'],
   reneg: ['Plancha sobre las mancuernas con agarre neutro (palmas enfrentadas) y pies separados', 'Rema con una mano y luego con la otra: el codo va hacia la cadera', 'La cadera no gira ni se mueve mientras remas'],
   pull: ['Empieza colgado con los brazos estirados', 'Pecho a la barra, codos hacia los bolsillos', 'Baja despacio, sin dejarte caer'],
+  hang: ['Agarre firme, brazos totalmente estirados', 'Baja los hombros, lejos de las orejas', 'Cuerpo quieto, sin balancearte'],
+  scap: ['Brazos estirados todo el rato: los codos no se doblan', 'Sube el cuerpo unos centímetros bajando los hombros', 'Movimiento corto y controlado; vuelve a soltar despacio'],
+  tophold: ['Sube con un salto o un apoyo hasta tener la barbilla sobre la barra', 'Aguanta ahí con el pecho cerca de la barra', 'Hombros abajo y abdomen firme, sin balancearte'],
+  negpull: ['Sube con un salto o un apoyo hasta arriba', 'Baja muy despacio, contando 5 segundos', 'Llega abajo con los brazos estirados del todo'],
   dips: ['Hombros lejos de las orejas', 'Baja hasta que los codos formen unos 90°', 'Tronco un poco inclinado hacia delante'],
   dp: ['Silla firme y manos en el borde', 'Codos hacia atrás, no abiertos', 'Baja hasta unos 90° y sube sin bloquear de golpe'],
   skull: ['Brazos verticales y codos quietos', 'Solo se mueve el antebrazo', 'Baja controlado hacia la frente'],
@@ -8016,7 +8266,7 @@ const can3D = () => true;
 const seen3D = () => !!lsGet('fitnesteban_3dseen'); // hasta que abres tu primera animación, los botones 3D brillan // 🧍 animaciones 3D de los ejercicios: abiertas a todos desde la 4.96.0
 const GYM3D_GAL = [
   ["Pecho", ["Press de banca con barra", "Press inclinado con mancuernas", "Aperturas en banco inclinado", "Aperturas con mancuernas", "Flexiones", "Flexiones con rodillas", "Fondos en paralelas"]],
-  ["Espalda", ["Dominadas", "Remo con barra", "Remo a una mano con mancuerna", "Remo con mancuernas en banco inclinado", "Remo gorilla", "Remo renegado", "Remo invertido", "Remo invertido en TRX", "Remo con toalla", "Face pull en TRX"]],
+  ["Espalda", ["Dominadas", "Remo con barra", "Remo a una mano con mancuerna", "Remo con mancuernas en banco inclinado", "Remo gorilla", "Remo renegado", "Remo invertido", "Remo invertido en TRX", "Remo con toalla", "Face pull en TRX", "Colgado activo", "Encogimientos de escápula colgado", "Aguantar arriba", "Bajadas lentas"]],
   ["Hombros", ["Press militar con barra", "Press con kettlebell", "Elevaciones laterales", "Pájaros con mancuernas"]],
   ["Brazos", ["Curl de bíceps con mancuernas", "Curl martillo", "Curl inclinado", "Curl concentrado", "Curl en polea", "Curl martillo en polea con cuerda", "Curl predicador", "Curl Zottman", "Curl 21 con barra Z", "Press cerrado con barra", "Press francés", "Extensión de tríceps sobre la cabeza", "Extensión de tríceps en polea", "Fondos en banco"]],
   ["Pierna y glúteo", ["Sentadilla", "Sentadilla con barra", "Sentadilla goblet", "Sentadilla sumo", "Sentadilla búlgara", "Zancadas", "Zancadas con kettlebell", "Step-up con mancuernas", "Prensa de piernas", "Extensión de cuádriceps", "Curl femoral sentado", "Curl femoral tumbado", "Peso muerto", "Peso muerto rumano", "Peso muerto a una pierna", "Buenos días", "Hip thrust con barra", "Hip thrust a una pierna", "Puente de glúteo", "Puente de glúteo a una pierna", "Elevación de gemelos"]],
@@ -8507,6 +8757,7 @@ document.addEventListener('touchend', mmSwipeEnd, { passive: true });
 document.addEventListener('touchcancel', mmSwipeEnd, { passive: true });
 
 const actions = {
+  ...tallerActions,
   pickDay: b => { ui.dayId = b.dataset.day; render(); window.scrollTo({ top: 0 }); },
   pickProg: b => { state.plan.active = b.dataset.prog; ui.dayId = nextDayId(); persist(); render(); window.scrollTo({ top: 0 }); },
   addProg: () => libraryModal(),
@@ -8694,7 +8945,7 @@ const actions = {
   goToday: b => { state.plan.active = b.dataset.prog; ui.dayId = b.dataset.day; ui.retoId = null; ui.trainHome = false; persist(); render(); window.scrollTo({ top: 0 }); },
   openBlock: b => openBlock(b.dataset.key),
   blockMenu: b => blockMenu(b.dataset.key),
-  trainHome: () => { ui.trainHome = true; ui.retoId = null; render(); window.scrollTo({ top: 0 }); },
+  trainHome: () => { ui.trainHome = true; ui.retoId = null; ui.taller = false; render(); window.scrollTo({ top: 0 }); },
   toggleHidden: () => { ui.showHidden = !ui.showHidden; render(); },
   newBlock: () => editProgModal(null),
   retoOpen: b => { ui.retoId = b.dataset.reto; render(); window.scrollTo({ top: 0 }); },
