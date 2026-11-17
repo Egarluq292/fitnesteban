@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.15.4';
+const APP_VERSION = '5.15.5';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4367,7 +4367,8 @@ const QC_RULES = `REGLAS (obligatorias):
 - Ajusta a lo que corresponde a ESTA comida, no a todo lo que queda del día. Mejor quedarse algo corto que pasarse.
 - Si con lo que hay no se llega a la proteína sin forzar, no fuerces: dilo en "nota" y sugiere qué comprar.
 - Nunca cuadres las calorías a base de grasa: como mucho 1 cucharada de aceite (10 g) por plato, y la grasa no pasa del 40 % de las kcal del plato. Si sobran calorías, mejor quedarse corto.
-- "nota" y "pasos": frases completas y cortas.`;
+- Tono SIEMPRE cercano, como un amigo que sabe de cocina: háblale de tú, en español de España sencillo y de andar por casa. Nada de lenguaje técnico ni de informe («objetivo energético», «perfil de macronutrientes», «aporte», «se han ajustado»).
+- "nota" y "pasos": frases completas y cortas. En "nota" pon algo útil para la persona (un consejo, un aviso); si no tienes nada útil que decir, déjala vacía.`;
 const QC_STYLES = { var: ['🎲', 'Variado'], cuchara: ['🍲', 'Cuchara'], arroz: ['🥘', 'Arroces'], pasta: ['🍝', 'Pasta'], carne: ['🥩', 'Carne'], pescado: ['🐟', 'Pescado'], ligero: ['🥗', 'Ligero'], taper: ['🥡', 'Táper'] };
 const qcStyleOn = (tp, B) => (tp === 'Comida' || tp === 'Cena') && !B.protOnly;
 function qcStyleTxt(tp, sty, fast) {
@@ -7371,7 +7372,7 @@ async function fetchRecipe(ml, wish = '', chatMsgs = []) {
 Reglas:
 - No añadas ningún ingrediente con calorías (ni aceite, ni mantequilla, ni salsas, ni azúcar, ni pan) que no esté en la lista. Si el plato necesita grasa para cocinar y no hay aceite en la lista, usa sartén antiadherente, horno, airfryer, plancha o un toque de spray.
 - Sí puedes usar sal, pimienta, especias, hierbas, ajo, limón, vinagre, mostaza y agua (cantidades orientativas: "1 pizca", "1 diente"…).
-- Pasos cortos, claros y en orden (máximo 8), en español de España, tuteando. Indica temperaturas y tiempos concretos.${ml.taper ? `\n- Es para llevar en táper: el último paso es cómo guardarlo (dejar de humear, a la nevera antes de 2 horas, cuántos días aguanta) y cómo recalentarlo o si se come frío; lo que deba ir aparte (aliño, salsa), dilo. Referencia: ${ml.taper.slice(0, 200)}` : ''}${algPrompt() ? `\n- La persona tiene alergias o intolerancias: ningún condimento ni paso puede llevarlas. Si algún ingrediente de la lista podría contenerlas (p. ej. pan, embutido, salsa), avísalo en "consejo".${algPrompt()}` : ''}
+- Pasos cortos, claros y en orden (máximo 8), en español de España, tuteando y con tono cercano, como un amigo que te enseña a cocinar; nada de lenguaje técnico. El "consejo", igual de cercano. Indica temperaturas y tiempos concretos.${ml.taper ? `\n- Es para llevar en táper: el último paso es cómo guardarlo (dejar de humear, a la nevera antes de 2 horas, cuántos días aguanta) y cómo recalentarlo o si se come frío; lo que deba ir aparte (aliño, salsa), dilo. Referencia: ${ml.taper.slice(0, 200)}` : ''}${algPrompt() ? `\n- La persona tiene alergias o intolerancias: ningún condimento ni paso puede llevarlas. Si algún ingrediente de la lista podría contenerlas (p. ej. pan, embutido, salsa), avísalo en "consejo".${algPrompt()}` : ''}
 ${said ? `- Lo que el usuario ha dicho en la conversación (respeta sus preferencias de cocinado, utensilios y gustos): ${said}\n` : ''}${wish ? `- PETICIÓN PARA ESTA RECETA (manda sobre todo lo demás, salvo las cantidades): ${wish.slice(0, 200)}\n` : ''}
 Devuelve SOLO este JSON: {"titulo":"…","tiempo_min":n,"dificultad":"Fácil|Media","utensilios":["…"],"condimentos":["…"],"pasos":[{"texto":"…","min":n o null}],"consejo":"una frase"}`;
   const r = parseJSONLoose(await callGemini([{ text: prompt }], { timeout: 45000, temperature: 0.4 }));
@@ -7447,6 +7448,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.15.5', ['🍽️ «¿Qué como?» y las recetas te hablan con un tono más cercano, sin lenguaje técnico; la nota de arriba solo sale si aporta algo.'], 'quiet'],
   ['5.15.4', ['🍽️ «¿Qué como?» más coherente: el reparto de kcal y macros siempre cuadra; si ya tienes la proteína del día, propone una ración normal (no platos de aceite); cada idea, de la IA o sin IA, se revisa antes de enseñarla (aceite como mucho 10 g, cantidades ajustadas a lo que te toca, fuera lo que no cuadra) y las notas ya no se cortan.'], 'quiet'],
   ['5.15.3', ['🥡 «¿Qué como?» · Táper: ideas que llegan bien al trabajo (al menos una se come fría), sin fritos ni rebozados, y cada una con «Para el táper»: días en la nevera, si se congela, cómo recalentarlo y qué llevar aparte.'], 'quiet'],
   ['5.15.2', ['📈 «Tu progreso», Fuerza por ejercicio y Récords encuentran tu historial por el nombre del ejercicio, igual que el Coach: ya no dicen «aún no hay sesiones» de un ejercicio que sí has hecho en otro bloque o en otro día.'], 'quiet'],
