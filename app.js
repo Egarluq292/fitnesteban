@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.15.7';
+const APP_VERSION = '5.15.8';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4196,6 +4196,16 @@ const QC_BASICS = [
   { desc: 'Yogur con avena y frutos rojos', u: '1 yogur y 30 g de avena', g: 230, kcal: 260, prot: 16, carbs: 34, fat: 6, ing: ['1 yogur proteico', '30 g de copos de avena', 'Un puñado de frutos rojos'], r: 'b' }
 ];
 // Un plato = ingredientes con gramos y valores por 100 g: así al apuntarlo puedes ajustar la cantidad de cada uno
+/* ✔️ Valores por 100 g que devuelve la IA, siempre posibles: macros entre 0 y 100 g (y que no sumen más de 100 g),
+   y kcal coherentes con sus macros (4/4/9); si la IA da unas kcal que no cuadran, mandan los macros. Máximo, 900 kcal (aceite puro) */
+const ALCO_RE = /cerveza|ca[ñn]a\b|vino|tinto|rosado|blanco de|cava|champ[aá]n|sidra|vermut|verm[uú]|cubata|copa\b|chupito|licor|ron\b|ginebra|gin\b|gin-?tonic|whisk|vodka|tequila|brandy|co[ñn]ac|an[ií]s|pachar[aá]n|orujo|sangr[ií]a|mojito|tinto de verano|calimocho|alcohol/i;
+function fixPer100(p, name = '') { // con alcohol (7 kcal/g, que no está en los macros) solo se corrigen unas kcal demasiado bajas
+  let prot = Math.min(100, Math.max(0, num(p.prot) || 0)), carbs = Math.min(100, Math.max(0, num(p.carbs) || 0)), fat = Math.min(100, Math.max(0, num(p.fat) || 0));
+  const sum = prot + carbs + fat; if (sum > 100) { const f = 100 / sum; prot *= f; carbs *= f; fat *= f; }
+  const calc = prot * 4 + carbs * 4 + fat * 9; let kcal = Math.max(0, num(p.kcal) || 0);
+  if (calc > 0 && (kcal <= 0 || kcal < calc * .65 || (kcal > calc * 1.35 && !ALCO_RE.test(name)))) kcal = calc;
+  return { kcal: Math.round(Math.min(900, kcal) * 10) / 10, prot: Math.round(prot * 10) / 10, carbs: Math.round(carbs * 10) / 10, fat: Math.round(fat * 10) / 10 };
+}
 const qcSum = items => { const t = { kcal: 0, prot: 0, carbs: 0, fat: 0 }; for (const it of items) for (const k in t) t[k] += it.per100[k] * it.grams / 100; for (const k in t) t[k] = Math.round(t[k]); return t; };
 const qcIngTxt = it => `${it.name}${it.uds ? ` (${it.uds})` : ''}: ${it.grams} g`;
 const QC_SLOTS = ['Desayuno', 'Comida', 'Puente', 'Cena'], QC_W = { Desayuno: 25, Comida: 35, Puente: 12, Cena: 28 };
@@ -4417,7 +4427,7 @@ Responde SOLO con JSON: {"opciones":[{"nombre":"…","olla":1,"items":[{"nombre"
   const list = v => (Array.isArray(v) ? v : String(v || '').split(/[,;\n]/)).map(x => String(x).trim()).filter(Boolean).slice(0, 25);
   const raw = (r?.opciones || []).slice(0, 3).map(o => {
     let items = (Array.isArray(o.items) ? o.items : []).slice(0, 8).map(it => { const pc = it.por100 || it.per100 || {};
-      return { name: String(it.nombre || it.name || '').slice(0, 40), uds: String(it.uds || '').slice(0, 30), grams: Math.max(1, Math.round(num(it.g ?? it.grams))), per100: { kcal: num(pc.kcal), prot: num(pc.prot ?? pc.protein), carbs: num(pc.carbs), fat: num(pc.fat) } }; })
+      return { name: String(it.nombre || it.name || '').slice(0, 40), uds: String(it.uds || '').slice(0, 30), grams: Math.max(1, Math.round(num(it.g ?? it.grams))), per100: fixPer100({ kcal: pc.kcal, prot: pc.prot ?? pc.protein, carbs: pc.carbs, fat: pc.fat }, it.nombre || it.name) }; })
       .filter(it => it.name && it.grams && (it.per100.kcal > 0 || it.per100.prot > 0));
     if (!items.length && num(o.kcal)) items = [{ name: String(o.nombre || 'Plato').slice(0, 40), uds: '', grams: 100, per100: { kcal: num(o.kcal), prot: num(o.prot), carbs: num(o.carbs), fat: num(o.fat) } }];
     return { nombre: String(o.nombre || 'Opción').slice(0, 80), items, pasos: String(o.pasos || '').slice(0, 500), taper: String(o.taper || '').slice(0, 500), olla: Math.min(8, Math.max(1, Math.round(num(o.olla) || 1))), ...qcSum(items) };
@@ -4433,11 +4443,9 @@ const QC_OIL = /aceite|mantequilla|manteca|margarina/i;
 function qcFix(o, B) {
   const K = B.kcal, adj = [];
   let items = o.items.map(it => {
-    const p = { ...it.per100 }, calc = p.prot * 4 + p.carbs * 4 + p.fat * 9;
-    if (calc > 0 && (p.kcal <= 0 || Math.abs(p.kcal - calc) > calc * .35)) p.kcal = Math.round(calc);
     let g = it.grams;
     if (QC_OIL.test(it.name) && g > 10) { g = 10; adj.push('aceite'); }
-    return { ...it, grams: g, per100: p };
+    return { ...it, grams: g, per100: fixPer100(it.per100, it.name) };
   });
   let t = qcSum(items);
   // cantidades a lo que toca: si falta, crece primero la guarnición de hidratos (hasta ×2,5) y luego lo demás que se pesa (hasta ×1,35);
@@ -4579,8 +4587,9 @@ function renderDiet() {
       <button class="btn-ghost !px-2" data-act="gallery" type="button">🖼️ Galería</button>
       <button class="btn-ghost !px-2" data-act="scanBar" type="button">🏷️ Código</button>
     </div>
+    ${ui.aiPending && !ui.aiBusy ? `<div class="ai-pend"><b>📶 Ahora mismo no hay conexión con Google.</b> No pasa nada: <b>te lo calculo yo en cuanto vuelva</b>, sin que hagas nada. Si es algo que ya has comido, elígelo abajo en tus habituales y listo. <button class="underline" data-act="aiPendCancel" type="button">No hace falta</button></div>` : ''}
     <button class="btn-primary w-full" data-act="analyze" type="button" ${ui.aiBusy ? 'disabled' : ''}>
-      ${ui.aiBusy ? '<span class="spinner"></span> Analizando…' : '⚡ Estimar macros con IA'}
+      ${ui.aiBusy ? '<span class="spinner"></span> Analizando…' : ui.aiPending ? '🔄 Probar ahora' : '⚡ Estimar macros con IA'}
     </button>
     ${!ai ? `<p class="text-center"><button class="text-xs text-mute underline" data-act="manualMeal" type="button">o introduce los macros a mano</button></p>` : ''}
     ${!state.settings.apiKey ? `<p class="text-[11px] text-amber-300">Para usar la IA, pega tu clave de Gemini en <button class="underline" data-act="goSettings" type="button">Ajustes</button>.</p>` : ''}`}
@@ -4776,7 +4785,7 @@ function ingFromAI(it) {
   return { name: String(it.name || 'Alimento').slice(0, 40), fromDesc,
     sizes: { s: num(it.small_g) || Math.round(m * 0.65), m, l: num(it.large_g) || Math.round(m * 1.4) },
     sel: fromDesc ? 'x' : 'm', grams: fromDesc ? num(it.grams) : m,
-    per100: { kcal: num(per.kcal) || 0, prot: num(per.protein) || 0, carbs: num(per.carbs) || 0, fat: num(per.fat) || 0 } };
+    per100: fixPer100({ kcal: per.kcal, prot: per.protein, carbs: per.carbs, fat: per.fat }, it?.name || '') };
 }
 function pushIng(item) {
   const a = ui.aiResult; if (!a) return;
@@ -5077,7 +5086,8 @@ function geminiErr(status, data) {
   return e;
 }
 function geminiSpanish(e) {
-  if (e.net) return new Error('No he podido conectar con Google. Revisa la conexión (wifi o datos) y vuelve a probar. Si usas un bloqueador de anuncios, una VPN o un DNS privado, puede que esté bloqueando la IA.');
+  if (e.off) return e;
+  if (e.net) return Object.assign(new Error('No he podido conectar con Google. Revisa la conexión (wifi o datos) y vuelve a probar. Si usas un bloqueador de anuncios, una VPN o un DNS privado, puede que esté bloqueando la IA.'), { net: true });
   if (e.busy) return new Error('Gemini está saturado ahora mismo (mucha demanda en Google). Prueba en unos minutos o introduce los macros a mano.');
   if (e.noModel) return new Error(`Ningún modelo de IA de Google responde con tu clave ahora mismo. Cierra la app del todo, ábrela para que se actualice y vuelve a probar. Si sigue igual, manda una captura a Esteban.${e.status ? ` (código ${e.status})` : ''}`);
   if (e.quota) return new Error('Has llegado al límite gratuito de Gemini por ahora. Prueba más tarde o introduce los macros a mano.');
@@ -5095,6 +5105,7 @@ async function geminiOnce(model, body, timeout) {
     if (!resp.ok) throw geminiErr(resp.status, data);
     const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
     if (!text) throw new Error('La IA no devolvió respuesta (bloqueo o cuota agotada).');
+    if ((lsGet(AINET_KEY) || {}).n) lsSet(AINET_KEY, { ...lsGet(AINET_KEY), n: 0 });
     return text;
   } catch (e) {
     if (e.name === 'AbortError') { const t = new Error('La IA tardó demasiado. Prueba de nuevo.'); t.busy = true; throw t; }
@@ -5106,7 +5117,7 @@ async function geminiOnce(model, body, timeout) {
 async function callGemini(parts, { json = true, timeout = 45000, contents = null, system = null, temperature = 0.2, only = null } = {}) {
   const s = state.settings;
   if (!s.apiKey) throw new Error('Falta la clave de Gemini (Ajustes).');
-  if (!navigator.onLine) throw new Error('Sin conexión a internet.');
+  if (!navigator.onLine) { const e = new Error('Sin conexión a internet.'); e.net = true; e.off = true; throw e; }
   const body = JSON.stringify({ contents: contents || [{ parts }], ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), generationConfig: json ? { responseMimeType: 'application/json', temperature } : { temperature } });
   const main = s.model || DEFAULT_MODEL;
   const models = only || [...new Set([main, DEFAULT_MODEL, ...GEMINI_FALLBACKS])];
@@ -5134,7 +5145,23 @@ async function callGemini(parts, { json = true, timeout = 45000, contents = null
     try { const m = await geminiDiscover(models); if (m) { const text = await geminiOnce(m, body, timeout); s.model = s.modelFound = m; persist(); return text; } }
     catch (e) { if (!e.noModel) useful = e; } finally { setTimeout(() => { callGemini._looked = false; }, 60000); }
   }
-  throw geminiSpanish(useful || last || new Error('Error desconocido de la IA'));
+  const fe = geminiSpanish(useful || last || new Error('Error desconocido de la IA'));
+  if (fe.net) aiNetFail();
+  throw fe;
+}
+/* 🚧 Si la IA falla por red varias veces seguidas mientras internet funciona, casi seguro algo del móvil la bloquea
+   (VPN, bloqueador de anuncios, DNS privado): se explica UNA vez (como mucho una vez por semana) */
+const AINET_KEY = 'fitnesteban_ainet';
+async function aiNetFail() {
+  const x = lsGet(AINET_KEY) || { n: 0, shown: 0 }; x.n = (x.n || 0) + 1; lsSet(AINET_KEY, x);
+  if (x.n < 3 || !navigator.onLine || Date.now() - (x.shown || 0) < 7 * 864e5) return;
+  try { await fetch('https://www.google.com/generate_204', { mode: 'no-cors', cache: 'no-store' }); } catch { return; } // sin internet de verdad: no es un bloqueo
+  x.shown = Date.now(); lsSet(AINET_KEY, x);
+  setTimeout(() => { if ($('#modalRoot').classList.contains('open')) return; openModal(`<h3 class="modal-title">🚧 Algo de tu móvil bloquea la IA</h3>
+    <p class="text-sm text-slate-300">Tienes internet, pero la app no consigue hablar con la IA de Google desde hace varios intentos. Casi siempre es por algo instalado o activado en el móvil:</p>
+    <ul class="text-sm text-slate-300 list-disc pl-5 space-y-1"><li>Un <b>bloqueador de anuncios</b> o un navegador que bloquea rastreadores.</li><li>Una <b>VPN</b>.</li><li>Un <b>DNS privado</b> (en Ajustes del móvil → Conexiones o Red → DNS privado).</li><li>El <b>ahorro de datos</b> muy estricto.</li></ul>
+    <p class="text-sm text-slate-300">Desactívalo un momento y vuelve a probar. Mientras, puedes apuntar tus comidas de tus habituales o a mano: nada se pierde.</p>
+    <button class="btn-primary w-full" data-close type="button">Entendido</button>`); }, 400);
 }
 async function geminiDiscover(skip) { // el modelo Flash más nuevo que la clave puede usar
   const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': state.settings.apiKey } });
@@ -5176,8 +5203,8 @@ Descripción del usuario: ${desc ? JSON.stringify(desc) : '(sin descripción, us
       return {
         name: String(it.name || 'Alimento').slice(0, 40), fromDesc,
         sizes: { s: num(it.small_g) || Math.round(m * 0.65), m, l: num(it.large_g) || Math.round(m * 1.4) },
-        sel: fromDesc ? 'x' : 'm', grams: fromDesc ? num(it.grams) : m,
-        per100: { kcal: num(per.kcal) || 0, prot: num(per.protein) || 0, carbs: num(per.carbs) || 0, fat: num(per.fat) || 0 }
+        sel: fromDesc ? 'x' : 'm', grams: Math.min(2000, fromDesc ? num(it.grams) : m),
+        per100: fixPer100({ kcal: per.kcal, prot: per.protein, carbs: per.carbs, fat: per.fat }, it.name)
       };
     }).filter(it => it.per100.kcal > 0 || it.per100.prot > 0);
     ui.aiResult = {
@@ -5187,12 +5214,36 @@ Descripción del usuario: ${desc ? JSON.stringify(desc) : '(sin descripción, us
     };
     if (res.alerta && algAny()) toast(`⚠️ ${String(res.alerta).slice(0, 140)}`, 'warn');
     recalcFromItems(ui.aiResult);
+    if (ui.aiResult.kcal > 2500) toast('Revisa las cantidades: sale una comida de más de 2.500 kcal.', 'warn');
+    if (ui.aiPending) { const was = ui.aiPending.auto; ui.aiPending = null; aiPendSave(); if (was) toast(`✅ Ya tengo los macros de «${(desc || 'tu foto').slice(0, 40)}». Revísalos y pulsa Registrar.`); }
   } catch (e) {
-    toast('IA: ' + e.message, 'error');
+    if (e.net) { // sin conexión con Google: no se pierde nada, se calcula solo al volver
+      ui.aiPending = { desc, img: ui.img || null, type: ui.mealType, at: Date.now() }; aiPendSave();
+      const ws = desc.split(/\s+/).filter(Boolean), w = ws.length <= 4 ? ws : ws.filter(x => normTxt(x).replace(/[^a-z0-9ñ]/g, '').length >= 4 && !/^(para|unos|unas|poco|media|medio)$/i.test(normTxt(x))).slice(0, 2);
+      if (w.length && !ui.img) ui.mealSearch = w.join(' '); // tus habituales que encajan, con lo que escribiste (tildes incluidas)
+    } else toast('IA: ' + e.message, 'error');
   } finally {
     ui.aiBusy = false; render();
   }
 }
+/* 📶 Estimación pendiente por falta de conexión con Google: se guarda (sin la foto) y se calcula sola cuando vuelve la conexión */
+const AIPEND_KEY = 'fitnesteban_aipend';
+function aiPendSave() { lsSet(AIPEND_KEY, ui.aiPending ? { desc: ui.aiPending.desc, type: ui.aiPending.type, at: ui.aiPending.at } : null); }
+function aiPendTry() {
+  const P = ui.aiPending || (() => { const x = lsGet(AIPEND_KEY); return x?.desc ? (ui.aiPending = { ...x, img: null }) : null; })();
+  if (!P || ui.aiBusy || !navigator.onLine || !state.settings.apiKey) return;
+  if (Date.now() - P.at > 12 * 3600000) { ui.aiPending = null; aiPendSave(); return; } // de hace más de 12 h: ya no tiene sentido
+  if (Date.now() - (P.tried || 0) < 15000) return;
+  const free = !ui.aiResult && !ui.editing && (!ui.mealDesc.trim() || ui.mealDesc.trim() === P.desc);
+  if (!free) return; // está apuntando otra cosa: se espera
+  P.tried = Date.now(); P.auto = true;
+  ui.mealDesc = P.desc; ui.img = P.img; ui.mealType = P.type || ui.mealType; ui.addOpen = true;
+  analyzeMeal();
+}
+window.addEventListener('online', () => setTimeout(aiPendTry, 1500));
+setInterval(() => { if (document.visibilityState === 'visible') aiPendTry(); }, 20000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(aiPendTry, 2000); });
+setTimeout(aiPendTry, 4000);
 
 function mealRecord(m, id) {
   const rec = { id, type: m.type || ui.mealType, desc: m.desc || '', kcal: r2(m.kcal || 0), prot: r2(m.prot || 0), carbs: r2(m.carbs || 0), fat: r2(m.fat || 0) };
@@ -6939,7 +6990,8 @@ function chatContext() {
     dieta_hoy: { comidas: mealsOf(T).map(m => ({ tipo: m.type, que: m.desc, kcal: Math.round(m.kcal), P: Math.round(m.prot), C: Math.round(m.carbs), G: Math.round(m.fat) })),
       total: { kcal: Math.round(t.kcal), P: Math.round(t.prot), C: Math.round(t.carbs), G: Math.round(t.fat) },
       quedan: { kcal: Math.round(budget - t.kcal), P: Math.round(st.targetProt - t.prot), C: Math.round(st.targetCarbs - t.carbs), G: Math.round(st.targetFat - t.fat) },
-      quemado_ejercicio_kcal: Math.round(burn) },
+      quemado_ejercicio_kcal: Math.round(burn),
+      ...(st.targetProt - t.prot < 15 ? { nota_proteina: 'Ya tiene cubierta (o casi) la proteína de hoy: en lo que proponga, una ración normal y moderada de proteína, no cero ni a base de grasa.' } : {}) },
     dieta_ultimos_7_dias: days7,
     resumen_semana: weekData(),
     programa_activo: prog().name, plan_y_recomendacion_del_coach: plan,
@@ -6968,6 +7020,8 @@ Reglas:
 - Ten en cuenta sus comentarios por ejercicio ("comentarios" en ultimas_sesiones: molestias, muy duro, fácil, poco tiempo, notas). Si se repiten molestias o "muy duro" en un ejercicio, propón una alternativa (puede cambiarla con ⇄ en la app) o ajustar carga/volumen; si algo le resulta fácil varias veces, anímale a progresar.
 - AJUSTA EL CONSEJO A SU OBJETIVO Y A SU ALIMENTACIÓN: insiste en la proteína solo si su objetivo es perder grasa, recomposición o ganar músculo, y sin obsesionarte. Si es mantener o salud y rendimiento, habla de comer variado, verdura y fruta, saciedad y energía (hidratos) para rendir. No recomiendes suplementos (batidos de proteína, etc.) salvo que ya los use. Varía las fuentes de proteína (huevos, lácteos, legumbres, pescado, carne, tofu…) según lo que coma y respeta siempre su estilo de alimentación.
 - Comprueba si sus objetivos diarios ("objetivos": kcal y proteína) encajan con su sexo, edad, altura, peso actual y objetivo. Si claramente NO encajan (p. ej. demasiado altos o bajos para esa persona), avísale una sola vez en la conversación, en una o dos frases, con cifras orientativas y diciendo que los cambia en Ajustes → Objetivos diarios. Si faltan edad o altura, puedes sugerir que las añada en Ajustes → Mi perfil.
+- COHERENCIA EN LAS COMIDAS (obligatorio): los macros que des tienen que sumar las kcal (proteína y hidratos 4 kcal/g, grasa 9 kcal/g). Nunca cuadres calorías a base de grasa: como mucho 1 cucharada de aceite (10 g) por plato y la grasa no pasa del 40 % de las kcal del plato. Si la proteína del día ya está cubierta ("nota_proteina"), propón una ración normal de proteína, no un plato sin ella. Si "quedan" kcal es negativo o casi cero, no propongas otra comida salvo que te la pida, y entonces algo ligero. Si sobran calorías, mejor quedarse corto que pasarse.
+- Tono cercano, como un amigo que sabe del tema: tutea y usa un español sencillo, sin lenguaje técnico ni de informe.
 - Cuando propongas una o varias comidas CONCRETAS (alimentos con cantidades), añade al final de tu respuesta un bloque oculto EXACTAMENTE con este formato (no lo menciones en el texto):
 \`\`\`comida
 {"opciones":[{"titulo":"nombre corto","tipo":"Desayuno|Comida|Puente|Cena|Otro","items":[{"nombre":"alimento","gramos":número,"por100":{"kcal":n,"p":n,"c":n,"g":n}}]}]}
@@ -6986,6 +7040,17 @@ Reglas:
 DATOS (JSON, null = sin dato):
 ${JSON.stringify(chatContext())}`;
 }
+/* ✔️ Propuestas de comida del Coach: la misma revisión que en «¿Qué como?», sin cambiar el plato que describe el texto:
+   kcal por 100 g coherentes con sus macros y aceite como mucho 10 g (avisando en la tarjeta); si aun así es casi todo grasa, se avisa */
+function chatMealFix(m) {
+  let oil = 0;
+  const items = m.items.map(it => {
+    let g = it.grams; if (QC_OIL.test(it.name) && g > 10) { oil += g - 10; g = 10; }
+    return { ...it, grams: g };
+  });
+  const t = qcSum(items), fatPct = t.kcal > 0 ? t.fat * 9 / t.kcal : 0;
+  return { ...m, items, ...(oil ? { oilCut: Math.round(oil) } : {}), ...(fatPct > .6 && t.kcal > 120 ? { fatty: true } : {}) };
+}
 /* Comidas propuestas por el coach: bloque ```comida {json}``` al final de la respuesta → botones «Apuntar en Dieta» */
 function chatMeals(reply) {
   let meals = [];
@@ -6996,9 +7061,9 @@ function chatMeals(reply) {
         const items = (Array.isArray(o.items) ? o.items : []).map(it => {
           const pr = it.por100 || {};
           return { name: String(it.nombre || 'Alimento').slice(0, 40), grams: Math.max(1, Math.round(num(it.gramos) || 100)),
-            per100: { kcal: num(pr.kcal) || 0, prot: num(pr.p) || 0, carbs: num(pr.c) || 0, fat: num(pr.g) || 0 } };
+            per100: fixPer100({ kcal: pr.kcal, prot: pr.p, carbs: pr.c, fat: pr.g }, it.nombre) };
         }).filter(it => it.per100.kcal > 0 || it.per100.prot > 0);
-        if (items.length) meals.push({ title: String(o.titulo || 'Propuesta del coach').slice(0, 60), type: MEAL_TYPES.includes(o.tipo) ? o.tipo : '', items });
+        if (items.length) meals.push(chatMealFix({ title: String(o.titulo || 'Propuesta del coach').slice(0, 60), type: MEAL_TYPES.includes(o.tipo) ? o.tipo : '', items }));
       }
     } catch { /* bloque ilegible: se ignora */ }
     return '';
@@ -7163,7 +7228,7 @@ function chatBodyHTML() {
     ${chatHistoryHTML()}`;
   return c.msgs.map((m, i) => m.role === 'user'
     ? `<div class="chat-me">${esc(m.text)}</div>`
-    : `<div class="chat-ai${m.error ? ' chat-err' : ''}">${mdLite(m.text)}${m.error && i === c.msgs.length - 1 ? '<button class="text-xs text-brand underline mt-1" data-mact="retry" type="button">Reintentar</button>' : ''}${(m.meals || []).map((ml, j) => `<div class="flex gap-2 items-stretch"><button class="chat-meal flex-1 min-w-0" data-mact="toDiet" data-m="${i}" data-o="${j}" type="button"><span>🍽️ Apuntar en Dieta</span><span class="text-[11px] opacity-80 truncate max-w-full">${m.meals.length > 1 ? esc(ml.title) + ' · ' : ''}${esc(ml.type || 'comida que toca')} · ~${mealKcal(ml)} kcal</span></button><button class="chat-meal !w-auto shrink-0 items-center justify-center" data-mact="recipe" data-m="${i}" data-o="${j}" type="button"><span>👨‍🍳 Receta</span><span class="text-[11px] opacity-80">${ml.recipe ? 'guardada' : 'paso a paso'}</span></button></div>`).join('')}${(m.blocks || []).map((bl, j) => `<button class="chat-meal" data-mact="toBlock" data-m="${i}" data-o="${j}" type="button"><span>${bl.added ? '✓ Ver en mis bloques' : '＋ Añadir a mis bloques'}</span><span class="text-[11px] opacity-80 truncate max-w-full">${esc(bl.icon)} ${esc(bl.name)} · ${bl.days.length} día${bl.days.length > 1 ? 's' : ''} · ${bl.days.reduce((a, d) => a + d.exercises.length, 0)} ejercicios</span></button>`).join('')}${(m.edits || []).map((ed, j) => `<div class="chat-edit">
+    : `<div class="chat-ai${m.error ? ' chat-err' : ''}">${mdLite(m.text)}${m.error && i === c.msgs.length - 1 ? '<button class="text-xs text-brand underline mt-1" data-mact="retry" type="button">Reintentar</button>' : ''}${(m.meals || []).map((ml, j) => `<div class="flex gap-2 items-stretch"><button class="chat-meal flex-1 min-w-0" data-mact="toDiet" data-m="${i}" data-o="${j}" type="button"><span>🍽️ Apuntar en Dieta</span><span class="text-[11px] opacity-80 max-w-full leading-snug">${m.meals.length > 1 ? esc(ml.title) + ' · ' : ''}${esc(ml.type || 'comida que toca')} · ~${mealKcal(ml)} kcal</span>${ml.oilCut ? '<span class="text-[10.5px] opacity-80 leading-snug">✔️ Con el aceite en 10 g, no más</span>' : ''}${ml.fatty ? '<span class="text-[10.5px] text-amber-300 leading-snug">⚠️ Casi todo grasa: revísala antes de apuntarla</span>' : ''}</button><button class="chat-meal !w-auto shrink-0 items-center justify-center" data-mact="recipe" data-m="${i}" data-o="${j}" type="button"><span>👨‍🍳 Receta</span><span class="text-[11px] opacity-80">${ml.recipe ? 'guardada' : 'paso a paso'}</span></button></div>`).join('')}${(m.blocks || []).map((bl, j) => `<button class="chat-meal" data-mact="toBlock" data-m="${i}" data-o="${j}" type="button"><span>${bl.added ? '✓ Ver en mis bloques' : '＋ Añadir a mis bloques'}</span><span class="text-[11px] opacity-80 truncate max-w-full">${esc(bl.icon)} ${esc(bl.name)} · ${bl.days.length} día${bl.days.length > 1 ? 's' : ''} · ${bl.days.reduce((a, d) => a + d.exercises.length, 0)} ejercicios</span></button>`).join('')}${(m.edits || []).map((ed, j) => `<div class="chat-edit">
       <div class="text-[11px] font-bold uppercase tracking-wider text-brand">✏️ Cambios en ${esc(ed.name)}</div>
       <ul class="text-[13px] leading-snug space-y-1 mt-1.5">${ed.lines.map(l => `<li>${l}</li>`).join('')}</ul>
       ${ed.ops.length ? (ed.applied ? `<div class="grid grid-cols-2 gap-2 mt-2.5"><button class="chat-meal items-center justify-center text-center" data-mact="editGo" data-m="${i}" data-o="${j}" type="button"><span>✓ Ver bloque</span></button><button class="chat-meal items-center justify-center text-center !bg-transparent" data-mact="editUndo" data-m="${i}" data-o="${j}" type="button"><span>↩️ Deshacer</span></button></div>`
@@ -7451,6 +7516,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.15.8', ['📶 Sin conexión con Google ya no pierdes nada: «Estimar macros con IA» guarda lo que escribiste y te lo calcula solo en cuanto vuelve la conexión. Mientras, te enseña tus habituales que encajan.', '✔️ Todo lo que calcula la IA (estimar macros, añadir ingrediente, ¿Qué como? y el Coach) se revisa antes de enseñarlo: las kcal siempre cuadran con los macros.', '💬 Coach: las mismas reglas que «¿Qué como?» para proponer comidas (nada de platos de aceite, ración normal de proteína si ya la tienes cubierta) y tono cercano.', '🚧 Si algo del móvil bloquea la IA (VPN, bloqueador, DNS privado), la app te lo explica una vez.'], 'quiet'],
   ['5.15.7', ['🤖 IA: si la conexión con Google se corta un momento, la app vuelve a intentarlo sola. Si aun así no conecta, te explica en español qué revisar (wifi o datos, bloqueadores, VPN o DNS privado) en vez de «Failed to fetch».'], 'quiet'],
   ['5.15.6', ['🔥 Mapa muscular en tema claro: lo descansado sale casi blanco y, cuanto más cargado está el músculo, más intenso y oscuro. La leyenda va en el mismo orden.'], 'quiet'],
   ['5.15.5', ['🍽️ «¿Qué como?» y las recetas te hablan con un tono más cercano, sin lenguaje técnico; la nota de arriba solo sale si aporta algo.'], 'quiet'],
@@ -9028,6 +9094,7 @@ const actions = {
   gallery: () => $('#mealGalleryInput').click(),
   clearImg: () => { ui.img = null; render(); },
   analyze: () => analyzeMeal(),
+  aiPendCancel: () => { ui.aiPending = null; aiPendSave(); render(); },
   manualMeal: () => { ui.aiResult = { desc: ui.mealDesc.trim() || ui.mealType, kcal: 0, prot: 0, carbs: 0, fat: 0, note: '' }; render(); },
   portion: b => {
     const it = ui.aiResult?.items?.[+b.dataset.i]; if (!it) return;
@@ -9056,6 +9123,7 @@ const actions = {
       render(); return toast('Comida actualizada ✓');
     }
     addMeal(ui.dietDate, { ...a, type: ui.mealType }); (ui.dietOpen ||= {})[ui.mealType] = true;
+    if (ui.aiPending && ui.aiPending.type === ui.mealType) { ui.aiPending = null; aiPendSave(); } // ya ha apuntado esa comida (de sus habituales o a mano): no se calcula sola después
     ui.aiResult = null; ui.img = null; ui.addOpen = false; ui.mealDesc = '';
     render(); toast('Comida registrada ✓');
   },
