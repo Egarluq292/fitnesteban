@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.15.2';
+const APP_VERSION = '5.15.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4363,7 +4363,11 @@ function qcStyleBase(tp, sty, fast) {
   if (sty === 'carne') return 'Propón 3 platos de carne distintos, cada uno con una carne diferente (ternera, cerdo, pollo, pavo, cordero, conejo…) y una forma de cocinar diferente (plancha, horno, en salsa, guisada, albóndigas, brocheta…), con su guarnición.';
   if (sty === 'pescado') return 'Propón 3 platos de pescado o marisco distintos (azul y blanco; al horno, en salsa, a la plancha, en papillote, guisado…), con su guarnición.';
   if (sty === 'ligero') return 'Propón 3 platos ligeros pero saciantes, con mucha verdura y su proteína (ensaladas completas, verduras salteadas o al horno con carne, pescado o huevo, cremas o sopas…).';
-  if (sty === 'taper') return 'Propón 3 platos que aguanten bien en táper y se recalienten sin estropearse, para llevar al trabajo (legumbres, guisos, arroces al horno, pasta, salteados…). Nada que se ablande o se seque al recalentar.';
+  if (sty === 'taper') return 'Propón 3 platos para llevar en táper al trabajo, que aguanten bien en la nevera y se recalienten sin estropearse (legumbres, guisos, arroces, pasta, salteados, pollo o carne en salsa…). ' +
+    'Al menos UNA de las 3 tiene que poder comerse fría, sin microondas (ensalada de legumbres, de pasta o de arroz, con el aliño aparte). ' +
+    'Evita lo que llega mal al trabajo: rebozados y fritos (se reblandecen), huevo frito o a la plancha, pescado blanco a la plancha (se seca y huele al recalentar), verdura de hoja ya aliñada, patatas fritas y todo lo que deba comerse crujiente. ' +
+    'En cada opción rellena "taper" con UNA frase práctica: cuántos días aguanta en la nevera (como mucho 3, y si lleva arroz o pescado, mejor 1–2), si se puede congelar, cómo recalentarlo (o si se come frío) y qué llevar aparte (aliño, salsa, pan, fruta). ' +
+    'Recuerda en "nota" que el táper se guarda en la nevera en cuanto deja de humear (antes de 2 horas) y no se deja a temperatura ambiente; el arroz y la pasta cocidos, sobre todo.';
   if (fast) return tp === 'Cena' ? 'Propón 3 cenas distintas, ligeras y variadas, de menos de 20 minutos (tortillas o revueltos, pescado a la plancha, ensaladas completas, salteados…).' : 'Propón 3 opciones distintas y variadas de menos de 20 minutos (incluida, si encaja, una de cuchara con legumbre cocida de bote).';
   if (tp === 'Comida') return 'Propón 3 opciones distintas: 1) un plato tradicional español de cuchara o un arroz (potaje, lentejas, garbanzos, estofado, cocido, fabada, arroz caldoso, paella…); 2) uno rápido (menos de 20 minutos); 3) otro distinto a los dos anteriores (horno, guiso corto, legumbre en ensalada, pescado, pasta…).';
   if (tp === 'Cena') return 'Propón 3 cenas distintas, más ligeras y de poca elaboración (máximo 30 minutos), y variadas: tortillas o revueltos, cremas o sopas, pescado al horno o en papillote, ensaladas templadas, verduras rellenas, salteados… Nada repetido entre ellas.';
@@ -4383,7 +4387,7 @@ ${img ? 'En la foto se ve su nevera o despensa: usa SOLO lo que se ve con clarid
 ${prev.length ? `No repitas estas ideas: ${prev.join('; ')}.` : ''}${recent.length ? `\nEstos días ya ha comido: ${recent.join('; ')}. Propón platos diferentes.` : ''}
 ${QC_RULES}${algPrompt()}${B.protOnly ? `\n- MODO PROTEÍNA: ya ha llegado a sus calorías de hoy y le faltan ${B.prot} g de proteína. Solo ideas de 150 kcal como mucho, con mucha proteína y casi sin grasa ni hidratos: lácteos desnatados o proteicos, claras, pavo, atún al natural, gambas, batido de proteína… Nada de pan, aceite, frutos secos ni dulces. Puede ser algo sencillo, sin cocinar.` : ''}
 ${qcStyleTxt(tp, sty, fast)} Para cada ingrediente da su peso en gramos (en crudo si se cocina; si va por unidades, pon también las unidades) y sus valores por 100 g, realistas (tablas españolas). Incluye el aceite si se usa.
-Responde SOLO con JSON: {"opciones":[{"nombre":"…","olla":1,"items":[{"nombre":"Merluza","g":150,"uds":"","por100":{"kcal":0,"prot":0,"carbs":0,"fat":0}}],"pasos":"una frase"}],"veo":["alimento", "…"],"dudas":["lo que no distingues bien"],"nota":"una frase"}`;
+Responde SOLO con JSON: {"opciones":[{"nombre":"…","olla":1,"items":[{"nombre":"Merluza","g":150,"uds":"","por100":{"kcal":0,"prot":0,"carbs":0,"fat":0}}],"pasos":"una frase"${sty === 'taper' ? ',"taper":"una frase"' : ''}}],"veo":["alimento", "…"],"dudas":["lo que no distingues bien"],"nota":"una frase"}`;
   let r, err = null;
   for (let t = 0; t < 2; t++) { // un segundo intento automático: muchas veces a la segunda sale bien
     try { r = parseJSONLoose(await callGemini(img ? [{ text: prompt }, { inlineData: { mimeType: 'image/jpeg', data: img.split(',')[1] } }] : [{ text: prompt }], { timeout: 45000, temperature: .5 })); if ((r?.opciones || []).length) { err = null; break; } err = new Error('La IA no ha devuelto ideas'); }
@@ -4397,7 +4401,7 @@ Responde SOLO con JSON: {"opciones":[{"nombre":"…","olla":1,"items":[{"nombre"
       return { name: String(it.nombre || it.name || '').slice(0, 40), uds: String(it.uds || '').slice(0, 30), grams: Math.max(1, Math.round(num(it.g ?? it.grams))), per100: { kcal: num(pc.kcal), prot: num(pc.prot ?? pc.protein), carbs: num(pc.carbs), fat: num(pc.fat) } }; })
       .filter(it => it.name && it.grams && (it.per100.kcal > 0 || it.per100.prot > 0));
     if (!items.length && num(o.kcal)) items = [{ name: String(o.nombre || 'Plato').slice(0, 40), uds: '', grams: 100, per100: { kcal: num(o.kcal), prot: num(o.prot), carbs: num(o.carbs), fat: num(o.fat) } }];
-    return { nombre: String(o.nombre || 'Opción').slice(0, 80), items, pasos: String(o.pasos || '').slice(0, 180), olla: Math.min(8, Math.max(1, Math.round(num(o.olla) || 1))), ...qcSum(items) };
+    return { nombre: String(o.nombre || 'Opción').slice(0, 80), items, pasos: String(o.pasos || '').slice(0, 180), taper: String(o.taper || '').slice(0, 260), olla: Math.min(8, Math.max(1, Math.round(num(o.olla) || 1))), ...qcSum(items) };
   }).filter(o => o.items.length);
   const veo = img ? list(r?.veo) : [], dudas = img ? list(r?.dudas) : [];
   qcShow({ ...cx, veo: veo.length ? veo : cx.veo, dudas, prev: [...prev, ...ops.map(o => o.nombre)] }, ops, String(r?.nota || '').slice(0, 200), true);
@@ -4414,7 +4418,7 @@ function qcShow(cx, ops, note, ia = false) {
     ${note ? `<p class="text-[12px] text-mute mt-2">${esc(note)}</p>` : ''}${algAny() ? `<p class="text-[11px] text-amber-300 mt-1">🚫 Sin: ${esc(algShort())}. Revisa las etiquetas.</p>` : ''}
     ${ops.length ? ops.map((o, i) => `<div class="qc-card"><div class="font-extrabold text-[15px] leading-tight">${esc(o.nombre)}${o.mine ? ' <span class="text-[10.5px] text-amber-300 font-bold">· de tus habituales</span>' : ''}</div>
       <div class="text-[11px] font-mono mt-1">${macroLine({ kcal: o.kcal, prot: o.prot, carbs: o.carbs, fat: o.fat })}</div>
-      ${o.items.length > 1 || ia ? `<ul class="qc-ing">${o.items.map(it => `<li>${esc(it.name)}${it.uds ? ` <span class="text-mute">(${esc(it.uds)})</span>` : ''} · ${it.grams} g</li>`).join('')}</ul>` : ''}${o.pasos ? `<p class="text-[12px] text-mute mt-1">${esc(o.pasos)}</p>` : ''}${o.olla > 1 ? `<p class="text-[11.5px] text-amber-200 mt-1">🍲 Se cocina para ${o.olla} raciones: estas cantidades son tu ración. Para la compra, multiplica por ${o.olla}.</p>` : ''}
+      ${o.items.length > 1 || ia ? `<ul class="qc-ing">${o.items.map(it => `<li>${esc(it.name)}${it.uds ? ` <span class="text-mute">(${esc(it.uds)})</span>` : ''} · ${it.grams} g</li>`).join('')}</ul>` : ''}${o.pasos ? `<p class="text-[12px] text-mute mt-1">${esc(o.pasos)}</p>` : ''}${o.taper ? `<p class="qc-taper">🥡 <b>Para el táper:</b> ${esc(o.taper)}</p>` : ''}${o.olla > 1 ? `<p class="text-[11.5px] text-amber-200 mt-1">🍲 Se cocina para ${o.olla} raciones: estas cantidades son tu ración. Para la compra, multiplica por ${o.olla}.</p>` : ''}
       <div class="grid grid-cols-3 gap-2 mt-2.5"><button class="btn-primary !py-2 !px-1 text-sm" data-mact="add" data-i="${i}" type="button">＋ Añadir</button>${ia ? `<button class="btn-ghost !py-2 !px-1 text-sm" data-mact="rec" data-i="${i}" type="button">👨‍🍳 Receta</button>` : ''}<button class="btn-ghost !py-2 !px-1 text-sm ${ia ? '' : 'col-span-2'}" data-mact="copy" data-i="${i}" type="button">📋 Lista</button></div></div>`).join('')
     : '<p class="text-sm text-mute mt-3">No encuentro ninguna comida que encaje. Prueba con «Con lo que tengo en casa».</p>'}
     ${ia ? `<div class="grid ${seen ? 'grid-cols-2' : ''} gap-2 mt-3">${seen ? `<button class="btn-ghost !py-2 text-sm" data-mact="fix" type="button">✏️ ${img ? '¿He visto algo mal?' : 'Cambiar lo que tengo'}</button>` : ''}<button class="btn-ghost !py-2 text-sm" data-mact="more" type="button">🔄 Otras ideas</button></div>` : ''}
@@ -4422,7 +4426,7 @@ function qcShow(cx, ops, note, ia = false) {
     back: () => queComoModal(tp),
     more: () => qcAsk(cx),
     rec: (_, b) => { const o = ui._qc[+b.dataset.i]; const add = () => qcToDiet(o, tp);
-      o.ml = o.ml || { title: o.nombre, type: tp, olla: o.olla, items: o.items.map(it => ({ name: it.uds ? `${it.name} (${it.uds})` : it.name, grams: it.grams, per100: it.per100 })) };
+      o.ml = o.ml || { title: o.nombre, type: tp, olla: o.olla, taper: o.taper || '', items: o.items.map(it => ({ name: it.uds ? `${it.name} (${it.uds})` : it.name, grams: it.grams, per100: it.per100 })) };
       recipeView(o.ml, { back: () => qcShow(...ui._qcLast), backLabel: '‹ Ideas', toDiet: add, note: 'Son las cantidades de esta idea: si las cambias, cambian los macros.' }); },
     fix: () => qcHome({ ...cx, img: null }, seen, img ? '✏️ Corrige lo que he visto' : '🏠 ¿Qué tienes en casa?'),
     add: (_, b) => qcToDiet(ui._qc[+b.dataset.i], tp),
@@ -7318,7 +7322,7 @@ async function fetchRecipe(ml, wish = '', chatMsgs = []) {
 Reglas:
 - No añadas ningún ingrediente con calorías (ni aceite, ni mantequilla, ni salsas, ni azúcar, ni pan) que no esté en la lista. Si el plato necesita grasa para cocinar y no hay aceite en la lista, usa sartén antiadherente, horno, airfryer, plancha o un toque de spray.
 - Sí puedes usar sal, pimienta, especias, hierbas, ajo, limón, vinagre, mostaza y agua (cantidades orientativas: "1 pizca", "1 diente"…).
-- Pasos cortos, claros y en orden (máximo 8), en español de España, tuteando. Indica temperaturas y tiempos concretos.${algPrompt() ? `\n- La persona tiene alergias o intolerancias: ningún condimento ni paso puede llevarlas. Si algún ingrediente de la lista podría contenerlas (p. ej. pan, embutido, salsa), avísalo en "consejo".${algPrompt()}` : ''}
+- Pasos cortos, claros y en orden (máximo 8), en español de España, tuteando. Indica temperaturas y tiempos concretos.${ml.taper ? `\n- Es para llevar en táper: el último paso es cómo guardarlo (dejar de humear, a la nevera antes de 2 horas, cuántos días aguanta) y cómo recalentarlo o si se come frío; lo que deba ir aparte (aliño, salsa), dilo. Referencia: ${ml.taper.slice(0, 200)}` : ''}${algPrompt() ? `\n- La persona tiene alergias o intolerancias: ningún condimento ni paso puede llevarlas. Si algún ingrediente de la lista podría contenerlas (p. ej. pan, embutido, salsa), avísalo en "consejo".${algPrompt()}` : ''}
 ${said ? `- Lo que el usuario ha dicho en la conversación (respeta sus preferencias de cocinado, utensilios y gustos): ${said}\n` : ''}${wish ? `- PETICIÓN PARA ESTA RECETA (manda sobre todo lo demás, salvo las cantidades): ${wish.slice(0, 200)}\n` : ''}
 Devuelve SOLO este JSON: {"titulo":"…","tiempo_min":n,"dificultad":"Fácil|Media","utensilios":["…"],"condimentos":["…"],"pasos":[{"texto":"…","min":n o null}],"consejo":"una frase"}`;
   const r = parseJSONLoose(await callGemini([{ text: prompt }], { timeout: 45000, temperature: 0.4 }));
@@ -7394,6 +7398,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.15.3', ['🥡 «¿Qué como?» · Táper: ideas que llegan bien al trabajo (al menos una se come fría), sin fritos ni rebozados, y cada una con «Para el táper»: días en la nevera, si se congela, cómo recalentarlo y qué llevar aparte.'], 'quiet'],
   ['5.15.2', ['📈 «Tu progreso», Fuerza por ejercicio y Récords encuentran tu historial por el nombre del ejercicio, igual que el Coach: ya no dicen «aún no hay sesiones» de un ejercicio que sí has hecho en otro bloque o en otro día.'], 'quiet'],
   ['5.15.1', ['🏆 Récords personales: el mismo ejercicio en varios días ya sale una sola vez, con su mejor marca de todas las sesiones. Los nombres largos se leen enteros.'], 'quiet'],
   ['5.15.0', ['🔎 Progreso · Fuerza por ejercicio: «Cambiar» abre un buscador por nombre o por grupo muscular («pecho», «bíceps»…), también con los dibujos de los músculos. El mismo ejercicio en varios días se junta en una sola gráfica.', '📈 En la rutina, «Tu progreso ›» (junto a «Última vez») abre la gráfica de ese ejercicio sin salir del entreno.'], 'quiet'],
