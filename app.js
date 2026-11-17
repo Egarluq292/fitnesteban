@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.15.3';
+const APP_VERSION = '5.15.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4179,7 +4179,7 @@ const QC_BASICS = [
   { desc: 'pan integral', g: 60, kcal: 150, prot: 6, carbs: 26, fat: 2, ing: ['60 g de pan integral'], r: 'c' },
   { desc: 'ensalada', u: 'con 1 cucharada de aceite', g: 210, kcal: 110, prot: 1, carbs: 4, fat: 10, ing: ['Lechuga, tomate y pepino', '1 cucharada de aceite de oliva'], r: 'v' },
   { desc: 'verduras a la plancha', g: 300, kcal: 90, prot: 4, carbs: 14, fat: 1, ing: ['300 g de verduras variadas'], r: 'v' },
-  { desc: 'Yogur proteico', u: '1 yogur', g: 120, kcal: 95, prot: 15, carbs: 7, fat: 0, ing: ['1 yogur proteico'], low: 'un yogur proteico', r: 'xdq' },
+  { desc: 'Yogur proteico', u: '1 yogur', g: 120, low: 'un yogur proteico', kcal: 95, prot: 15, carbs: 7, fat: 0, ing: ['1 yogur proteico'], low: 'un yogur proteico', r: 'xdq' },
   { desc: 'Queso fresco batido 0 %', g: 250, kcal: 115, prot: 20, carbs: 9, fat: 0, ing: ['250 g de queso fresco batido 0 %'], r: 'xq' },
   { desc: 'Pieza de fruta', u: '1 pieza', g: 150, low: 'una pieza de fruta', kcal: 80, prot: 1, carbs: 19, fat: 0, ing: ['1 pieza de fruta'], r: 'xd' },
   { desc: 'Tostada integral con pavo', u: '60 g de pan y 80 g de pavo', g: 140, kcal: 210, prot: 20, carbs: 27, fat: 3, ing: ['60 g de pan integral', '80 g de pavo en lonchas'], r: 'x' },
@@ -4213,10 +4213,22 @@ function qcPlan(L = qcLeft()) {
   let slots = QC_SLOTS.filter((tp, i) => i >= now && !(i > now && done.has(tp)));
   if (done.has(QC_SLOTS[now]) && slots.length > 1) slots = slots.slice(1); // la de ahora ya está apuntada: la siguiente
   if (!slots.length) slots = [QC_SLOTS[Math.max(0, now)]];
+  // con poco margen, el puente no se queda las calorías de una comida principal: si alguna se quedaría corta, el puente sobra
+  const MIN = { Desayuno: 250, Comida: 350, Puente: 120, Cena: 350 }, W0 = slots.reduce((a, tp) => a + QC_W[tp], 0);
+  if (slots.length > 1 && slots.includes('Puente') && slots.some(tp => L.kcal * QC_W[tp] / W0 < MIN[tp])) slots = slots.filter(tp => tp !== 'Puente');
   const W = slots.reduce((a, tp) => a + QC_W[tp], 0), part = (v, tp) => Math.max(0, Math.round(v * QC_W[tp] / W));
   // la proteína, como mucho un 40 % de las kcal de esa comida: si no llega, no se fuerza (se avisa)
   const CAP = { Desayuno: 700, Comida: 1000, Puente: 450, Cena: 900 }; // nunca un plato desproporcionado aunque quede mucho
-  return slots.map(tp => { const kcal = Math.min(part(L.kcal, tp), CAP[tp]); return { tp, kcal, prot: Math.min(part(L.prot, tp), Math.round(kcal * .4 / 4)), carbs: part(L.carbs, tp), fat: part(L.fat, tp) }; });
+  // los macros siempre cuadran con las kcal: si la proteína del día ya está (casi) cubierta se pide una ración normal (no «2 g»);
+  // la grasa, entre el 20 y el 35 % del plato (ni platos sin una gota de aceite ni cenas de aceite); los hidratos completan
+  return slots.map(tp => {
+    const kcal = Math.min(part(L.kcal, tp), CAP[tp]), cap = Math.round(kcal * .4 / 4), p0 = Math.min(part(L.prot, tp), cap);
+    const floor = Math.min(cap, Math.round(kcal * (tp === 'Comida' || tp === 'Cena' ? .2 : .15) / 4)), prot = Math.max(p0, floor);
+    const fMin = Math.round(kcal * .2 / 9), fMax = Math.round(kcal * .35 / 9);
+    let fat = Math.min(fMax, Math.max(fMin, part(L.fat, tp))), carbs = part(L.carbs, tp), gap = kcal - (prot * 4 + carbs * 4 + fat * 9);
+    if (Math.abs(gap) > kcal * .1) { carbs = Math.max(0, carbs + Math.round(gap / 4)); gap = kcal - (prot * 4 + carbs * 4 + fat * 9); if (gap < -kcal * .1) fat = Math.max(fMin, fat + Math.round(gap / 9)); }
+    return { tp, kcal, prot, carbs, fat, ...(p0 < floor ? { protDone: true } : {}) };
+  });
 }
 // sin IA: comidas con sentido (proteína + guarnición, o tentempié) de tus habituales y básicos, para lo que toca en esa comida
 /* 🚫 Alergias e intolerancias: se guardan solo en el móvil y se mandan a la IA en cada propuesta de comida.
@@ -4285,20 +4297,24 @@ function qcLocal(B, tp) {
   const okB = x => !algHit(`${x.desc} ${x.ing.join(' ')}`);
   const R = r => QC_BASICS.filter(x => x.r.includes(r) && okB(x)), combos = mine.filter(c => !algHit(`${c[0].desc} ${(c[0].its || []).map(it => it.name).join(' ')}`));
   const fruit0 = QC_BASICS.find(x => x.low === 'una pieza de fruta'), fruit = okB(fruit0) ? fruit0 : null;
-  if (snack) { for (const x of tp === 'Desayuno' ? [...R('b'), ...R('xd').filter(y => y !== fruit)] : R('x')) { combos.push([x]); if (fruit && x !== fruit) combos.push([x, fruit]); } }
+  const yog = QC_BASICS.find(x => x.low === 'un yogur proteico'), yogOk = yog && okB(yog) ? yog : null;
+  if (snack) { for (const x of tp === 'Desayuno' ? [...R('b'), ...R('xd').filter(y => y !== fruit && y !== yogOk)] : R('x')) { combos.push([x]); if (fruit && x !== fruit) combos.push([x, fruit]); if (tp === 'Desayuno' && yogOk && x !== yogOk) { combos.push([x, yogOk]); if (fruit && x !== fruit) combos.push([x, fruit, yogOk]); } } }
   else for (const p of R('p')) for (const v of R('v')) { combos.push([p, v]); for (const c of R('c')) { combos.push([p, c, v]); for (const d of R('d')) combos.push([p, c, v, d]); } for (const d of R('d')) combos.push([p, v, d]); }
   const K = B.kcal, P = Math.max(0, B.prot);
   const score = c => { const k = c.reduce((a, x) => a + x.kcal, 0), pr = c.reduce((a, x) => a + x.prot, 0);
     if (k > K * 1.15 || k < K * .55) return -1e9; return -Math.abs(P - pr) * 2 - Math.abs(K * .95 - k) / 8 + (c[0].mine ? 25 : 0); };
   const name = c => { if (c[0].mine || c.length === 1) return c[0].desc;
-    if (snack) return `${c[0].desc} y ${c[1].low || c[1].desc.toLowerCase()}`;
-    const side = c.slice(1).filter(x => x.r !== 'xd'), d = c.find((x, i) => i && x.r === 'xd');
-    return `${c[0].desc}${side.length ? ` con ${side.map(x => x.desc).join(' y ')}` : ''}${d ? ` (de postre, ${d.low})` : ''}`; };
+    const low = x => x.low || x.desc.toLowerCase(), and = a => a.length > 1 ? `${a.slice(0, -1).join(', ')} y ${a[a.length - 1]}` : a[0];
+    if (snack) return c.length === 2 ? `${c[0].desc}${/ y /.test(c[0].desc) ? ', más' : ' y'} ${low(c[1])}` : `${c[0].desc}, ${and(c.slice(1).map(low))}`;
+    const isD = (x, i) => i && x.r.includes('d') && x.r.includes('x'), side = c.filter((x, i) => i && !isD(x, i)), d = c.filter(isD);
+    return `${c[0].desc}${side.length ? ` con ${and(side.map(x => x.desc))}` : ''}${d.length ? ` (de postre, ${and(d.map(low))})` : ''}`; };
   const best = combos.map(c => ({ c, sc: score(c) })).filter(x => x.sc > -1e9).sort((a, b) => b.sc - a.sc), out = [], used = new Set();
-  for (const { c } of best) { if (used.has(c[0].desc)) continue; used.add(c[0].desc); out.push(c); if (out.length === 3) break; }
-  return out.map(c => { const items = c.flatMap(x => { if (x.its?.length) return x.its.map(it => ({ name: it.name, uds: '', grams: Math.round(it.grams), per100: { ...it.per100 } }));
+  const build = c => { const items = c.flatMap(x => { if (x.its?.length) return x.its.map(it => ({ name: it.name, uds: '', grams: Math.round(it.grams), per100: { ...it.per100 } }));
       const g = x.g || 100, f = 100 / g; return [{ name: x.mine ? x.desc : x.desc.charAt(0).toUpperCase() + x.desc.slice(1), uds: x.mine ? '1 ración' : x.u || '', grams: g, per100: { kcal: x.kcal * f, prot: x.prot * f, carbs: x.carbs * f, fat: x.fat * f } }]; });
-    return { nombre: name(c), items, ...qcSum(items), mine: !!c[0].mine }; });
+    return qcFix({ nombre: name(c), items, ...qcSum(items), mine: !!c[0].mine }, B); };
+  // cada idea pasa la misma revisión que las de la IA antes de contar: así siempre salen 3 si las hay
+  for (const { c } of best) { if (used.has(c[0].desc)) continue; const o = build(c); if (!o) continue; used.add(c[0].desc); out.push(o); if (out.length === 3) break; }
+  return out;
 }
 function queComoModal(pick) {
   const L = qcLeft(), ia = !!state.settings.apiKey, plan = qcPlan(L), B = plan.find(x => x.tp === pick) || plan[0], tp = B.tp;
@@ -4349,7 +4365,9 @@ const QC_RULES = `REGLAS (obligatorias):
 - Guisos, potajes y arroces se cocinan para varios: pon en "olla" para cuántas raciones se suele hacer (2 a 6) y en "items" SOLO la ración de esta persona (sin olvidar el aceite y el embutido que le tocan). Si es un plato de una ración, "olla": 1.
 - El nombre del plato debe encajar con esa comida (no llames «cena» a un puente).
 - Ajusta a lo que corresponde a ESTA comida, no a todo lo que queda del día. Mejor quedarse algo corto que pasarse.
-- Si con lo que hay no se llega a la proteína sin forzar, no fuerces: dilo en "nota" y sugiere qué comprar.`;
+- Si con lo que hay no se llega a la proteína sin forzar, no fuerces: dilo en "nota" y sugiere qué comprar.
+- Nunca cuadres las calorías a base de grasa: como mucho 1 cucharada de aceite (10 g) por plato, y la grasa no pasa del 40 % de las kcal del plato. Si sobran calorías, mejor quedarse corto.
+- "nota" y "pasos": frases completas y cortas.`;
 const QC_STYLES = { var: ['🎲', 'Variado'], cuchara: ['🍲', 'Cuchara'], arroz: ['🥘', 'Arroces'], pasta: ['🍝', 'Pasta'], carne: ['🥩', 'Carne'], pescado: ['🐟', 'Pescado'], ligero: ['🥗', 'Ligero'], taper: ['🥡', 'Táper'] };
 const qcStyleOn = (tp, B) => (tp === 'Comida' || tp === 'Cena') && !B.protOnly;
 function qcStyleTxt(tp, sty, fast) {
@@ -4382,7 +4400,7 @@ async function qcAsk(cx) {
   const { B, rest, tp, have = '', img = null, prev = [] } = cx, on = qcStyleOn(tp, B), sty = on ? (cx.sty || 'var') : '', fast = on && !!cx.fast, recent = qcRecent(tp);
   openModal(`<div class="text-center py-6"><span class="spinner" style="width:34px;height:34px;border-width:3px;border-color:rgba(34,211,238,.25);border-top-color:#22d3ee"></span><h3 class="modal-title mt-3">${img ? 'Mirando lo que tienes…' : 'Pensando en tu comida…'}</h3><p class="text-sm text-mute">Unos segundos.</p></div>`);
   const prompt = `Eres un dietista práctico de España. Propón ideas para ${qcDe(tp).toUpperCase()} de hoy.
-Para esta comida le corresponden unas ${B.kcal} kcal (±15 %), ${B.prot} g de proteína, ${B.carbs} g de hidratos y ${B.fat} g de grasa.${rest.length ? ` Después todavía tiene ${rest.map(x => `${qcDe(x.tp)} (~${x.kcal} kcal)`).join(' y ')}, así que no gastes en esta comida lo que es para luego.` : ' Es su última comida del día.'}
+Para esta comida le corresponden unas ${B.kcal} kcal (±15 %), ${B.prot} g de proteína, ${B.carbs} g de hidratos y ${B.fat} g de grasa.${B.protDone ? ' Ya tiene cubierta la proteína del día: esos gramos son una ración normal y moderada, no un máximo; no hace falta más.' : ''}${rest.length ? ` Después todavía tiene ${rest.map(x => `${qcDe(x.tp)} (~${x.kcal} kcal)`).join(' y ')}, así que no gastes en esta comida lo que es para luego.` : ' Es su última comida del día.'}
 ${img ? 'En la foto se ve su nevera o despensa: usa SOLO lo que se ve con claridad (más sal, aceite, especias y agua). Si algo no se distingue bien, no lo uses y ponlo en "dudas".' : have ? `Tiene en casa: ${have}. Usa SOLO eso (más sal, aceite, especias y agua).` : 'Usa ingredientes corrientes de supermercado español.'}
 ${prev.length ? `No repitas estas ideas: ${prev.join('; ')}.` : ''}${recent.length ? `\nEstos días ya ha comido: ${recent.join('; ')}. Propón platos diferentes.` : ''}
 ${QC_RULES}${algPrompt()}${B.protOnly ? `\n- MODO PROTEÍNA: ya ha llegado a sus calorías de hoy y le faltan ${B.prot} g de proteína. Solo ideas de 150 kcal como mucho, con mucha proteína y casi sin grasa ni hidratos: lácteos desnatados o proteicos, claras, pavo, atún al natural, gambas, batido de proteína… Nada de pan, aceite, frutos secos ni dulces. Puede ser algo sencillo, sin cocinar.` : ''}
@@ -4396,15 +4414,45 @@ Responde SOLO con JSON: {"opciones":[{"nombre":"…","olla":1,"items":[{"nombre"
   if (err) return openModal(`<div class="text-center text-4xl">😕</div><h3 class="modal-title text-center">No he podido pensarlo</h3><p class="text-sm text-mute text-center">${esc(err.message || 'Error de conexión')}</p>
     <button class="btn-primary w-full mt-3" data-mact="again" type="button">🔄 Reintentar</button><button class="btn-ghost w-full mt-2" data-mact="loc" type="button">Ver ideas sin IA</button><button class="btn-ghost w-full mt-2" data-close type="button">Cerrar</button>`, { again: () => qcAsk(cx), loc: () => qcShow(cx, qcLocal(B, tp), 'Con tus comidas habituales y alimentos básicos (sin IA).') });
   const list = v => (Array.isArray(v) ? v : String(v || '').split(/[,;\n]/)).map(x => String(x).trim()).filter(Boolean).slice(0, 25);
-  const ops = (r?.opciones || []).slice(0, 3).map(o => {
+  const raw = (r?.opciones || []).slice(0, 3).map(o => {
     let items = (Array.isArray(o.items) ? o.items : []).slice(0, 8).map(it => { const pc = it.por100 || it.per100 || {};
       return { name: String(it.nombre || it.name || '').slice(0, 40), uds: String(it.uds || '').slice(0, 30), grams: Math.max(1, Math.round(num(it.g ?? it.grams))), per100: { kcal: num(pc.kcal), prot: num(pc.prot ?? pc.protein), carbs: num(pc.carbs), fat: num(pc.fat) } }; })
       .filter(it => it.name && it.grams && (it.per100.kcal > 0 || it.per100.prot > 0));
     if (!items.length && num(o.kcal)) items = [{ name: String(o.nombre || 'Plato').slice(0, 40), uds: '', grams: 100, per100: { kcal: num(o.kcal), prot: num(o.prot), carbs: num(o.carbs), fat: num(o.fat) } }];
-    return { nombre: String(o.nombre || 'Opción').slice(0, 80), items, pasos: String(o.pasos || '').slice(0, 180), taper: String(o.taper || '').slice(0, 260), olla: Math.min(8, Math.max(1, Math.round(num(o.olla) || 1))), ...qcSum(items) };
+    return { nombre: String(o.nombre || 'Opción').slice(0, 80), items, pasos: String(o.pasos || '').slice(0, 500), taper: String(o.taper || '').slice(0, 500), olla: Math.min(8, Math.max(1, Math.round(num(o.olla) || 1))), ...qcSum(items) };
   }).filter(o => o.items.length);
+  const ops = raw.map(o => qcFix(o, B)).filter(Boolean), dropped = raw.length - ops.length;
   const veo = img ? list(r?.veo) : [], dudas = img ? list(r?.dudas) : [];
-  qcShow({ ...cx, veo: veo.length ? veo : cx.veo, dudas, prev: [...prev, ...ops.map(o => o.nombre)] }, ops, String(r?.nota || '').slice(0, 200), true);
+  qcShow({ ...cx, veo: veo.length ? veo : cx.veo, dudas, dropped: ops.length ? dropped : 0, prev: [...prev, ...raw.map(o => o.nombre)] }, ops, String(r?.nota || '').slice(0, 600), true);
+}
+/* ✔️ Revisión de cada idea antes de enseñarla (de la IA o sin IA), en el móvil y sin gastar otra consulta:
+   aceite y grasas para cocinar, como mucho 10 g por ración; kcal por 100 g coherentes con sus macros;
+   cantidades ajustadas a las kcal de esa comida; y fuera lo que no tiene arreglo (demasiada grasa o muy lejos de lo que toca). */
+const QC_OIL = /aceite|mantequilla|manteca|margarina/i;
+function qcFix(o, B) {
+  const K = B.kcal, adj = [];
+  let items = o.items.map(it => {
+    const p = { ...it.per100 }, calc = p.prot * 4 + p.carbs * 4 + p.fat * 9;
+    if (calc > 0 && (p.kcal <= 0 || Math.abs(p.kcal - calc) > calc * .35)) p.kcal = Math.round(calc);
+    let g = it.grams;
+    if (QC_OIL.test(it.name) && g > 10) { g = 10; adj.push('aceite'); }
+    return { ...it, grams: g, per100: p };
+  });
+  let t = qcSum(items);
+  // cantidades a lo que toca: si falta, crece primero la guarnición de hidratos (hasta ×2,5) y luego lo demás que se pesa (hasta ×1,35);
+  // si sobra, baja todo lo que se pesa. No se tocan el aceite ni lo que va por unidades (latas, huevos, piezas).
+  const canScale = it => !QC_OIL.test(it.name) && (!it.uds || /crudo|cocid/i.test(it.uds)), isCarb = it => /arroz|pasta|macarr|espagu|fideo|patata|boniato|pan\b|cusc|quinoa/i.test(it.name);
+  const grow = (pick, max) => { const sel = items.filter(it => canScale(it) && pick(it)), ks = qcSum(sel).kcal, need = K * .95 - qcSum(items).kcal;
+    if (ks > 0 && need > 0) { const f = Math.min(max, 1 + need / ks); items = items.map(it => sel.includes(it) ? { ...it, grams: Math.round(it.grams * f / 5) * 5 } : it); } };
+  if (K > 0 && t.kcal > 0 && t.kcal < K * .9) { const k0 = t.kcal; grow(isCarb, 2.5); grow(it => !isCarb(it), 1.35); t = qcSum(items); if (t.kcal !== k0) adj.push('cantidades'); }
+  else if (K > 0 && t.kcal > K * 1.1) {
+    const sel = items.filter(canScale), ks = qcSum(sel).kcal, f = ks > 0 ? Math.max(.6, 1 - (t.kcal - K) / ks) : 1;
+    if (f < 1) { items = items.map(it => sel.includes(it) ? { ...it, grams: Math.max(5, Math.round(it.grams * f / 5) * 5) } : it); t = qcSum(items); adj.push('cantidades'); }
+  }
+  const fatPct = t.kcal > 0 ? t.fat * 9 / t.kcal : 0;
+  if (K > 0 && (t.kcal > K * 1.25 || t.kcal < K * .7)) return null;
+  if (fatPct > .6 && t.kcal > 120) return null; // un salmón con patata ronda el 50 %: es normal; una «cena» de aguacate y aceite pasa del 70 %
+  return { ...o, items, ...t, fixed: adj.length ? adj : null };
 }
 function qcToDiet(o, tp) { // abre el registro de Dieta con cada ingrediente y su cantidad, para ajustarla antes de apuntar
   mealFromChat({ title: o.nombre, type: tp, items: o.items.map(it => ({ name: it.uds ? `${it.name} (${it.uds})` : it.name, grams: it.grams, per100: { ...it.per100 } })) }, '🍽️ Idea de «¿Qué como?»: ajusta la cantidad de cada ingrediente a lo que vayas a comer y pulsa Registrar.');
@@ -4413,18 +4461,19 @@ function qcShow(cx, ops, note, ia = false) {
   const { L, B, tp, img, have, veo = [], dudas = [] } = cx;
   ui._qc = ops; ui._qcLast = [cx, ops, note, ia];
   const seen = img ? veo.join(', ') : have;
-  openModal(`<div class="flex items-center gap-2"><button class="text-mute text-xl -ml-1 px-1" data-mact="back" type="button">‹</button><div class="min-w-0"><div class="text-[11px] font-black tracking-widest text-cyan-300">🍽️ IDEAS PARA ${esc(qcDe(tp).toUpperCase())}</div><h3 class="text-lg font-black leading-tight">${B.protOnly ? `Hasta ~${B.prot} g de proteína · máx. ${B.kcal} kcal` : `Unas ${B.kcal} kcal · ${B.prot} g de proteína`}</h3><p class="text-[11px] text-mute">${B.protOnly ? `Te faltan ${L.prot} g de proteína y ya has llegado a tus kcal` : `De las ${L.kcal} kcal que te quedan hoy`}</p></div></div>
+  openModal(`<div class="flex items-center gap-2"><button class="text-mute text-xl -ml-1 px-1" data-mact="back" type="button">‹</button><div class="min-w-0"><div class="text-[11px] font-black tracking-widest text-cyan-300">🍽️ IDEAS PARA ${esc(qcDe(tp).toUpperCase())}</div><h3 class="text-lg font-black leading-tight">${B.protOnly ? `Hasta ~${B.prot} g de proteína · máx. ${B.kcal} kcal` : `Unas ${B.kcal} kcal · ${B.prot} g de proteína`}</h3><p class="text-[11px] text-mute">${B.protOnly ? `Te faltan ${L.prot} g de proteína y ya has llegado a tus kcal` : `De las ${L.kcal} kcal que te quedan hoy${B.protDone ? ' · proteína del día ya cubierta&nbsp;✓' : ''}`}</p></div></div>
     ${img && veo.length ? `<div class="qc-seen"><b>👀 He visto:</b> ${esc(veo.join(', '))}${dudas.length ? `<br><b>🤔 No lo distingo bien:</b> ${esc(dudas.join(', '))}` : ''}</div>` : ''}
-    ${note ? `<p class="text-[12px] text-mute mt-2">${esc(note)}</p>` : ''}${algAny() ? `<p class="text-[11px] text-amber-300 mt-1">🚫 Sin: ${esc(algShort())}. Revisa las etiquetas.</p>` : ''}
+    ${note ? `<p class="text-[12px] text-mute mt-2">${esc(note)}</p>` : ''}${cx.dropped ? `<p class="text-[11px] text-mute mt-1">✔️ He quitado ${cx.dropped === 1 ? 'una idea de la IA que no cuadraba' : `${cx.dropped} ideas de la IA que no cuadraban`} con lo que te toca (casi todo grasa o muy lejos de tus kcal).</p>` : ''}${algAny() ? `<p class="text-[11px] text-amber-300 mt-1">🚫 Sin: ${esc(algShort())}. Revisa las etiquetas.</p>` : ''}
     ${ops.length ? ops.map((o, i) => `<div class="qc-card"><div class="font-extrabold text-[15px] leading-tight">${esc(o.nombre)}${o.mine ? ' <span class="text-[10.5px] text-amber-300 font-bold">· de tus habituales</span>' : ''}</div>
       <div class="text-[11px] font-mono mt-1">${macroLine({ kcal: o.kcal, prot: o.prot, carbs: o.carbs, fat: o.fat })}</div>
-      ${o.items.length > 1 || ia ? `<ul class="qc-ing">${o.items.map(it => `<li>${esc(it.name)}${it.uds ? ` <span class="text-mute">(${esc(it.uds)})</span>` : ''} · ${it.grams} g</li>`).join('')}</ul>` : ''}${o.pasos ? `<p class="text-[12px] text-mute mt-1">${esc(o.pasos)}</p>` : ''}${o.taper ? `<p class="qc-taper">🥡 <b>Para el táper:</b> ${esc(o.taper)}</p>` : ''}${o.olla > 1 ? `<p class="text-[11.5px] text-amber-200 mt-1">🍲 Se cocina para ${o.olla} raciones: estas cantidades son tu ración. Para la compra, multiplica por ${o.olla}.</p>` : ''}
+      ${o.items.length > 1 || ia ? `<ul class="qc-ing">${o.items.map(it => `<li>${esc(it.name)}${it.uds ? ` <span class="text-mute">(${esc(it.uds)})</span>` : ''} · ${it.grams} g</li>`).join('')}</ul>` : ''}${o.pasos ? `<p class="text-[12px] text-mute mt-1">${esc(o.pasos)}</p>` : ''}${o.taper ? `<p class="qc-taper">🥡 <b>Para el táper:</b> ${esc(o.taper)}</p>` : ''}${o.fixed ? `<p class="text-[11px] text-emerald-300/80 mt-1">✔️ ${o.fixed.includes('cantidades') && o.fixed.includes('aceite') ? 'Cantidades y aceite ajustados' : o.fixed.includes('cantidades') ? 'Cantidades ajustadas' : 'Aceite ajustado a 10 g'} para que cuadre con lo que te toca.</p>` : ''}${o.olla > 1 ? `<p class="text-[11.5px] text-amber-200 mt-1">🍲 Se cocina para ${o.olla} raciones: estas cantidades son tu ración. Para la compra, multiplica por ${o.olla}.</p>` : ''}
       <div class="grid grid-cols-3 gap-2 mt-2.5"><button class="btn-primary !py-2 !px-1 text-sm" data-mact="add" data-i="${i}" type="button">＋ Añadir</button>${ia ? `<button class="btn-ghost !py-2 !px-1 text-sm" data-mact="rec" data-i="${i}" type="button">👨‍🍳 Receta</button>` : ''}<button class="btn-ghost !py-2 !px-1 text-sm ${ia ? '' : 'col-span-2'}" data-mact="copy" data-i="${i}" type="button">📋 Lista</button></div></div>`).join('')
-    : '<p class="text-sm text-mute mt-3">No encuentro ninguna comida que encaje. Prueba con «Con lo que tengo en casa».</p>'}
+    : ia ? '<p class="text-sm text-mute mt-3">Las ideas de la IA no cuadraban con lo que te toca (casi todo grasa o muy lejos de tus kcal) y no te las enseño. Toca «🔄 Otras ideas» o mira las ideas sin IA.</p><button class="btn-ghost w-full mt-2" data-mact="loc" type="button">Ver ideas sin IA</button>' : '<p class="text-sm text-mute mt-3">No encuentro ninguna comida que encaje. Prueba con «Con lo que tengo en casa».</p>'}
     ${ia ? `<div class="grid ${seen ? 'grid-cols-2' : ''} gap-2 mt-3">${seen ? `<button class="btn-ghost !py-2 text-sm" data-mact="fix" type="button">✏️ ${img ? '¿He visto algo mal?' : 'Cambiar lo que tengo'}</button>` : ''}<button class="btn-ghost !py-2 text-sm" data-mact="more" type="button">🔄 Otras ideas</button></div>` : ''}
     <p class="text-[11px] text-mute mt-3 text-center">Valores aproximados. Ajusta las cantidades al añadirlo si hace falta.</p>`, {
     back: () => queComoModal(tp),
     more: () => qcAsk(cx),
+    loc: () => qcShow({ ...cx, img: null, have: '' }, qcLocal(B, tp), 'Con tus comidas habituales y alimentos básicos (sin IA).'),
     rec: (_, b) => { const o = ui._qc[+b.dataset.i]; const add = () => qcToDiet(o, tp);
       o.ml = o.ml || { title: o.nombre, type: tp, olla: o.olla, taper: o.taper || '', items: o.items.map(it => ({ name: it.uds ? `${it.name} (${it.uds})` : it.name, grams: it.grams, per100: it.per100 })) };
       recipeView(o.ml, { back: () => qcShow(...ui._qcLast), backLabel: '‹ Ideas', toDiet: add, note: 'Son las cantidades de esta idea: si las cambias, cambian los macros.' }); },
@@ -7398,6 +7447,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.15.4', ['🍽️ «¿Qué como?» más coherente: el reparto de kcal y macros siempre cuadra; si ya tienes la proteína del día, propone una ración normal (no platos de aceite); cada idea, de la IA o sin IA, se revisa antes de enseñarla (aceite como mucho 10 g, cantidades ajustadas a lo que te toca, fuera lo que no cuadra) y las notas ya no se cortan.'], 'quiet'],
   ['5.15.3', ['🥡 «¿Qué como?» · Táper: ideas que llegan bien al trabajo (al menos una se come fría), sin fritos ni rebozados, y cada una con «Para el táper»: días en la nevera, si se congela, cómo recalentarlo y qué llevar aparte.'], 'quiet'],
   ['5.15.2', ['📈 «Tu progreso», Fuerza por ejercicio y Récords encuentran tu historial por el nombre del ejercicio, igual que el Coach: ya no dicen «aún no hay sesiones» de un ejercicio que sí has hecho en otro bloque o en otro día.'], 'quiet'],
   ['5.15.1', ['🏆 Récords personales: el mismo ejercicio en varios días ya sale una sola vez, con su mejor marca de todas las sesiones. Los nombres largos se leen enteros.'], 'quiet'],
