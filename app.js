@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.13.1';
+const APP_VERSION = '5.14.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -127,22 +127,42 @@ const EX_LIB = [["Pecho","Press de banca con barra","Escápulas retraídas, pies
 const EX_LIB_GROUPS = ['Pecho', 'Espalda', 'Hombro', 'Bíceps', 'Tríceps', 'Pierna', 'Femoral y glúteo', 'Gemelos', 'Core', 'Kettlebell', 'Peso corporal', 'Bandas elásticas'];
 const EX_LIB_ICON = { 'Pecho': '💪', 'Espalda': '🦅', 'Hombro': '🎯', 'Bíceps': '💪', 'Tríceps': '💪', 'Pierna': '🦵', 'Femoral y glúteo': '🍑', 'Gemelos': '🦵', 'Core': '🧱', 'Kettlebell': '🔔', 'Peso corporal': '🤸', 'Bandas elásticas': '🎗️' };
 const normTxt = t => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-function exLibraryModal() {
+/* 🧍 Grupos musculares con icono: círculo recortado del mapa muscular de Progreso con el grupo resaltado */
+const MG = { 'Pecho': ['front', ['chest'], 364, 395, 330], 'Espalda': ['back', ['upper-back', 'trapezius', 'lower-back'], 1084, 455, 400], 'Hombro': ['front', ['deltoids'], 364, 370, 360],
+  'Bíceps': ['front', ['biceps'], 364, 450, 420], 'Tríceps': ['back', ['triceps'], 1084, 455, 420], 'Core': ['front', ['abs', 'obliques'], 364, 560, 340],
+  'Pierna': ['front', ['quadriceps', 'adductors'], 364, 800, 380], 'Femoral y glúteo': ['back', ['gluteal', 'hamstring'], 1084, 790, 400], 'Gemelos': ['back', ['calves'], 1084, 1120, 360] };
+const MG_ORDER = ['Pecho', 'Espalda', 'Hombro', 'Bíceps', 'Tríceps', 'Core', 'Pierna', 'Femoral y glúteo', 'Gemelos'];
+const MG_NEUTRAL = new Set(['head', 'hair', 'hands', 'feet', 'ankles', 'knees', 'neck']), mgCache = {};
+function mgIcon(g) {
+  if (mgCache[g]) return mgCache[g];
+  const [side, hi, cx, cy, sz] = MG[g];
+  return (mgCache[g] = `<svg viewBox="${cx - sz / 2} ${cy - sz / 2} ${sz} ${sz}" aria-hidden="true">${BODY_PATHS[side].map(([slug, ps]) => { const c = hi.includes(slug) ? 'mg-h' : MG_NEUTRAL.has(slug) ? 'mg-n' : 'mg-m'; return ps.map(d => `<path class="${c}" d="${d}"/>`).join(''); }).join('')}</svg>`);
+}
+function mgGridHTML(count, act) { // count(g) → nº de ejercicios del grupo; los grupos vacíos no salen
+  return `<div class="mg-grid">${MG_ORDER.filter(g => count(g)).map(g => `<button class="mg-c" data-mact="${act}" data-g="${esc(g)}" type="button"><i>${mgIcon(g)}</i><b>${esc(g)}</b><small>${count(g)}</small></button>`).join('')}</div>`;
+}
+function exLibraryModal(init = null) { // init: volver al mismo grupo o búsqueda (p. ej. al salir de una animación 3D)
   const day = currentDay(); if (!day) return;
-  const st = { q: '', g: '' };
+  const st = init || { q: '', g: null }; // g: null = cuadrícula de grupos · '' = todos · 'Pecho'…
   const has = n => day.exercises.some(e => e.variants.some(v => v.name.toLowerCase() === n.toLowerCase()));
-  const list = () => { const q = normTxt(st.q), L = exLibAll().filter(x => (!st.g || x[0] === st.g) && (!q || normTxt(x[1] + ' ' + x[0] + ' ' + x[9].map(a => a[0]).join(' ')).includes(q))); return q ? [...L.filter(x => normTxt(x[1]).includes(q)), ...L.filter(x => !normTxt(x[1]).includes(q))] : L; };
+  const list = () => { const q = normTxt(st.q), L = exLibAll().filter(x => (q || !st.g || x[0] === st.g) && (!q || normTxt(x[1] + ' ' + x[0] + ' ' + x[9].map(a => a[0]).join(' ')).includes(q))); return q ? [...L.filter(x => normTxt(x[1]).includes(q)), ...L.filter(x => !normTxt(x[1]).includes(q))] : L; };
   const rows = () => { const L = list(); return L.length ? L.map(x => { const i = exLibAll().indexOf(x), added = has(x[1]); return `<div class="flex items-center justify-between gap-2 bg-ink rounded-xl border border-line px-3 py-2">
-      <div class="min-w-0"><div class="font-semibold text-[14px] truncate">${esc(x[1])}${x[10] && !access.me?.admin ? ' <span class="text-[10px] font-bold text-brand">NUEVO</span>' : ''}</div><div class="text-[11px] text-mute truncate">${EX_LIB_ICON[x[0]] || ''} ${esc(x[0])} · ${x[3]}×${x[4]}–${x[5]}${x[11] === 't' ? ' s ⏱' : ''}${x[8] ? ' · peso corporal' : ''} · +${x[9].length} alternativas</div></div>
-      <button class="${added ? 'btn-mini text-emerald-300' : 'btn-mini text-brand'} shrink-0" data-mact="add" data-i="${i}" type="button">${added ? '✓ Añadido' : '＋ Añadir'}</button></div>`; }).join('') : '<p class="text-xs text-mute text-center py-4">No está entre los preparados. Créalo con «✏️ Crear uno nuevo».</p>'; };
+      <div class="min-w-0"><div class="font-semibold text-[14px] leading-tight">${esc(x[1])}${x[10] && !access.me?.admin ? ' <span class="text-[10px] font-bold text-brand">NUEVO</span>' : ''}</div><div class="text-[11px] text-mute leading-snug mt-0.5">${EX_LIB_ICON[x[0]] || ''} ${esc(x[0])} · ${x[3]}×${x[4]}–${x[5]}${x[11] === 't' ? ' s ⏱' : ''}${x[8] ? ' · peso corporal' : ''} · +${x[9].length} alternativas</div></div>
+      <span class="flex items-center gap-1.5 shrink-0">${gym3dOf(x[1]) ? `<button class="btn-3d" data-mact="g3d" data-n="${esc(x[1])}" type="button" aria-label="Ver el movimiento en 3D">🧍 3D</button>` : ''}<button class="${added ? 'btn-mini text-emerald-300' : 'btn-mini text-brand'}" data-mact="add" data-i="${i}" type="button">${added ? '✓ Añadido' : '＋ Añadir'}</button></span></div>`; }).join('') : '<p class="text-xs text-mute text-center py-4">No está entre los preparados. Créalo con «✏️ Crear uno nuevo».</p>'; };
+  const count = g => exLibAll().filter(x => x[0] === g).length;
+  const body = () => st.q.trim() || st.g !== null
+    ? `${st.q.trim() ? '' : `<div class="flex items-center gap-2"><button class="back-btn" data-mact="grids" type="button">‹ Grupos</button><b class="text-[15px]">${st.g ? `${MG[st.g] ? '' : (EX_LIB_ICON[st.g] || '') + ' '}${esc(st.g)}` : 'Todos'}</b></div>`}<div class="space-y-1.5 mt-2" id="exLibRows">${rows()}</div>`
+    : `${mgGridHTML(count, 'grp')}<div class="flex flex-wrap gap-1.5 mt-3">${[...EX_LIB_GROUPS.filter(g => !MG[g]), ''].map(g => `<button class="chip shrink-0" data-mact="grp" data-g="${esc(g)}" type="button">${g ? (EX_LIB_ICON[g] || '') + ' ' + esc(g) : '📋 Todos'}</button>`).join('')}</div>`;
   const html = () => `<h3 class="modal-title">＋ Añadir ejercicio</h3>
     <button class="btn-ghost w-full" data-mact="create" type="button">✏️ Crear uno nuevo</button>
     <p class="text-xs text-mute">O elige uno preparado (con 2 alternativas ⇄). Se añaden a <b class="text-slate-300">${esc(day.label === prog().name ? day.label : day.label + ' · ' + prog().name)}</b>. Puedes añadir varios.</p>
     <input class="field" name="q" placeholder="Buscar: press, remo, glúteo, kettlebell…" value="${esc(st.q)}" autocomplete="off" />
-    <div class="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" data-noswipe>${['', ...EX_LIB_GROUPS].map(g => `<button class="chip ${st.g === g ? 'chip-on' : ''} shrink-0" data-mact="grp" data-g="${esc(g)}" type="button">${g ? (EX_LIB_ICON[g] || '') + ' ' + esc(g) : 'Todos'}</button>`).join('')}</div>
-    <div class="space-y-1.5" id="exLibRows">${rows()}</div>`;
+    <div id="exLibBody">${body()}</div>`;
+  const paint = () => { const b = $('#exLibBody'); if (b) b.innerHTML = body(); };
   openModal(html(), {
-    grp: (root, b) => { st.g = b.dataset.g; root.querySelector('.modal-sheet').innerHTML = html(); bindQ(root); },
+    grp: (root, b) => { st.g = b.dataset.g; paint(); root.querySelector('.modal-sheet').scrollTop = 0; },
+    grids: () => { st.g = null; paint(); },
+    g3d: (root, b) => { const top = root.querySelector('.modal-sheet').scrollTop; gym3dModal(b.dataset.n, () => { exLibraryModal({ ...st }); requestAnimationFrame(() => { const m = $('#modalRoot .modal-sheet'); if (m) m.scrollTop = top; }); }); },
     create: () => { closeModal(); editExModal(null); },
     add: (root, b) => {
       const x = exLibAll()[+b.dataset.i]; if (!x) return;
@@ -151,9 +171,9 @@ function exLibraryModal() {
       persist(); render(); root.querySelector('#exLibRows').innerHTML = rows(); toast(`Añadido: ${x[1]}`);
     }
   });
-  const bindQ = root => { const q = root.querySelector('[name=q]'); if (q) q.oninput = () => { st.q = q.value; root.querySelector('#exLibRows').innerHTML = rows(); }; };
-  bindQ($('#modalRoot'));
-  fetchRemoteEx().then(() => { const r = $('#exLibRows'); if (r) r.innerHTML = rows(); });
+  modalBackFn = () => { if (st.q.trim()) { st.q = ''; const q = $('#modalRoot [name=q]'); if (q) q.value = ''; paint(); return true; } if (st.g !== null) { st.g = null; paint(); return true; } return false; };
+  const q = $('#modalRoot [name=q]'); if (q) q.oninput = () => { const was = !!st.q.trim(); st.q = q.value; if (was !== !!st.q.trim()) paint(); else { const r = $('#exLibRows'); if (r) r.innerHTML = rows(); } };
+  fetchRemoteEx().then(() => { if (st.q.trim() || st.g !== null) { const r = $('#exLibRows'); if (r) r.innerHTML = rows(); } else paint(); });
 }
 
 /* Biblioteca: bloques recomendados (preparados por Esteban) que cada usuario puede añadir a los suyos */
@@ -835,8 +855,9 @@ function scrollLock(on) {
   if (on && lockY === null) { lockY = window.scrollY; Object.assign(b, { position: 'fixed', top: `-${lockY}px`, left: '0', right: '0', width: '100%' }); const h = document.querySelector('body > header'); if (h) h.style.transform = `translateY(${lockY}px)`; }
   else if (!on && lockY !== null) { const y = lockY; lockY = null; Object.assign(b, { position: '', top: '', left: '', right: '', width: '' }); const h = document.querySelector('body > header'); if (h) h.style.transform = ''; window.scrollTo(0, y); }
 }
+let modalBackFn = null; // «atrás» dentro de una ventana (p. ej. de la lista de un grupo a los grupos); devuelve true si lo ha gestionado
 function openModal(html, handlers = {}) {
-  modalHandlers = handlers;
+  modalHandlers = handlers; modalBackFn = null;
   const root = $('#modalRoot');
   const swap = root.classList.contains('open'); // de una ventana a otra (p. ej. chat → receta): sin animación de entrada, para que no asome lo de detrás
   root.innerHTML = `<div class="modal-back" ${handlers.noClose ? '' : 'data-close'}></div><div class="modal-sheet ${swap ? 'no-anim ' : ''}${handlers.sheetClass || ''}" role="dialog" aria-modal="true">${html}</div>`;
@@ -851,7 +872,7 @@ function closeModal() { $('#modalRoot').style.zIndex = '';
   root.innerHTML = '';
   root.classList.remove('open');
   document.body.classList.remove('overflow-hidden'); scrollLock(false);
-  modalHandlers = {};
+  modalHandlers = {}; modalBackFn = null;
   if (ui.fichaBack) { const h = ui.fichaBack; ui.fichaBack = null; setTimeout(() => { if (ui.accPage && !$('#modalRoot').classList.contains('open')) accFichaModal(h); }, 0); } // al cerrar lo que se abrió desde la ficha, se vuelve a ella
   if (ui.roadPending) { ui.roadPending = false; setTimeout(roadNotify, 700); } // «Próximamente» esperaba a que se cerrara otra ventana
 }
@@ -6330,7 +6351,7 @@ function dietBackToToday() { const T = todayISO(); if (ui.dietDate !== T && !die
 let backGuard = false, backCW = null, backPause = 0;
 const HAS_CW = typeof window.CloseWatcher === 'function';
 function appBack() {
-  if ($('#modalRoot')?.classList.contains('open')) { closeModal(); return true; }
+  if ($('#modalRoot')?.classList.contains('open')) { if (!modalBackFn?.()) closeModal(); return true; }
   if (ui.view === 'train' && ui.retoId) { ui.retoId = null; render(); window.scrollTo({ top: 0 }); return true; }
   if (ui.view === 'train' && !ui.trainHome) { ui.trainHome = true; render(); window.scrollTo({ top: 0 }); return true; }
   if (ui.view === 'diet' && (ui.addOpen || ui.aiResult || ui.editing)) { actions.addClose(); return true; }
@@ -7333,6 +7354,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.14.0', ['🧍 Nuevo «＋ Añadir ejercicio»: eliges el grupo muscular tocando su dibujo (pecho, espalda, hombro…) y, en la lista, el botón 🧍 3D te enseña cómo se hace cada ejercicio antes de añadirlo.', '🧍 La galería de animaciones 3D también se organiza por grupos musculares.', '⬅️ El gesto o el botón «atrás» del móvil te devuelve al paso anterior dentro de estas ventanas, en vez de cerrarlas.'], null, { img: 'news-grupos.webp', hi: true }],
   ['5.13.1', ['🎯 Coach: si haces el Taller de dominadas y en un ejercicio de espalda te tocaba subir peso, el mensaje ahora explica con claridad que mantienes el peso mientras dure el taller.'], 'quiet'],
   ['5.13.0', ['🎯 Nuevo en Entreno: TALLER DE DOMINADAS. 6 semanas para hacer más dominadas, a tu nivel: un test al empezar, 2 días por semana y un test final para ver cuánto has mejorado. El plan se ajusta solo según cómo te vaya cada sesión. Mientras lo haces, tus otros bloques bajan un poco el trabajo de espalda para que llegues fresco. Cada ejercicio trae su animación 3D y su vídeo de técnica.']],
   ['5.12.2', ['🤖 Cuando la IA principal de Google está ocupada y responde la de reserva, el aviso es más tranquilo y explica que la principal volverá sola.'], 'quiet'],
@@ -7647,7 +7669,8 @@ const GUIDE = [
     'Para montar el tuyo: «＋ Crear bloque» (en Tus bloques) → nombre y cuántos días tiene → se abre en el Día 1. Pulsa «＋ Añadir ejercicio», cambia de día con las pestañas y repite; «＋ Día» añade otro día. También desde Ajustes → Bloques («＋ Día» y «＋ Ejercicios»). Para eliminar un bloque tuyo: ⋯ de su tarjeta → «🗑 Eliminar este bloque», o la 🗑 en Ajustes → Bloques.',
     'Los bloques preparados (Full Body, PPT, Híbrido 5, Brazos, Tren inferior, Glúteo, Calistenia en casa, Kettlebell…) traen su descripción y «Cómo usarlo»: la ves en el ⋯ de su tarjeta. Los que acaban de salir llevan la etiqueta <b>NUEVO</b> hasta que los abres.',
     '🧍 El botón <b>3D</b> junto a un ejercicio (en tu entreno y en «Hoy has hecho») abre una animación del movimiento con sus 3 claves de técnica; la cámara gira sola para que lo veas desde varios ángulos. Si un ejercicio aún no tiene animación, usa el ▶ de YouTube.',
-    '🧍 <b>VER ANIMACIONES 3D ›</b>, en Entreno: todas las animaciones juntas, por grupos y con buscador. Toca una para verla con sus 3 claves.',
+    '🧍 <b>VER ANIMACIONES 3D ›</b>, en Entreno: todas las animaciones juntas, por grupos musculares (toca el dibujo del músculo) y con buscador. Toca una para verla con sus 3 claves.',
+    '💪 En «＋ Añadir ejercicio» eliges el grupo tocando su dibujo; en la lista, «🧍 3D» te enseña el ejercicio antes de añadirlo. El gesto «atrás» del móvil te devuelve a los grupos.',
     'Para cambiar ejercicios, usa «＋ Añadir ejercicio» (crear uno o elegir entre los preparados) y el ✎ de cada ejercicio. «＋ Día» añade días. El ✎ del bloque o del día permite renombrar, reordenar (◀ ▶) o eliminar. El historial nunca se borra al eliminar.'
   ]],
   ['🧭 Cómo decide el coach el peso', [
@@ -7757,13 +7780,15 @@ function newsRows(fromVer) {
   // historial para usuarios: las versiones internas seguidas se agrupan en una sola línea
   const rows = [];
   for (const e of list) {
-    if (newsForMe(e)) rows.push({ v: e[0], items: e[1] });
+    if (newsForMe(e)) rows.push({ v: e[0], items: e[1], x: e[3] });
     else if (rows.length && rows[rows.length - 1].internal) rows[rows.length - 1].v2 = e[0];
     else rows.push({ v: e[0], items: ['🔧 Mejoras en la aplicación.'], internal: true });
   }
   return rows;
 }
-const newsRowHTML = r => `<div class="mt-3 first:mt-0">
+const newsRowHTML = r => r.x?.hi ? `<div class="news-hi mt-3 first:mt-0">${r.x.img ? `<img src="${esc(r.x.img)}" alt="" loading="lazy" />` : ''}
+      <div class="p-3"><div class="flex items-center gap-2"><span class="news-tag">⭐ IMPORTANTE</span><span class="text-xs font-extrabold text-brand">Versión ${r.v}</span></div>
+      <ul class="mt-1.5 space-y-1 text-sm text-slate-200 list-disc pl-5">${r.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul></div></div>` : `<div class="mt-3 first:mt-0">
       <div class="text-xs font-extrabold ${r.internal ? 'text-mute' : 'text-brand'}">Versión ${r.v2 ? r.v2 + '–' + r.v : r.v}</div>
       <ul class="mt-1 space-y-1 text-sm ${r.internal ? 'text-mute' : 'text-slate-300'} list-disc pl-5">${r.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
     </div>`;
@@ -8165,7 +8190,7 @@ const GYM3D_MAP = [
   [/^(?!.*(m[aá]quina|polea|cable|contractora|pec ?deck)).*(p[aá]jaros?\b|rear delt|deltoides posterior)/i, 'rdfly'], // pájaros con mancuernas o banda, no en máquina
   [/m[aá]quina|polea|prensa|smith|multipower|jal[oó]n|contractora|cable|pec ?deck|hack|extensi[oó]n de cu[aá]driceps|curl femoral|curl n[oó]rdico|\+|gemelos sentado|pica|sissy|thruster|hiperextensi|patada|p[aá]jaro|apertura|abducci|aducci|paseo lateral|clean/i, null],
   [/martillo/i, 'curlh'], [/curl concentrado/i, 'curlconc'], [/curl (en banco )?inclinado|curl inclinado/i, 'curlinc'],
-  [/gorilla/i, 'gorilla'], [/toalla/i, 'towel'], [/remo invertido en trx/i, 'trxrow'], [/face ?pull|trx/i, 'trxfp'], [/remo (a una mano|con mancuerna a una mano)/i, 'dbrow1'], [/remo con (2|dos) mancuernas|remo con mancuernas en banco inclinado/i, 'csrow'],
+  [/gorilla/i, 'gorilla'], [/toalla/i, 'towel'], [/remo invertido en trx/i, 'trxrow'], [/trx/i, 'trxfp'], [/remo (a una mano|con mancuerna a una mano)/i, 'dbrow1'], [/remo con (2|dos) mancuernas|remo con mancuernas en banco inclinado/i, 'csrow'],
   [/press cerrado/i, 'benchc'], [/peso muerto (rumano )?a una pierna/i, 'sldl'], [/hip thrust a una pierna/i, 'hipth1'], [/zancadas?.*kettlebell/i, 'lungekb'],
   [/burpee/i, 'burpee'], [/hollow/i, 'hollow'], [/crunch/i, 'crunch'], [/plancha lateral/i, 'sk'], [/plancha/i, 'plank'],
   [/mountain|escalador/i, 'mc'], [/jumping|tijera/i, 'jj'],
@@ -8268,26 +8293,42 @@ const canBeta = () => isAdminUser() || !!access.me?.beta; // 🧪 administrador 
 const can3D = () => true;
 const seen3D = () => !!lsGet('fitnesteban_3dseen'); // hasta que abres tu primera animación, los botones 3D brillan // 🧍 animaciones 3D de los ejercicios: abiertas a todos desde la 4.96.0
 const GYM3D_GAL = [
-  ["Pecho", ["Press de banca con barra", "Press inclinado con mancuernas", "Aperturas en banco inclinado", "Aperturas con mancuernas", "Flexiones", "Flexiones con rodillas", "Fondos en paralelas"]],
-  ["Espalda", ["Dominadas", "Remo con barra", "Remo a una mano con mancuerna", "Remo con mancuernas en banco inclinado", "Remo gorilla", "Remo renegado", "Remo invertido", "Remo invertido en TRX", "Remo con toalla", "Face pull en TRX", "Colgado activo", "Encogimientos de escápula colgado", "Aguantar arriba", "Bajadas lentas"]],
-  ["Hombros", ["Press militar con barra", "Press con kettlebell", "Elevaciones laterales", "Pájaros con mancuernas"]],
-  ["Brazos", ["Curl de bíceps con mancuernas", "Curl martillo", "Curl inclinado", "Curl concentrado", "Curl en polea", "Curl martillo en polea con cuerda", "Curl predicador", "Curl Zottman", "Curl 21 con barra Z", "Press cerrado con barra", "Press francés", "Extensión de tríceps sobre la cabeza", "Extensión de tríceps en polea", "Fondos en banco"]],
-  ["Pierna y glúteo", ["Sentadilla", "Sentadilla con barra", "Sentadilla goblet", "Sentadilla sumo", "Sentadilla búlgara", "Zancadas", "Zancadas con kettlebell", "Step-up con mancuernas", "Prensa de piernas", "Extensión de cuádriceps", "Curl femoral sentado", "Curl femoral tumbado", "Peso muerto", "Peso muerto rumano", "Peso muerto a una pierna", "Buenos días", "Hip thrust con barra", "Hip thrust a una pierna", "Puente de glúteo", "Puente de glúteo a una pierna", "Elevación de gemelos"]],
-  ["Core", ["Plancha", "Plancha lateral", "Hollow", "Crunch", "Escaladores"]],
-  ["Cuerpo completo", ["Burpees", "Jumping jacks", "Swing con kettlebell"]]
-]; // 🧍 galería: un nombre por animación, que gym3dOf reconoce
-function gym3dGalleryModal(q = '') {
-  const tot = GYM3D_GAL.reduce((a, [, L]) => a + L.length, 0);
+  ['Pecho', ['Press de banca con barra', 'Press inclinado con mancuernas', 'Aperturas en banco inclinado', 'Aperturas con mancuernas', 'Flexiones', 'Flexiones con rodillas', 'Fondos en paralelas']],
+  ['Espalda', ['Dominadas', 'Remo con barra', 'Remo a una mano con mancuerna', 'Remo con mancuernas en banco inclinado', 'Remo gorilla', 'Remo renegado', 'Remo invertido', 'Remo invertido en TRX', 'Remo con toalla', 'Face pull en TRX', 'Colgado activo', 'Encogimientos de escápula colgado', 'Aguantar arriba', 'Bajadas lentas']],
+  ['Hombro', ['Press militar con barra', 'Press con kettlebell', 'Elevaciones laterales', 'Pájaros con mancuernas']],
+  ['Bíceps', ['Curl de bíceps con mancuernas', 'Curl martillo', 'Curl inclinado', 'Curl concentrado', 'Curl en polea', 'Curl martillo en polea con cuerda', 'Curl predicador', 'Curl Zottman', 'Curl 21 con barra Z']],
+  ['Tríceps', ['Press cerrado con barra', 'Press francés', 'Extensión de tríceps sobre la cabeza', 'Extensión de tríceps en polea', 'Fondos en banco']],
+  ['Core', ['Plancha', 'Plancha lateral', 'Barco (hollow)', 'Crunch', 'Escaladores']],
+  ['Pierna', ['Sentadilla', 'Sentadilla con barra', 'Sentadilla goblet', 'Sentadilla sumo', 'Sentadilla búlgara', 'Zancadas', 'Zancadas con kettlebell', 'Step-up con mancuernas', 'Prensa de piernas', 'Extensión de cuádriceps']],
+  ['Femoral y glúteo', ['Curl femoral sentado', 'Curl femoral tumbado', 'Peso muerto', 'Peso muerto rumano', 'Peso muerto a una pierna', 'Buenos días', 'Hip thrust con barra', 'Hip thrust a una pierna', 'Puente de glúteo', 'Puente de glúteo a una pierna']],
+  ['Gemelos', ['Elevación de gemelos']],
+  ['Cuerpo completo', ['Burpees', 'Jumping jacks', 'Swing con kettlebell']]
+]; // 🧍 galería: un nombre por animación, que gym3dOf reconoce. Los grupos con icono son los de MG
+function gym3dGalleryModal(q = '', g = null) { // g: null = cuadrícula · '' = todas · nombre de grupo
+  const tot = GYM3D_GAL.reduce((a, [, L]) => a + L.length, 0), st = { q, g };
+  const cnt = gr => GYM3D_GAL.find(x => x[0] === gr)?.[1].length || 0;
+  const items = (L, gr) => L.map(n => `<button class="g3d-it" data-mact="g" data-n="${esc(n)}" data-s="${esc(normTxt(n + ' ' + gr))}" type="button">${esc(n)}</button>`).join('');
+  const body = () => {
+    const t = normTxt(st.q.trim());
+    if (t) { const hit = GYM3D_GAL.map(([gr, L]) => [gr, L.filter(n => normTxt(n + ' ' + gr).includes(t))]).filter(([, L]) => L.length);
+      return hit.length ? `<div class="space-y-3">${hit.map(([gr, L]) => `<div><div class="lbl mb-1.5">${esc(gr)}</div><div class="flex flex-wrap gap-1.5">${items(L, gr)}</div></div>`).join('')}</div>` : '<p class="text-[12px] text-mute text-center">No hay animación para eso todavía. Irán llegando más.</p>'; }
+    if (st.g === null) return `${mgGridHTML(cnt, 'grp')}<div class="flex flex-wrap gap-1.5 mt-3"><button class="chip" data-mact="grp" data-g="Cuerpo completo" type="button">🔥 Cuerpo completo</button><button class="chip" data-mact="grp" data-g="" type="button">📋 Todas</button></div>`;
+    const G = st.g ? GYM3D_GAL.filter(x => x[0] === st.g) : GYM3D_GAL;
+    return `<div class="flex items-center gap-2"><button class="back-btn" data-mact="grids" type="button">‹ Grupos</button><b class="text-[15px]">${esc(st.g || 'Todas')}</b></div>
+      <div class="space-y-3 mt-2">${G.map(([gr, L]) => `<div>${st.g ? '' : `<div class="lbl mb-1.5">${esc(gr)}</div>`}<div class="flex flex-wrap gap-1.5">${items(L, gr)}</div></div>`).join('')}</div>`;
+  };
+  const paint = () => { const b = $('#g3dBody'); if (b) b.innerHTML = body(); };
   openModal(`<h3 class="modal-title">🧍 Animaciones 3D</h3>
-    <p class="text-[12.5px] text-mute -mt-1">${tot} ejercicios. Toca uno para ver cómo se hace y sus 3 claves.</p>
+    <p class="text-[12.5px] text-mute -mt-1">${tot} ejercicios. Elige un grupo y toca uno para ver cómo se hace y sus 3 claves.</p>
     <input class="field" id="g3dq" type="search" placeholder="Buscar ejercicio…" value="${esc(q)}" autocomplete="off" />
-    <div id="g3dList" class="space-y-3">${GYM3D_GAL.map(([g, L]) => `<div class="g3d-grp"><div class="lbl mb-1.5">${esc(g)}</div><div class="flex flex-wrap gap-1.5">${L.map(n => `<button class="g3d-it" data-mact="g" data-n="${esc(n)}" data-s="${esc(normTxt(n + ' ' + g))}" type="button">${esc(n)}</button>`).join('')}</div></div>`).join('')}</div>
-    <p class="text-[12px] text-mute text-center hidden" id="g3dNone">No hay animación para eso todavía. Irán llegando más.</p>
+    <div id="g3dBody">${body()}</div>
     <button class="btn-ghost w-full" data-close type="button">Cerrar</button>`, {
-    g: (root, b) => { const qq = root.querySelector('#g3dq')?.value || ''; gym3dModal(b.dataset.n, () => gym3dGalleryModal(qq)); }
+    grp: (root, b) => { st.g = b.dataset.g; paint(); root.querySelector('.modal-sheet').scrollTop = 0; },
+    grids: () => { st.g = null; paint(); },
+    g: (root, b) => { gym3dModal(b.dataset.n, () => gym3dGalleryModal(st.q, st.g)); }
   });
-  const inp = $('#g3dq'), filt = () => { const t = normTxt(inp.value.trim()); let n = 0; document.querySelectorAll('#g3dList .g3d-grp').forEach(gr => { let k = 0; gr.querySelectorAll('.g3d-it').forEach(b => { const ok = !t || b.dataset.s.includes(t); b.hidden = !ok; if (ok) k++; }); gr.hidden = !k; n += k; }); $('#g3dNone').classList.toggle('hidden', n > 0); };
-  inp.addEventListener('input', filt); if (q) filt();
+  modalBackFn = () => { if (st.q.trim()) { st.q = ''; $('#g3dq').value = ''; paint(); return true; } if (st.g !== null) { st.g = null; paint(); return true; } return false; };
+  $('#g3dq').addEventListener('input', e => { st.q = e.target.value; paint(); });
 }
 let gym3dMod = null;
 function gym3dModal(name, back = null) { // back: volver a la ventana de la que vienes (p. ej. «Hoy has hecho»)
@@ -8297,6 +8338,7 @@ function gym3dModal(name, back = null) { // back: volver a la ventana de la que 
     <div class="man3d mt-3" id="gym3d"><span class="text-mute text-sm">Cargando animación…</span></div>
     ${gym3dCues(name) ? `<div class="lbl mt-3">💡 Las 3 claves</div><ol class="cues">${gym3dCues(name).map(c => `<li>${esc(c)}</li>`).join('')}</ol><p class="text-[11px] text-mute mt-1">Léelas antes de empezar y cuida una en cada serie.</p>${GYM3D_VAR[gym3dOf(name)?.split(':')[0]] ? `<div class="g3d-var">🔁 <b>Variante:</b> ${esc(GYM3D_VAR[gym3dOf(name).split(':')[0]])}</div>` : ''}` : '<p class="text-[11px] text-mute mt-2 text-center">Muestra el movimiento básico. Para la técnica fina, mira el vídeo.</p>'}
     <div class="grid grid-cols-2 gap-2 mt-3"><a class="btn-ghost text-center" href="${esc(videoUrl({ name }))}" target="_blank" rel="noopener">▶ YouTube</a>${back ? '<button class="btn-primary" data-mact="back" type="button">‹ Volver</button>' : '<button class="btn-primary" data-close type="button">Cerrar</button>'}</div>`, back ? { back } : undefined);
+  if (back) modalBackFn = () => { back(); return true; };
   (async () => { const el = $('#gym3d'); try { gym3dMod ||= await import('./gym3d.js'); if (el?.isConnected) gym3dMod.mount(el, id); } catch { if (el) el.innerHTML = '<span class="text-mute text-sm">No se pudo cargar la animación. Mira el vídeo.</span>'; } })();
 }
 /* Aviso fijo en Inicio cuando al acceso le quedan 3 días o menos (el toast se pierde fácil) */
