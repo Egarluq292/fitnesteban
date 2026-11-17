@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.15.0';
+const APP_VERSION = '5.15.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -2410,11 +2410,11 @@ function bodyForAI() {
   };
 }
 
-function personalRecords() {
+function personalRecords() { // el mismo ejercicio en varios días se junta en un solo récord (igual que en Fuerza por ejercicio)
   const map = new Map();
   for (const s of sortedSessions()) for (const e of s.exercises) {
     if (!e.exKey) continue;
-    const r = map.get(e.exKey) || { bw: isBwEx(e.exId), timed: isTimedEx(e), bestSec: 0, bestSecW: 0, bestSecDate: '', name: e.name, bestW: -1, bestWReps: 0, bestWDate: '', best1: 0, best1Date: '', bestReps: 0, bestRepsDate: '', lastPR: '' };
+    const id = normTxt(String(e.name).trim()), r = map.get(id) || { bw: isBwEx(e.exId), timed: isTimedEx(e), bestSec: 0, bestSecW: 0, bestSecDate: '', name: e.name, bestW: -1, bestWReps: 0, bestWDate: '', best1: 0, best1Date: '', bestReps: 0, bestRepsDate: '', lastPR: '' };
     r.name = e.name;
     for (const x of e.sets) {
       if (!(x.r > 0)) continue;
@@ -2424,7 +2424,7 @@ function personalRecords() {
       if (one > r.best1 + 0.05) { r.best1 = one; r.best1Date = s.date; r.lastPR = s.date; }
       if (!x.w && x.r > r.bestReps) { r.bestReps = x.r; r.bestRepsDate = s.date; r.lastPR = s.date; }
     }
-    map.set(e.exKey, r);
+    map.set(id, r);
   }
   return [...map.values()].filter(r => r.bestW >= 0).sort((a, b) => (a.lastPR < b.lastPR ? 1 : -1));
 }
@@ -2484,7 +2484,7 @@ function renderRecords() {
     <summary class="flex items-center justify-between cursor-pointer select-none"><h3 class="section-title">🏆 Récords personales</h3><span class="flex items-center gap-2 text-[11px] text-mute">${recs.length} ejercicios<span class="tri"></span></span></summary>
     <div class="space-y-1.5 mt-3">
       ${recs.map(r => `<div class="bg-ink rounded-xl border border-line px-3 py-2">
-        <div class="flex items-center justify-between gap-2"><span class="text-sm font-bold truncate">${esc(r.name)}</span>${r.lastPR >= addDays(todayISO(), -7) ? '<span class="text-[10px] font-bold text-emerald-300 shrink-0">NUEVO</span>' : ''}</div>
+        <div class="flex items-start justify-between gap-2"><span class="text-sm font-bold leading-snug">${esc(r.name)}</span>${r.lastPR >= addDays(todayISO(), -7) ? '<span class="text-[10px] font-bold text-emerald-300 shrink-0">NUEVO</span>' : ''}</div>
         <div class="text-[11px] text-mute mt-0.5">${r.timed
           ? `⏱ Máx. <strong class="text-white">${secTxt(r.bestSec)}</strong>${r.bestSecW > 0 ? ` con ${r.bw ? 'PC + ' : ''}${fmtKg(r.bestSecW)}` : ''} (${fmtDateShort(r.bestSecDate)})`
           : r.bw
@@ -7390,9 +7390,10 @@ function recipeView(ml, o) {
 /* =========================================================================
    GUÍA Y NOVEDADES
    ========================================================================= */
-/* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
+/* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.15.1', ['🏆 Récords personales: el mismo ejercicio en varios días ya sale una sola vez, con su mejor marca de todas las sesiones. Los nombres largos se leen enteros.'], 'quiet'],
   ['5.15.0', ['🔎 Progreso · Fuerza por ejercicio: «Cambiar» abre un buscador por nombre o por grupo muscular («pecho», «bíceps»…), también con los dibujos de los músculos. El mismo ejercicio en varios días se junta en una sola gráfica.', '📈 En la rutina, «Tu progreso ›» (junto a «Última vez») abre la gráfica de ese ejercicio sin salir del entreno.'], 'quiet'],
   ['5.14.1', ['👥 Activos hoy: los códigos antiguos que comparten 2 personas cuentan como 2 (el mismo perfil en móvil y tableta sigue contando 1). Script de uso v15: pégalo en Reconfigurar para que el numerito de la cabecera también lo cuente así.'], 'admin'],
   ['5.14.0', ['🧍 Nuevo «＋ Añadir ejercicio»: eliges el grupo muscular tocando su dibujo (pecho, espalda, hombro…) y, en la lista, el botón 🧍 3D te enseña cómo se hace cada ejercicio antes de añadirlo.', '🧍 La galería de animaciones 3D también se organiza por grupos musculares.', '⬅️ El gesto o el botón «atrás» del móvil te devuelve al paso anterior dentro de estas ventanas, en vez de cerrarlas.'], null, { img: 'news-grupos.webp', hi: true }],
@@ -7934,7 +7935,8 @@ function maybeShowNews() {
   const from = seen || (hasData ? '4.4.1' : null); // sin registro previo: si ya usabas la app, vienes de la 4.4.1
   if (!(from && cmpVer(APP_VERSION, from) > 0)) return markSeen();
   // sin novedades para este usuario (solo cambios de administración o arreglos internos): se marca como vista sin avisar
-  if (!CHANGELOG.some(e => cmpVer(e[0], from) > 0 && cmpVer(e[0], APP_VERSION) <= 0 && newsForMe(e))) return markSeen();
+  // 'quiet': nadie recibe aviso, tampoco el administrador (sigue en el historial)
+  if (!CHANGELOG.some(e => cmpVer(e[0], from) > 0 && cmpVer(e[0], APP_VERSION) <= 0 && newsForMe(e) && e[2] !== 'quiet')) return markSeen();
   // se marca como vista solo cuando de verdad se muestra (por si la app se recarga justo al arrancar)
   setTimeout(() => {
     if ($('#modalRoot').classList.contains('open')) return;
