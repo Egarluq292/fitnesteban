@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.14.0';
+const APP_VERSION = '5.14.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7354,6 +7354,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.14.1', ['👥 Activos hoy: los códigos antiguos que comparten 2 personas cuentan como 2 (el mismo perfil en móvil y tableta sigue contando 1). Script de uso v15: pégalo en Reconfigurar para que el numerito de la cabecera también lo cuente así.'], 'admin'],
   ['5.14.0', ['🧍 Nuevo «＋ Añadir ejercicio»: eliges el grupo muscular tocando su dibujo (pecho, espalda, hombro…) y, en la lista, el botón 🧍 3D te enseña cómo se hace cada ejercicio antes de añadirlo.', '🧍 La galería de animaciones 3D también se organiza por grupos musculares.', '⬅️ El gesto o el botón «atrás» del móvil te devuelve al paso anterior dentro de estas ventanas, en vez de cerrarlas.'], null, { img: 'news-grupos.webp', hi: true }],
   ['5.13.1', ['🎯 Coach: si haces el Taller de dominadas y en un ejercicio de espalda te tocaba subir peso, el mensaje ahora explica con claridad que mantienes el peso mientras dure el taller.'], 'quiet'],
   ['5.13.0', ['🎯 Nuevo en Entreno: TALLER DE DOMINADAS. 6 semanas para hacer más dominadas, a tu nivel: un test al empezar, 2 días por semana y un test final para ver cuánto has mejorado. El plan se ajusta solo según cómo te vaya cada sesión. Mientras lo haces, tus otros bloques bajan un poco el trabajo de espalda para que llegues fresco. Cada ejercicio trae su animación 3D y su vídeo de técnica.']],
@@ -9918,7 +9919,7 @@ async function loadUsage() {
     ui.usage = {}; for (const x of d.rows || []) { x.v = usageVer(x.v); ui.usage[String(x.h).toLowerCase()] = x; }
     ui.trialH = {}; // 🧪 filas del periodo de prueba: su huella es la del correo (así no dependen de la columna «nombre»)
     for (const x of d.rows || []) { const m = String(x.m || '').trim().toLowerCase(), h = String(x.h).toLowerCase(); if (m && !(access.list || []).some(y => y.hash === h) && await trialHashOf(m) === h) ui.trialH[h] = (String(x.nm || '').match(/\d{4}-\d{2}-\d{2}/) || [''])[0] || (x.first ? addDays(fecha10(x.first), TRIAL_DAYS - 1) : ''); }
-    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageOld12 = !(d.ver >= 12); ui.usageOld13 = !(d.ver >= 14); ui.usageVer = +d.ver || 0;
+    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageOld12 = !(d.ver >= 12); ui.usageOld13 = !(d.ver >= 14); ui.usageOld14 = !(d.ver >= 15); ui.usageVer = +d.ver || 0;
     // nombres puestos en otro dispositivo tuyo: se copian aquí si aquí no tienes uno
     let got = 0;
     for (const x of d.rows || []) { const h = String(x.h).toLowerCase(), nm = String(x.nm || '').trim(); if (nm && nm !== 'Sin nombre' && nm !== 'Yo (admin)' && !state.accessNames[h]) { state.accessNames[h] = nm.slice(0, 24); got++; } }
@@ -10095,13 +10096,16 @@ function doGet_(e) {
   // cuántas personas han abierto la app hoy (solo el número: sin nombres ni correos)
   if (q.op === 'hoy') {
     const c = CacheService.getScriptCache(); let n = c.get('hoy');
-    if (n === null) { const hoy = fecha_(new Date()), adm = admins_(); n = String(hoja_().getDataRange().getValues().slice(1).filter(r => fecha_(r[1]) === hoy && adm.indexOf(String(r[0])) < 0).length); c.put('hoy', n, 60); }
-    return salida_({ ok: true, ver: 14, hoy: +n });
+    if (n === null) { // un código antiguo compartido (2 dispositivos) cuenta a cada persona; el mismo perfil en 2 dispositivos, una vez
+      const hoy = fecha_(new Date()), adm = admins_(), dd = disp_(); let k = 0;
+      hoja_().getDataRange().getValues().slice(1).forEach(r => { const h = String(r[0]).toLowerCase(); if (fecha_(r[1]) !== hoy || adm.indexOf(h) >= 0) return; const q = {}; ((dd[h] || {}).d || []).forEach(v => { if (v.last === hoy) q[String(v.p || v.id).toLowerCase()] = 1; }); k += Math.max(1, Object.keys(q).length); });
+      n = String(k); c.put('hoy', n, 60); }
+    return salida_({ ok: true, ver: 15, hoy: +n });
   }
   if (q.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
   const datos = hoja_().getDataRange().getValues().slice(1);
   const dd = disp_();
-  return salida_({ ok: true, ver: 14, rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
+  return salida_({ ok: true, ver: 15, rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
 }`;
 }
 /* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
@@ -10328,7 +10332,9 @@ function accFilterDom() {
 }
 document.addEventListener('input', e => { if (e.target.id === 'accSearch') accFilterDom(); });
 /* 🟢 Activos hoy: el script da solo el número (sin PIN). Se pide al ver Ajustes, como mucho una vez por minuto */
-const activeN = () => ui.usage ? Object.entries(ui.usage).filter(([h, u]) => u.last === todayISO() && !(access.list || []).find(x => x.hash === h)?.admin).length : ui.hoyN;
+/* Personas activas hoy: un código antiguo compartido (2 dispositivos) cuenta a cada persona; el mismo perfil en móvil y tableta cuenta una vez */
+const peopleToday = u => { const t = todayISO(), k = new Set((u.ds || []).filter(v => v.last === t).map(v => String(v.p || v.id).toLowerCase())); return Math.max(1, k.size); };
+const activeN = () => ui.usage ? Object.entries(ui.usage).filter(([h, u]) => u.last === todayISO() && !(access.list || []).find(x => x.hash === h)?.admin).reduce((a, [, u]) => a + peopleToday(u), 0) : ui.hoyN;
 /* 🟢 Numerito de activos hoy sobre el botón 👥 de la cabecera (solo admin; sin nombres, solo la cifra) */
 function usersBadge() {
   const ub = $('#usersBtn'); if (!ub) return;
@@ -10458,7 +10464,7 @@ function accessSectionHTML() {
     ${list.length ? `<p class="text-[12px] text-slate-300">💶 Este mes: <b class="text-white">${eur(paysSummary().mes)}</b> · Este año: <b class="text-white">${eur(paysSummary().ano)}</b> <span class="text-mute">(solo en este móvil)</span></p>` : ''}
     <button class="btn-primary w-full" data-act="accPage" type="button">👥 Usuarios y planes</button>
     ${access.usageUrl && lsGet(USE_KEY)
-      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : ui.usageOld12 ? '<span class="text-amber-300">actualiza el script a la v12 (Reconfigurar → nueva versión) para activar el periodo de prueba con Google</span>' : ui.usageOld13 ? '<span class="text-amber-300">actualiza el script a la v14 (Reconfigurar → nueva versión): las pruebas nuevas pasan a 7 días</span>' : 'actualizado ahora · nombres, correos, altas y quién usa cada dispositivo') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
+      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : ui.usageOld12 ? '<span class="text-amber-300">actualiza el script a la v12 (Reconfigurar → nueva versión) para activar el periodo de prueba con Google</span>' : ui.usageOld13 ? '<span class="text-amber-300">actualiza el script a la v14 (Reconfigurar → nueva versión): las pruebas nuevas pasan a 7 días</span>' : ui.usageOld14 ? '<span class="text-amber-300">actualiza el script a la v15 (Reconfigurar → nueva versión): el número de activos de la cabecera contará a las 2 personas de los códigos antiguos compartidos</span>' : 'actualizado ahora · nombres, correos, altas y quién usa cada dispositivo') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
       : access.usageUrl ? `<button class="btn-ghost w-full" data-act="usageHere" type="button">📶 Ver quién usa la app en este dispositivo</button>`
       : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
     ${access.usageUrl && lsGet(USE_KEY) ? (lsGet(SHEET_KEY) && !ui.sheetEdit
