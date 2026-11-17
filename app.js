@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.12.0';
+const APP_VERSION = '5.12.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7093,6 +7093,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.12.1', ['📈 «Tu evolución» con un aspecto más sobrio: fichas neutras, cifras en blanco y el color solo como un punto junto a cada dato.'], 'quiet'],
   ['5.12.0', ['📈 Progreso: nueva tarjeta «Tu evolución» con tu peso, cintura, fuerza, entrenos, proteína y pasos del último mes, 3 meses, 6 meses o de todo tu historial. Si entrenas, sale debajo del mapa muscular; si no, arriba del todo.', '🔥 Mapa muscular más compacto: el detalle por músculo va plegado (tócalo para verlo).', '📄 Nuevo: «Informe de progreso», al final de Progreso. Un PDF de 4 páginas con tu evolución (peso, cintura, fuerza, récords, constancia, dieta y pasos), en versión digital (oscura) o para imprimir (clara). Guárdalo en Drive, compártelo o descárgalo en un toque.']],
   ['5.11.0', ['📄 Nuevo en Progreso: «Informe de progreso». Un PDF de 4 páginas con tu evolución (peso, cintura, fuerza, récords, constancia, dieta y pasos) del último mes, 3 meses, 6 meses o todo tu historial. En versión digital (oscura) o para imprimir (clara). Se crea en tu móvil y no se envía a ningún sitio.'], 'admin'],
   ['5.10.5', ['📈 Progreso · Fuerza por ejercicio: las series de más de 12 repeticiones ya no inflan el 1RM estimado. La gráfica refleja mejor tu fuerza real y no baja cuando subes de peso.'], 'quiet'],
