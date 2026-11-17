@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.14.1';
+const APP_VERSION = '5.15.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -1489,7 +1489,7 @@ function renderExerciseCard(e, idx, day, d) {
     <div class="coach ${tone.cls} mt-3">
       <div class="font-bold text-sm">${tone.icon} ${esc(c.title)}</div>
       <p class="text-xs mt-1 opacity-90 leading-relaxed">${esc(c.text)}</p>
-      ${c.last ? `<p class="text-[11px] mt-1.5 opacity-70">Última vez: ${esc(c.last)}</p>` : ''}
+      ${c.last ? `<button class="ex-prog" data-act="exProg" data-k="${esc(key)}" data-n="${esc(variant.name)}" type="button"><span>Última vez: ${esc(c.last)}</span><b>📈 Tu progreso ›</b></button>` : ''}
     </div>
     ${(() => { const ln = lastExNote(e.id); return ln ? `<div class="mt-2 rounded-lg px-3 py-2 text-[12px]" style="background:rgba(252,211,77,.08);border:1px solid rgba(252,211,77,.3)"><b class="text-amber-200">📝 La última vez (${esc(fmtDateShort(ln.date))}):</b> <span class="text-slate-300">${esc(noteTxt(ln))}</span></div>` : ''; })()}
     <button class="sets-toggle ${isOpen ? 'sets-toggle-open' : ''} ${doneCount === n ? 'sets-toggle-done' : ''}" data-act="toggleSets" data-key="${esc(key)}" type="button" aria-expanded="${isOpen}">
@@ -5209,16 +5209,66 @@ function lineChart(rawPts, { color = '#00d2df', unit = '', label = '', trend = n
   </svg>`;
 }
 
-function strengthOptions() {
+/* 🏋️ Gráfica de fuerza de un ejercicio (Progreso y «📈 Tu progreso» desde la rutina) */
+function strengthChartHTML(key) {
+  const pts = [], rows = [];
+  let isT = false;
+  const keys = strengthKeys(key);
+  for (const s of sortedSessions()) for (const e of s.exercises) if (keys.has(e.exKey)) {
+    if (isTimedEx(e)) { isT = true; pts.push({ x: s.date, y: Math.max(...e.sets.map(x => x.r)), kg: false }); rows.push({ date: s.date, sets: e.sets, bw: isBwEx(e.exId), t: true }); continue; }
+    const best = Math.max(...e.sets.map(x => oneRM(e, x, s.date)));
+    const reps = e.sets.reduce((a, x) => a + x.r, 0);
+    pts.push({ x: s.date, y: best > 0 ? Math.round(best * 10) / 10 : reps, kg: best > 0 });
+    rows.push({ date: s.date, sets: e.sets, bw: isBwEx(e.exId) });
+  }
+  const isBW = pts.length && pts.some(p => !p.kg);
+  const pr = pts.length ? Math.max(...pts.map(p => p.y)) : 0;
+  return `
+      <div class="flex justify-between text-[11px] text-mute mt-3"><span>${isT ? '⏱ Mejor serie por sesión' : isBW ? 'Reps totales por sesión' : '1RM estimado (Epley) por sesión'}</span><span>Mejor: <strong class="text-white">${isT ? secTxt(pr) : fmtNum(pr) + (isBW ? ' reps' : ' kg')}</strong></span></div>
+      <div class="mt-1">${lineChart(pts, { color: '#00d2df', unit: isT ? ' s' : isBW ? '' : ' kg', label: 'fuerza' })}</div>
+      <div class="space-y-1 mt-2">${rows.slice(-5).reverse().map(r => `<div class="text-[11px] flex justify-between gap-3 bg-ink rounded-lg px-2.5 py-1.5"><span class="text-mute shrink-0">${fmtDate(r.date)}</span><span class="font-mono text-right">${r.sets.map(x => setStr(x, r.bw, r.t)).join(' · ')}</span></div>`).join('')}</div>`;
+}
+/* 🔎 Elegir ejercicio en «Fuerza por ejercicio»: buscador (nombre o grupo: «pecho», «bíceps»…) y grupos musculares con icono */
+const MG_OF_SLUG = { chest: 'Pecho', 'upper-back': 'Espalda', 'lower-back': 'Espalda', trapezius: 'Espalda', deltoids: 'Hombro', biceps: 'Bíceps', forearm: 'Bíceps', triceps: 'Tríceps', abs: 'Core', obliques: 'Core', quadriceps: 'Pierna', adductors: 'Pierna', gluteal: 'Femoral y glúteo', hamstring: 'Femoral y glúteo', calves: 'Gemelos' };
+function mgOf(name) { const m = Object.entries(musclesOf(name) || {}).sort((a, b) => b[1] - a[1])[0]; return m ? MG_OF_SLUG[m[0]] || '' : ''; }
+function strengthPickModal(init = null) {
+  const opts = strengthOptions().map(([k, v]) => ({ k, ...v, g: mgOf(v.name) })), st = init || { q: '', g: null };
+  const last = {}; for (const x of sortedSessions()) for (const e of x.exercises) if (e.exKey) last[e.exKey] = x.date;
+  const lastOf = o => [...o.keys].map(k => last[k] || '').sort().pop();
+  const count = g => opts.filter(o => o.g === g).length, others = opts.filter(o => !o.g).length;
+  const list = () => { const q = normTxt(st.q.trim()); return opts.filter(o => q ? normTxt(o.name + ' ' + o.g).includes(q) : !st.g || (st.g === '·' ? !o.g : o.g === st.g)); };
+  const rows = () => { const L = list(); return L.length ? L.map(o => `<button class="sp-row ${o.k === ui.progEx ? 'on' : ''}" data-mact="pick" data-k="${esc(o.k)}" type="button"><span class="min-w-0"><b>${esc(o.name)}</b><small>${o.g ? esc(o.g) + ' · ' : ''}${o.count} ${o.count === 1 ? 'sesión' : 'sesiones'} · última ${esc(fmtDateShort(lastOf(o)))}</small></span><span class="text-brand">›</span></button>`).join('') : '<p class="text-xs text-mute text-center py-4">Ningún ejercicio con ese nombre en tus sesiones.</p>'; };
+  const body = () => st.q.trim() || st.g !== null
+    ? `${st.q.trim() ? '' : `<div class="flex items-center gap-2"><button class="back-btn" data-mact="grids" type="button">‹ Grupos</button><b class="text-[15px]">${st.g === '·' ? 'Otros' : st.g ? esc(st.g) : 'Todos'}</b></div>`}<div class="space-y-1.5 mt-2">${rows()}</div>`
+    : `${mgGridHTML(count, 'grp')}<div class="flex flex-wrap gap-1.5 mt-3">${others ? `<button class="chip" data-mact="grp" data-g="·" type="button">🧩 Otros (${others})</button>` : ''}<button class="chip" data-mact="grp" data-g="" type="button">📋 Todos (${opts.length})</button></div>`;
+  const paint = () => { const b = $('#spBody'); if (b) b.innerHTML = body(); };
+  openModal(`<h3 class="modal-title">🏋️ ¿Qué ejercicio quieres ver?</h3>
+    <input class="field" id="spQ" type="search" placeholder="Buscar: press, remo, pecho, bíceps…" value="${esc(st.q)}" autocomplete="off" />
+    <div id="spBody">${body()}</div>`, {
+    grp: (root, b) => { st.g = b.dataset.g; paint(); root.querySelector('.modal-sheet').scrollTop = 0; },
+    grids: () => { st.g = null; paint(); },
+    pick: (root, b) => { ui.progEx = b.dataset.k; openKeys.strength = true; closeModal(); render(); setTimeout(() => document.querySelector('[data-open-key="strength"]')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 60); }
+  });
+  modalBackFn = () => { if (st.q.trim()) { st.q = ''; $('#spQ').value = ''; paint(); return true; } if (st.g !== null) { st.g = null; paint(); return true; } return false; };
+  $('#spQ').addEventListener('input', e => { const was = !!st.q.trim(); st.q = e.target.value; if (was !== !!st.q.trim() || st.q.trim()) paint(); });
+}
+/* 📈 Desde la rutina: el progreso de ese ejercicio sin salir del entreno */
+function exProgressModal(key, name) {
+  if (!sortedSessions().some(x => x.exercises.some(e => strengthKeys(key).has(e.exKey)))) return toast('Aún no hay sesiones guardadas de este ejercicio');
+  openModal(`<h3 class="text-lg font-black leading-tight">📈 ${esc(name)}</h3>${strengthChartHTML(key)}
+    <button class="btn-primary w-full mt-3" data-close type="button">Cerrar</button>`);
+}
+function strengthOptions() { // el mismo ejercicio en varios días (o bloques) se junta en uno: una sola gráfica con todo su historial
   const map = new Map();
   for (const s of sortedSessions()) for (const e of s.exercises) {
     if (!e.exKey) continue;
-    const cur = map.get(e.exKey) || { name: e.name, count: 0 };
-    cur.name = e.name; cur.count++;
-    map.set(e.exKey, cur);
+    const n = normTxt(String(e.name).trim()), cur = map.get(n) || { name: e.name, count: 0, keys: new Set(), k: e.exKey };
+    cur.name = e.name; cur.count++; cur.keys.add(e.exKey); cur.k = e.exKey;
+    map.set(n, cur);
   }
-  return [...map.entries()].filter(([, v]) => v.count > 0).sort((a, b) => b[1].count - a[1].count);
+  return [...map.values()].filter(v => v.count > 0).sort((a, b) => b.count - a.count).map(v => [v.k, v]);
 }
+const strengthKeys = key => strengthOptions().find(([k, v]) => k === key || v.keys.has(key))?.[1].keys || new Set([key]);
 
 function weekStats() {
   const today = parseISO(todayISO());
@@ -5572,25 +5622,14 @@ function renderProgress() {
   const delta = (pts, unit) => pts.length >= 2 ? (() => { const d = r2(pts[pts.length - 1].y - pts[0].y); return `<span class="${d <= 0 ? 'text-emerald-300' : 'text-rose-300'} font-bold">${d > 0 ? '+' : ''}${fmtNum(d)} ${unit}</span> desde ${fmtDateShort(pts[0].x)}`; })() : '';
 
   const opts = strengthOptions();
-  if (!ui.progEx || !opts.some(([k]) => k === ui.progEx)) ui.progEx = opts[0]?.[0] || null;
+  if (ui.progEx && !opts.some(([k]) => k === ui.progEx)) ui.progEx = opts.find(([, v]) => v.keys.has(ui.progEx))?.[0] || null;
+  if (!ui.progEx) ui.progEx = opts[0]?.[0] || null;
   let strengthHtml = '<p class="text-sm text-mute">Guarda alguna sesión y aquí verás tu fuerza por ejercicio.</p>';
   if (ui.progEx) {
-    const pts = [], rows = [];
-    let isT = false;
-    for (const s of sortedSessions()) for (const e of s.exercises) if (e.exKey === ui.progEx) {
-      if (isTimedEx(e)) { isT = true; pts.push({ x: s.date, y: Math.max(...e.sets.map(x => x.r)), kg: false }); rows.push({ date: s.date, sets: e.sets, bw: isBwEx(e.exId), t: true }); continue; }
-      const best = Math.max(...e.sets.map(x => oneRM(e, x, s.date)));
-      const reps = e.sets.reduce((a, x) => a + x.r, 0);
-      pts.push({ x: s.date, y: best > 0 ? Math.round(best * 10) / 10 : reps, kg: best > 0 });
-      rows.push({ date: s.date, sets: e.sets, bw: isBwEx(e.exId) });
-    }
-    const isBW = pts.length && pts.some(p => !p.kg);
-    const pr = pts.length ? Math.max(...pts.map(p => p.y)) : 0;
+    const cur = opts.find(([k]) => k === ui.progEx)?.[1];
     strengthHtml = `
-      <select class="field" data-act-change="progEx">${opts.map(([k, v]) => `<option value="${esc(k)}" ${k === ui.progEx ? 'selected' : ''}>${esc(v.name)} (${v.count})</option>`).join('')}</select>
-      <div class="flex justify-between text-[11px] text-mute mt-3"><span>${isT ? '⏱ Mejor serie por sesión' : isBW ? 'Reps totales por sesión' : '1RM estimado (Epley) por sesión'}</span><span>Mejor: <strong class="text-white">${isT ? secTxt(pr) : fmtNum(pr) + (isBW ? ' reps' : ' kg')}</strong></span></div>
-      <div class="mt-1">${lineChart(pts, { color: '#00d2df', unit: isT ? ' s' : isBW ? '' : ' kg', label: 'fuerza' })}</div>
-      <div class="space-y-1 mt-2">${rows.slice(-5).reverse().map(r => `<div class="text-[11px] flex justify-between gap-3 bg-ink rounded-lg px-2.5 py-1.5"><span class="text-mute shrink-0">${fmtDate(r.date)}</span><span class="font-mono text-right">${r.sets.map(x => setStr(x, r.bw, r.t)).join(' · ')}</span></div>`).join('')}</div>`;
+      <button class="sp-pick" data-act="strengthPick" type="button"><span class="min-w-0"><b>${esc(cur?.name || '')}</b><small>${cur ? `${cur.count} ${cur.count === 1 ? 'sesión' : 'sesiones'} · ` : ''}${opts.length} ejercicios</small></span><span class="sp-pick-r">🔎 Cambiar</span></button>
+      ${strengthChartHTML(ui.progEx)}`;
   }
 
   const backupAge = st.lastBackup ? daysBetween(st.lastBackup, todayISO()) : null;
@@ -7354,6 +7393,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.15.0', ['🔎 Progreso · Fuerza por ejercicio: «Cambiar» abre un buscador por nombre o por grupo muscular («pecho», «bíceps»…), también con los dibujos de los músculos. El mismo ejercicio en varios días se junta en una sola gráfica.', '📈 En la rutina, «Tu progreso ›» (junto a «Última vez») abre la gráfica de ese ejercicio sin salir del entreno.'], 'quiet'],
   ['5.14.1', ['👥 Activos hoy: los códigos antiguos que comparten 2 personas cuentan como 2 (el mismo perfil en móvil y tableta sigue contando 1). Script de uso v15: pégalo en Reconfigurar para que el numerito de la cabecera también lo cuente así.'], 'admin'],
   ['5.14.0', ['🧍 Nuevo «＋ Añadir ejercicio»: eliges el grupo muscular tocando su dibujo (pecho, espalda, hombro…) y, en la lista, el botón 🧍 3D te enseña cómo se hace cada ejercicio antes de añadirlo.', '🧍 La galería de animaciones 3D también se organiza por grupos musculares.', '⬅️ El gesto o el botón «atrás» del móvil te devuelve al paso anterior dentro de estas ventanas, en vez de cerrarlas.'], null, { img: 'news-grupos.webp', hi: true }],
   ['5.13.1', ['🎯 Coach: si haces el Taller de dominadas y en un ejercicio de espalda te tocaba subir peso, el mensaje ahora explica con claridad que mantienes el peso mientras dure el taller.'], 'quiet'],
@@ -7758,7 +7798,7 @@ const GUIDE = [
     '🧠 <b>Resumen semanal</b>: analiza 7 días de fuerza, dieta, cardio y peso y te da 3 acciones para la semana siguiente.',
     '📈 <b>Tu evolución</b>: peso, cintura, fuerza, entrenos, proteína y pasos del periodo que elijas (1, 3 o 6 meses, o todo). Si entrenas, sale debajo del mapa muscular; si no, arriba.',
     '📄 <b>Informe de progreso</b>: un PDF de 4 páginas con toda tu evolución, en versión digital (oscura) o para imprimir (clara). Se crea en tu móvil en unos segundos y luego eliges: ☁️ guardarlo en Drive (carpeta FITNESTEBAN › Informes), 📤 compartirlo o ⬇️ descargarlo.',
-    '🏆 <b>Récords</b> y «Fuerza por ejercicio» (1RM estimado). En el <b>historial</b> ves sesiones, retos y tests; puedes borrar una sesión mal guardada.'
+    '🏆 <b>Récords</b> y «Fuerza por ejercicio» (1RM estimado): «🔎 Cambiar» busca por nombre o por grupo muscular. En la rutina, «📈 Tu progreso ›» abre la gráfica de ese ejercicio. En el <b>historial</b> ves sesiones, retos y tests; puedes borrar una sesión mal guardada.'
   ]],
   ['🔒 Datos, copias y PIN', [
     'Tus datos viven <b>solo en este móvil</b>. Conecta <b>☁️ Google Drive</b> (Ajustes → Copias de seguridad): cada día, y al guardar cada sesión o reto, se guarda una copia en tu Drive. Desde ahí también puedes restaurar. La app te avisa si pasan más de 7 días.',
@@ -8817,6 +8857,8 @@ const actions = {
   advInfo: () => advInfoModal(),
   gym3d: b => { if (can3D()) gym3dModal(b.dataset.n); },
   gal3d: () => gym3dGalleryModal(),
+  strengthPick: () => strengthPickModal(),
+  exProg: b => exProgressModal(b.dataset.k, b.dataset.n),
   queComo: () => queComoModal(),
   cdWatch: () => { keepCardioInputs(); state.settings.watchOpen = !state.settings.watchOpen; persist(); render(); },
   cdUseWatch: () => { const e = ui.cardio.est; if (!e?.wkcal) return; keepCardioInputs(); e.appKcal = e.appKcal ?? e.kcal; e.kcal = +e.wkcal; e.usedWatch = true; render(); toast('Puestas las kcal del reloj'); },
