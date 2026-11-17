@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.15.1';
+const APP_VERSION = '5.15.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -2413,8 +2413,8 @@ function bodyForAI() {
 function personalRecords() { // el mismo ejercicio en varios días se junta en un solo récord (igual que en Fuerza por ejercicio)
   const map = new Map();
   for (const s of sortedSessions()) for (const e of s.exercises) {
-    if (!e.exKey) continue;
-    const id = normTxt(String(e.name).trim()), r = map.get(id) || { bw: isBwEx(e.exId), timed: isTimedEx(e), bestSec: 0, bestSecW: 0, bestSecDate: '', name: e.name, bestW: -1, bestWReps: 0, bestWDate: '', best1: 0, best1Date: '', bestReps: 0, bestRepsDate: '', lastPR: '' };
+    const id = exNameKey(e.name); if (!id) continue;
+    const r = map.get(id) || { bw: isBwEx(e.exId), timed: isTimedEx(e), bestSec: 0, bestSecW: 0, bestSecDate: '', name: e.name, bestW: -1, bestWReps: 0, bestWDate: '', best1: 0, best1Date: '', bestReps: 0, bestRepsDate: '', lastPR: '' };
     r.name = e.name;
     for (const x of e.sets) {
       if (!(x.r > 0)) continue;
@@ -5213,8 +5213,8 @@ function lineChart(rawPts, { color = '#00d2df', unit = '', label = '', trend = n
 function strengthChartHTML(key) {
   const pts = [], rows = [];
   let isT = false;
-  const keys = strengthKeys(key);
-  for (const s of sortedSessions()) for (const e of s.exercises) if (keys.has(e.exKey)) {
+  const o = strengthOpt(key), keys = o?.keys || new Set([key]), nk = o?.nk;
+  for (const s of sortedSessions()) for (const e of s.exercises) if ((keys.has(e.exKey) || (nk && exNameKey(e.name) === nk)) && e.sets?.some(x => x.r > 0)) {
     if (isTimedEx(e)) { isT = true; pts.push({ x: s.date, y: Math.max(...e.sets.map(x => x.r)), kg: false }); rows.push({ date: s.date, sets: e.sets, bw: isBwEx(e.exId), t: true }); continue; }
     const best = Math.max(...e.sets.map(x => oneRM(e, x, s.date)));
     const reps = e.sets.reduce((a, x) => a + x.r, 0);
@@ -5233,8 +5233,7 @@ const MG_OF_SLUG = { chest: 'Pecho', 'upper-back': 'Espalda', 'lower-back': 'Esp
 function mgOf(name) { const m = Object.entries(musclesOf(name) || {}).sort((a, b) => b[1] - a[1])[0]; return m ? MG_OF_SLUG[m[0]] || '' : ''; }
 function strengthPickModal(init = null) {
   const opts = strengthOptions().map(([k, v]) => ({ k, ...v, g: mgOf(v.name) })), st = init || { q: '', g: null };
-  const last = {}; for (const x of sortedSessions()) for (const e of x.exercises) if (e.exKey) last[e.exKey] = x.date;
-  const lastOf = o => [...o.keys].map(k => last[k] || '').sort().pop();
+  const lastOf = o => { let d = ''; for (const x of sortedSessions()) if (x.exercises.some(e => exNameKey(e.name) === o.nk || o.keys.has(e.exKey))) d = x.date; return d; };
   const count = g => opts.filter(o => o.g === g).length, others = opts.filter(o => !o.g).length;
   const list = () => { const q = normTxt(st.q.trim()); return opts.filter(o => q ? normTxt(o.name + ' ' + o.g).includes(q) : !st.g || (st.g === '·' ? !o.g : o.g === st.g)); };
   const rows = () => { const L = list(); return L.length ? L.map(o => `<button class="sp-row ${o.k === ui.progEx ? 'on' : ''}" data-mact="pick" data-k="${esc(o.k)}" type="button"><span class="min-w-0"><b>${esc(o.name)}</b><small>${o.g ? esc(o.g) + ' · ' : ''}${o.count} ${o.count === 1 ? 'sesión' : 'sesiones'} · última ${esc(fmtDateShort(lastOf(o)))}</small></span><span class="text-brand">›</span></button>`).join('') : '<p class="text-xs text-mute text-center py-4">Ningún ejercicio con ese nombre en tus sesiones.</p>'; };
@@ -5254,21 +5253,23 @@ function strengthPickModal(init = null) {
 }
 /* 📈 Desde la rutina: el progreso de ese ejercicio sin salir del entreno */
 function exProgressModal(key, name) {
-  if (!sortedSessions().some(x => x.exercises.some(e => strengthKeys(key).has(e.exKey)))) return toast('Aún no hay sesiones guardadas de este ejercicio');
+  const o = strengthOpt(key, name);
+  if (!o) return toast('Aún no hay sesiones guardadas de este ejercicio');
+  key = o.k || 'n:' + o.nk;
   openModal(`<h3 class="text-lg font-black leading-tight">📈 ${esc(name)}</h3>${strengthChartHTML(key)}
     <button class="btn-primary w-full mt-3" data-close type="button">Cerrar</button>`);
 }
-function strengthOptions() { // el mismo ejercicio en varios días (o bloques) se junta en uno: una sola gráfica con todo su historial
+function strengthOptions() { // el mismo ejercicio (mismo nombre) en varios días o bloques se junta en uno, igual que hace el Coach
   const map = new Map();
   for (const s of sortedSessions()) for (const e of s.exercises) {
-    if (!e.exKey) continue;
-    const n = normTxt(String(e.name).trim()), cur = map.get(n) || { name: e.name, count: 0, keys: new Set(), k: e.exKey };
-    cur.name = e.name; cur.count++; cur.keys.add(e.exKey); cur.k = e.exKey;
+    const n = exNameKey(e.name); if (!n || !e.sets?.some(x => x.r > 0)) continue;
+    const cur = map.get(n) || { name: e.name, count: 0, keys: new Set(), nk: n, k: '' };
+    cur.name = e.name; cur.count++; if (e.exKey) { cur.keys.add(e.exKey); cur.k = e.exKey; }
     map.set(n, cur);
   }
-  return [...map.values()].filter(v => v.count > 0).sort((a, b) => b.count - a.count).map(v => [v.k, v]);
+  return [...map.values()].map(v => [v.k || 'n:' + v.nk, v]).sort((a, b) => b[1].count - a[1].count);
 }
-const strengthKeys = key => strengthOptions().find(([k, v]) => k === key || v.keys.has(key))?.[1].keys || new Set([key]);
+const strengthOpt = (key, name) => { const n = exNameKey(name); return strengthOptions().find(([k, v]) => k === key || v.keys.has(key) || (n && v.nk === n))?.[1] || null; };
 
 function weekStats() {
   const today = parseISO(todayISO());
@@ -7393,6 +7394,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.15.2', ['📈 «Tu progreso», Fuerza por ejercicio y Récords encuentran tu historial por el nombre del ejercicio, igual que el Coach: ya no dicen «aún no hay sesiones» de un ejercicio que sí has hecho en otro bloque o en otro día.'], 'quiet'],
   ['5.15.1', ['🏆 Récords personales: el mismo ejercicio en varios días ya sale una sola vez, con su mejor marca de todas las sesiones. Los nombres largos se leen enteros.'], 'quiet'],
   ['5.15.0', ['🔎 Progreso · Fuerza por ejercicio: «Cambiar» abre un buscador por nombre o por grupo muscular («pecho», «bíceps»…), también con los dibujos de los músculos. El mismo ejercicio en varios días se junta en una sola gráfica.', '📈 En la rutina, «Tu progreso ›» (junto a «Última vez») abre la gráfica de ese ejercicio sin salir del entreno.'], 'quiet'],
   ['5.14.1', ['👥 Activos hoy: los códigos antiguos que comparten 2 personas cuentan como 2 (el mismo perfil en móvil y tableta sigue contando 1). Script de uso v15: pégalo en Reconfigurar para que el numerito de la cabecera también lo cuente así.'], 'admin'],
