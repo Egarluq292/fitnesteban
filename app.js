@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.15.5';
+const APP_VERSION = '5.15.6';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -2896,11 +2896,11 @@ function mmTrendHTML(wk) {
   const tr = a + b < 4 ? '' : b > a * 1.2 ? '<span class="text-emerald-300">↑</span>' : b < a * 0.8 ? '<span class="text-amber-300">↓</span>' : '<span class="text-mute">=</span>';
   return `<span class="mm-wk" title="Series por semana: ${wk.map(x => fmtNum(Math.round(x * 2) / 2)).join(' · ')}">${wk.map((x, i) => `<i style="height:${Math.max(8, Math.round(x / mx * 100))}%;opacity:${x ? 1 : .25}" class="${i === 3 ? 'is-now' : ''}"></i>`).join('')}</span>${tr}`;
 }
-const MM_SCALE = ['#2c3b44', '#164e63', '#0e7490', '#0891b2', '#06b6d4', '#22d3ee', '#67e8f9'];
+const MM_SCALE = ['#2c3b44', '#164e63', '#0e7490', '#0891b2', '#06b6d4', '#22d3ee', '#67e8f9']; // en tema claro se invierte por CSS (.mm-body): descansado casi blanco → muy cargado, cian intenso oscuro
 const mmColor = v => v <= 0.03 ? MM_SCALE[0] : MM_SCALE[Math.min(6, 1 + Math.floor(v * 6))];
 function bodySVG(vals, width) {
   const fem = profileOf()?.sex === 'm', P = fem ? BODY_PATHS_F : BODY_PATHS;
-  const view = (side, vb) => `<svg viewBox="${vb}" width="${width}" class="swipe-ok" aria-hidden="true">${P[side].map(([slug, paths]) => {
+  const view = (side, vb) => `<svg viewBox="${vb}" width="${width}" class="swipe-ok mm-body" aria-hidden="true">${P[side].map(([slug, paths]) => {
     const c = MUSCLE_NEUTRAL.has(slug) ? (slug === 'hair' ? '#141b20' : '#1c262c') : mmColor(vals[slug] || 0);
     return paths.map(d => `<path d="${d}" fill="${c}" stroke="#070b0d" stroke-width="2"/>`).join('');
   }).join('')}</svg>`;
@@ -2934,7 +2934,7 @@ function muscleMapHTML() {
     <div class="seg mt-3" style="grid-template-columns:repeat(3,minmax(0,1fr))">${[['now', 'Ahora'], ['d7', '7 días'], ['d30', '30 días']].map(([k, l]) => `<button class="seg-btn py-1.5 ${tab === k ? 'seg-on' : ''}" data-act="mmTab" data-v="${k}" type="button">${l}</button>`).join('')}</div>
     <div id="mmBody">
     <div class="mt-3">${bodySVG(vals, 150)}</div>
-    <div class="flex items-center gap-2 mt-3 text-[10px] text-mute"><span>${tab === 'now' ? 'Descansado' : 'Poco'}</span><span class="flex-1 h-2 rounded-full" style="background:${grad}"></span><span>${tab === 'now' ? 'Muy cargado' : 'Mucho'}</span></div>
+    <div class="flex items-center gap-2 mt-3 text-[10px] text-mute"><span>${tab === 'now' ? 'Descansado' : 'Poco'}</span><span class="flex-1 h-2 rounded-full mm-grad" style="background:${grad}"></span><span>${tab === 'now' ? 'Muy cargado' : 'Mucho'}</span></div>
     <details class="mm-list mt-3" ${openAttr('mmList')}><summary class="flex items-center justify-between cursor-pointer select-none text-[12px] text-mute"><span>Detalle por músculo</span><span class="tri"></span></summary>
     <div class="mt-2 space-y-1">${rows}</div>
     <p class="text-[11px] text-mute mt-2">${foot}</p>
@@ -7448,6 +7448,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.15.6', ['🔥 Mapa muscular en tema claro: lo descansado sale casi blanco y, cuanto más cargado está el músculo, más intenso y oscuro. La leyenda va en el mismo orden.'], 'quiet'],
   ['5.15.5', ['🍽️ «¿Qué como?» y las recetas te hablan con un tono más cercano, sin lenguaje técnico; la nota de arriba solo sale si aporta algo.'], 'quiet'],
   ['5.15.4', ['🍽️ «¿Qué como?» más coherente: el reparto de kcal y macros siempre cuadra; si ya tienes la proteína del día, propone una ración normal (no platos de aceite); cada idea, de la IA o sin IA, se revisa antes de enseñarla (aceite como mucho 10 g, cantidades ajustadas a lo que te toca, fuera lo que no cuadra) y las notas ya no se cortan.'], 'quiet'],
   ['5.15.3', ['🥡 «¿Qué como?» · Táper: ideas que llegan bien al trabajo (al menos una se come fría), sin fritos ni rebozados, y cada una con «Para el táper»: días en la nevera, si se congela, cómo recalentarlo y qué llevar aparte.'], 'quiet'],
