@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.15.8';
+const APP_VERSION = '5.15.9';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7516,6 +7516,12 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.15.9', [
+    '🍽️ La IA de la dieta, más fiable y sin cortes:',
+    '✔️ Comidas que cuadran siempre. Cada comida que calcula o propone la IA se revisa antes de enseñártela: las calorías cuadran con la proteína, los hidratos y la grasa, y las raciones son las de un plato normal.',
+    '📶 Si se corta la conexión, no pierdes nada. La IA funciona a través de Google, así que necesita internet. Si al darle a «Estimar macros con IA» falla la cobertura o Google no responde, la app guarda lo que has escrito y lo calcula sola en cuanto vuelve la conexión, aunque hayas cerrado la app. Te avisará con un «✅ Ya tengo los macros…» para que lo revises y lo registres. Mientras, te enseña tus comidas habituales parecidas, para apuntarla con un toque si es algo que ya has comido.',
+    '🛡️ Si la IA no responde nunca en tu móvil, a veces es algo del propio móvil, no de la app: una VPN, un bloqueador de anuncios, un DNS privado o el ahorro de datos muy estricto. Si la app lo detecta, te lo explicará con los pasos para solucionarlo. Mientras, puedes apuntar tus comidas desde tus habituales o a mano.',
+    '💬 «¿Qué como?» y el Coach te hablan más cercano, y en modo Táper te dicen cuántos días aguanta cada plato y cómo recalentarlo.']],
   ['5.15.8', ['📶 Sin conexión con Google ya no pierdes nada: «Estimar macros con IA» guarda lo que escribiste y te lo calcula solo en cuanto vuelve la conexión. Mientras, te enseña tus habituales que encajan.', '✔️ Todo lo que calcula la IA (estimar macros, añadir ingrediente, ¿Qué como? y el Coach) se revisa antes de enseñarlo: las kcal siempre cuadran con los macros.', '💬 Coach: las mismas reglas que «¿Qué como?» para proponer comidas (nada de platos de aceite, ración normal de proteína si ya la tienes cubierta) y tono cercano.', '🚧 Si algo del móvil bloquea la IA (VPN, bloqueador, DNS privado), la app te lo explica una vez.'], 'quiet'],
   ['5.15.7', ['🤖 IA: si la conexión con Google se corta un momento, la app vuelve a intentarlo sola. Si aun así no conecta, te explica en español qué revisar (wifi o datos, bloqueadores, VPN o DNS privado) en vez de «Failed to fetch».'], 'quiet'],
   ['5.15.6', ['🔥 Mapa muscular en tema claro: lo descansado sale casi blanco y, cuanto más cargado está el músculo, más intenso y oscuro. La leyenda va en el mismo orden.'], 'quiet'],
@@ -7896,6 +7902,7 @@ const GUIDE = [
     'Foto (cámara o galería) y/o descripción. Lo que escribas <b>manda</b>: «200 g de pollo» fija esa cantidad. Con 🎤 puedes dictarla en vez de escribirla.',
     '🏷️ <b>Código</b>: escanea el código de barras de un envase y se añade con los valores de su etiqueta (Open Food Facts). Si no aparece, haz una foto de la tabla nutricional y la IA la lee; la próxima vez saldrá directo.',
     'Tras «Estimar macros con IA», ajusta cada alimento con <b>P / M / G</b> (pequeña, mediana, grande) u «Otra» con los gramos exactos. ✕ quita un alimento que la IA vio por error.',
+    '📶 Sin conexión con Google no pierdes nada: la app guarda lo que has escrito y lo calcula sola en cuanto vuelve la conexión (te avisa con «✅ Ya tengo los macros…»). Mientras, te enseña tus habituales parecidos. Si la IA no responde nunca en tu móvil, suele ser una VPN, un bloqueador de anuncios, un DNS privado o el ahorro de datos: la app te lo explica si lo detecta.',
     '🥩 <b>Proteína por comida</b>: cada toma principal (desayuno, comida, puente, cena) debería llegar al mínimo (25 g por defecto). «Otro» (picoteos) no cuenta.',
     'Anillo exterior = kcal (ámbar); dentro, proteína (cian), carbohidratos (verde) y grasas (rosa). Si te pasas, el exceso da una segunda vuelta y sale «+…».',
     '«Te quedan» dice las kcal y la proteína que te faltan. Los días con cardio o gym verás también lo quemado y el neto (la app estima el gym con la duración, las series, los kilos y tu peso).',
