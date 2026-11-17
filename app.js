@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.15.6';
+const APP_VERSION = '5.15.7';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -5077,6 +5077,7 @@ function geminiErr(status, data) {
   return e;
 }
 function geminiSpanish(e) {
+  if (e.net) return new Error('No he podido conectar con Google. Revisa la conexión (wifi o datos) y vuelve a probar. Si usas un bloqueador de anuncios, una VPN o un DNS privado, puede que esté bloqueando la IA.');
   if (e.busy) return new Error('Gemini está saturado ahora mismo (mucha demanda en Google). Prueba en unos minutos o introduce los macros a mano.');
   if (e.noModel) return new Error(`Ningún modelo de IA de Google responde con tu clave ahora mismo. Cierra la app del todo, ábrela para que se actualice y vuelve a probar. Si sigue igual, manda una captura a Esteban.${e.status ? ` (código ${e.status})` : ''}`);
   if (e.quota) return new Error('Has llegado al límite gratuito de Gemini por ahora. Prueba más tarde o introduce los macros a mano.');
@@ -5097,6 +5098,8 @@ async function geminiOnce(model, body, timeout) {
     return text;
   } catch (e) {
     if (e.name === 'AbortError') { const t = new Error('La IA tardó demasiado. Prueba de nuevo.'); t.busy = true; throw t; }
+    // «Failed to fetch», «Load failed», «NetworkError…»: el móvil no ha llegado a Google (red que se corta, bloqueador, VPN o DNS privado). Se reintenta como un atasco
+    if (e instanceof TypeError || /failed to fetch|load failed|networkerror|network request failed/i.test(e.message || '')) { const t = new Error('net'); t.busy = true; t.net = true; throw t; }
     throw e;
   } finally { clearTimeout(tm); }
 }
@@ -7448,6 +7451,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.15.7', ['🤖 IA: si la conexión con Google se corta un momento, la app vuelve a intentarlo sola. Si aun así no conecta, te explica en español qué revisar (wifi o datos, bloqueadores, VPN o DNS privado) en vez de «Failed to fetch».'], 'quiet'],
   ['5.15.6', ['🔥 Mapa muscular en tema claro: lo descansado sale casi blanco y, cuanto más cargado está el músculo, más intenso y oscuro. La leyenda va en el mismo orden.'], 'quiet'],
   ['5.15.5', ['🍽️ «¿Qué como?» y las recetas te hablan con un tono más cercano, sin lenguaje técnico; la nota de arriba solo sale si aporta algo.'], 'quiet'],
   ['5.15.4', ['🍽️ «¿Qué como?» más coherente: el reparto de kcal y macros siempre cuadra; si ya tienes la proteína del día, propone una ración normal (no platos de aceite); cada idea, de la IA o sin IA, se revisa antes de enseñarla (aceite como mucho 10 g, cantidades ajustadas a lo que te toca, fuera lo que no cuadra) y las notas ya no se cortan.'], 'quiet'],
