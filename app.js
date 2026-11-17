@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.13.0';
+const APP_VERSION = '5.13.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -1039,9 +1039,11 @@ function coachFor(e, key) {
   }
   c = deloadActive() ? deloadCoach(c, e, key) : c;
   if (!deloadActive() && tallerFoco() && isLatEx(e)) {
-    if (c.tone === 'up') { const w = Math.max(0, r2((c.weight || 0) - e.increment)), wTxt = e.bw ? (w ? `PC + ${fmtKg(w)}` : 'tu peso') : fmtKg(w); c = { ...c, tone: 'hold', title: `Mantén ${wTxt}`, weight: w }; }
-    const n = baseSets(e);
-    c = { ...c, text: `${c.text} 🎯 Taller de dominadas: ${tallerToday() ? 'hoy ya lo has hecho, así que puedes saltarte este ejercicio (⏭).' : `${n < e.sets ? `${n} series en vez de ${e.sets} y ` : ''}mantienes el peso para que el dorsal llegue fresco al taller.`}` };
+    const n = baseSets(e), less = n < e.sets ? `${n} series en vez de ${e.sets} y ` : '', today = tallerToday();
+    if (c.tone === 'up') {
+      const w = Math.max(0, r2((c.weight || 0) - e.increment)), wTxt = e.bw ? (w ? `PC + ${fmtKg(w)}` : 'tu peso') : fmtKg(w);
+      c = { ...c, tone: 'hold', title: `Mantén ${wTxt}`, weight: w, text: `Has llegado al tope de reps con ${wTxt}. Tocaría subir, pero mientras haces el 🎯 Taller de dominadas no subimos: ${today ? 'hoy ya lo has hecho, así que puedes saltarte este ejercicio (⏭).' : `${less}mismo peso, para que el dorsal llegue fresco al taller.`}` };
+    } else c = { ...c, text: `${c.text} 🎯 Taller de dominadas: ${today ? 'hoy ya lo has hecho, así que puedes saltarte este ejercicio (⏭).' : `${less}mantienes el peso para que el dorsal llegue fresco al taller.`}` };
   }
   return e.timed ? { ...c, title: timedTxt(c.title), text: timedTxt(c.text) } : c;
 }
@@ -7331,6 +7333,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso.
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.13.1', ['🎯 Coach: si haces el Taller de dominadas y en un ejercicio de espalda te tocaba subir peso, el mensaje ahora explica con claridad que mantienes el peso mientras dure el taller.'], 'quiet'],
   ['5.13.0', ['🎯 Nuevo en Entreno: TALLER DE DOMINADAS. 6 semanas para hacer más dominadas, a tu nivel: un test al empezar, 2 días por semana y un test final para ver cuánto has mejorado. El plan se ajusta solo según cómo te vaya cada sesión. Mientras lo haces, tus otros bloques bajan un poco el trabajo de espalda para que llegues fresco. Cada ejercicio trae su animación 3D y su vídeo de técnica.']],
   ['5.12.2', ['🤖 Cuando la IA principal de Google está ocupada y responde la de reserva, el aviso es más tranquilo y explica que la principal volverá sola.'], 'quiet'],
   ['5.12.1', ['📈 «Tu evolución» con un aspecto más sobrio: fichas neutras, cifras en blanco y el color solo como un punto junto a cada dato.'], 'quiet'],
