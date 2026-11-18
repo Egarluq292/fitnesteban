@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.16.6';
+const APP_VERSION = '5.16.7';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -272,7 +272,7 @@ async function fetchRemoteLib() {
 // Un bloque compartido por Esteban sustituye al preparado de fábrica con el mismo nombre (base = id del de fábrica).
 const libKey = n => String(n || '').trim().toLowerCase();
 const libAll = () => [
-  ...remoteLib.map(x => ({ ...x, pub: true, base: LIB_BLOCKS.find(b => libKey(b.name) === libKey(x.name))?.lib, days: () => x.days })),
+  ...remoteLib.filter(x => !x.adminOnly || access.me?.admin).map(x => ({ ...x, pub: true, base: LIB_BLOCKS.find(b => libKey(b.name) === libKey(x.name))?.lib, days: () => x.days })), // adminOnly: solo lo ve el administrador (para probarlo antes de abrirlo a todos)
   ...LIB_BLOCKS.filter(b => !remoteLib.some(x => libKey(x.name) === libKey(b.name)))
 ];
 /* Tus bloques sacados de la biblioteca toman su icono si no tienen uno (p. ej. los añadidos antes de que hubiera iconos) */
@@ -1130,6 +1130,7 @@ const BLOCK_LOOKS = [
   { re: /gl[uú]te|🍑/i, img: 'gluteo', c: '#f472b6', tag: 'Glúteo', f: 'blur(1px) brightness(1.7) saturate(1.15)' },
   { re: /tren inferior/i, img: 'inferior', c: '#ef4444', tag: 'Pierna', f: 'blur(1px) brightness(1.9) saturate(1.1)' },
   { re: /piern|cuádr|🦵/i, img: 'pierna', c: '#f43f5e', tag: 'Pierna' },
+  { re: /^pecho|🛡️/i, img: 'gen', c: '#38bdf8', tag: 'Pecho', tint: true },
   { re: /ppt|push|pull|torso/i, img: 'ppt', c: '#60a5fa', tag: 'Fuerza' },
   { re: /full|cuerpo/i, img: 'full', c: '#22d3ee', tag: 'Fuerza' },
   { re: /h[ií]brido/i, img: 'hibrido', c: '#f97316', tag: 'Fuerza · 5 días' },
@@ -7523,6 +7524,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.16.7', ['🛡️ Bloque PECHO (2 días) en la biblioteca, de momento solo visible para ti para probarlo.', '🧍 3D: «Flexiones en TRX» ya no enseña por error la animación del face pull.'], 'admin'],
   ['5.16.6', ['💬 Recordar renovación: el mensaje incluye los precios individual y DÚO, y «🖼️ Enviar con tarjeta de precios» manda una imagen con los dos.'], 'admin'],
   ['5.16.5', ['🤝 Pantalla de la prueba: si llegas por el enlace de alguien, sale «🤝 Te ha invitado …» ya puesto, sin que tengas que escribir nada.'], 'quiet'],
   ['5.16.4', ['🥗 Al estimar una comida, cada alimento muestra su proteína, hidratos y grasa para la cantidad que elijas (se recalcula al cambiar P/M/G o los gramos) y su referencia por 100 g. Los escaneados llevan «🏷️ del envase».'], 'quiet'],
@@ -8384,7 +8386,7 @@ const GYM3D_MAP = [
   [/^(?!.*(m[aá]quina|polea|cable|contractora|pec ?deck)).*(p[aá]jaros?\b|rear delt|deltoides posterior)/i, 'rdfly'], // pájaros con mancuernas o banda, no en máquina
   [/m[aá]quina|polea|prensa|smith|multipower|jal[oó]n|contractora|cable|pec ?deck|hack|extensi[oó]n de cu[aá]driceps|curl femoral|curl n[oó]rdico|\+|gemelos sentado|pica|sissy|thruster|hiperextensi|patada|p[aá]jaro|apertura|abducci|aducci|paseo lateral|clean/i, null],
   [/martillo/i, 'curlh'], [/curl concentrado/i, 'curlconc'], [/curl (en banco )?inclinado|curl inclinado/i, 'curlinc'],
-  [/gorilla/i, 'gorilla'], [/toalla/i, 'towel'], [/remo invertido en trx/i, 'trxrow'], [/trx/i, 'trxfp'], [/remo (a una mano|con mancuerna a una mano)/i, 'dbrow1'], [/remo con (2|dos) mancuernas|remo con mancuernas en banco inclinado/i, 'csrow'],
+  [/gorilla/i, 'gorilla'], [/toalla/i, 'towel'], [/remo invertido en trx|remo en trx/i, 'trxrow'], [/face ?pull.*trx|trx.*face ?pull/i, 'trxfp'], [/remo (a una mano|con mancuerna a una mano)/i, 'dbrow1'], [/remo con (2|dos) mancuernas|remo con mancuernas en banco inclinado/i, 'csrow'],
   [/press cerrado/i, 'benchc'], [/peso muerto (rumano )?a una pierna/i, 'sldl'], [/hip thrust a una pierna/i, 'hipth1'], [/zancadas?.*kettlebell/i, 'lungekb'],
   [/burpee/i, 'burpee'], [/hollow/i, 'hollow'], [/crunch/i, 'crunch'], [/plancha lateral/i, 'sk'], [/plancha/i, 'plank'],
   [/mountain|escalador/i, 'mc'], [/jumping|tijera/i, 'jj'],

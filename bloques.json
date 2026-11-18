@@ -3094,5 +3094,233 @@
    }
   ],
   "perWeek": 3
+ },
+ {
+  "lib": "pub_pecho1",
+  "name": "PECHO",
+  "icon": "🛡️",
+  "adminOnly": true,
+  "desc": "Dos días de pecho para hacer en la misma semana, separados al menos 48 h. Día 1, pesado y con la parte alta primero; día 2, más repeticiones y el pecho trabajando estirado. Unas 11 series por día, ~50 min.\nCómo usarlo: antes del primer ejercicio, 2 series ligeras de calentamiento (12 y 6 repeticiones). Deja 1–2 repeticiones en reserva; solo la última serie del día puede ir al fallo. Cuando llegues al tope de repeticiones en todas las series, el Coach te sube el peso. Un pecho definido se ve de verdad con poca grasa: cuida también la dieta.",
+  "author": "Esteban",
+  "at": "2026-11-18",
+  "perWeek": 2,
+  "days": [
+   {
+    "label": "DÍA 1",
+    "rotation": true,
+    "title": "Pecho pesado",
+    "subtitle": "Parte alta primero, presses pesados y aperturas",
+    "exercises": [
+     {
+      "id": "c_pecho1",
+      "block": "🔼 Pecho alto",
+      "sets": 3,
+      "minReps": 6,
+      "maxReps": 10,
+      "increment": 2,
+      "rest": 150,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Press inclinado con mancuernas",
+        "note": "Banco a 30º, codos a unos 45º del cuerpo, bajada de 2 s y sin chocar las mancuernas arriba."
+       },
+       {
+        "name": "Press inclinado con barra",
+        "note": "Banco a 30º, la barra baja a la parte alta del pecho."
+       },
+       {
+        "name": "Flexiones con pies elevados",
+        "note": "Pies en el banco; si te sobran repeticiones, ponte una mochila con peso."
+       }
+      ]
+     },
+     {
+      "id": "c_pecho2",
+      "block": "🏋️ Pecho pesado",
+      "sets": 3,
+      "minReps": 6,
+      "maxReps": 10,
+      "increment": 2.5,
+      "rest": 150,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Press de banca con barra",
+        "note": "Escápulas juntas y hacia abajo, barra a la mitad del esternón y 1 s de pausa abajo, sin rebote."
+       },
+       {
+        "name": "Press de banca con mancuernas",
+        "note": "Baja hasta notar el pecho estirado, sin rebote."
+       },
+       {
+        "name": "Flexiones con lastre",
+        "note": "Mochila con peso; cuerpo recto de la cabeza a los pies."
+       }
+      ]
+     },
+     {
+      "id": "c_pecho3",
+      "block": "⬇️ Pecho bajo",
+      "sets": 2,
+      "minReps": 8,
+      "maxReps": 12,
+      "increment": 2.5,
+      "rest": 120,
+      "bw": true,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Fondos en paralelas",
+        "note": "Torso inclinado hacia delante; baja hasta notar estiramiento, no más. Si molesta el hombro, usa la alternativa."
+       },
+       {
+        "name": "Flexiones con pies elevados",
+        "note": "Pies en el banco, bajada lenta."
+       },
+       {
+        "name": "Press declinado con mancuernas",
+        "note": "Banco ligeramente declinado, bajada controlada."
+       }
+      ]
+     },
+     {
+      "id": "c_pecho4",
+      "block": "🦋 Pecho estirado",
+      "sets": 3,
+      "minReps": 10,
+      "maxReps": 15,
+      "increment": 2,
+      "rest": 90,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Aperturas en banco inclinado",
+        "note": "Codos un poco doblados y fijos; 1 s de pausa abajo con el pecho estirado. La última serie puede ir al fallo."
+       },
+       {
+        "name": "Cruce de poleas alto a una mano",
+        "note": "De lado a la polea; lleva la mano de arriba abajo hacia la cadera contraria y vuelve en 3 s."
+       },
+       {
+        "name": "Aperturas en TRX",
+        "note": "Cuerpo inclinado y recto; abre despacio y aguanta 1 s abajo."
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "label": "DÍA 2",
+    "rotation": true,
+    "title": "Pecho en estiramiento",
+    "subtitle": "Más repeticiones, recorrido largo y aperturas",
+    "exercises": [
+     {
+      "id": "c_pecho5",
+      "block": "🏋️ Pecho plano",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 12,
+      "increment": 2,
+      "rest": 120,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Press de banca con mancuernas",
+        "note": "Baja más que con barra, hasta notar el pecho estirado; sin chocar arriba."
+       },
+       {
+        "name": "Press de banca con barra",
+        "note": "Escápulas juntas, 1 s de pausa abajo."
+       },
+       {
+        "name": "Flexiones con lastre",
+        "note": "Mochila con peso; manos algo más abiertas que los hombros."
+       }
+      ]
+     },
+     {
+      "id": "c_pecho6",
+      "block": "🔼 Pecho alto",
+      "sets": 3,
+      "minReps": 8,
+      "maxReps": 12,
+      "increment": 2.5,
+      "rest": 120,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Press inclinado con barra",
+        "note": "Banco a 30º, la barra baja a la parte alta del pecho, sin rebote."
+       },
+       {
+        "name": "Press inclinado con mancuernas",
+        "note": "Banco a 30º, bajada de 2 s."
+       },
+       {
+        "name": "Flexiones con pies elevados",
+        "note": "Pies en el banco, cuerpo recto."
+       }
+      ]
+     },
+     {
+      "id": "c_pecho7",
+      "block": "🦋 Pecho estirado",
+      "sets": 3,
+      "minReps": 12,
+      "maxReps": 15,
+      "increment": 2.5,
+      "rest": 60,
+      "bw": false,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Cruce de poleas alto a una mano",
+        "note": "De lado a la polea, un pie adelantado; mano de arriba abajo hacia la cadera contraria y vuelta en 3 s. Primero un brazo y luego el otro."
+       },
+       {
+        "name": "Aperturas con mancuernas",
+        "note": "Banco plano, codos un poco doblados, pausa abajo."
+       },
+       {
+        "name": "Aperturas en TRX",
+        "note": "Cuerpo inclinado y recto; abre despacio."
+       }
+      ]
+     },
+     {
+      "id": "c_pecho8",
+      "block": "🔥 Final",
+      "sets": 2,
+      "minReps": 8,
+      "maxReps": 15,
+      "increment": 0,
+      "rest": 60,
+      "bw": true,
+      "alts27": true,
+      "variants": [
+       {
+        "name": "Flexiones con pies elevados",
+        "note": "Pies en el banco. La última serie puede ir al fallo."
+       },
+       {
+        "name": "Flexiones",
+        "note": "Si con los pies elevados no llegas a 8, hazlas normales."
+       },
+       {
+        "name": "Flexiones en TRX",
+        "note": "Cuanto más inclinado, más difícil."
+       }
+      ]
+     }
+    ]
+   }
+  ]
  }
 ]
