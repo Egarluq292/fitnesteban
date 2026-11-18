@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.16.2';
+const APP_VERSION = '5.16.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7516,6 +7516,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.16.3', ['🔑 Durante la prueba ya puedes escribir tu código sin esperar a que termine: «Poner o pedir mi código» → «Usar mi código». Sigues con todos tus datos.'], 'quiet'],
   ['5.16.2', ['🤝 Usuarios: el bloque «Recomendaciones» se ve siempre; si aún no hay ninguna (o falta el script v16), lo dice.'], 'quiet'],
   ['5.16.1', ['🤝 Usuarios · Recomendaciones: quién trajo a quién y en qué está cada persona (en prueba, prueba terminada o ya paga). Solo cuando la persona recomendada paga, botón «🎁 Dar días» a quien la recomendó: 15 días si pagó 1 mes, 30 si pagó 3 o 6 meses, sin anotar cobro y sin repetirse.'], 'quiet'],
   ['5.16.0', ['🤝 Al empezar la prueba se puede indicar quién te ha recomendado FITNESTEBAN (opcional). «Compartir app» añade tu nombre al enlace para que le salga ya escrito a quien lo abra. En Usuarios: quién trajo a quién y cuántos la usan de verdad (script de uso v16).'], 'quiet'],
@@ -8527,12 +8528,12 @@ function gym3dModal(name, back = null) { // back: volver a la ventana de la que 
 /* Aviso fijo en Inicio cuando al acceso le quedan 3 días o menos (el toast se pierde fácil) */
 function planBannerHTML() {
   const me = access.me, left = me ? planDaysLeft(me) : null;
-  if (me?.trial && left > 3) return `<button class="trial-chip mb-3" data-act="askCode" type="button">🔓 Te quedan ${left} días · <u>Pedir mi código</u></button>`;
+  if (me?.trial && left > 3) return `<button class="trial-chip mb-3" data-act="askCode" type="button">🔓 Te quedan ${left} días · <u>🔑 Poner o pedir mi código</u></button>`;
   if (left === null || left > 3 || left < 0) return '';
   const d = new Date(planOf(me).hasta + 'T12:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   return `<div class="plan-warn mb-3"><div class="text-[14px] font-extrabold">⏳ ${me.trial ? (left === 0 ? 'Hoy es el último día de tu prueba' : left === 1 ? 'Mañana es el último día de tu prueba' : `Tu periodo de prueba termina el ${esc(d)}`) : left === 0 ? 'Hoy es tu último día de acceso' : left === 1 ? 'Mañana es tu último día de acceso' : `Tu acceso termina el ${esc(d)}`}</div>
     <p class="text-[12px] mt-0.5 opacity-90">Después la app dejará de abrirse, pero tus datos no se borran: pide a Esteban que lo renueve y sigues donde lo dejaste.</p>
-    <button class="contact-btn mt-2" data-act="askCode" type="button">${icon('send', 'w-4 h-4')}<span>${me.trial ? 'Pedir mi código' : 'Pedir renovación'}</span></button></div>`;
+    <button class="contact-btn mt-2" data-act="askCode" type="button">${icon('send', 'w-4 h-4')}<span>${me.trial ? 'Poner o pedir mi código' : 'Pedir renovación'}</span></button></div>`;
 }
 // Pedir código o renovar: aclara que pedirlo antes no hace perder días
 /* ✨ FITNESTEBAN 5: aviso fijo en Inicio hasta que lo cierras con ✕ (como mucho 21 días) */
@@ -8548,10 +8549,36 @@ function v5HomeHTML() {
 }
 function askCodeModal() {
   const trial = !!access.me?.trial;
-  openModal(`<h3 class="modal-title">${trial ? '🔓 Pedir mi código' : '⏳ Renovar'}</h3>
-    <p class="text-[14px] leading-snug">${trial ? 'Pídelo cuando quieras: <b>no pierdes los días de prueba</b> que te quedan. Tu código empezará a contar cuando termine la prueba.' : 'Renueva cuando quieras: <b>no pierdes los días</b> que te quedan. Lo nuevo empieza a contar cuando termine lo que tienes.'}</p>
-    ${contactBtn('Escribir a Esteban', 'w-full justify-center')}
-    <button class="btn-ghost w-full" data-close type="button">Ahora no</button>`);
+  openModal(`<h3 class="modal-title">${trial ? '🔓 Tu código de acceso' : '⏳ Renovar'}</h3>
+    ${trial ? `<div class="code-have"><b>¿Ya te ha dado Esteban tu código?</b> Escríbelo aquí y listo: sigues con todos tus datos.
+      <input class="field mt-2 text-center text-xl font-black tracking-[.2em] uppercase" id="haveCode" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" />
+      <button class="btn-primary w-full mt-2" data-mact="use" type="button">Usar mi código</button></div>
+      <p class="text-[13px] leading-snug mt-1"><b>¿Aún no lo tienes?</b> Pídeselo cuando quieras: no pierdes los días de prueba que te quedan.</p>` : `<p class="text-[14px] leading-snug">Renueva cuando quieras: <b>no pierdes los días</b> que te quedan. Lo nuevo empieza a contar cuando termine lo que tienes.</p>`}
+    ${contactBtn(trial ? 'Pedir mi código a Esteban' : 'Escribir a Esteban', 'w-full justify-center')}
+    <button class="btn-ghost w-full" data-close type="button">Ahora no</button>`, {
+    use: async (root, b) => {
+      const v = $('#haveCode')?.value || ''; if (normCode(v).length < 8) return toast('El código tiene 8 caracteres', 'warn');
+      b.disabled = true; b.innerHTML = '<span class="spinner"></span> Comprobando…';
+      const r = await codeEnter(v);
+      if (r.ok) { closeModal(); unlock(r.me); render(); toast('✅ Código activado. Ya no estás en prueba 👋'); return; }
+      b.disabled = false; b.textContent = 'Usar mi código'; toast(r.msg, 'error');
+    }
+  });
+  const i = $('#haveCode'); if (i) i.onkeydown = e => { if (e.key === 'Enter') $('#modalRoot [data-mact=use]')?.click(); };
+}
+/* 🔑 Activar un código (desde la pantalla de acceso o durante la prueba): comprueba que existe, que no ha caducado y que admite este dispositivo */
+async function codeEnter(v) {
+  try {
+    const h = await codeHash(v);
+    let list = access.list || await fetchAcl(), me = (list || []).find(x => x.hash === h);
+    if (!me) { const live = await fetchAclLive(); if (live) { list = live; me = live.find(x => x.hash === h); } } // recién creado: GitHub Pages tarda unos minutos
+    if (!me) return { ok: false, msg: list ? 'Ese código no existe. Revisa que esté bien escrito.' : 'Sin conexión para comprobar el código. Prueba en un momento.' };
+    if (planExpired(me)) return { ok: false, msg: 'Ese código ya ha caducado. Pídele a Esteban que lo renueve.' };
+    if (!(await deviceAllowed(v, me))) return { ok: false, msg: deviceReason === 'exp' ? 'Ese código ya ha caducado. Pídele a Esteban que lo renueve.' : 'Ese código ya se está usando en otro móvil. Escribe a Esteban.' };
+    deviceChecked = deviceSure;
+    lsSet(ACCESS_KEY, { code: normCode(v), at: Date.now() });
+    return { ok: true, me };
+  } catch { return { ok: false, msg: 'No he podido comprobar el código. Prueba en un momento.' }; }
 }
 /* ---------- 👣 Pasos: un dato diario aparte del cardio (NO resta calorías: tu objetivo ya cuenta con el nivel de actividad del perfil) ---------- */
 const stepsOf = d => { const v = state.steps?.[d]; return Number.isFinite(v) ? v : null; };
