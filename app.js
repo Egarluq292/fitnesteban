@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.16.5';
+const APP_VERSION = '5.16.6';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7523,6 +7523,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.16.6', ['💬 Recordar renovación: el mensaje incluye los precios individual y DÚO, y «🖼️ Enviar con tarjeta de precios» manda una imagen con los dos.'], 'admin'],
   ['5.16.5', ['🤝 Pantalla de la prueba: si llegas por el enlace de alguien, sale «🤝 Te ha invitado …» ya puesto, sin que tengas que escribir nada.'], 'quiet'],
   ['5.16.4', ['🥗 Al estimar una comida, cada alimento muestra su proteína, hidratos y grasa para la cantidad que elijas (se recalcula al cambiar P/M/G o los gramos) y su referencia por 100 g. Los escaneados llevan «🏷️ del envase».'], 'quiet'],
   ['5.16.3', ['🔑 Durante la prueba ya puedes escribir tu código sin esperar a que termine: «Poner o pedir mi código» → «Usar mi código». Sigues con todos tus datos.'], 'quiet'],
@@ -10985,14 +10986,53 @@ function duoShareModal(made) {
 }
 function renewMsgModal(hash) {
   const x = (access.list || []).find(y => y.hash === hash); if (!x) return;
-  const mate = duoMate(x), w = state.accessNames[hash] || '', wm = mate ? state.accessNames[mate.hash] || '' : '', P = PRICES[mate ? 'duo' : 'ind'];
-  const T = netToday() || todayISO(), past = x.hasta && x.hasta < T;
-  const msg = `Hola${w ? ' ' + w : ''}${wm ? ` y ${wm}` : ''} 👋 ${mate ? 'Vuestro acceso DÚO' : 'Tu acceso'} a FITNESTEBAN ${past ? 'terminó' : 'termina'} el ${fmtDateShort(x.hasta)}.\nPara renovarlo${mate ? ' (las dos cuentas)' : ''}:\n· 1 mes: ${eur(P['1m'])}\n· 3 meses: ${eur(P['3m'])}\n· 6 meses: ${eur(P['6m'])}\nDime cuál prefieres y lo renuevo sin perder nada de lo que ${mate ? 'tenéis' : 'tienes'} guardado.`;
+  const mate = duoMate(x), w = state.accessNames[hash] || '', wm = mate ? state.accessNames[mate.hash] || '' : '';
+  const T = netToday() || todayISO(), past = x.hasta && x.hasta < T, today = x.hasta === T;
+  const lst = m => ['1m', '3m', '6m'].map(k => `· ${planName(k)}: ${eur(PRICES[m][k])}`).join('\n');
+  const ind = `Individual (1 cuenta):\n${lst('ind')}`, duo = `DÚO (2 cuentas, por ejemplo con tu pareja o un compañero de entreno):\n${lst('duo')}`;
+  const msg = `Hola${w ? ' ' + w : ''}${wm ? ` y ${wm}` : ''} 👋 ${mate ? 'Vuestro acceso DÚO' : 'Tu acceso'} a FITNESTEBAN ${past ? `terminó el ${fmtDateShort(x.hasta)}` : today ? `termina hoy (${fmtDateShort(x.hasta)})` : `termina el ${fmtDateShort(x.hasta)}`}.\nPara renovarlo:\n\n${mate ? `${duo}\n\n${ind.replace('Individual (1 cuenta)', 'O cada uno por su cuenta, individual')}` : `${ind}\n\n${duo}`}\n\nDime cuál prefieres y lo renuevo sin perder nada de lo que ${mate ? 'tenéis' : 'tienes'} guardado.`;
   openModal(`<h3 class="modal-title">💬 Recordar renovación</h3>
     <pre style="white-space:pre-wrap;overflow-wrap:anywhere;font-family:inherit;background:rgba(255,255,255,.05)" class="text-[13px] leading-snug rounded-xl bg-white/5 p-3 font-sans">${esc(msg)}</pre>
-    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="copy" type="button">📋 Copiar</button><a class="btn-ghost block text-center" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">💬 WhatsApp</a></div>`, {
-    copy: () => navigator.clipboard.writeText(msg).then(() => toast('Mensaje copiado')).catch(() => toast('Cópialo a mano', 'warn'))
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="copy" type="button">📋 Copiar</button><a class="btn-ghost block text-center" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">💬 WhatsApp</a></div>
+    <button class="btn-primary w-full" data-mact="card" type="button">🖼️ Enviar con tarjeta de precios</button>
+    <p class="text-[11px] text-mute -mt-1">La tarjeta es una imagen con los precios individual y DÚO; se envía junto al mensaje.</p>`, {
+    copy: () => navigator.clipboard.writeText(msg).then(() => toast('Mensaje copiado')).catch(() => toast('Cópialo a mano', 'warn')),
+    card: async (root, b) => {
+      b.disabled = true; b.innerHTML = '<span class="spinner"></span> Preparando…';
+      try {
+        const blob = await priceCardPNG(mate ? 'duo' : 'ind'), file = new File([blob], 'fitnesteban-precios.png', { type: 'image/png' });
+        if (navigator.canShare?.({ files: [file] })) { await navigator.clipboard?.writeText(msg).catch(() => {}); await navigator.share({ files: [file], text: msg }); }
+        else { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; a.click(); toast('Tarjeta descargada: adjúntala en WhatsApp'); }
+      } catch (e) { if (e?.name !== 'AbortError') toast('No se pudo compartir la tarjeta', 'warn'); }
+      b.disabled = false; b.textContent = '🖼️ Enviar con tarjeta de precios';
+    }
   });
+}
+/* 🖼️ Tarjeta de precios (imagen) para enviar por WhatsApp: individual y DÚO, con el plan de esa persona destacado */
+async function priceCardPNG(mine = 'ind') {
+  const W = 1080, H = 1080, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#0b1418'); bg.addColorStop(1, '#05080a'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  const glow = g.createRadialGradient(W / 2, 0, 50, W / 2, 0, 700); glow.addColorStop(0, 'rgba(34,211,238,.28)'); glow.addColorStop(1, 'rgba(34,211,238,0)'); g.fillStyle = glow; g.fillRect(0, 0, W, H);
+  const img = src => new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; });
+  const [logo, marca] = await Promise.all([img('icons/logo-128.png'), img('icons/marca-f.svg')]);
+  if (logo) g.drawImage(logo, W / 2 - 70, 70, 140, 140);
+  if (marca) { const mw = 520, mh = mw * (marca.height / marca.width || .11); g.drawImage(marca, W / 2 - mw / 2, 240, mw, mh); }
+  const font = (w, s) => `${w} ${s}px Inter, system-ui, sans-serif`;
+  g.textAlign = 'center'; g.fillStyle = '#ffffff'; g.font = font(900, 64); g.fillText('Renueva tu acceso', W / 2, 390);
+  g.fillStyle = '#94a3b8'; g.font = font(500, 34); g.fillText('Sigues con todo lo que tienes guardado', W / 2, 445);
+  const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+  const col = (x, key, title, sub) => {
+    const on = key === mine, y = 500, w = 450, h = 470;
+    rr(x, y, w, h, 40); g.fillStyle = on ? 'rgba(34,211,238,.10)' : 'rgba(255,255,255,.04)'; g.fill(); g.lineWidth = on ? 5 : 2; g.strokeStyle = on ? '#22d3ee' : '#24313a'; g.stroke();
+    g.fillStyle = on ? '#67e8f9' : '#e2e8f0'; g.font = font(900, 46); g.fillText(title, x + w / 2, y + 80);
+    g.fillStyle = '#7b8a93'; g.font = font(500, 28); g.fillText(sub, x + w / 2, y + 122);
+    ['1m', '3m', '6m'].forEach((k, i) => { const yy = y + 210 + i * 95;
+      g.textAlign = 'left'; g.fillStyle = '#cbd5e1'; g.font = font(700, 36); g.fillText(planName(k), x + 45, yy);
+      g.textAlign = 'right'; g.fillStyle = '#ffffff'; g.font = font(900, 42); g.fillText(eur(PRICES[key][k]), x + w - 45, yy); g.textAlign = 'center'; });
+  };
+  col(70, 'ind', 'Individual', '1 cuenta'); col(560, 'duo', 'DÚO', '2 cuentas');
+  g.fillStyle = '#4b5b63'; g.font = font(800, 30); g.fillText('FITNESTEBAN.app', W / 2, 1040);
+  return new Promise(ok => c.toBlob(ok, 'image/png'));
 }
 function delAccess(hash) {
   const who = state.accessNames[hash] || 'Sin nombre …' + hash.slice(-4);
