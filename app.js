@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.16.3';
+const APP_VERSION = '5.16.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4766,7 +4766,7 @@ function recalcFromItems(ai) {
 function syncResultFields() {
   const ai = ui.aiResult; if (!ai) return;
   for (const k of ['kcal', 'prot', 'carbs', 'fat']) { const el = document.querySelector(`[data-ai="${k}"]`); if (el) el.value = Math.round(ai[k]); }
-  (ai.items || []).forEach((it, i) => { const el = document.querySelector(`[data-item-kcal="${i}"]`); if (el) el.textContent = `${Math.round(itemMacros(it).kcal)} kcal`; });
+  (ai.items || []).forEach((it, i) => { const el = document.querySelector(`[data-item-kcal="${i}"]`); if (el) el.textContent = `${Math.round(itemMacros(it).kcal)} kcal`; const mc = document.querySelector(`[data-item-mac="${i}"]`); if (mc) mc.innerHTML = itemMacHTML(it); });
   syncProtHint();
 }
 /* Añadir un ingrediente a la comida (texto → IA; sin IA, a mano) */
@@ -4993,6 +4993,12 @@ async function scanStart() {
   };
   tick();
 }
+/* Macros de un alimento para la cantidad elegida (se recalculan al cambiar P/M/G o los gramos) y su referencia por 100 g */
+const macN = v => v < 10 ? String(Math.round(v * 10) / 10).replace('.', ',') : String(Math.round(v));
+function itemMacHTML(it) {
+  const m = itemMacros(it), p = it.per100 || {};
+  return `<span class="${MAC.prot.text}">P ${macN(m.prot)}</span>${SEP}<span class="${MAC.carbs.text}">C ${macN(m.carbs)}</span>${SEP}<span class="${MAC.fat.text}">G ${macN(m.fat)}</span><span class="text-mute"> · 100 g = ${Math.round(p.kcal || 0)} kcal${it.src === 'bar' ? ' 🏷️ del envase' : ''}</span>`;
+}
 function renderPortions(ai) {
   const items = ai.items || [];
   if (!items.length) return `<div class="portions space-y-1.5">${addIngHTML()}</div>`;
@@ -5003,12 +5009,13 @@ function renderPortions(ai) {
       <div class="flex items-start justify-between gap-2 text-xs">
         <span class="font-semibold min-w-0 break-words leading-snug">${esc(it.name)} <span class="text-mute font-normal">· ${Math.round(it.grams)} g, según tu descripción</span></span>
         <span class="flex items-center gap-2 shrink-0">${kc}<button class="underline text-brand" data-act="portionEdit" data-i="${i}" type="button">cambiar</button><button class="text-mute px-1" data-act="portionDel" data-i="${i}" type="button" aria-label="Quitar alimento">✕</button></span>
-      </div></div>`;
+      </div><div class="text-[11px] mt-0.5 leading-snug" data-item-mac="${i}">${itemMacHTML(it)}</div></div>`;
     return `<div class="portion">
       <div class="flex items-start justify-between gap-2 text-xs">
         <span class="font-semibold min-w-0 break-words leading-snug">${esc(it.name)}</span>
         <span class="flex items-center gap-2 shrink-0">${kc}<button class="text-mute px-1" data-act="portionDel" data-i="${i}" type="button" aria-label="Quitar alimento">✕</button></span>
       </div>
+      <div class="text-[11px] mt-0.5 leading-snug" data-item-mac="${i}">${itemMacHTML(it)}</div>
       <div class="seg mt-1.5">
         ${SIZES.map(([k, l]) => `<button class="seg-btn ${it.sel === k ? 'seg-on' : ''}" data-act="portion" data-i="${i}" data-size="${k}" type="button">${l}<span>${Math.round(it.sizes[k])} g</span></button>`).join('')}
         ${it.sel === 'x'
@@ -7516,6 +7523,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.16.4', ['🥗 Al estimar una comida, cada alimento muestra su proteína, hidratos y grasa para la cantidad que elijas (se recalcula al cambiar P/M/G o los gramos) y su referencia por 100 g. Los escaneados llevan «🏷️ del envase».'], 'quiet'],
   ['5.16.3', ['🔑 Durante la prueba ya puedes escribir tu código sin esperar a que termine: «Poner o pedir mi código» → «Usar mi código». Sigues con todos tus datos.'], 'quiet'],
   ['5.16.2', ['🤝 Usuarios: el bloque «Recomendaciones» se ve siempre; si aún no hay ninguna (o falta el script v16), lo dice.'], 'quiet'],
   ['5.16.1', ['🤝 Usuarios · Recomendaciones: quién trajo a quién y en qué está cada persona (en prueba, prueba terminada o ya paga). Solo cuando la persona recomendada paga, botón «🎁 Dar días» a quien la recomendó: 15 días si pagó 1 mes, 30 si pagó 3 o 6 meses, sin anotar cobro y sin repetirse.'], 'quiet'],
