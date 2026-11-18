@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.16.4';
+const APP_VERSION = '5.16.5';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7523,6 +7523,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.16.5', ['🤝 Pantalla de la prueba: si llegas por el enlace de alguien, sale «🤝 Te ha invitado …» ya puesto, sin que tengas que escribir nada.'], 'quiet'],
   ['5.16.4', ['🥗 Al estimar una comida, cada alimento muestra su proteína, hidratos y grasa para la cantidad que elijas (se recalcula al cambiar P/M/G o los gramos) y su referencia por 100 g. Los escaneados llevan «🏷️ del envase».'], 'quiet'],
   ['5.16.3', ['🔑 Durante la prueba ya puedes escribir tu código sin esperar a que termine: «Poner o pedir mi código» → «Usar mi código». Sigues con todos tus datos.'], 'quiet'],
   ['5.16.2', ['🤝 Usuarios: el bloque «Recomendaciones» se ve siempre; si aún no hay ninguna (o falta el script v16), lo dice.'], 'quiet'],
@@ -9947,7 +9948,8 @@ function lockScreen(mode, msg = '') {
     ${canTrial ? `<div class="trial-box mt-5"><div class="text-[11px] font-black tracking-widest text-cyan-300">🔓 PERIODO DE PRUEBA</div>
       <div class="text-xl font-black leading-tight mt-0.5">${TRIAL_DAYS} días con todo incluido</div>
       <p class="text-[13px] text-mute mt-1">Sin código: entra con tu cuenta de Google.</p>
-      <input class="field mt-3 text-[14px]" id="trialRef" maxlength="60" autocomplete="off" placeholder="¿Quién te ha recomendado FITNESTEBAN? (opcional)" value="${esc(lsGet(REF_KEY) || '')}" />
+      ${lsGet(REF_KEY) ? `<div class="trial-inv mt-3">🤝 Te ha invitado <b>${esc(lsGet(REF_KEY))}</b></div><input type="hidden" id="trialRef" value="${esc(lsGet(REF_KEY))}" />`
+        : '<input class="field mt-3 text-[14px]" id="trialRef" maxlength="60" autocomplete="off" placeholder="¿Quién te la recomendó? (opcional)" />'}
       <button class="btn-google w-full mt-3" id="trialGo" type="button"><b class="g-g">G</b> Continuar con Google</button>
       <p class="text-[11px] text-mute mt-2 leading-snug">Tu correo se guarda solo para que Esteban pueda enviarte la guía y ayudarte (<a class="underline" href="privacidad.html" target="_blank" rel="noopener">privacidad</a>). Una prueba por persona. Al terminar, pide tu código de acceso a Esteban para seguir.</p></div>
       <button class="lock-promo" id="lockPromo" type="button">▶ Mira lo que hace la app (1 min)</button>
