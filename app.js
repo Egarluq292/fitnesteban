@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.16.0';
+const APP_VERSION = '5.16.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7516,6 +7516,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.16.1', ['🤝 Usuarios · Recomendaciones: quién trajo a quién y en qué está cada persona (en prueba, prueba terminada o ya paga). Solo cuando la persona recomendada paga, botón «🎁 Dar días» a quien la recomendó: 15 días si pagó 1 mes, 30 si pagó 3 o 6 meses, sin anotar cobro y sin repetirse.'], 'quiet'],
   ['5.16.0', ['🤝 Al empezar la prueba se puede indicar quién te ha recomendado FITNESTEBAN (opcional). «Compartir app» añade tu nombre al enlace para que le salga ya escrito a quien lo abra. En Usuarios: quién trajo a quién y cuántos la usan de verdad (script de uso v16).'], 'quiet'],
   ['5.15.9', [
     '🍽️ La IA de la dieta, más fiable y sin cortes:',
@@ -9389,6 +9390,7 @@ const actions = {
   copyCode: async b => { const c = await accessCodeOf(b.dataset.hash); if (c) navigator.clipboard.writeText(fmtCode(c)).then(() => toast('Código copiado')).catch(() => toast('Cópialo a mano: ' + fmtCode(c), 'warn')); },
   regenAccess: b => regenAccess(b.dataset.hash),
   planAccess: b => planModal(b.dataset.hash),
+  refGift: b => refGiftModal(b.dataset.m, b.dataset.k),
   renewMsg: b => renewMsgModal(b.dataset.hash),
   askCode: () => askCodeModal(),
   sugTargets: () => { const t = suggestedTargets(); if (t) targetsModal(t); },
@@ -10557,16 +10559,63 @@ function trialRows() {
     .sort((a, b) => (b.last || '').localeCompare(a.last || ''));
 }
 const refOf = m => ui.refs?.[String(m || '').trim().toLowerCase()]?.ref || '';
-/* 🤝 Resumen: a cuántas personas ha traído cada uno (por correo, aunque ya tengan código) y cuántas la usan de verdad (7 días de uso o más) */
+/* 🤝 Recomendaciones, claras: quién trajo a quién, en qué está cada uno y qué regalo le toca a quien recomendó.
+   Regla: SOLO cuando la persona recomendada paga (pago anotado en la app), quien la recomendó gana días: 15 si pagó 1 mes, 30 si pagó 3 o 6 meses (tú los das con un toque) */
+const refGiftDays = k => k === '1m' ? 15 : 30;
+function refPeople() { // cada persona recomendada, con su estado
+  const R = ui.refs || {}, rows = Object.values(ui.usage || {}), t = netToday() || todayISO(), G = state.settings.refGifts || {};
+  return Object.entries(R).map(([m, x]) => {
+    const us = rows.filter(r => String(r.m || '').toLowerCase() === m), days = us.reduce((a, r) => a + (+r.days || 0), 0);
+    const code = (access.list || []).find(y => !y.admin && us.some(r => String(r.h).toLowerCase() === y.hash));
+    const pay1 = code ? (state.accessPays?.[code.hash] || []).find(x => isPaidPlan(x.k)) : null, paid = !!pay1; // su primer pago anotado
+    const trialH = us.find(r => (ui.trialH || {})[String(r.h).toLowerCase()]), tEnd = trialH ? ui.trialH[String(trialH.h).toLowerCase()] : '';
+    const st = paid ? 'paid' : code ? 'code' : tEnd && tEnd >= t ? 'trial' : 'ended';
+    return { m, ref: x.ref, refK: normTxt(x.ref), who: (code && accessWho(code)) || m.split('@')[0], days, st, gift: G[m] || null, gd: pay1 ? refGiftDays(pay1.k) : 0, pk: pay1?.k || '' };
+  });
+}
 function refSummaryHTML() {
-  const R = ui.refs || {}, rows = Object.values(ui.usage || {}), by = new Map();
-  for (const [m, x] of Object.entries(R)) {
-    const k = normTxt(x.ref), cur = by.get(k) || { name: x.ref, n: 0, ok: 0, who: [] }, u = rows.filter(r => String(r.m || '').toLowerCase() === m);
-    const days = u.reduce((a, r) => a + (+r.days || 0), 0); cur.n++; if (days >= 7) cur.ok++; cur.who.push(`${m.split('@')[0]}${days >= 7 ? ' ✅' : ''}`); by.set(k, cur);
-  }
-  if (!by.size) return '';
-  const L = [...by.values()].sort((a, b) => b.ok - a.ok || b.n - a.n);
-  return `<details class="acc-ref"><summary>🤝 Recomendaciones · ${L.reduce((a, x) => a + x.n, 0)}</summary><div class="space-y-1.5 mt-2">${L.map(x => `<div class="acc-ref-row"><b>${esc(x.name)}</b><span>${plural(x.n, 'persona', 'personas')} · ${x.ok} ${x.ok === 1 ? 'la usa' : 'la usan'} de verdad</span><small>${esc(x.who.join(' · '))}</small></div>`).join('')}</div><p class="text-[11px] text-mute mt-2">✅ = 7 días de uso o más. El nombre lo escribe cada persona al empezar la prueba, tal cual.</p></details>`;
+  const P = refPeople(); if (!P.length) return '';
+  const by = new Map(); for (const x of P) { const g = by.get(x.refK) || { name: x.ref, k: x.refK, L: [] }; g.L.push(x); by.set(x.refK, g); }
+  const pend = P.filter(x => x.st === 'paid' && !x.gift).length, link = state.settings.refLinks || {};
+  const stTxt = x => x.st === 'paid' ? `💶 Ya paga (${esc(planName(x.pk))})` : x.st === 'code' ? '🔑 Tiene código (sin pago anotado)' : x.st === 'trial' ? `🧪 En prueba · ${plural(x.days || 0, 'día', 'días')} de uso` : '⌛ Prueba terminada sin pagar';
+  const giftTxt = (x, g) => x.st !== 'paid' ? '' : x.gift ? `<span class="ref-ok">✅ ${x.gift.n || 30} días dados${x.gift.to ? ` a ${esc(x.gift.to)}` : ''} el ${esc(fmtDateShort(x.gift.d))}</span>`
+    : `<button class="ref-gift" data-act="refGift" data-m="${esc(x.m)}" data-k="${esc(g.k)}" type="button">🎁 Dar ${x.gd} días a ${esc(g.name)} ›</button>`;
+  const L = [...by.values()].sort((a, b) => b.L.filter(x => x.st === 'paid').length - a.L.filter(x => x.st === 'paid').length || b.L.length - a.L.length);
+  return `<details class="acc-ref" ${pend ? 'open' : ''}><summary>🤝 Recomendaciones · ${P.length}${pend ? ` <span class="ref-pend">🎁 ${pend} ${pend === 1 ? 'regalo pendiente' : 'regalos pendientes'}</span>` : ''}</summary>
+    <div class="space-y-2.5 mt-2">${L.map(g => `<div class="acc-ref-row"><b>${esc(g.name)}${link[g.k] && (access.list || []).some(y => y.hash === link[g.k]) ? ` <small class="inline">(${esc(accessWho(access.list.find(y => y.hash === link[g.k])) || 'código …' + link[g.k].slice(-4))})</small>` : ''}</b>
+      <span>Ha traído a ${plural(g.L.length, 'persona', 'personas')} · ${g.L.filter(x => x.st === 'paid').length} ${g.L.filter(x => x.st === 'paid').length === 1 ? 'paga' : 'pagan'}</span>
+      ${g.L.map(x => `<div class="ref-p"><div><b>${esc(x.who)}</b> · ${stTxt(x)}</div>${giftTxt(x, g)}</div>`).join('')}</div>`).join('')}</div>
+    <p class="text-[11px] text-mute mt-2">Regla: solo cuando alguien que han recomendado paga, quien se la recomendó gana días gratis: 15 si pagó 1 mes y 30 si pagó 3 o 6 meses. El nombre lo escribe cada persona al empezar la prueba, tal cual.</p></details>`;
+}
+/* 🎁 Dar los días: eliges (una vez) quién es esa persona entre tus usuarios y se le suman 30 días sin anotar ningún pago */
+function refGiftModal(m, k) {
+  const P = refPeople().find(x => x.m === m); if (!P || !P.gd) return; const N = P.gd;
+  const L = (access.list || []).filter(y => !y.admin && y.hasta), links = state.settings.refLinks || {};
+  let q = '', pick = links[k] && L.some(y => y.hash === links[k]) ? links[k] : '';
+  const rows = () => { const t = normTxt(q.trim()); const F = L.filter(y => !t || normTxt(accessWho(y) + ' ' + (ui.usage?.[y.hash]?.m || '')).includes(t)).sort((a, b) => (!accessWho(a)) - (!accessWho(b)) || accessWho(a).localeCompare(accessWho(b)));
+    return F.length ? F.map(y => `<button class="sp-row ${y.hash === pick ? 'on' : ''}" data-mact="who" data-h="${esc(y.hash)}" type="button"><span class="min-w-0"><b>${esc(accessWho(y) || 'Sin nombre …' + y.hash.slice(-4))}</b><small>${esc(ui.usage?.[y.hash]?.m || '')} · ${planLabel(y)}</small></span><span class="text-brand">${y.hash === pick ? '✓' : '›'}</span></button>`).join('') : '<p class="text-xs text-mute text-center py-3">Nadie coincide.</p>'; };
+  const html = () => { const y = L.find(z => z.hash === pick), T = netToday() || todayISO(), from = y && y.hasta > T ? y.hasta : T, end = addDays(from, N);
+    return `<h3 class="modal-title">🎁 ${N} días gratis para ${esc(P.ref)}</h3>
+    <p class="text-[13px] text-slate-300 -mt-1">Porque <b>${esc(P.who)}</b> ha pagado ${esc(planName(P.pk))} y se la recomendó «${esc(P.ref)}». ${N === 15 ? '1 mes = 15 días de regalo.' : '3 o 6 meses = 30 días de regalo.'}</p>
+    ${y ? `<div class="rounded-xl bg-white/5 p-3 text-[13px]">Se los das a <b>${esc(accessWho(y) || 'Sin nombre')}</b> · ${planLabel(y)}<br>Nueva fecha de fin: <b class="text-white">${esc(fmtDateShort(end))}</b>${duoMate(y) ? '<br><span class="text-cyan-300">👥 Es un DÚO: se le suman también a su pareja.</span>' : ''}</div>
+      <button class="text-[12px] text-brand underline" data-mact="change" type="button">No es esta persona, elegir otra</button>
+      <button class="btn-primary w-full" data-mact="go" type="button">🎁 Dar ${N} días (sin cobro)</button>`
+    : `<p class="lbl">¿Quién de tus usuarios es «${esc(P.ref)}»?</p><input class="field" id="refQ" type="search" placeholder="Buscar por nombre o correo" autocomplete="off" value="${esc(q)}" /><div class="space-y-1.5" id="refRows">${rows()}</div>
+      <p class="text-[11px] text-mute">Solo lo eliges la primera vez: la app se acuerda para las siguientes.</p>`}
+    <button class="btn-ghost w-full" data-close type="button">Cancelar</button>`; };
+  const paint = () => { $('#modalRoot .modal-sheet').innerHTML = html(); const i = $('#refQ'); if (i) i.oninput = () => { q = i.value; $('#refRows').innerHTML = rows(); }; };
+  openModal(html(), {
+    who: (root, b) => { pick = b.dataset.h; paint(); },
+    change: () => { pick = ''; paint(); },
+    go: () => { const y = L.find(z => z.hash === pick); if (!y) return; const T = netToday() || todayISO(), end = addDays(y.hasta > T ? y.hasta : T, N), hs = [y.hash, ...(duoMate(y) ? [duoMate(y).hash] : [])];
+      askPin({ title: `🎁 ${esc(accessWho(y) || 'Sin nombre')}: hasta el ${esc(fmtDateShort(end))}`, text: 'Tu PIN abre la llave de GitHub para guardar la fecha. No se anota ningún pago.', onPin: async pin => {
+        await ghEditAcl(pin, lines => lines.map(l => hs.some(h => l.trim().toLowerCase().startsWith(h)) ? [...l.trim().split(/\s+/).filter(t => !/^hasta=/i.test(t)), 'hasta=' + end].join(' ') : l), 'Acceso: regalo por recomendación');
+        state.settings.refLinks = { ...(state.settings.refLinks || {}), [k]: y.hash };
+        state.settings.refGifts = { ...(state.settings.refGifts || {}), [m]: { d: todayISO(), to: accessWho(y) || '', h: y.hash, n: N } };
+        persist(); ui.accessPin = pin; closeModal(); render(); toast(`🎁 ${N} días dados a ${accessWho(y) || 'esa persona'} ✓`);
+      } }); }
+  });
+  const i = $('#refQ'); if (i) i.oninput = () => { q = i.value; $('#refRows').innerHTML = rows(); };
 }
 function trialRowsHTML() {
   const T = trialRows(); if (!T.length) return '';
@@ -10625,7 +10674,7 @@ function accFichaModal(hash) {
       <div class="text-[12px]">${y.admin ? '<span class="text-brand">Administrador · sin límite</span>' : `⏳ ${planLabel(y)}`}${y.beta ? ' · <span class="text-cyan-300">🧪 beta</span>' : ''}${y.anon ? ' · <span class="text-mute">🙈 nombre de perfil oculto</span>' : ''}</div>
       <div class="flex items-center justify-between gap-2 min-h-[30px]">${has ? `<span class="font-mono text-[16px] font-black tracking-[.15em] ${shown ? 'text-brand' : 'text-mute'}">${shown ? fmtCode(shown) : '••••-••••'}</span><span class="flex gap-1.5"><button class="iconbtn iconbtn-sm" data-act="showCode" data-hash="${esc(y.hash)}" type="button" aria-label="Ver código">${shown ? '🙈' : '👁'}</button><button class="iconbtn iconbtn-sm" data-act="copyCode" data-hash="${esc(y.hash)}" type="button" aria-label="Copiar código">📋</button></span>` : '<span class="text-amber-300 text-[11px]">Código no guardado: si lo necesita, dale uno nuevo.</span>'}</div>
       ${usageLine(y.hash)}
-      ${refOf(ui.usage?.[y.hash]?.m) ? `<div class="text-[12px]">🤝 Se la recomendó: <b>${esc(refOf(ui.usage?.[y.hash]?.m))}</b></div>` : ''}
+      ${refOf(ui.usage?.[y.hash]?.m) ? `<div class="text-[12px]">🤝 Se la recomendó: <b>${esc(refOf(ui.usage?.[y.hash]?.m))}</b>${(() => { const r = refPeople().find(z => z.m === String(ui.usage?.[y.hash]?.m || '').toLowerCase()); return r?.st === 'paid' ? (r.gift ? ` · ✅ regalo dado` : ` <button class="ref-gift mt-1" data-act="refGift" data-m="${esc(r.m)}" data-k="${esc(r.refK)}" type="button">🎁 Dar ${r.gd} días a ${esc(r.ref)} ›</button>`) : ''; })()}</div>` : ''}
       ${gh && !y.admin ? `<div class="grid grid-cols-5 gap-1 pt-1">${big('nameAccess', y.hash, '✎', 'Nombre', 'ficha-sm')}${big('regenAccess', y.hash, '🔄', 'Código nuevo', 'ficha-sm')}${big('betaAccess', y.hash, '🧪', y.beta ? 'Quitar beta' : 'Beta', 'ficha-sm')}${big('anonAccess', y.hash, y.anon ? '👤' : '🙈', y.anon ? 'Mostrar nombre' : 'Ocultar nombre', 'ficha-sm')}${big('delAccess', y.hash, '🗑', 'Quitar acceso', 'ficha-sm ficha-del')}</div>` : `<div class="pt-1">${big('nameAccess', y.hash, '✎', 'Nombre')}</div>`}
     </div>`; };
   const html = () => `<div data-ficha="${esc(hash)}"><h3 class="modal-title">${m ? `👥 ${esc(accessWho(x) || 'Sin nombre')} + ${esc(accessWho(m) || 'Sin nombre')}` : esc(accessWho(x) || 'Sin nombre')}</h3>
