@@ -12,3 +12,4 @@ bff66ad7b5b25711a298a0b609dafbea plan=prueba hasta=2026-11-16
 1b7b7987a0a5d95837767d6f97e7f17f plan=prueba hasta=2026-11-16
 #uso https://script.google.com/macros/s/AKfycbxbwKzXbu5HgWqO0_hEYhVYoWCAOBg5ryV6yDbZWsRCDAQ5NGU1esmvGpodWS8cDfTi9A/exec
 a72da065c477d57c890803274433f872 plan=1m hasta=2026-12-21
+8f64eda0b8d566996b3836ce4c37865e plan=d5 hasta=2026-11-23
