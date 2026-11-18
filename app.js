@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.16.7';
+const APP_VERSION = '5.16.8';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -1130,7 +1130,7 @@ const BLOCK_LOOKS = [
   { re: /gl[uú]te|🍑/i, img: 'gluteo', c: '#f472b6', tag: 'Glúteo', f: 'blur(1px) brightness(1.7) saturate(1.15)' },
   { re: /tren inferior/i, img: 'inferior', c: '#ef4444', tag: 'Pierna', f: 'blur(1px) brightness(1.9) saturate(1.1)' },
   { re: /piern|cuádr|🦵/i, img: 'pierna', c: '#f43f5e', tag: 'Pierna' },
-  { re: /^pecho|🛡️/i, img: 'gen', c: '#38bdf8', tag: 'Pecho', tint: true },
+  { re: /^pecho|🛡️/i, img: 'pecho', c: '#22d3ee', tag: 'Pecho' },
   { re: /ppt|push|pull|torso/i, img: 'ppt', c: '#60a5fa', tag: 'Fuerza' },
   { re: /full|cuerpo/i, img: 'full', c: '#22d3ee', tag: 'Fuerza' },
   { re: /h[ií]brido/i, img: 'hibrido', c: '#f97316', tag: 'Fuerza · 5 días' },
@@ -7524,6 +7524,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.16.8', ['🛡️ Bloque PECHO con su foto.'], 'quiet'],
   ['5.16.7', ['🛡️ Bloque PECHO (2 días) en la biblioteca, de momento solo visible para ti para probarlo.', '🧍 3D: «Flexiones en TRX» ya no enseña por error la animación del face pull.'], 'admin'],
   ['5.16.6', ['💬 Recordar renovación: el mensaje incluye los precios individual y DÚO, y «🖼️ Enviar con tarjeta de precios» manda una imagen con los dos.'], 'admin'],
   ['5.16.5', ['🤝 Pantalla de la prueba: si llegas por el enlace de alguien, sale «🤝 Te ha invitado …» ya puesto, sin que tengas que escribir nada.'], 'quiet'],
