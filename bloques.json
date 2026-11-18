@@ -3099,7 +3099,6 @@
   "lib": "pub_pecho1",
   "name": "PECHO",
   "icon": "🛡️",
-  "adminOnly": true,
   "desc": "Dos días de pecho para hacer en la misma semana, separados al menos 48 h. Día 1, pesado y con la parte alta primero; día 2, más repeticiones y el pecho trabajando estirado. Unas 11 series por día, ~50 min.\nCómo usarlo: antes del primer ejercicio, 2 series ligeras de calentamiento (12 y 6 repeticiones). Deja 1–2 repeticiones en reserva; solo la última serie del día puede ir al fallo. Cuando llegues al tope de repeticiones en todas las series, el Coach te sube el peso. Un pecho definido se ve de verdad con poca grasa: cuida también la dieta.",
   "author": "Esteban",
   "at": "2026-11-18",

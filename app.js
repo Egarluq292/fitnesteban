@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.16.8';
+const APP_VERSION = '5.16.9';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7524,6 +7524,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.16.9', ['🛡️ Nuevo bloque PECHO en Entreno › Bloques: dos días de pecho para hacer en la misma semana. El día 1, pesado y empezando por la parte alta; el día 2, con más repeticiones y el pecho trabajando estirado. Cada ejercicio trae 2 alternativas (⇄) para casa o si algo molesta, y el Coach te va subiendo el peso.']],
   ['5.16.8', ['🛡️ Bloque PECHO con su foto.'], 'quiet'],
   ['5.16.7', ['🛡️ Bloque PECHO (2 días) en la biblioteca, de momento solo visible para ti para probarlo.', '🧍 3D: «Flexiones en TRX» ya no enseña por error la animación del face pull.'], 'admin'],
   ['5.16.6', ['💬 Recordar renovación: el mensaje incluye los precios individual y DÚO, y «🖼️ Enviar con tarjeta de precios» manda una imagen con los dos.'], 'admin'],
