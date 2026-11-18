@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.16.1';
+const APP_VERSION = '5.16.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7516,6 +7516,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.16.2', ['🤝 Usuarios: el bloque «Recomendaciones» se ve siempre; si aún no hay ninguna (o falta el script v16), lo dice.'], 'quiet'],
   ['5.16.1', ['🤝 Usuarios · Recomendaciones: quién trajo a quién y en qué está cada persona (en prueba, prueba terminada o ya paga). Solo cuando la persona recomendada paga, botón «🎁 Dar días» a quien la recomendó: 15 días si pagó 1 mes, 30 si pagó 3 o 6 meses, sin anotar cobro y sin repetirse.'], 'quiet'],
   ['5.16.0', ['🤝 Al empezar la prueba se puede indicar quién te ha recomendado FITNESTEBAN (opcional). «Compartir app» añade tu nombre al enlace para que le salga ya escrito a quien lo abra. En Usuarios: quién trajo a quién y cuántos la usan de verdad (script de uso v16).'], 'quiet'],
   ['5.15.9', [
@@ -10574,7 +10575,8 @@ function refPeople() { // cada persona recomendada, con su estado
   });
 }
 function refSummaryHTML() {
-  const P = refPeople(); if (!P.length) return '';
+  const P = refPeople();
+  if (!P.length) return `<div class="acc-ref"><b>🤝 Recomendaciones</b><p class="text-[12px] text-mute mt-1">${ui.usageOld15 ? 'Para verlas, actualiza el script de uso a la v16 (Reconfigurar → nueva versión).' : 'Aún no hay ninguna. Cuando alguien empiece la prueba indicando quién se la recomendó, aparecerá aquí.'}</p></div>`;
   const by = new Map(); for (const x of P) { const g = by.get(x.refK) || { name: x.ref, k: x.refK, L: [] }; g.L.push(x); by.set(x.refK, g); }
   const pend = P.filter(x => x.st === 'paid' && !x.gift).length, link = state.settings.refLinks || {};
   const stTxt = x => x.st === 'paid' ? `💶 Ya paga (${esc(planName(x.pk))})` : x.st === 'code' ? '🔑 Tiene código (sin pago anotado)' : x.st === 'trial' ? `🧪 En prueba · ${plural(x.days || 0, 'día', 'días')} de uso` : '⌛ Prueba terminada sin pagar';
