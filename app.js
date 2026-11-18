@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.15.9';
+const APP_VERSION = '5.16.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7516,6 +7516,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.16.0', ['🤝 Al empezar la prueba se puede indicar quién te ha recomendado FITNESTEBAN (opcional). «Compartir app» añade tu nombre al enlace para que le salga ya escrito a quien lo abra. En Usuarios: quién trajo a quién y cuántos la usan de verdad (script de uso v16).'], 'quiet'],
   ['5.15.9', [
     '🍽️ La IA de la dieta, más fiable y sin cortes:',
     '✔️ Comidas que cuadran siempre. Cada comida que calcula o propone la IA se revisa antes de enseñártela: las calorías cuadran con la proteína, los hidratos y la grasa, y las raciones son las de un plato normal.',
@@ -9458,7 +9459,7 @@ const actions = {
   installHide: () => { lsSet(INSTALL_HIDE, Date.now() + 7 * 86400000); render(); },
   shareApp: () => promoModal(),
   shareLink: async () => {
-    const url = 'https://fitnesteban.app', text = `Te recomiendo FITNESTEBAN, una app para entrenar y llevar la dieta. Puedes probarla ${TRIAL_DAYS} días: abre el enlace, instálala en tu móvil y entra con tu cuenta de Google.`;
+    const nm = String(profileOf()?.name || '').trim().slice(0, 40), url = 'https://fitnesteban.app' + (nm ? `/?de=${encodeURIComponent(nm)}` : ''), text = `Te recomiendo FITNESTEBAN, una app para entrenar y llevar la dieta. Puedes probarla ${TRIAL_DAYS} días: abre el enlace, instálala en tu móvil y entra con tu cuenta de Google.`;
     try { if (navigator.share) { await navigator.share({ title: 'FITNESTEBAN', text, url }); return; } } catch (e) { if (e?.name === 'AbortError') return; }
     try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Mensaje copiado: pégalo donde quieras'); } catch { toast(url); }
   },
@@ -9797,12 +9798,15 @@ const trialEndMsg = () => `Tu periodo de prueba ha terminado. Pide tu código de
 const trialDevMsg = r => r === 'device' ? `Este dispositivo ya ha usado su periodo de prueba con otra cuenta de Google. Para seguir, pide tu código de acceso a Esteban.${contactBtn('Pedir mi código', 'mx-auto mt-3')}` : `Esa cuenta ya tiene su periodo de prueba abierto en otro dispositivo. Para seguir, pide tu código de acceso a Esteban.${contactBtn('Pedir mi código', 'mx-auto mt-3')}`;
 async function trialHashOf(m) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('fitnesteban-prueba|' + m)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('').slice(0, 32); }
 const fecha10 = x => String(x || '').slice(0, 10);
-async function trialCall(tk = '') {
+/* 🤝 Quién recomendó la app: lo escribe la persona al empezar la prueba (o llega en el enlace: fitnesteban.app/?de=Nombre) */
+const REF_KEY = 'fitnesteban_de';
+try { const de = new URLSearchParams(location.search).get('de'); if (de) lsSet(REF_KEY, de.replace(/[<>"]/g, '').trim().slice(0, 60)); } catch { /* sin parámetros */ }
+async function trialCall(tk = '', ref = '') {
   if (!access.usageUrl) await fetchAcl();
   if (!access.usageUrl) throw new Error('No se puede comprobar la prueba ahora');
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000);
   try {
-    const r = await fetch(`${access.usageUrl}?op=prueba&d=${encodeURIComponent(deviceId())}&l=${encodeURIComponent(deviceLabel())}${tk ? `&tk=${encodeURIComponent(tk)}` : ''}`, { signal: ctl.signal, cache: 'no-store' });
+    const r = await fetch(`${access.usageUrl}?op=prueba&d=${encodeURIComponent(deviceId())}&l=${encodeURIComponent(deviceLabel())}${tk ? `&tk=${encodeURIComponent(tk)}` : ''}${ref ? `&ref=${encodeURIComponent(ref)}` : ''}`, { signal: ctl.signal, cache: 'no-store' });
     return await r.json();
   } finally { clearTimeout(t); }
 }
@@ -9811,7 +9815,8 @@ async function trialStart(btn) {
   try {
     const { email, token } = await googleAuth();
     btn.innerHTML = '<span class="spinner"></span> Preparando tu prueba…';
-    const d = await trialCall(token);
+    const ref = ($('#trialRef')?.value || '').replace(/[<>"]/g, '').trim().slice(0, 60);
+    const d = await trialCall(token, ref);
     if (!d?.ok) throw new Error(d?.error === 'google' ? 'Google no ha confirmado tu correo' : 'La prueba aún no está disponible. Inténtalo más tarde.');
     if (d.h) lsSet(TRIAL_KEY, { h: d.h, hasta: d.hasta, m: email });
     if (!d.allowed) { lockScreen('code', d.reason === 'exp' ? trialEndMsg() : trialDevMsg(d.reason)); return; }
@@ -9904,6 +9909,7 @@ function lockScreen(mode, msg = '') {
     ${canTrial ? `<div class="trial-box mt-5"><div class="text-[11px] font-black tracking-widest text-cyan-300">🔓 PERIODO DE PRUEBA</div>
       <div class="text-xl font-black leading-tight mt-0.5">${TRIAL_DAYS} días con todo incluido</div>
       <p class="text-[13px] text-mute mt-1">Sin código: entra con tu cuenta de Google.</p>
+      <input class="field mt-3 text-[14px]" id="trialRef" maxlength="60" autocomplete="off" placeholder="¿Quién te ha recomendado FITNESTEBAN? (opcional)" value="${esc(lsGet(REF_KEY) || '')}" />
       <button class="btn-google w-full mt-3" id="trialGo" type="button"><b class="g-g">G</b> Continuar con Google</button>
       <p class="text-[11px] text-mute mt-2 leading-snug">Tu correo se guarda solo para que Esteban pueda enviarte la guía y ayudarte (<a class="underline" href="privacidad.html" target="_blank" rel="noopener">privacidad</a>). Una prueba por persona. Al terminar, pide tu código de acceso a Esteban para seguir.</p></div>
       <button class="lock-promo" id="lockPromo" type="button">▶ Mira lo que hace la app (1 min)</button>
@@ -10102,7 +10108,7 @@ async function loadUsage() {
     ui.usage = {}; for (const x of d.rows || []) { x.v = usageVer(x.v); ui.usage[String(x.h).toLowerCase()] = x; }
     ui.trialH = {}; // 🧪 filas del periodo de prueba: su huella es la del correo (así no dependen de la columna «nombre»)
     for (const x of d.rows || []) { const m = String(x.m || '').trim().toLowerCase(), h = String(x.h).toLowerCase(); if (m && !(access.list || []).some(y => y.hash === h) && await trialHashOf(m) === h) ui.trialH[h] = (String(x.nm || '').match(/\d{4}-\d{2}-\d{2}/) || [''])[0] || (x.first ? addDays(fecha10(x.first), TRIAL_DAYS - 1) : ''); }
-    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageOld12 = !(d.ver >= 12); ui.usageOld13 = !(d.ver >= 14); ui.usageOld14 = !(d.ver >= 15); ui.usageVer = +d.ver || 0;
+    ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageOld12 = !(d.ver >= 12); ui.usageOld13 = !(d.ver >= 14); ui.usageOld14 = !(d.ver >= 15); ui.usageOld15 = !(d.ver >= 16); ui.refs = {}; for (const x of d.refs || []) if (x.m) ui.refs[String(x.m).toLowerCase()] = { ref: String(x.ref || ''), ini: String(x.ini || '') }; ui.usageVer = +d.ver || 0;
     // nombres puestos en otro dispositivo tuyo: se copian aquí si aquí no tienes uno
     let got = 0;
     for (const x of d.rows || []) { const h = String(x.h).toLowerCase(), nm = String(x.nm || '').trim(); if (nm && nm !== 'Sin nombre' && nm !== 'Yo (admin)' && !state.accessNames[h]) { state.accessNames[h] = nm.slice(0, 24); got++; } }
@@ -10269,7 +10275,7 @@ function doGet_(e) {
       const ya = P.getProperty('pd_' + d);
       if (ya && ya !== h) return salida_({ ok: true, allowed: false, reason: 'device' });
       let x = prueba_(h);
-      if (!x) x = { m: m, ini: hoy, hasta: sumaDias_(hoy, DIAS_PRUEBA - 1), d: [] };
+      if (!x) { x = { m: m, ini: hoy, hasta: sumaDias_(hoy, DIAS_PRUEBA - 1), d: [] }; const rf = String(q.ref || '').replace(/[<>"]/g, '').trim().slice(0, 60); if (rf) x.ref = rf; } // quién le recomendó la app (opcional, lo escribe la persona)
       if (x.d.indexOf(d) < 0) { if (x.d.length >= LIMITE) return salida_({ ok: true, allowed: false, reason: 'limite' }); x.d.push(d); }
       P.setProperty('p_' + h, JSON.stringify(x)); P.setProperty('pd_' + d, h);
       if (hoy > x.hasta) return salida_({ ok: true, allowed: false, reason: 'exp', h: h, hasta: x.hasta });
@@ -10283,12 +10289,13 @@ function doGet_(e) {
       const hoy = fecha_(new Date()), adm = admins_(), dd = disp_(); let k = 0;
       hoja_().getDataRange().getValues().slice(1).forEach(r => { const h = String(r[0]).toLowerCase(); if (fecha_(r[1]) !== hoy || adm.indexOf(h) >= 0) return; const q = {}; ((dd[h] || {}).d || []).forEach(v => { if (v.last === hoy) q[String(v.p || v.id).toLowerCase()] = 1; }); k += Math.max(1, Object.keys(q).length); });
       n = String(k); c.put('hoy', n, 60); }
-    return salida_({ ok: true, ver: 15, hoy: +n });
+    return salida_({ ok: true, ver: 16, hoy: +n });
   }
   if (q.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
   const datos = hoja_().getDataRange().getValues().slice(1);
   const dd = disp_();
-  return salida_({ ok: true, ver: 15, rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
+  const refs = []; Object.entries(PropertiesService.getScriptProperties().getProperties()).forEach(([k, v]) => { if (k.indexOf('p_') !== 0) return; try { const x = JSON.parse(v); if (x && x.ref) refs.push({ m: x.m, ref: x.ref, ini: x.ini }); } catch (e) {} });
+  return salida_({ ok: true, ver: 16, refs: refs, rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
 }`;
 }
 /* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
@@ -10549,6 +10556,18 @@ function trialRows() {
   return Object.values(ui.usage).filter(u => String(u.h).toLowerCase() in T).map(u => ({ ...u, hasta: T[String(u.h).toLowerCase()] }))
     .sort((a, b) => (b.last || '').localeCompare(a.last || ''));
 }
+const refOf = m => ui.refs?.[String(m || '').trim().toLowerCase()]?.ref || '';
+/* 🤝 Resumen: a cuántas personas ha traído cada uno (por correo, aunque ya tengan código) y cuántas la usan de verdad (7 días de uso o más) */
+function refSummaryHTML() {
+  const R = ui.refs || {}, rows = Object.values(ui.usage || {}), by = new Map();
+  for (const [m, x] of Object.entries(R)) {
+    const k = normTxt(x.ref), cur = by.get(k) || { name: x.ref, n: 0, ok: 0, who: [] }, u = rows.filter(r => String(r.m || '').toLowerCase() === m);
+    const days = u.reduce((a, r) => a + (+r.days || 0), 0); cur.n++; if (days >= 7) cur.ok++; cur.who.push(`${m.split('@')[0]}${days >= 7 ? ' ✅' : ''}`); by.set(k, cur);
+  }
+  if (!by.size) return '';
+  const L = [...by.values()].sort((a, b) => b.ok - a.ok || b.n - a.n);
+  return `<details class="acc-ref"><summary>🤝 Recomendaciones · ${L.reduce((a, x) => a + x.n, 0)}</summary><div class="space-y-1.5 mt-2">${L.map(x => `<div class="acc-ref-row"><b>${esc(x.name)}</b><span>${plural(x.n, 'persona', 'personas')} · ${x.ok} ${x.ok === 1 ? 'la usa' : 'la usan'} de verdad</span><small>${esc(x.who.join(' · '))}</small></div>`).join('')}</div><p class="text-[11px] text-mute mt-2">✅ = 7 días de uso o más. El nombre lo escribe cada persona al empezar la prueba, tal cual.</p></details>`;
+}
 function trialRowsHTML() {
   const T = trialRows(); if (!T.length) return '';
   const show = !ui.accF || ui.accF === 'all' || ui.accF === 'trial', t = netToday() || todayISO();
@@ -10558,9 +10577,9 @@ function trialRowsHTML() {
     const pill = left === null ? '' : left < 0 ? '<span class="text-rose-300">Terminada</span>' : `<span class="${left <= 3 ? 'text-amber-300' : 'text-cyan-300'}">Prueba · ${left === 0 ? 'hoy' : left + ' d'}</span>`;
     return `<div class="acc-row st-trial ${open ? 'acc-open' : ''}" data-s="${esc(normTxt(who + ' prueba'))}" ${show ? '' : 'hidden'}>
       <button class="w-full flex items-center gap-2 px-3 py-2.5 text-left" data-act="accRow" data-hash="${esc(u.h)}" type="button"><span class="u-dot ${dot}"></span>
-        <span class="flex-1 min-w-0"><span class="block font-semibold text-[13px] truncate ${ago === 0 ? 'text-emerald-300' : ''}">${esc(who)}</span><span class="block text-[11px] text-mute">${ago === 0 ? 'Activo hoy' : ago === null ? '' : `Último uso hace ${plural(ago, 'día', 'días')}`} · ${plural(u.days || 1, 'día', 'días')} de uso</span></span>
+        <span class="flex-1 min-w-0"><span class="block font-semibold text-[13px] truncate ${ago === 0 ? 'text-emerald-300' : ''}">${esc(who)}</span><span class="block text-[11px] text-mute">${ago === 0 ? 'Activo hoy' : ago === null ? '' : `Último uso hace ${plural(ago, 'día', 'días')}`} · ${plural(u.days || 1, 'día', 'días')} de uso${refOf(u.m) ? ` · 🤝 ${esc(refOf(u.m))}` : ''}</span></span>
         <span class="text-[11px] shrink-0">${pill}</span><span class="tri shrink-0 ${open ? 'rotate-180' : ''}"></span></button>
-      ${open ? `<div class="px-3 pb-2.5 pt-1 text-xs space-y-1.5"><p class="text-[11px] text-mute">Empezó el ${esc(fmtDateShort(u.first || ''))}${u.hasta ? ` · termina el ${esc(fmtDateShort(u.hasta))}` : ''}${u.v ? ` · v${esc(u.v)}` : ''}</p>
+      ${open ? `<div class="px-3 pb-2.5 pt-1 text-xs space-y-1.5">${refOf(u.m) ? `<p class="text-[12px]">🤝 Se la recomendó: <b>${esc(refOf(u.m))}</b></p>` : ''}<p class="text-[11px] text-mute">Empezó el ${esc(fmtDateShort(u.first || ''))}${u.hasta ? ` · termina el ${esc(fmtDateShort(u.hasta))}` : ''}${u.v ? ` · v${esc(u.v)}` : ''}</p>
         ${lsGet(GH_KEY) ? `<button class="btn-ghost w-full" data-act="trialCode" data-who="${esc(String(u.m || '').split('@')[0].slice(0, 24))}" data-from="${esc(u.hasta && u.hasta > todayISO() ? u.hasta : '')}" type="button">🔑 Darle su código personal</button>` : ''}
         <p class="text-[11px] text-mute">Cuando le des un código, lo escribe en la pantalla de acceso y sigue con todos sus datos.</p></div>` : ''}</div>`;
   }).join('');
@@ -10606,6 +10625,7 @@ function accFichaModal(hash) {
       <div class="text-[12px]">${y.admin ? '<span class="text-brand">Administrador · sin límite</span>' : `⏳ ${planLabel(y)}`}${y.beta ? ' · <span class="text-cyan-300">🧪 beta</span>' : ''}${y.anon ? ' · <span class="text-mute">🙈 nombre de perfil oculto</span>' : ''}</div>
       <div class="flex items-center justify-between gap-2 min-h-[30px]">${has ? `<span class="font-mono text-[16px] font-black tracking-[.15em] ${shown ? 'text-brand' : 'text-mute'}">${shown ? fmtCode(shown) : '••••-••••'}</span><span class="flex gap-1.5"><button class="iconbtn iconbtn-sm" data-act="showCode" data-hash="${esc(y.hash)}" type="button" aria-label="Ver código">${shown ? '🙈' : '👁'}</button><button class="iconbtn iconbtn-sm" data-act="copyCode" data-hash="${esc(y.hash)}" type="button" aria-label="Copiar código">📋</button></span>` : '<span class="text-amber-300 text-[11px]">Código no guardado: si lo necesita, dale uno nuevo.</span>'}</div>
       ${usageLine(y.hash)}
+      ${refOf(ui.usage?.[y.hash]?.m) ? `<div class="text-[12px]">🤝 Se la recomendó: <b>${esc(refOf(ui.usage?.[y.hash]?.m))}</b></div>` : ''}
       ${gh && !y.admin ? `<div class="grid grid-cols-5 gap-1 pt-1">${big('nameAccess', y.hash, '✎', 'Nombre', 'ficha-sm')}${big('regenAccess', y.hash, '🔄', 'Código nuevo', 'ficha-sm')}${big('betaAccess', y.hash, '🧪', y.beta ? 'Quitar beta' : 'Beta', 'ficha-sm')}${big('anonAccess', y.hash, y.anon ? '👤' : '🙈', y.anon ? 'Mostrar nombre' : 'Ocultar nombre', 'ficha-sm')}${big('delAccess', y.hash, '🗑', 'Quitar acceso', 'ficha-sm ficha-del')}</div>` : `<div class="pt-1">${big('nameAccess', y.hash, '✎', 'Nombre')}</div>`}
     </div>`; };
   const html = () => `<div data-ficha="${esc(hash)}"><h3 class="modal-title">${m ? `👥 ${esc(accessWho(x) || 'Sin nombre')} + ${esc(accessWho(m) || 'Sin nombre')}` : esc(accessWho(x) || 'Sin nombre')}</h3>
@@ -10628,6 +10648,7 @@ function usersPageHTML() {
     ${accFilterHTML(list)}
   </div>
   <button class="w-full text-left text-[13px] mt-2 px-1" data-act="pays" type="button">💶 ${esc(mes.charAt(0).toUpperCase() + mes.slice(1))}: <b>${eur(p.mes)}</b> · Este año: <b>${eur(p.ano)}</b> <span class="text-mute">(solo en este móvil) ›</span></button>
+  ${split ? refSummaryHTML() : ''}
   <div id="accRows" class="mt-2 space-y-1.5">
     ${A.length ? `<div class="lbl acc-row-h">⚠️ Requieren atención · ${A.filter(x => !duoMate(x) || x.hash < duoMate(x).hash).length}</div>${groups(A)}<div class="lbl acc-row-h mt-3">Resto</div>` : ''}
     ${groups(R)}${trialRowsHTML()}</div>
@@ -10647,7 +10668,7 @@ function accessSectionHTML() {
     ${list.length ? `<p class="text-[12px] text-slate-300">💶 Este mes: <b class="text-white">${eur(paysSummary().mes)}</b> · Este año: <b class="text-white">${eur(paysSummary().ano)}</b> <span class="text-mute">(solo en este móvil)</span></p>` : ''}
     <button class="btn-primary w-full" data-act="accPage" type="button">👥 Usuarios y planes</button>
     ${access.usageUrl && lsGet(USE_KEY)
-      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : ui.usageOld12 ? '<span class="text-amber-300">actualiza el script a la v12 (Reconfigurar → nueva versión) para activar el periodo de prueba con Google</span>' : ui.usageOld13 ? '<span class="text-amber-300">actualiza el script a la v14 (Reconfigurar → nueva versión): las pruebas nuevas pasan a 7 días</span>' : ui.usageOld14 ? '<span class="text-amber-300">actualiza el script a la v15 (Reconfigurar → nueva versión): el número de activos de la cabecera contará a las 2 personas de los códigos antiguos compartidos</span>' : 'actualizado ahora · nombres, correos, altas y quién usa cada dispositivo') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
+      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : ui.usageOld12 ? '<span class="text-amber-300">actualiza el script a la v12 (Reconfigurar → nueva versión) para activar el periodo de prueba con Google</span>' : ui.usageOld13 ? '<span class="text-amber-300">actualiza el script a la v14 (Reconfigurar → nueva versión): las pruebas nuevas pasan a 7 días</span>' : ui.usageOld14 ? '<span class="text-amber-300">actualiza el script a la v15 (Reconfigurar → nueva versión): el número de activos de la cabecera contará a las 2 personas de los códigos antiguos compartidos</span>' : ui.usageOld15 ? '<span class="text-amber-300">actualiza el script a la v16 (Reconfigurar → nueva versión) para ver quién ha recomendado la app a cada persona</span>' : 'actualizado ahora · nombres, correos, altas y quién usa cada dispositivo') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
       : access.usageUrl ? `<button class="btn-ghost w-full" data-act="usageHere" type="button">📶 Ver quién usa la app en este dispositivo</button>`
       : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
     ${access.usageUrl && lsGet(USE_KEY) ? (lsGet(SHEET_KEY) && !ui.sheetEdit
