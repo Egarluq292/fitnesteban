@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.16.10';
+const APP_VERSION = '5.16.11';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7524,6 +7524,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.16.11', ['👥 Usuarios: la pastilla «Hoy» cuenta personas, igual que «X activos hoy» (en un DÚO o código compartido cuenta a cada uno que haya entrado).'], 'quiet'],
   ['5.16.10', ['👥 Usuarios con 5 filtros: Todos (sin caducados, con las pruebas en curso), Hoy (también pruebas), ⚠️ Atención (caducan pronto, caducados y con plan pero sin usarla +7 días), Free y En prueba. DÚO e individual se buscan escribiéndolo. El buscador busca en todos.', '📱 Los códigos antiguos con 2 móviles salen como un DÚO: un punto por móvil y los dos nombres de perfil.'], 'admin'],
   ['5.16.9', ['🛡️ Nuevo bloque PECHO en Entreno › Bloques: dos días de pecho para hacer en la misma semana. El día 1, pesado y empezando por la parte alta; el día 2, con más repeticiones y el pecho trabajando estirado. Cada ejercicio trae 2 alternativas (⇄) para casa o si algo molesta, y el Coach te va subiendo el peso.']],
   ['5.16.8', ['🛡️ Bloque PECHO con su foto.'], 'quiet'],
@@ -10557,13 +10558,13 @@ const accIdle = x => { if (x.admin || accStatus(x) !== 'ok' || !isPaidPlan(x.pla
 function accGroups(list) { // por fila (los DÚO juntos): estado para los filtros
   const seen = new Set(), G = [];
   for (const x of list) { if (seen.has(x.hash)) continue; const m = duoMate(x); if (m) seen.add(m.hash); seen.add(x.hash); const P = m ? [x, m] : [x];
-    G.push({ x, m, st: accStatus(x), today: P.some(y => ui.usage?.[y.hash]?.last === todayISO()), idle: P.every(accIdle) && !x.admin }); }
+    G.push({ x, m, st: accStatus(x), today: P.some(y => ui.usage?.[y.hash]?.last === todayISO()), ppl: P.filter(y => ui.usage?.[y.hash]?.last === todayISO()).reduce((a, y) => a + peopleToday(ui.usage[y.hash]), 0), idle: P.every(accIdle) && !x.admin }); }
   return G;
 }
 function accFilterHTML(list) {
   const G = accGroups(list), T = trialRows(), t = netToday() || todayISO(), live = T.filter(u => !u.hasta || u.hasta >= t);
   const attn = G.filter(g => !g.x.admin && (['soon', 'exp'].includes(g.st) || g.idle)).length;
-  const F = [['all', 'Todos', G.filter(g => g.st !== 'exp').length + live.length], ['today', '🟢 Hoy', ui.usage ? G.filter(g => g.today && !g.x.admin).length + T.filter(u => u.last === todayISO()).length : null], ['attn', '⚠️ Atención', attn], ['free', 'Free', G.filter(g => g.st === 'free').length], ['trial', '🧪 En prueba', ui.usage ? T.length : null]];
+  const F = [['all', 'Todos', G.filter(g => g.st !== 'exp').length + live.length], ['today', '🟢 Hoy', ui.usage ? G.filter(g => g.today && !g.x.admin).reduce((a, g) => a + g.ppl, 0) + T.filter(u => u.last === todayISO()).length : null], ['attn', '⚠️ Atención', attn], ['free', 'Free', G.filter(g => g.st === 'free').length], ['trial', '🧪 En prueba', ui.usage ? T.length : null]];
   if (!ACC_FS.includes(ui.accF || 'all')) ui.accF = 'all';
   return `<input class="field" id="accSearch" placeholder="🔎 Buscar por nombre, correo, «dúo»…" autocomplete="off" value="${esc(ui.accQ || '')}" />
     <div class="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" id="accChips" data-noswipe>${F.filter(f => f[2] !== null).map(([k, l, c]) => `<button class="chip chip-sm shrink-0 ${(ui.accF || 'all') === k ? 'chip-on' : ''}" data-act="accF" data-k="${k}" type="button">${l} <span class="opacity-70">${c}</span></button>`).join('')}</div>`;
