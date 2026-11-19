@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.18.4';
+const APP_VERSION = '5.18.5';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6766,7 +6766,7 @@ async function msgCheck(force) {
   msgCheckAt = Date.now();
   try {
     msgFlush();
-    const j = await msgApi('hilo'), seen = lsGet(MSG_SEEN_KEY) || '';
+    msgVisto(); const j = await msgApi('hilo'), seen = lsGet(MSG_SEEN_KEY) || '';
     ui.msgThread = j.msgs || [];
     const nw = ui.msgThread.filter(m => m.de === 'e' && m.ts > seen).length;
     if (nw && !ui.msgNew) toast(`💬 Esteban te ha ${nw === 1 ? 'respondido' : `escrito ${nw} mensajes`}. Toca el botón de los bocadillos de arriba para leerlo.`);
@@ -6780,6 +6780,12 @@ function msgBadge() {
   if (!k) { n?.remove(); return; }
   if (!n) { n = document.createElement('span'); n.className = 'ub-n ub-msg'; b.appendChild(n); }
   n.textContent = String(k); b.setAttribute('aria-label', `Escribir a Esteban · ${k} sin leer`);
+}
+/* ✓✓ Al abrir la conversación, Esteban ve que has leído su último mensaje (lo explica la política de privacidad). Si no hay conexión, se avisa la próxima vez */
+const MSG_VISTO_KEY = 'fitnesteban_msgvisto';
+async function msgVisto() {
+  const seen = lsGet(MSG_SEEN_KEY) || ''; if (!seen || seen <= (lsGet(MSG_VISTO_KEY) || '') || !navigator.onLine) return;
+  try { await msgApi('visto', { m: seen }); lsSet(MSG_VISTO_KEY, seen); } catch { /* script antiguo o sin conexión: se reintenta */ }
 }
 /* La ventana del usuario: su conversación con Esteban */
 function msgBox(pre = '') {
@@ -6805,7 +6811,7 @@ function msgBoxRender(err) {
   b.innerHTML = (all.length ? all.map(m => msgBubble(m, m.mine)).join('') : `<div class="text-center mt-6"><div class="text-3xl">👋</div><p class="text-sm text-mute mt-2 leading-relaxed">Pregúntame lo que quieras: tu código, una duda de la app, algo que no funciona o una idea.<br>Te contesto aquí; verás el aviso en el botón de los bocadillos de arriba.</p></div>`)
     + (err === 'net' ? '<p class="text-[11px] text-amber-300 text-center">Sin conexión: lo que escribas se enviará solo al volver.</p>' : '');
   b.scrollTop = b.scrollHeight;
-  const last = (ui.msgThread || []).filter(m => m.de === 'e').pop(); if (last) { lsSet(MSG_SEEN_KEY, last.ts); ui.msgNew = 0; msgBadge(); }
+  const last = (ui.msgThread || []).filter(m => m.de === 'e').pop(); if (last) { lsSet(MSG_SEEN_KEY, last.ts); ui.msgNew = 0; msgBadge(); msgVisto(); }
 }
 async function msgBoxLoad() {
   msgBoxRender();
@@ -6867,7 +6873,7 @@ function msgInboxModal() {
   const th = msgThreads();
   openModal(`<div class="flex items-center justify-between gap-2"><h3 class="modal-title">💬 Mensajes</h3><button class="w-8 h-8 rounded-full border border-line text-mute" data-close type="button" aria-label="Cerrar">✕</button></div>
     <button class="btn-primary w-full" data-mact="new" type="button">✍️ Escribir a alguien</button>
-    ${th.length ? `<div class="space-y-1.5">${th.map(t => `<button class="msg-row${t.pend ? ' msg-row-on' : ''}" data-mact="open" data-id="${esc(t.id)}" type="button"><span class="flex items-center justify-between gap-2"><b class="truncate">${t.pend ? '🟠 ' : ''}${esc(msgWhoName(t.id, t))}</b><span class="text-[11px] text-mute shrink-0">${esc(msgTime(t.last.ts))}</span></span><span class="block text-[12px] text-mute truncate">${t.last.de === 'e' ? 'Tú: ' : ''}${esc(t.last.t)}</span></button>`).join('')}</div>` : '<p class="text-sm text-mute">Aún no te ha escrito nadie. Cuando alguien pulse «Escribir a Esteban», aparecerá aquí.</p>'}
+    ${th.length ? `<div class="space-y-1.5">${th.map(t => `<button class="msg-row${t.pend ? ' msg-row-on' : ''}" data-mact="open" data-id="${esc(t.id)}" type="button"><span class="flex items-center justify-between gap-2"><b class="truncate">${t.pend ? '🟠 ' : ''}${esc(msgWhoName(t.id, t))}</b><span class="text-[11px] text-mute shrink-0">${esc(msgTime(t.last.ts))}</span></span><span class="block text-[12px] text-mute truncate">${t.last.de === 'e' ? `${ui.msgVistos ? (ui.msgVistos[t.id]?.m >= t.last.ts ? '✓✓ ' : '✓ ') : ''}Tú: ` : ''}${esc(t.last.t)}</span></button>`).join('')}</div>` : '<p class="text-sm text-mute">Aún no te ha escrito nadie. Cuando alguien pulse «Escribir a Esteban», aparecerá aquí.</p>'}
     <label class="flex items-center justify-between gap-3 text-[13px] pt-2 border-t border-line"><span>✉️ Avisarme también por correo<span class="block text-[11px] text-mute">Te llega un correo con cada mensaje nuevo</span></span><input id="msgAvisos" type="checkbox" class="w-5 h-5 accent-cyan-400 shrink-0" ${ui.msgAvisos !== false ? 'checked' : ''} /></label>`, {
     open: (r, b) => msgThreadModal(b.dataset.id),
     new: () => msgPickModal()
@@ -6893,6 +6899,12 @@ async function msgAdminApi(op, extra) {
   const r = await fetch(`${access.usageUrl}?${new URLSearchParams({ key, op, ...extra, t2: Date.now() }) /* «t» es el texto: el anticaché va en «t2» */}`, { cache: 'no-store' }); const j = await r.json();
   if (!j.ok) throw new Error('fallo'); return j;
 }
+function msgVistoHTML(id, t) {
+  const lastE = [...t.msgs].reverse().find(m => m.de === 'e'); if (!lastE || t.msgs[t.msgs.length - 1].de !== 'e') return '';
+  if (!ui.msgVistos) return ''; // script anterior a la v18
+  const v = ui.msgVistos[id];
+  return v?.m && v.m >= lastE.ts ? `<p class="msg-visto">✓✓ Visto · ${esc(msgTime(v.at))}</p>` : '<p class="msg-visto msg-novisto">✓ Enviado · aún no lo ha abierto</p>';
+}
 function msgThreadModal(id, pre = '', back = null) {
   const t = msgThreads().find(x => x.id === id) || { id, msgs: [], nm: '', ct: '' };
   const u = ui.usage?.[id], mail = u?.m || '';
@@ -6900,7 +6912,7 @@ function msgThreadModal(id, pre = '', back = null) {
     <div class="cal-head flex items-center gap-2 pb-3"><button class="w-8 h-8 rounded-full border border-line text-mute shrink-0" data-mact="back" type="button" aria-label="Volver">‹</button>
       <div class="min-w-0"><h3 class="modal-title leading-tight truncate">${esc(msgWhoName(id, t))}</h3><p class="text-[11px] text-mute truncate">${esc(msgWhoState(id))}${t.ct ? ` · ${esc(t.ct)}` : mail ? ` · ${esc(mail)}` : ''}</p></div>
       <button class="ml-auto w-8 h-8 rounded-full border border-line text-mute shrink-0" data-close type="button" aria-label="Cerrar">✕</button></div>
-    <div id="msgBody" class="cal-body space-y-2">${t.msgs.length ? t.msgs.map(m => msgBubble(m, m.de === 'e')).join('') : '<p class="text-[12px] text-mute text-center mt-6">Aún no os habéis escrito. Lo verá la próxima vez que abra la app, con aviso en el botón de los bocadillos.</p>'}</div>
+    <div id="msgBody" class="cal-body space-y-2">${t.msgs.length ? t.msgs.map(m => msgBubble(m, m.de === 'e')).join('') + msgVistoHTML(id, t) : '<p class="text-[12px] text-mute text-center mt-6">Aún no os habéis escrito. Lo verá la próxima vez que abra la app, con aviso en el botón de los bocadillos.</p>'}</div>
     <div class="cal-foot"><form id="msgForm" class="flex gap-2 items-end"><textarea id="msgInput" rows="3" class="field flex-1 resize-none max-h-[200px] py-2.5" maxlength="1500" placeholder="Tu respuesta…">${esc(pre)}</textarea><button class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button></form>
       <div class="flex items-center justify-between gap-2 mt-1.5"><p class="text-[11px] text-mute">Lo verá dentro de la app la próxima vez que la abra.</p>${t.msgs.some(m => m.de === 'u') ? '<button class="chip chip-sm shrink-0" data-mact="ai" type="button">✨ Sugerir respuesta</button>' : ''}</div></div>`, {
     sheetClass: 'sheet-fixed sheet-full',
@@ -7869,6 +7881,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.18.5', ['✓✓ Mensajes: Esteban ve si has abierto su respuesta (lo explica la política de privacidad).'], 'quiet'],
   ['5.18.4', ['💬 «Escribir a Esteban» a pantalla completa, también con el teclado abierto.', '✍️ Usuarios: puedes empezar tú una conversación («Escribir a alguien» en Mensajes, o desde la ficha).'], 'quiet'],
   ['5.18.3', ['⌨️ Teclado: las ventanas se ajustan a la parte visible de la pantalla en cualquier navegador (también en los que ponen el teclado encima sin avisar).'], 'quiet'],
   ['5.18.2', ['💬 Mensajes: las respuestas de Esteban llegaban como un número en vez del texto. Arreglado.'], 'quiet'],
@@ -10514,7 +10527,7 @@ async function loadUsage() {
     ui.usage = {}; for (const x of d.rows || []) { x.v = usageVer(x.v); ui.usage[String(x.h).toLowerCase()] = x; }
     ui.trialH = {}; // 🧪 filas del periodo de prueba: su huella es la del correo (así no dependen de la columna «nombre»)
     for (const x of d.rows || []) { const m = String(x.m || '').trim().toLowerCase(), h = String(x.h).toLowerCase(); if (m && !(access.list || []).some(y => y.hash === h) && await trialHashOf(m) === h) ui.trialH[h] = (String(x.nm || '').match(/\d{4}-\d{2}-\d{2}/) || [''])[0] || (x.first ? addDays(fecha10(x.first), TRIAL_DAYS - 1) : ''); }
-    ui.msgs = Array.isArray(d.msgs) ? d.msgs : null; ui.msgAvisos = d.avisos !== false; ui.usageOld16 = !(d.ver >= 17); if (ui.msgs) { ui.msgPend = msgThreads().filter(t => t.pend).length; usersBadge(); }
+    ui.msgs = Array.isArray(d.msgs) ? d.msgs : null; ui.msgVistos = d.vistos || null; ui.msgAvisos = d.avisos !== false; ui.usageOld16 = !(d.ver >= 17); if (ui.msgs) { ui.msgPend = msgThreads().filter(t => t.pend).length; usersBadge(); }
     ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageOld12 = !(d.ver >= 12); ui.usageOld13 = !(d.ver >= 14); ui.usageOld14 = !(d.ver >= 15); ui.usageOld15 = !(d.ver >= 16); ui.refs = {}; for (const x of d.refs || []) if (x.m) ui.refs[String(x.m).toLowerCase()] = { ref: String(x.ref || ''), ini: String(x.ini || '') }; ui.usageVer = +d.ver || 0;
     // nombres puestos en otro dispositivo tuyo: se copian aquí si aquí no tienes uno
     let got = 0;
@@ -10537,7 +10550,7 @@ function usageLine(hash) {
   return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(ver || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${(+u.days || 1) === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} dispositivo${u.n === 1 ? '' : 's'} (límite: ${DEVICE_LIMIT}${u.n > DEVICE_LIMIT ? '; los que ya tenía se mantienen' : ''})`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="min-w-0 break-words text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${dv.p && !(access.list || []).some(x => x.hash === hash && x.anon) ? `<b class="text-white">${esc(dv.p)}</b> · ` : ''}${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}${dv.k ? ` · ${dv.k} día${dv.k === 1 ? '' : 's'} de uso` : ''}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 break-words">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
 }
 function usageScript(key) {
-  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 1; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos; periodo de prueba de 7 días con Google; mensajes dentro de la app) · v17
+  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 1; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos; periodo de prueba de 7 días con Google; mensajes dentro de la app, con «visto») · v18
 const READ_KEY = '${key}';
 const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
 const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre', 'correo', 'alta', 'dispositivos', 'bloqueos'];
@@ -10725,12 +10738,20 @@ function doGet_(e) {
       const lock = LockService.getScriptLock(); lock.waitLock(10000);
       try { msgHoja_().appendRow([ts, id, 'u', t, nm, ct]); } finally { lock.releaseLock(); }
       avisaCorreo_(nm, ct, t);
-      return salida_({ ok: true, ver: 17, ts: ts });
+      return salida_({ ok: true, ver: 18, ts: ts });
     }
-    return salida_({ ok: true, ver: 17, msgs: msgFilas_().filter(r => r.id === id).slice(-60).map(r => ({ ts: r.ts, de: r.de, t: r.t })) });
+    return salida_({ ok: true, ver: 18, msgs: msgFilas_().filter(r => r.id === id).slice(-60).map(r => ({ ts: r.ts, de: r.de, t: r.t })) });
+  }
+  // ✓✓ el usuario ha abierto su conversación y ha visto hasta el mensaje de Esteban con fecha «m»
+  if (q.op === 'visto') {
+    const id = quien_(String(q.h || '').toLowerCase(), String(q.d || '').slice(0, 40)), m = String(q.m || '').slice(0, 30);
+    if (!id || !/^\\d{4}-\\d{2}-\\d{2}T/.test(m)) return salida_({ ok: false });
+    const P = PropertiesService.getScriptProperties(), prev = JSON.parse(P.getProperty('vs_' + id) || '{}');
+    if (!prev.m || m > prev.m) P.setProperty('vs_' + id, JSON.stringify({ m: m, at: new Date().toISOString() }));
+    return salida_({ ok: true, ver: 18 });
   }
   // cuántas conversaciones esperan respuesta (solo el número, para el aviso de tu app)
-  if (q.op === 'pend') return salida_({ ok: true, ver: 17, n: msgPend_() });
+  if (q.op === 'pend') return salida_({ ok: true, ver: 18, n: msgPend_() });
   // cuántas personas han abierto la app hoy (solo el número: sin nombres ni correos)
   if (q.op === 'hoy') {
     const c = CacheService.getScriptCache(); let n = c.get('hoy');
@@ -10738,7 +10759,7 @@ function doGet_(e) {
       const hoy = fecha_(new Date()), adm = admins_(), dd = disp_(); let k = 0;
       hoja_().getDataRange().getValues().slice(1).forEach(r => { const h = String(r[0]).toLowerCase(); if (fecha_(r[1]) !== hoy || adm.indexOf(h) >= 0) return; const q = {}; ((dd[h] || {}).d || []).forEach(v => { if (v.last === hoy) q[String(v.p || v.id).toLowerCase()] = 1; }); k += Math.max(1, Object.keys(q).length); });
       n = String(k); c.put('hoy', n, 60); }
-    return salida_({ ok: true, ver: 17, hoy: +n });
+    return salida_({ ok: true, ver: 18, hoy: +n });
   }
   if (q.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
   // 💬 contestar (o escribir primero) a una persona, y encender o apagar el aviso por correo
@@ -10747,13 +10768,14 @@ function doGet_(e) {
     if (!/^([0-9a-f]{32}|v_[\\w-]{1,40})$/.test(id) || !t) return salida_({ ok: false });
     const ts = new Date().toISOString(), lock = LockService.getScriptLock(); lock.waitLock(10000);
     try { msgHoja_().appendRow([ts, id, 'e', t, 'Esteban', '']); } finally { lock.releaseLock(); }
-    return salida_({ ok: true, ver: 17, ts: ts });
+    return salida_({ ok: true, ver: 18, ts: ts });
   }
-  if (q.op === 'avisos') { PropertiesService.getScriptProperties().setProperty('avisos', q.v === '0' ? '0' : '1'); return salida_({ ok: true, ver: 17 }); }
+  if (q.op === 'avisos') { PropertiesService.getScriptProperties().setProperty('avisos', q.v === '0' ? '0' : '1'); return salida_({ ok: true, ver: 18 }); }
   const datos = hoja_().getDataRange().getValues().slice(1);
   const dd = disp_();
   const refs = []; Object.entries(PropertiesService.getScriptProperties().getProperties()).forEach(([k, v]) => { if (k.indexOf('p_') !== 0) return; try { const x = JSON.parse(v); if (x && x.ref) refs.push({ m: x.m, ref: x.ref, ini: x.ini }); } catch (e) {} });
-  return salida_({ ok: true, ver: 17, refs: refs, avisos: PropertiesService.getScriptProperties().getProperty('avisos') !== '0', msgs: msgFilas_().slice(-800), rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
+  const vistos = {}; Object.entries(PropertiesService.getScriptProperties().getProperties()).forEach(([k, v]) => { if (k.indexOf('vs_') === 0) { try { vistos[k.slice(3)] = JSON.parse(v); } catch (e) {} } });
+  return salida_({ ok: true, ver: 18, vistos: vistos, refs: refs, avisos: PropertiesService.getScriptProperties().getProperty('avisos') !== '0', msgs: msgFilas_().slice(-800), rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
 }`;
 }
 /* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
