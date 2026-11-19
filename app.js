@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.16.13';
+const APP_VERSION = '5.17.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7042,6 +7042,7 @@ Reglas:
 {"nombre":"NOMBRE CORTO EN MAYÚSCULAS (máx. 30)","icono":"un emoji","veces_por_semana":número de sesiones por semana que recomiendas,"dias":[{"label":"DÍA A (máx. 8)","titulo":"título del día","ejercicios":[{"grupo":"Pecho|Espalda|Pierna|Hombro|Brazos|Core|Cardio…","nombre":"nombre del ejercicio en español","series":3,"reps_min":8,"reps_max":12,"descanso_s":90,"peso_corporal":true,"por_tiempo":false,"nota":"consejo técnico de máx. 10 palabras","alternativas":[{"nombre":"alternativa con el mismo material","nota":"…"}]}]}]}
 \`\`\`
   2–6 ejercicios por día, 1–5 días. Con "por_tiempo":true, reps_min y reps_max son segundos. Da 2 alternativas por ejercicio. Si solo hablas de entreno sin crear un bloque nuevo, no añadas el bloque.
+- Si te manda una FOTO (pizarra, hoja o captura de un entreno): léela con cuidado y úsala como si te la hubiera dictado. Lo normal es añadirla como DÍA NUEVO (añadir_dia) a uno de "tus_bloques": al que diga o, si no lo dice, al que mejor encaje; si hay dudas entre varios, pregunta a cuál (una pregunta corta). Solo crea un bloque nuevo si lo pide o si no tiene ninguno (aquí no preguntes material ni días: los de la foto). Usa como label del día la fecha o el nombre de la foto si lo tiene (p. ej. «JUE 19»). Ahí el límite de 2–6 ejercicios por día no cuenta: pon todos los de la foto (sin repetir los que salen dos veces por ir por parejas). Circuitos, AMRAP o intervalos (p. ej. 40/20): ejercicio "por_tiempo" con los segundos de trabajo, el descanso en "descanso_s", y el formato en la nota ("AMRAP 12 min", "3 vueltas 40/20"…); corrige las erratas de los nombres (Snathc → Snatch). Si algo no se lee, pregúntalo en vez de inventarlo.
 - Si te pide CAMBIAR uno de sus bloques (están en "tus_bloques": añadir o quitar días o ejercicios, cambiar uno por otro, series, repeticiones, descanso, nombre de un día), añade al final:
 \`\`\`cambios
 {"bloque":"nombre exacto del bloque","ops":[{"op":"añadir_dia","label":"DÍA D (máx. 8)","titulo":"título","ejercicios":[mismo formato que en bloque]},{"op":"añadir_ejercicios","dia":"label exacto del día","ejercicios":[…]},{"op":"quitar_ejercicio","dia":"…","nombre":"nombre exacto actual"},{"op":"cambiar_ejercicio","dia":"…","nombre":"actual","nuevo":{ejercicio en el mismo formato}},{"op":"ajustar","dia":"…","nombre":"…","series":4,"reps_min":6,"reps_max":10,"descanso_s":120},{"op":"renombrar_dia","dia":"…","label":"NUEVO","titulo":"…"},{"op":"quitar_dia","dia":"…"}]}
@@ -7237,7 +7238,7 @@ function chatBodyHTML() {
     ${medNote('chat-med mt-4 text-center')}
     ${chatHistoryHTML()}`;
   return c.msgs.map((m, i) => m.role === 'user'
-    ? `<div class="chat-me">${esc(m.text)}</div>`
+    ? `<div class="chat-me">${m.img ? `<img class="chat-photo" src="${m.img}" alt="Foto enviada" />` : m.photo ? '<span class="chat-photo-tag">📷 Foto</span>' : ''}${esc(m.text)}</div>`
     : `<div class="chat-ai${m.error ? ' chat-err' : ''}">${mdLite(m.text)}${m.error && i === c.msgs.length - 1 ? '<button class="text-xs text-brand underline mt-1" data-mact="retry" type="button">Reintentar</button>' : ''}${(m.meals || []).map((ml, j) => `<div class="flex gap-2 items-stretch"><button class="chat-meal flex-1 min-w-0" data-mact="toDiet" data-m="${i}" data-o="${j}" type="button"><span>🍽️ Apuntar en Dieta</span><span class="text-[11px] opacity-80 max-w-full leading-snug">${m.meals.length > 1 ? esc(ml.title) + ' · ' : ''}${esc(ml.type || 'comida que toca')} · ~${mealKcal(ml)} kcal</span>${ml.oilCut ? '<span class="text-[10.5px] opacity-80 leading-snug">✔️ Con el aceite en 10 g, no más</span>' : ''}${ml.fatty ? '<span class="text-[10.5px] text-amber-300 leading-snug">⚠️ Casi todo grasa: revísala antes de apuntarla</span>' : ''}</button><button class="chat-meal !w-auto shrink-0 items-center justify-center" data-mact="recipe" data-m="${i}" data-o="${j}" type="button"><span>👨‍🍳 Receta</span><span class="text-[11px] opacity-80">${ml.recipe ? 'guardada' : 'paso a paso'}</span></button></div>`).join('')}${(m.blocks || []).map((bl, j) => `<button class="chat-meal" data-mact="toBlock" data-m="${i}" data-o="${j}" type="button"><span>${bl.added ? '✓ Ver en mis bloques' : '＋ Añadir a mis bloques'}</span><span class="text-[11px] opacity-80 truncate max-w-full">${esc(bl.icon)} ${esc(bl.name)} · ${bl.days.length} día${bl.days.length > 1 ? 's' : ''} · ${bl.days.reduce((a, d) => a + d.exercises.length, 0)} ejercicios</span></button>`).join('')}${(m.edits || []).map((ed, j) => `<div class="chat-edit">
       <div class="text-[11px] font-bold uppercase tracking-wider text-brand">✏️ Cambios en ${esc(ed.name)}</div>
       <ul class="text-[13px] leading-snug space-y-1 mt-1.5">${ed.lines.map(l => `<li>${l}</li>`).join('')}</ul>
@@ -7250,7 +7251,7 @@ const CHAT_DAYS = 7, CHAT_MAX = 20;
 function pruneChats() { const lim = Date.now() - CHAT_DAYS * 86400000; state.chats = (state.chats || []).filter(c => c.at >= lim).sort((a, b) => b.at - a.at).slice(0, CHAT_MAX); }
 function saveChatConv(c) {
   if (!c.id) c.id = uid('c_');
-  const msgs = c.msgs.filter(m => !m.error).slice(-30);
+  const msgs = c.msgs.filter(m => !m.error).slice(-30).map(({ img, ...m }) => m); // 📷 las fotos no se guardan: queda la marca «Foto»
   state.chats = (state.chats || []).filter(x => x.id !== c.id);
   state.chats.unshift({ id: c.id, at: Date.now(), msgs });
   pruneChats(); persist();
@@ -7283,13 +7284,18 @@ function refreshChat() {
   const send = $('#chatSend'); if (send) send.disabled = !!ui.chat.busy;
   const nb = $('#chatNew'); if (nb) nb.classList.toggle('invisible', !ui.chat.msgs.length);
 }
-async function chatSend(text) {
+async function chatSend(text, img = null) {
   const c = ui.chat; text = String(text || '').trim();
-  if (!text || c.busy) return;
+  if (c.busy) return;
+  img = img || c.img || null; // 📷 foto pendiente (pizarra, hoja del entreno, captura…)
+  if (!text && img) text = 'Te paso la foto de mi entreno. Añádelo como día nuevo al bloque que encaje.';
+  if (!text) return;
+  c.img = null; chatImgPrev();
   c.msgs = c.msgs.filter(m => !m.error);
-  c.msgs.push({ role: 'user', text }); c.busy = true; refreshChat();
+  c.msgs.push({ role: 'user', text, ...(img ? { img, photo: true } : {}) }); c.busy = true; refreshChat();
   try {
-    const contents = c.msgs.slice(-12).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
+    // la foto solo viaja mientras la conversación está abierta (no se guarda en el historial)
+    const contents = c.msgs.slice(-12).map(m => ({ role: m.role, parts: [{ text: m.text }, ...(m.img ? [{ inlineData: { mimeType: 'image/jpeg', data: m.img.split(',')[1] } }] : [])] }));
     const reply = await callGemini(null, { json: false, contents, system: chatSystem(), temperature: 0.4, timeout: 60000 });
     const { text: clean, meals, blocks, edits } = chatMeals(reply);
     c.msgs.push({ role: 'model', text: clean, ...(meals.length ? { meals } : {}), ...(blocks.length ? { blocks } : {}), ...(edits.length ? { edits } : {}) });
@@ -7410,7 +7416,8 @@ function openChat(keep) {
       <button class="w-8 h-8 rounded-full border border-line text-mute" data-close type="button" aria-label="Cerrar">✕</button>
     </div>
     <div id="chatBody" class="cal-body space-y-2.5"></div>
-    <div class="cal-foot"><form id="chatForm" class="flex gap-2 items-end">
+    <div class="cal-foot"><div id="chatImgPrev"></div><form id="chatForm" class="flex gap-2 items-end">
+      <label class="btn-ghost px-3 py-2.5 shrink-0 cursor-pointer" aria-label="Enviar una foto">📷<input id="chatFile" type="file" accept="image/*" class="hidden" /></label>
       ${SpeechRec ? '<button id="chatMic" class="btn-ghost px-3 py-2.5 shrink-0" data-mact="mic" type="button" aria-label="Dictar">🎤</button>' : ''}
       <textarea id="chatInput" rows="1" class="field flex-1 resize-none max-h-28 py-2.5" placeholder="Pregunta al coach…" enterkeyhint="send"></textarea>
       <button id="chatSend" class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button>
@@ -7429,7 +7436,8 @@ function openChat(keep) {
     openConv: (r, b) => { const cv = state.chats.find(x => x.id === b.dataset.id); if (!cv) return; ui.chat = { id: cv.id, msgs: cv.msgs.map(m => ({ ...m })), busy: false }; refreshChat(); },
     delConv: (r, b) => { state.chats = state.chats.filter(x => x.id !== b.dataset.id); persist(); refreshChat(); },
     new: () => { ui.chat = { msgs: [], busy: false }; refreshChat(); },
-    retry: () => { const lastQ = [...ui.chat.msgs].reverse().find(m => m.role === 'user'); if (lastQ) { ui.chat.msgs = ui.chat.msgs.filter(m => !m.error); ui.chat.msgs.pop(); chatSend(lastQ.text); } },
+    retry: () => { const lastQ = [...ui.chat.msgs].reverse().find(m => m.role === 'user'); if (lastQ) { ui.chat.msgs = ui.chat.msgs.filter(m => !m.error); ui.chat.msgs.pop(); chatSend(lastQ.text, lastQ.img); } },
+    imgDel: () => { ui.chat.img = null; chatImgPrev(); },
     toKey: () => { closeModal(); ui.aiOpen = true; go('settings'); }
   });
   refreshChat();
@@ -7437,6 +7445,18 @@ function openChat(keep) {
   const grow = () => { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 112) + 'px'; };
   inp.addEventListener('input', grow);
   $('#chatForm').addEventListener('submit', e => { e.preventDefault(); const v = inp.value; inp.value = ''; grow(); chatSend(v); });
+  $('#chatFile').addEventListener('change', async e => {
+    const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
+    try { ui.chat.img = await compressImage(f, 1600); chatImgPrev(); inp.placeholder = 'Añade algo (opcional)'; } catch (err) { toast(err.message, 'warn'); }
+  });
+  chatImgPrev();
+}
+/* 📷 Miniatura de la foto lista para enviar, con ✕ para quitarla */
+function chatImgPrev() {
+  const b = $('#chatImgPrev'); if (!b) return;
+  const img = ui.chat?.img;
+  b.innerHTML = img ? `<div class="chat-prev"><img src="${img}" alt="Foto para el coach" /><span class="flex-1 text-[12px] text-mute leading-snug">Foto lista. Si quieres, escribe qué hacer con ella; si no, pulsa ➤.</span><button class="iconbtn iconbtn-sm" data-mact="imgDel" type="button" aria-label="Quitar la foto">✕</button></div>` : '';
+  if (!img) { const i = $('#chatInput'); if (i) i.placeholder = 'Pregunta al coach…'; }
 }
 $('#chatBtn')?.addEventListener('click', () => openChat());
 
@@ -7526,6 +7546,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.17.0', ['📷 Coach IA: pásale una foto de tu entreno (la pizarra o la hoja de tu clase) y, si quieres, dicta qué hacer. Lo prepara como un día nuevo de tu bloque y tú pulsas «Aplicar».'], 'quiet'],
   ['5.16.13', ['👥 Usuarios: quien pasa de la prueba a un código sale una sola vez, con su correo en la ficha (se reconoce por el botón «Darle su código personal» o por el nombre que propone).', '✉️ Al pasar de la prueba a un código, el correo de la prueba llega solo a la fila del código y queda en sus Ajustes.'], 'quiet'],
   ['5.16.12', ['👥 Usuarios: quien pasa de la prueba a un código (mismo correo) sale una sola vez, en su código; en su ficha se ve desde cuándo y cuántos días usó la prueba.'], 'quiet'],
   ['5.16.11', ['👥 Usuarios: la pastilla «Hoy» cuenta personas, igual que «X activos hoy» (en un DÚO o código compartido cuenta a cada uno que haya entrado).'], 'quiet'],
@@ -7945,6 +7966,7 @@ const GUIDE = [
     '👨‍🍳 Cuando te propone un plato, pulsa «Receta» para verlo paso a paso con los mismos ingredientes y gramos. «¿Cambiar algo?» la adapta (también por voz).',
     '🏋️ Pídele un <b>bloque de entreno</b> con el material que tienes (o sin nada): pulsa «＋ Añadir a mis bloques» y aparece en Entreno. Se guarda en la conversación, como las recetas.',
     '✏️ También <b>cambia tus bloques</b>: «añade un día de hombro a mi bloque X», «cambia el press militar por mancuernas», «pon 4 series de sentadilla». Te enseña la lista de cambios y no toca nada hasta que pulsas «Aplicar». Si no te convence, «Deshacer».',
+    '📷 <b>Pásale una foto</b> del entreno (la pizarra o la hoja de tu clase): toca 📷, elígela y, si quieres, dicta qué hacer («añádelo como día nuevo a mi bloque X»). Lo prepara como un día nuevo y no toca nada hasta que pulsas «Aplicar». La foto no se guarda en el historial.',
     'Cada vez que lo abres empieza de cero; «Ver la última conversación» recupera la anterior. Usa tu clave de Gemini (Ajustes → IA). Nunca se envían la clave ni el PIN.'
   ]],
   ['📈 Progreso', [
