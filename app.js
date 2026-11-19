@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.16.12';
+const APP_VERSION = '5.16.13';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6743,11 +6743,13 @@ function installDate() {
 }
 async function emailSync() {
   try {
-    const st = state.settings, url = access.usageUrl, code = lsGet(ACCESS_KEY)?.code || lsGet(TRIAL_KEY)?.h, m = st.email || '';
-    if (!url || !code || !access.ok || !navigator.onLine || !m || st.emailSent === m) return; // solo se envía un correo nuevo o cambiado; quitarlo de la app no lo borra de la hoja (lo dice el aviso)
-    const h = await myHash();
+    // el correo que dio (o, si vino de la prueba, el que confirmó Google al empezarla: ya aceptó ese aviso)
+    const st = state.settings, url = access.usageUrl, code = lsGet(ACCESS_KEY)?.code || lsGet(TRIAL_KEY)?.h, m = st.email || String(lsGet(TRIAL_KEY)?.m || '').toLowerCase();
+    if (m && !st.email) { st.email = m; persist(); } // así lo ve y lo puede cambiar en Ajustes, y no se le vuelve a pedir
+    if (!url || !code || !access.ok || !navigator.onLine || !m) return;
+    const h = await myHash(); if (!h || st.emailSent === h + '|' + m) return; // se envía una vez por correo Y por código: al pasar de la prueba a un código, su fila nueva también lo recibe; quitarlo de la app no lo borra de la hoja (lo dice el aviso)
     await fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ h, v: 'v' + APP_VERSION, m, i: installDate() }) });
-    st.emailSent = m; persist();
+    st.emailSent = h + '|' + m; persist();
   } catch { /* se reintenta al volver a abrir la app */ }
 }
 function setEmail(m) { state.settings.email = m || ''; persist(); emailSync(); }
@@ -7524,6 +7526,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.16.13', ['👥 Usuarios: quien pasa de la prueba a un código sale una sola vez, con su correo en la ficha (se reconoce por el botón «Darle su código personal» o por el nombre que propone).', '✉️ Al pasar de la prueba a un código, el correo de la prueba llega solo a la fila del código y queda en sus Ajustes.'], 'quiet'],
   ['5.16.12', ['👥 Usuarios: quien pasa de la prueba a un código (mismo correo) sale una sola vez, en su código; en su ficha se ve desde cuándo y cuántos días usó la prueba.'], 'quiet'],
   ['5.16.11', ['👥 Usuarios: la pastilla «Hoy» cuenta personas, igual que «X activos hoy» (en un DÚO o código compartido cuenta a cada uno que haya entrado).'], 'quiet'],
   ['5.16.10', ['👥 Usuarios con 5 filtros: Todos (sin caducados, con las pruebas en curso), Hoy (también pruebas), ⚠️ Atención (caducan pronto, caducados y con plan pero sin usarla +7 días), Free y En prueba. DÚO e individual se buscan escribiéndolo. El buscador busca en todos.', '📱 Los códigos antiguos con 2 móviles salen como un DÚO: un punto por móvil y los dos nombres de perfil.'], 'admin'],
@@ -9362,7 +9365,7 @@ const actions = {
   export: () => exportBackup(),
   editProfile: () => profileModal(),
   newAccess: () => newAccessModal(),
-  trialCode: b => newAccessModal(b.dataset.who || '', '1m', b.dataset.from || ''),
+  trialCode: b => newAccessModal(b.dataset.who || '', '1m', b.dataset.from || '', b.dataset.mail || ''),
   openAccess: then => {
     if (typeof then !== 'function') then = null;
     // el PIN vale para toda la sesión: hasta cerrar la app o 2 horas sin tocar nada de Acceso
@@ -10608,11 +10611,16 @@ async function loadActiveCount() {
 }
 /* 🧪 Quien está en periodo de prueba (filas de la hoja que no son de ningún código de acceso.txt) */
 /* Prueba que ya pasó a código: mismo correo en una fila de un código de acceso.txt → es la misma persona, se muestra solo en su código */
+/* Se reconoce por: 1) el enlace que guarda «Darle su código personal», 2) el mismo correo en la fila del código, 3) el nombre del código igual a lo de antes de la @ (así lo propone ese botón) si solo hay uno */
 function trialConv() {
-  const T = ui.trialH || {}, C = new Map();
-  for (const u of Object.values(ui.usage || {})) { const h = String(u.h).toLowerCase(); if (h in T || !u.m || !(access.list || []).some(y => y.hash === h)) continue; C.set(String(u.m).trim().toLowerCase(), h); }
+  const T = ui.trialH || {}, C = new Map(), L = state.settings.trialOf || {}, codes = (access.list || []).filter(y => !y.admin);
+  for (const [h, m] of Object.entries(L)) if (codes.some(y => y.hash === h)) C.set(String(m).toLowerCase(), h);
+  for (const u of Object.values(ui.usage || {})) { const h = String(u.h).toLowerCase(); if (h in T || !u.m || !codes.some(y => y.hash === h)) continue; const m = String(u.m).trim().toLowerCase(); if (!C.has(m)) C.set(m, h); }
   const out = new Map(); // hash de la prueba → hash del código
-  for (const u of Object.values(ui.usage || {})) { const h = String(u.h).toLowerCase(), c = C.get(String(u.m || '').trim().toLowerCase()); if (h in T && c) out.set(h, c); }
+  for (const u of Object.values(ui.usage || {})) { const h = String(u.h).toLowerCase(), m = String(u.m || '').trim().toLowerCase(); if (!(h in T) || !m) continue;
+    let c = C.get(m);
+    if (!c) { const pre = normTxt(m.split('@')[0]), hit = codes.filter(y => normTxt(state.accessNames[y.hash] || '') === pre); if (pre && hit.length === 1) c = hit[0].hash; }
+    if (c) out.set(h, c); }
   return out;
 }
 const trialOfCode = h => { for (const [t, c] of trialConv()) if (c === h) return ui.usage?.[t] || Object.values(ui.usage || {}).find(u => String(u.h).toLowerCase() === t); return null; };
@@ -10630,7 +10638,7 @@ function refPeople() { // cada persona recomendada, con su estado
   const R = ui.refs || {}, rows = Object.values(ui.usage || {}), t = netToday() || todayISO(), G = state.settings.refGifts || {};
   return Object.entries(R).map(([m, x]) => {
     const us = rows.filter(r => String(r.m || '').toLowerCase() === m), days = us.reduce((a, r) => a + (+r.days || 0), 0);
-    const code = (access.list || []).find(y => !y.admin && us.some(r => String(r.h).toLowerCase() === y.hash));
+    const cv = trialConv(), code = (access.list || []).find(y => !y.admin && us.some(r => { const h = String(r.h).toLowerCase(); return h === y.hash || cv.get(h) === y.hash; }));
     const pay1 = code ? (state.accessPays?.[code.hash] || []).find(x => isPaidPlan(x.k)) : null, paid = !!pay1; // su primer pago anotado
     const trialH = us.find(r => (ui.trialH || {})[String(r.h).toLowerCase()]), tEnd = trialH ? ui.trialH[String(trialH.h).toLowerCase()] : '';
     const st = paid ? 'paid' : code ? 'code' : tEnd && tEnd >= t ? 'trial' : 'ended';
@@ -10695,7 +10703,7 @@ function trialRowsHTML() {
         <span class="flex-1 min-w-0"><span class="block font-semibold text-[13px] truncate ${ago === 0 ? 'text-emerald-300' : ''}">${esc(who)}</span><span class="block text-[11px] text-mute">${ago === 0 ? 'Activo hoy' : ago === null ? '' : `Último uso hace ${plural(ago, 'día', 'días')}`} · ${plural(u.days || 1, 'día', 'días')} de uso${refOf(u.m) ? ` · 🤝 ${esc(refOf(u.m))}` : ''}</span></span>
         <span class="text-[11px] shrink-0">${pill}</span><span class="tri shrink-0 ${open ? 'rotate-180' : ''}"></span></button>
       ${open ? `<div class="px-3 pb-2.5 pt-1 text-xs space-y-1.5">${refOf(u.m) ? `<p class="text-[12px]">🤝 Se la recomendó: <b>${esc(refOf(u.m))}</b></p>` : ''}<p class="text-[11px] text-mute">Empezó el ${esc(fmtDateShort(u.first || ''))}${u.hasta ? ` · termina el ${esc(fmtDateShort(u.hasta))}` : ''}${u.v ? ` · v${esc(u.v)}` : ''}</p>
-        ${lsGet(GH_KEY) ? `<button class="btn-ghost w-full" data-act="trialCode" data-who="${esc(String(u.m || '').split('@')[0].slice(0, 24))}" data-from="${esc(u.hasta && u.hasta > todayISO() ? u.hasta : '')}" type="button">🔑 Darle su código personal</button>` : ''}
+        ${lsGet(GH_KEY) ? `<button class="btn-ghost w-full" data-act="trialCode" data-mail="${esc(String(u.m || '').toLowerCase())}" data-who="${esc(String(u.m || '').split('@')[0].slice(0, 24))}" data-from="${esc(u.hasta && u.hasta > todayISO() ? u.hasta : '')}" type="button">🔑 Darle su código personal</button>` : ''}
         <p class="text-[11px] text-mute">Cuando le des un código, lo escribe en la pantalla de acceso y sigue con todos sus datos.</p></div>` : ''}</div>`;
   }).join('');
 }
@@ -10709,7 +10717,7 @@ function accPersonRowHTML(x, vis = true) {
   const dDot = d => { const a = d.last ? daysBetween(d.last, todayISO()) : null; return a === null ? 'u-none' : a === 0 ? 'u-today' : a <= 7 ? 'u-week' : 'u-old'; };
   const dn = D ? [...new Set(D.map(d => String(d.p || '').trim()).filter(Boolean))] : [];
   const name = D && dn.length === 2 ? `${esc(dn[0])} + ${esc(dn[1])}` : accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`;
-  return `<button class="acc-row acc-line st-${st}" data-act="accFicha" data-hash="${esc(x.hash)}" data-s="${esc(normTxt([accessWho(x), u?.m || '', ...dn, D ? '2 moviles compartido' : '', x.hash.slice(-4), x.admin ? 'admin' : isPaidPlan(x.plan || '') ? 'individual ' + planName(x.plan) : st].join(' ')))}" ${visF ? '' : 'data-off="1" style="display:none"'} type="button">
+  return `<button class="acc-row acc-line st-${st}" data-act="accFicha" data-hash="${esc(x.hash)}" data-s="${esc(normTxt([accessWho(x), u?.m || '', trialOfCode(x.hash)?.m || '', ...dn, D ? '2 moviles compartido' : '', x.hash.slice(-4), x.admin ? 'admin' : isPaidPlan(x.plan || '') ? 'individual ' + planName(x.plan) : st].join(' ')))}" ${visF ? '' : 'data-off="1" style="display:none"'} type="button">
     ${D ? `<span class="flex flex-col gap-1 shrink-0">${D.map(d => `<span class="u-dot ${dDot(d)}"></span>`).join('')}</span>` : `<span class="u-dot ${accDot(x.hash)}"></span>`}<span class="flex-1 min-w-0 text-left font-semibold text-[14px] break-words ${ago === 0 && !D ? 'text-emerald-300' : ''}">${name}${me ? ' <span class="text-mute font-normal text-[12px]">(tú)</span>' : ''}</span>
     <span class="text-[11.5px] shrink-0 text-right">${x.admin ? '<span class="text-brand">admin</span>' : (D ? '<span class="text-cyan-300">2 móviles</span> · ' : '') + planPill(x)}</span><span class="text-mute text-lg leading-none">›</span></button>`;
 }
@@ -10741,7 +10749,7 @@ function accFichaModal(hash) {
       <div class="text-[12px]">${y.admin ? '<span class="text-brand">Administrador · sin límite</span>' : `⏳ ${planLabel(y)}`}${y.beta ? ' · <span class="text-cyan-300">🧪 beta</span>' : ''}${y.anon ? ' · <span class="text-mute">🙈 nombre de perfil oculto</span>' : ''}</div>
       <div class="flex items-center justify-between gap-2 min-h-[30px]">${has ? `<span class="font-mono text-[16px] font-black tracking-[.15em] ${shown ? 'text-brand' : 'text-mute'}">${shown ? fmtCode(shown) : '••••-••••'}</span><span class="flex gap-1.5"><button class="iconbtn iconbtn-sm" data-act="showCode" data-hash="${esc(y.hash)}" type="button" aria-label="Ver código">${shown ? '🙈' : '👁'}</button><button class="iconbtn iconbtn-sm" data-act="copyCode" data-hash="${esc(y.hash)}" type="button" aria-label="Copiar código">📋</button></span>` : '<span class="text-amber-300 text-[11px]">Código no guardado: si lo necesita, dale uno nuevo.</span>'}</div>
       ${usageLine(y.hash)}
-      ${(() => { const tr = trialOfCode(y.hash); return tr ? `<div class="text-[11px] text-mute">🧪 Antes, periodo de prueba${tr.first ? ` desde el ${esc(fmtDateShort(tr.first))}` : ''} · ${plural(tr.days || 1, 'día', 'días')} de uso</div>` : ''; })()}
+      ${(() => { const tr = trialOfCode(y.hash); return tr ? `${tr.m && !ui.usage?.[y.hash]?.m ? `<div class="text-[12px]">✉️ ${esc(tr.m)}</div>` : ''}<div class="text-[11px] text-mute">🧪 Antes, periodo de prueba${tr.first ? ` desde el ${esc(fmtDateShort(tr.first))}` : ''} · ${plural(tr.days || 1, 'día', 'días')} de uso</div>` : ''; })()}
       ${refOf(ui.usage?.[y.hash]?.m) ? `<div class="text-[12px]">🤝 Se la recomendó: <b>${esc(refOf(ui.usage?.[y.hash]?.m))}</b>${(() => { const r = refPeople().find(z => z.m === String(ui.usage?.[y.hash]?.m || '').toLowerCase()); return r?.st === 'paid' ? (r.gift ? ` · ✅ regalo dado` : ` <button class="ref-gift mt-1" data-act="refGift" data-m="${esc(r.m)}" data-k="${esc(r.refK)}" type="button">🎁 Dar ${r.gd} días a ${esc(r.ref)} ›</button>`) : ''; })()}</div>` : ''}
       ${gh && !y.admin ? `<div class="grid grid-cols-5 gap-1 pt-1">${big('nameAccess', y.hash, '✎', 'Nombre', 'ficha-sm')}${big('regenAccess', y.hash, '🔄', 'Código nuevo', 'ficha-sm')}${big('betaAccess', y.hash, '🧪', y.beta ? 'Quitar beta' : 'Beta', 'ficha-sm')}${big('anonAccess', y.hash, y.anon ? '👤' : '🙈', y.anon ? 'Mostrar nombre' : 'Ocultar nombre', 'ficha-sm')}${big('delAccess', y.hash, '🗑', 'Quitar acceso', 'ficha-sm ficha-del')}</div>` : `<div class="pt-1">${big('nameAccess', y.hash, '✎', 'Nombre')}</div>`}
     </div>`; };
@@ -10979,7 +10987,7 @@ function planModal(hash) {
       } }); }
   });
 }
-function newAccessModal(who = '', plan = '1m', from0 = '') {
+function newAccessModal(who = '', plan = '1m', from0 = '', mail = '') {
   let k = plan, who0 = who, who2 = '', nd = 15, mod = 'ind', from = from0;
   const html = () => `<h3 class="modal-title">Nuevo código de acceso</h3>
     <div><div class="lbl mb-1.5">Plan</div>${planChips(k)}</div>${planCustomHTML(k, nd)}
@@ -11006,6 +11014,7 @@ function newAccessModal(who = '', plan = '1m', from0 = '') {
         for (const w of people) { const code = newCode(); made.push({ w, code, hash: await codeHash(code) }); }
         await ghEditAcl(pin, lines => [...lines.filter(l => l.trim()), ...made.map(m => [m.hash, ...toks].join(' '))], `Acceso: nuevo código${duo ? ' DÚO' : ''} (${kk})`);
         for (const m of made) { state.accessNames[m.hash] = m.w; await saveAccessCode(m.hash, m.code, pin); }
+        if (mail) state.settings.trialOf = { ...(state.settings.trialOf || {}), [made[0].hash]: mail }; // la prueba de la que viene: para verla como una sola persona
         if (isPaidPlan(kk)) addPay(made[0].hash, kk, duo ? 'duo' : 'ind', PRICES[duo ? 'duo' : 'ind'][kk]);
         ui.accessPin = pin; persist(); render(); syncUsageNames();
         if (duo) duoShareModal(made); else codeShareModal(`Código para ${esc(w1)}`, w1, made[0].code);
