@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.18.2';
+const APP_VERSION = '5.18.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -856,15 +856,31 @@ function scrollLock(on) {
   else if (!on && lockY !== null) { const y = lockY; lockY = null; Object.assign(b, { position: '', top: '', left: '', right: '', width: '' }); const h = document.querySelector('body > header'); if (h) h.style.transform = ''; window.scrollTo(0, y); }
 }
 let modalBackFn = null; // «atrás» dentro de una ventana (p. ej. de la lista de un grupo a los grupos); devuelve true si lo ha gestionado
-/* ⌨️ Con el teclado abierto, la ventana se sube y se encoge para que la caja de texto quede a la vista (Android e iPhone) */
+/* ⌨️ Las ventanas miden la parte de pantalla que de verdad se ve (sin el teclado), en cualquier navegador: así la caja de texto nunca queda tapada */
 (() => {
   const vv = window.visualViewport; if (!vv) return;
   const fit = () => {
-    const kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)), on = kb > 80;
-    document.documentElement.style.setProperty('--kb', (on ? kb : 0) + 'px'); document.documentElement.classList.toggle('kb-open', on);
-    if (on) { const a = document.activeElement; if (a && /^(TEXTAREA|INPUT)$/.test(a.tagName) && a.closest('#modalRoot')) setTimeout(() => a.scrollIntoView({ block: 'nearest' }), 50); }
+    const r = document.documentElement, h = Math.round(vv.height), kb = window.screen?.height ? window.innerHeight - h : 0;
+    if (r.classList.contains('kb-guess') && kb <= 80) return; // la suposición del teclado sigue hasta que se suelta la caja
+    r.style.setProperty('--vvh', h + 'px'); r.style.setProperty('--vvt', Math.round(vv.offsetTop) + 'px');
+    const on = kb > 80 || (window.innerHeight < (window.screen?.height || 1e4) * 0.62 && !!document.activeElement?.closest?.('#modalRoot'));
+    r.classList.remove('kb-guess'); r.classList.toggle('kb-open', on);
+    if (on) { const a = document.activeElement; if (a && /^(TEXTAREA|INPUT)$/.test(a.tagName) && a.closest('#modalRoot')) setTimeout(() => a.scrollIntoView({ block: 'nearest' }), 60); }
   };
-  vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit);
+  vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit); window.addEventListener('resize', fit);
+  document.addEventListener('focusin', () => setTimeout(fit, 350)); document.addEventListener('focusout', () => setTimeout(fit, 350));
+  // navegadores que ponen el teclado encima sin avisar (p. ej. el de Xiaomi): si al escribir en una ventana la pantalla no cambia, se supone el teclado
+  document.addEventListener('focusin', e => {
+    const a = e.target; if (!a?.closest?.('#modalRoot') || !/^(TEXTAREA|INPUT)$/.test(a.tagName) || /^(checkbox|radio|range|file|button)$/i.test(a.type || '') || !matchMedia('(pointer: coarse)').matches) return;
+    const h0 = Math.round(vv.height);
+    setTimeout(() => {
+      if (document.activeElement !== a || document.documentElement.classList.contains('kb-open') || Math.abs(Math.round(vv.height) - h0) > 50) return;
+      const r = document.documentElement; r.style.setProperty('--vvh', Math.round(window.innerHeight * 0.56) + 'px'); r.style.setProperty('--vvt', '0px'); r.classList.add('kb-open', 'kb-guess');
+      setTimeout(() => a.scrollIntoView({ block: 'nearest' }), 60);
+    }, 700);
+  });
+  document.addEventListener('focusout', () => setTimeout(() => { const r = document.documentElement; if (r.classList.contains('kb-guess') && !document.activeElement?.closest?.('#modalRoot textarea, #modalRoot input')) { r.classList.remove('kb-open', 'kb-guess'); fit(); } }, 200));
+  fit();
 })();
 function openModal(html, handlers = {}) {
   modalHandlers = handlers; modalBackFn = null;
@@ -7837,6 +7853,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.18.3', ['⌨️ Teclado: las ventanas se ajustan a la parte visible de la pantalla en cualquier navegador (también en los que ponen el teclado encima sin avisar).'], 'quiet'],
   ['5.18.2', ['💬 Mensajes: las respuestas de Esteban llegaban como un número en vez del texto. Arreglado.'], 'quiet'],
   ['5.18.1', ['⌨️ Con el teclado abierto, las ventanas se suben para que veas lo que escribes.'], 'quiet'],
   ['5.18.0', ['💬 Nuevo: escribe a Esteban dentro de la app. Toca el botón de los dos bocadillos de arriba: tu código, una duda, algo que falla o una idea. Te contesta ahí mismo y verás un número en el botón cuando lo haga.', '✈️ ¿Prefieres Telegram? Lo tienes dentro de esa misma ventana, abajo.']],
