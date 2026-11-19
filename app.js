@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.18.1';
+const APP_VERSION = '5.18.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6858,7 +6858,7 @@ function msgInboxModal() {
 }
 async function msgAdminApi(op, extra) {
   const key = await secretDec(lsGet(USE_KEY), ui.accessPin);
-  const r = await fetch(`${access.usageUrl}?${new URLSearchParams({ key, op, ...extra, t: Date.now() })}`, { cache: 'no-store' }); const j = await r.json();
+  const r = await fetch(`${access.usageUrl}?${new URLSearchParams({ key, op, ...extra, t2: Date.now() }) /* «t» es el texto: el anticaché va en «t2» */}`, { cache: 'no-store' }); const j = await r.json();
   if (!j.ok) throw new Error('fallo'); return j;
 }
 function msgThreadModal(id, pre = '', back = null) {
@@ -7837,6 +7837,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.18.2', ['💬 Mensajes: las respuestas de Esteban llegaban como un número en vez del texto. Arreglado.'], 'quiet'],
   ['5.18.1', ['⌨️ Con el teclado abierto, las ventanas se suben para que veas lo que escribes.'], 'quiet'],
   ['5.18.0', ['💬 Nuevo: escribe a Esteban dentro de la app. Toca el botón de los dos bocadillos de arriba: tu código, una duda, algo que falla o una idea. Te contesta ahí mismo y verás un número en el botón cuando lo haga.', '✈️ ¿Prefieres Telegram? Lo tienes dentro de esa misma ventana, abajo.']],
   ['5.17.2', ['💬 El Coach IA ocupa toda la pantalla: los ejemplos se ven sin desplazarte.'], 'quiet'],
