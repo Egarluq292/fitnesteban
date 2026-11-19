@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.17.1';
+const APP_VERSION = '5.17.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7252,9 +7252,8 @@ function chatBodyHTML() {
   const c = ui.chat;
   if (!state.settings.apiKey) return `<div class="text-center text-sm text-mute mt-8">Necesitas tu clave de Gemini.<br><button class="btn-ghost mt-3" data-mact="toKey" type="button">Ir a Ajustes → IA</button></div>`;
   if (!c.msgs.length) return `
-    <div class="text-center mt-2"><div class="text-4xl">💬</div>
-      <p class="text-sm text-mute mt-2 leading-relaxed">Pregúntame lo que quieras sobre tu entreno o tu dieta. Leo tu plan, tus últimas sesiones, lo que llevas comido y tu peso.</p></div>
-    <div class="chat-ideas mt-4"><p class="text-[12px] font-semibold text-mute mb-1.5">Por ejemplo:</p><ul>
+    <div class="text-center"><p class="text-sm text-mute leading-relaxed">Pregúntame lo que quieras sobre tu entreno o tu dieta. Leo tu plan, tus últimas sesiones, lo que llevas comido y tu peso.</p></div>
+    <div class="chat-ideas mt-3"><p class="text-[12px] font-semibold text-mute mb-1.5">Por ejemplo:</p><ul>
       <li>«¿Cómo voy esta semana?»</li>
       <li>«¿Qué ceno hoy para cuadrar macros?»</li>
       <li>«Cambia el press militar por mancuernas en mi bloque»</li>
@@ -7263,7 +7262,7 @@ function chatBodyHTML() {
       <li>«Me apetece algo dulce, ¿qué tomo sin pasarme?»</li>
       <li>«Me molesta el hombro, ¿qué cambio hoy?»</li>
     </ul></div>
-    ${medNote('chat-med mt-4 text-center')}
+    ${medNote('chat-med mt-3 text-center')}
     ${chatHistoryHTML()}`;
   return c.msgs.map((m, i) => m.role === 'user'
     ? `<div class="chat-me">${m.img ? `<img class="chat-photo" src="${m.img}" alt="Foto enviada" />` : m.photo ? '<span class="chat-photo-tag">📷 Foto</span>' : ''}${esc(m.text)}</div>`
@@ -7452,7 +7451,7 @@ function openChat(keep) {
       <textarea id="chatInput" rows="1" class="field flex-1 resize-none max-h-28 py-2.5" placeholder="Pregunta al coach…" enterkeyhint="send"></textarea>
       <button id="chatSend" class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button>
     </form></div>`, {
-    sheetClass: 'sheet-fixed',
+    sheetClass: 'sheet-fixed sheet-full',
     chip: (r, b) => chatSend(CHAT_CHIPS[+b.dataset.i]),
     toDiet: (r, b) => { const ml = ui.chat.msgs[+b.dataset.m]?.meals?.[+b.dataset.o]; if (ml) mealFromChat(ml); },
     recipe: (r, b) => recipeSheet(+b.dataset.m, +b.dataset.o),
@@ -7580,6 +7579,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.17.2', ['💬 El Coach IA ocupa toda la pantalla: los ejemplos se ven sin desplazarte.'], 'quiet'],
   ['5.17.1', ['💬 Coach IA: en vez de botones, ejemplos de lo que le puedes pedir.', '📥 Si te propone un bloque, también puedes añadirlo como día nuevo a uno de tus bloques (con Deshacer).'], 'quiet'],
   ['5.17.0', ['📷 Coach IA: pásale una foto de tu entreno (la pizarra o la hoja de tu clase) y, si quieres, dicta qué hacer. Lo prepara como un día nuevo de tu bloque y tú pulsas «Aplicar».'], 'quiet'],
   ['5.16.13', ['👥 Usuarios: quien pasa de la prueba a un código sale una sola vez, con su correo en la ficha (se reconoce por el botón «Darle su código personal» o por el nombre que propone).', '✉️ Al pasar de la prueba a un código, el correo de la prueba llega solo a la fila del código y queda en sus Ajustes.'], 'quiet'],
