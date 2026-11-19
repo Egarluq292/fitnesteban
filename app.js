@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.17.0';
+const APP_VERSION = '5.17.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7195,6 +7195,26 @@ function undoChatEdit(ed) {
   if (!allDays().some(d => d.id === ui.dayId)) ui.dayId = nextDayId();
   saveChatConv(ui.chat); persist(); refreshChat(); render(); toast('Cambios deshechos');
 }
+/* 📥 El mismo entreno, metido como día(s) nuevo(s) en un bloque que ya tienes (con Deshacer) */
+function chatIntoHTML(bl, i, j) {
+  if (bl.into) { const p = state.plan.programs.find(x => x.id === bl.into.prog);
+    return `<div class="chat-edit mt-2"><p class="text-[12px]">✓ ${plural(bl.days.length, 'día nuevo', 'días nuevos')} en <b>${esc(p?.name || 'tu bloque')}</b></p><div class="flex gap-2 mt-1.5"><button class="chat-meal flex-1" data-mact="intoGo" data-m="${i}" data-o="${j}" type="button"><span>Ver el bloque</span></button><button class="btn-ghost text-xs px-3" data-mact="intoUndo" data-m="${i}" data-o="${j}" type="button">Deshacer</button></div></div>`; }
+  const open = ui.chat.pick === `${i}:${j}`;
+  return `<button class="chat-meal" data-mact="intoPick" data-m="${i}" data-o="${j}" type="button"><span>📥 Añadir como día nuevo a un bloque mío</span></button>${open ? `<div class="space-y-1.5 mt-1.5">${editableProgs().map(p => `<button class="chat-chip w-full text-left" data-mact="intoDo" data-m="${i}" data-o="${j}" data-p="${esc(p.id)}" type="button">${esc(p.icon || '🏋️')} ${esc(p.name)} <span class="text-mute text-[11px]">· ${plural(p.days.length, 'día', 'días')}</span></button>`).join('')}</div>` : ''}`;
+}
+function blockIntoProg(bl, pid) {
+  const p = state.plan.programs.find(x => x.id === pid); if (!p) return;
+  const undo = clone(p.days);
+  const days = clone(bl.days).map(d => { const nd = normalizeDay(d); nd.id = uid('d_'); nd.exercises = nd.exercises.map(e => ({ ...e, id: uid('c_'), alts27: true })); return nd; });
+  p.days.push(...days); bl.into = { prog: p.id, undo }; ui.chat.pick = null;
+  saveChatConv(ui.chat); persist(); refreshChat(); render();
+  toast(`✓ ${plural(days.length, 'día nuevo', 'días nuevos')} en ${p.name}`);
+}
+function blockIntoUndo(bl) {
+  const p = state.plan.programs.find(x => x.id === bl.into?.prog); if (p && bl.into.undo) p.days = bl.into.undo;
+  delete bl.into; if (!allDays().some(d => d.id === ui.dayId)) ui.dayId = nextDayId();
+  saveChatConv(ui.chat); persist(); refreshChat(); render(); toast('Deshecho');
+}
 function blockFromChat(b) {
   if (b.added && state.plan.programs.some(p => p.id === b.added)) { closeModal(); state.plan.active = b.added; ui.dayId = nextDayId(); ui.trainHome = false; ui.view = 'train'; render(); window.scrollTo({ top: 0 }); return; }
   const days = clone(b.days).map(d => { const nd = normalizeDay(d); nd.id = uid('d_'); nd.exercises = nd.exercises.map(e => ({ ...e, id: uid('c_'), alts27: true })); return nd; });
@@ -7234,12 +7254,20 @@ function chatBodyHTML() {
   if (!c.msgs.length) return `
     <div class="text-center mt-2"><div class="text-4xl">💬</div>
       <p class="text-sm text-mute mt-2 leading-relaxed">Pregúntame lo que quieras sobre tu entreno o tu dieta. Leo tu plan, tus últimas sesiones, lo que llevas comido y tu peso.</p></div>
-    <div class="flex flex-col gap-2 mt-4">${CHAT_CHIPS.map((q, i) => `<button class="chat-chip" data-mact="chip" data-i="${i}" type="button">${esc(q)}</button>`).join('')}</div>
+    <div class="chat-ideas mt-4"><p class="text-[12px] font-semibold text-mute mb-1.5">Por ejemplo:</p><ul>
+      <li>«¿Cómo voy esta semana?»</li>
+      <li>«¿Qué ceno hoy para cuadrar macros?»</li>
+      <li>«Cambia el press militar por mancuernas en mi bloque»</li>
+      <li>📷 Una foto de la pizarra: «añádelo como día nuevo a mi bloque»</li>
+      <li>«Tengo pollo, arroz y calabacín, ¿qué me recomiendas?»</li>
+      <li>«Me apetece algo dulce, ¿qué tomo sin pasarme?»</li>
+      <li>«Me molesta el hombro, ¿qué cambio hoy?»</li>
+    </ul></div>
     ${medNote('chat-med mt-4 text-center')}
     ${chatHistoryHTML()}`;
   return c.msgs.map((m, i) => m.role === 'user'
     ? `<div class="chat-me">${m.img ? `<img class="chat-photo" src="${m.img}" alt="Foto enviada" />` : m.photo ? '<span class="chat-photo-tag">📷 Foto</span>' : ''}${esc(m.text)}</div>`
-    : `<div class="chat-ai${m.error ? ' chat-err' : ''}">${mdLite(m.text)}${m.error && i === c.msgs.length - 1 ? '<button class="text-xs text-brand underline mt-1" data-mact="retry" type="button">Reintentar</button>' : ''}${(m.meals || []).map((ml, j) => `<div class="flex gap-2 items-stretch"><button class="chat-meal flex-1 min-w-0" data-mact="toDiet" data-m="${i}" data-o="${j}" type="button"><span>🍽️ Apuntar en Dieta</span><span class="text-[11px] opacity-80 max-w-full leading-snug">${m.meals.length > 1 ? esc(ml.title) + ' · ' : ''}${esc(ml.type || 'comida que toca')} · ~${mealKcal(ml)} kcal</span>${ml.oilCut ? '<span class="text-[10.5px] opacity-80 leading-snug">✔️ Con el aceite en 10 g, no más</span>' : ''}${ml.fatty ? '<span class="text-[10.5px] text-amber-300 leading-snug">⚠️ Casi todo grasa: revísala antes de apuntarla</span>' : ''}</button><button class="chat-meal !w-auto shrink-0 items-center justify-center" data-mact="recipe" data-m="${i}" data-o="${j}" type="button"><span>👨‍🍳 Receta</span><span class="text-[11px] opacity-80">${ml.recipe ? 'guardada' : 'paso a paso'}</span></button></div>`).join('')}${(m.blocks || []).map((bl, j) => `<button class="chat-meal" data-mact="toBlock" data-m="${i}" data-o="${j}" type="button"><span>${bl.added ? '✓ Ver en mis bloques' : '＋ Añadir a mis bloques'}</span><span class="text-[11px] opacity-80 truncate max-w-full">${esc(bl.icon)} ${esc(bl.name)} · ${bl.days.length} día${bl.days.length > 1 ? 's' : ''} · ${bl.days.reduce((a, d) => a + d.exercises.length, 0)} ejercicios</span></button>`).join('')}${(m.edits || []).map((ed, j) => `<div class="chat-edit">
+    : `<div class="chat-ai${m.error ? ' chat-err' : ''}">${mdLite(m.text)}${m.error && i === c.msgs.length - 1 ? '<button class="text-xs text-brand underline mt-1" data-mact="retry" type="button">Reintentar</button>' : ''}${(m.meals || []).map((ml, j) => `<div class="flex gap-2 items-stretch"><button class="chat-meal flex-1 min-w-0" data-mact="toDiet" data-m="${i}" data-o="${j}" type="button"><span>🍽️ Apuntar en Dieta</span><span class="text-[11px] opacity-80 max-w-full leading-snug">${m.meals.length > 1 ? esc(ml.title) + ' · ' : ''}${esc(ml.type || 'comida que toca')} · ~${mealKcal(ml)} kcal</span>${ml.oilCut ? '<span class="text-[10.5px] opacity-80 leading-snug">✔️ Con el aceite en 10 g, no más</span>' : ''}${ml.fatty ? '<span class="text-[10.5px] text-amber-300 leading-snug">⚠️ Casi todo grasa: revísala antes de apuntarla</span>' : ''}</button><button class="chat-meal !w-auto shrink-0 items-center justify-center" data-mact="recipe" data-m="${i}" data-o="${j}" type="button"><span>👨‍🍳 Receta</span><span class="text-[11px] opacity-80">${ml.recipe ? 'guardada' : 'paso a paso'}</span></button></div>`).join('')}${(m.blocks || []).map((bl, j) => bl.into ? chatIntoHTML(bl, i, j) : `<button class="chat-meal" data-mact="toBlock" data-m="${i}" data-o="${j}" type="button"><span>${bl.added ? '✓ Ver en mis bloques' : '＋ Añadir como bloque nuevo'}</span><span class="text-[11px] opacity-80 truncate max-w-full">${esc(bl.icon)} ${esc(bl.name)} · ${bl.days.length} día${bl.days.length > 1 ? 's' : ''} · ${bl.days.reduce((a, d) => a + d.exercises.length, 0)} ejercicios</span></button>${!bl.added && editableProgs().length ? chatIntoHTML(bl, i, j) : ''}`).join('')}${(m.edits || []).map((ed, j) => `<div class="chat-edit">
       <div class="text-[11px] font-bold uppercase tracking-wider text-brand">✏️ Cambios en ${esc(ed.name)}</div>
       <ul class="text-[13px] leading-snug space-y-1 mt-1.5">${ed.lines.map(l => `<li>${l}</li>`).join('')}</ul>
       ${ed.ops.length ? (ed.applied ? `<div class="grid grid-cols-2 gap-2 mt-2.5"><button class="chat-meal items-center justify-center text-center" data-mact="editGo" data-m="${i}" data-o="${j}" type="button"><span>✓ Ver bloque</span></button><button class="chat-meal items-center justify-center text-center !bg-transparent" data-mact="editUndo" data-m="${i}" data-o="${j}" type="button"><span>↩️ Deshacer</span></button></div>`
@@ -7284,6 +7312,8 @@ function refreshChat() {
   const send = $('#chatSend'); if (send) send.disabled = !!ui.chat.busy;
   const nb = $('#chatNew'); if (nb) nb.classList.toggle('invisible', !ui.chat.msgs.length);
 }
+/* Va pegado (sin verse) al mensaje con foto: el coach tendía a crear un bloque nuevo en vez de añadir un día */
+const CHAT_PHOTO_NOTE = '\n\n[Nota de la app, no la menciones: si el usuario no pide expresamente un bloque NUEVO, NO uses ```bloque. Responde con ```cambios y la operación "añadir_dia" en uno de "tus_bloques" (el que diga o el que mejor encaje; si no está claro, pregunta a cuál). Si no tiene ningún bloque, entonces sí ```bloque.]';
 async function chatSend(text, img = null) {
   const c = ui.chat; text = String(text || '').trim();
   if (c.busy) return;
@@ -7295,7 +7325,7 @@ async function chatSend(text, img = null) {
   c.msgs.push({ role: 'user', text, ...(img ? { img, photo: true } : {}) }); c.busy = true; refreshChat();
   try {
     // la foto solo viaja mientras la conversación está abierta (no se guarda en el historial)
-    const contents = c.msgs.slice(-12).map(m => ({ role: m.role, parts: [{ text: m.text }, ...(m.img ? [{ inlineData: { mimeType: 'image/jpeg', data: m.img.split(',')[1] } }] : [])] }));
+    const contents = c.msgs.slice(-12).map(m => ({ role: m.role, parts: [{ text: m.text + (m.img ? CHAT_PHOTO_NOTE : '') }, ...(m.img ? [{ inlineData: { mimeType: 'image/jpeg', data: m.img.split(',')[1] } }] : [])] }));
     const reply = await callGemini(null, { json: false, contents, system: chatSystem(), temperature: 0.4, timeout: 60000 });
     const { text: clean, meals, blocks, edits } = chatMeals(reply);
     c.msgs.push({ role: 'model', text: clean, ...(meals.length ? { meals } : {}), ...(blocks.length ? { blocks } : {}), ...(edits.length ? { edits } : {}) });
@@ -7429,6 +7459,10 @@ function openChat(keep) {
     editApply: (r, b) => { const ed = ui.chat.msgs[+b.dataset.m]?.edits?.[+b.dataset.o]; if (ed && !ed.applied) applyChatEdit(ed); },
     editUndo: (r, b) => { const ed = ui.chat.msgs[+b.dataset.m]?.edits?.[+b.dataset.o]; if (ed?.applied) undoChatEdit(ed); },
     editGo: (r, b) => { const ed = ui.chat.msgs[+b.dataset.m]?.edits?.[+b.dataset.o]; const p = ed && state.plan.programs.find(x => x.id === ed.prog); if (p) { closeModal(); openBlock('p:' + p.id); } },
+    intoPick: (r, b) => { const k = `${b.dataset.m}:${b.dataset.o}`; ui.chat.pick = ui.chat.pick === k ? null : k; refreshChat(); },
+    intoDo: (r, b) => { const bl = ui.chat.msgs[+b.dataset.m]?.blocks?.[+b.dataset.o]; if (bl && !bl.into) blockIntoProg(bl, b.dataset.p); },
+    intoUndo: (r, b) => { const bl = ui.chat.msgs[+b.dataset.m]?.blocks?.[+b.dataset.o]; if (bl?.into) blockIntoUndo(bl); },
+    intoGo: (r, b) => { const bl = ui.chat.msgs[+b.dataset.m]?.blocks?.[+b.dataset.o]; const p = bl?.into && state.plan.programs.find(x => x.id === bl.into.prog); if (p) { closeModal(); openBlock('p:' + p.id); } },
     toBlock: (r, b) => { const bl = ui.chat.msgs[+b.dataset.m]?.blocks?.[+b.dataset.o]; if (bl) blockFromChat(bl); },
     mic: () => chatMic(),
     histToggle: () => { ui.histOpen = !ui.histOpen; refreshChat(); },
@@ -7546,6 +7580,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.17.1', ['💬 Coach IA: en vez de botones, ejemplos de lo que le puedes pedir.', '📥 Si te propone un bloque, también puedes añadirlo como día nuevo a uno de tus bloques (con Deshacer).'], 'quiet'],
   ['5.17.0', ['📷 Coach IA: pásale una foto de tu entreno (la pizarra o la hoja de tu clase) y, si quieres, dicta qué hacer. Lo prepara como un día nuevo de tu bloque y tú pulsas «Aplicar».'], 'quiet'],
   ['5.16.13', ['👥 Usuarios: quien pasa de la prueba a un código sale una sola vez, con su correo en la ficha (se reconoce por el botón «Darle su código personal» o por el nombre que propone).', '✉️ Al pasar de la prueba a un código, el correo de la prueba llega solo a la fila del código y queda en sus Ajustes.'], 'quiet'],
   ['5.16.12', ['👥 Usuarios: quien pasa de la prueba a un código (mismo correo) sale una sola vez, en su código; en su ficha se ve desde cuándo y cuántos días usó la prueba.'], 'quiet'],
@@ -7964,7 +7999,7 @@ const GUIDE = [
     'El botón ⚡ de arriba abre un chat con Gemini que <b>lee tus datos</b>: plan y progresión, últimas sesiones, comidas de hoy y lo que te queda, dieta de la semana, cardio, retos y medidas.',
     '🎤 Puedes <b>dictarle</b> en vez de escribir: toca el micro y habla; puedes hacer pausas. Toca 🎤 otra vez para terminar (o se para solo tras unos segundos de silencio). Al terminar se ponen mayúsculas, comas y puntos (con un modelo ligero de Gemini que no gasta la cuota de las fotos).',
     '👨‍🍳 Cuando te propone un plato, pulsa «Receta» para verlo paso a paso con los mismos ingredientes y gramos. «¿Cambiar algo?» la adapta (también por voz).',
-    '🏋️ Pídele un <b>bloque de entreno</b> con el material que tienes (o sin nada): pulsa «＋ Añadir a mis bloques» y aparece en Entreno. Se guarda en la conversación, como las recetas.',
+    '🏋️ Pídele un <b>bloque de entreno</b> con el material que tienes (o sin nada): pulsa «＋ Añadir como bloque nuevo» o «📥 Añadir como día nuevo a un bloque mío» y aparece en Entreno. Se guarda en la conversación, como las recetas.',
     '✏️ También <b>cambia tus bloques</b>: «añade un día de hombro a mi bloque X», «cambia el press militar por mancuernas», «pon 4 series de sentadilla». Te enseña la lista de cambios y no toca nada hasta que pulsas «Aplicar». Si no te convence, «Deshacer».',
     '📷 <b>Pásale una foto</b> del entreno (la pizarra o la hoja de tu clase): toca 📷, elígela y, si quieres, dicta qué hacer («añádelo como día nuevo a mi bloque X»). Lo prepara como un día nuevo y no toca nada hasta que pulsas «Aplicar». La foto no se guarda en el historial.',
     'Cada vez que lo abres empieza de cero; «Ver la última conversación» recupera la anterior. Usa tu clave de Gemini (Ajustes → IA). Nunca se envían la clave ni el PIN.'
