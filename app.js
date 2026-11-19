@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.18.3';
+const APP_VERSION = '5.18.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6794,7 +6794,7 @@ function msgBox(pre = '') {
       ${vis ? `<div class="grid grid-cols-2 gap-2"><input id="msgName" class="field py-2 text-sm" maxlength="40" placeholder="Tu nombre" value="${esc(ct.p || profileOf()?.name || '')}" /><input id="msgCt" class="field py-2 text-sm" maxlength="80" placeholder="Correo o teléfono" value="${esc(ct.ct || '')}" /></div><p class="text-[10px] text-mute leading-snug">Aún no tienes código: déjame tu correo o teléfono por si no vuelves a abrir la app.</p>` : ''}
       <form id="msgForm" class="flex gap-2 items-end"><textarea id="msgInput" rows="2" class="field flex-1 resize-none max-h-32 py-2.5" maxlength="800" placeholder="Escribe tu mensaje…">${esc(pre)}</textarea><button class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button></form>
       <p class="text-[11px] text-mute text-center">¿Prefieres Telegram? <a class="text-brand underline" href="${CONTACT_URL}" target="_blank" rel="noopener">Escríbeme allí</a></p>
-    </div>`, { sheetClass: 'sheet-fixed', retry: () => msgBoxLoad() });
+    </div>`, { sheetClass: 'sheet-fixed sheet-full', retry: () => msgBoxLoad() });
   $('#msgForm').addEventListener('submit', e => { e.preventDefault(); msgSend(); });
   msgBoxLoad();
 }
@@ -6866,11 +6866,27 @@ function msgAdminCardHTML() {
 function msgInboxModal() {
   const th = msgThreads();
   openModal(`<div class="flex items-center justify-between gap-2"><h3 class="modal-title">💬 Mensajes</h3><button class="w-8 h-8 rounded-full border border-line text-mute" data-close type="button" aria-label="Cerrar">✕</button></div>
+    <button class="btn-primary w-full" data-mact="new" type="button">✍️ Escribir a alguien</button>
     ${th.length ? `<div class="space-y-1.5">${th.map(t => `<button class="msg-row${t.pend ? ' msg-row-on' : ''}" data-mact="open" data-id="${esc(t.id)}" type="button"><span class="flex items-center justify-between gap-2"><b class="truncate">${t.pend ? '🟠 ' : ''}${esc(msgWhoName(t.id, t))}</b><span class="text-[11px] text-mute shrink-0">${esc(msgTime(t.last.ts))}</span></span><span class="block text-[12px] text-mute truncate">${t.last.de === 'e' ? 'Tú: ' : ''}${esc(t.last.t)}</span></button>`).join('')}</div>` : '<p class="text-sm text-mute">Aún no te ha escrito nadie. Cuando alguien pulse «Escribir a Esteban», aparecerá aquí.</p>'}
     <label class="flex items-center justify-between gap-3 text-[13px] pt-2 border-t border-line"><span>✉️ Avisarme también por correo<span class="block text-[11px] text-mute">Te llega un correo con cada mensaje nuevo</span></span><input id="msgAvisos" type="checkbox" class="w-5 h-5 accent-cyan-400 shrink-0" ${ui.msgAvisos !== false ? 'checked' : ''} /></label>`, {
-    open: (r, b) => msgThreadModal(b.dataset.id)
+    open: (r, b) => msgThreadModal(b.dataset.id),
+    new: () => msgPickModal()
   });
   $('#msgAvisos')?.addEventListener('change', async e => { const v = e.target.checked; try { await msgAdminApi('avisos', { v: v ? '1' : '0' }); ui.msgAvisos = v; toast(v ? 'Te avisaré por correo' : 'Sin avisos por correo'); } catch { e.target.checked = !v; toast('No se pudo cambiar (¿sin conexión?)', 'warn'); } });
+}
+/* ✍️ Empezar tú una conversación: con quien tenga código o esté en prueba (lo verá al abrir la app) */
+function msgPickModal() {
+  const T = netToday() || todayISO();
+  const P = [...(access.list || []).filter(x => !x.admin && !trialConv().has(x.hash)).map(x => ({ id: x.hash, name: accessWho(x), sub: msgWhoState(x.hash), last: ui.usage?.[x.hash]?.last || '' })),
+    ...trialRows().map(u => { const h = String(u.h).toLowerCase(); return { id: h, name: u.m || 'Prueba', sub: msgWhoState(h), last: u.last || '' }; })]
+    .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  openModal(`<div class="flex items-center gap-2"><button class="w-8 h-8 rounded-full border border-line text-mute shrink-0" data-mact="back" type="button" aria-label="Volver">‹</button><h3 class="modal-title">✍️ ¿A quién escribes?</h3><button class="ml-auto w-8 h-8 rounded-full border border-line text-mute shrink-0" data-close type="button" aria-label="Cerrar">✕</button></div>
+    <input id="msgPickQ" class="field w-full" placeholder="🔎 Buscar por nombre o correo…" autocomplete="off" />
+    <div id="msgPickL" class="space-y-1.5">${P.map(p => `<button class="msg-row" data-mact="go" data-id="${esc(p.id)}" data-s="${esc(normTxt(p.name + ' ' + p.sub))}" type="button"><span class="flex items-center justify-between gap-2"><b class="truncate">${esc(p.name)}</b><span class="text-[11px] text-mute shrink-0">${p.last ? (daysBetween(p.last, T) <= 0 ? 'hoy' : `hace ${plural(daysBetween(p.last, T), 'día', 'días')}`) : 'sin uso'}</span></span><span class="block text-[12px] text-mute truncate">${esc(p.sub)}</span></button>`).join('') || '<p class="text-sm text-mute">No hay nadie con código o en prueba.</p>'}</div>`, {
+    back: () => msgInboxModal(),
+    go: (r, b) => msgThreadModal(b.dataset.id, '', msgPickModal)
+  });
+  $('#msgPickQ')?.addEventListener('input', e => { const q = normTxt(e.target.value); document.querySelectorAll('#msgPickL [data-s]').forEach(b => { b.style.display = !q || b.dataset.s.includes(q) ? '' : 'none'; }); });
 }
 async function msgAdminApi(op, extra) {
   const key = await secretDec(lsGet(USE_KEY), ui.accessPin);
@@ -6887,7 +6903,7 @@ function msgThreadModal(id, pre = '', back = null) {
     <div id="msgBody" class="cal-body space-y-2">${t.msgs.length ? t.msgs.map(m => msgBubble(m, m.de === 'e')).join('') : '<p class="text-[12px] text-mute text-center mt-6">Aún no os habéis escrito. Lo verá la próxima vez que abra la app, con aviso en el botón de los bocadillos.</p>'}</div>
     <div class="cal-foot"><form id="msgForm" class="flex gap-2 items-end"><textarea id="msgInput" rows="3" class="field flex-1 resize-none max-h-[200px] py-2.5" maxlength="1500" placeholder="Tu respuesta…">${esc(pre)}</textarea><button class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button></form>
       <div class="flex items-center justify-between gap-2 mt-1.5"><p class="text-[11px] text-mute">Lo verá dentro de la app la próxima vez que la abra.</p>${t.msgs.some(m => m.de === 'u') ? '<button class="chip chip-sm shrink-0" data-mact="ai" type="button">✨ Sugerir respuesta</button>' : ''}</div></div>`, {
-    sheetClass: 'sheet-fixed',
+    sheetClass: 'sheet-fixed sheet-full',
     back: () => (back || msgInboxModal)(),
     ai: async (r, b) => {
       if (!state.settings.apiKey) return toast('Necesitas tu clave de Gemini (Ajustes → IA)', 'warn');
@@ -7853,6 +7869,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.18.4', ['💬 «Escribir a Esteban» a pantalla completa, también con el teclado abierto.', '✍️ Usuarios: puedes empezar tú una conversación («Escribir a alguien» en Mensajes, o desde la ficha).'], 'quiet'],
   ['5.18.3', ['⌨️ Teclado: las ventanas se ajustan a la parte visible de la pantalla en cualquier navegador (también en los que ponen el teclado encima sin avisar).'], 'quiet'],
   ['5.18.2', ['💬 Mensajes: las respuestas de Esteban llegaban como un número en vez del texto. Arreglado.'], 'quiet'],
   ['5.18.1', ['⌨️ Con el teclado abierto, las ventanas se suben para que veas lo que escribes.'], 'quiet'],
@@ -9739,6 +9756,7 @@ const actions = {
   closeAccess: () => { ui.accessOpen = false; render(); },
   accPage: () => { ui.accPage = true; render(); window.scrollTo({ top: 0 }); },
   msgInbox: () => msgInboxModal(),
+  msgTo: b => { const h = b.dataset.hash; msgThreadModal(h, '', () => accFichaModal(h)); },
   toWrite: () => toWriteModal(),
   accPageClose: () => { ui.accPage = false; render(); window.scrollTo({ top: 0 }); },
   duoJoin: b => duoJoinModal(b.dataset.hash),
@@ -11145,6 +11163,7 @@ function accFichaModal(hash) {
     </div>`; };
   const html = () => `<div data-ficha="${esc(hash)}"><h3 class="modal-title">${m ? `👥 ${esc(accessWho(x) || 'Sin nombre')} + ${esc(accessWho(m) || 'Sin nombre')}` : esc(accessWho(x) || 'Sin nombre')}</h3>
     ${gh && !x.admin && x.hasta ? `<div class="grid grid-cols-2 gap-2 mb-2">${big('planAccess', x.hash, '⏳', m ? 'Renovar el DÚO' : 'Renovar o cambiar', 'ficha-main')}${big('renewMsg', x.hash, '💬', 'Recordar renovación')}</div>` : gh && !x.admin ? `<div class="mb-2">${big('planAccess', x.hash, '⏳', 'Cambiar plan', 'ficha-main')}</div>` : ''}
+    ${!x.admin && ui.msgs ? `<button class="btn-ghost w-full mb-2" data-act="msgTo" data-hash="${esc(x.hash)}" type="button">💬 Escribirle por la app${msgThreads().some(t => t.id === x.hash) ? ' · ver conversación' : ''}</button>` : ''}
     <div class="space-y-2">${P.map(person).join('')}</div>
     <div class="text-xs space-y-1.5 mt-2 px-1">${payInfoHTML(x, true)}</div>
     <button class="btn-ghost w-full mt-3" data-close type="button">Cerrar</button></div>`;
