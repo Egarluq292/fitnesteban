@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.18.0';
+const APP_VERSION = '5.18.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -856,6 +856,16 @@ function scrollLock(on) {
   else if (!on && lockY !== null) { const y = lockY; lockY = null; Object.assign(b, { position: '', top: '', left: '', right: '', width: '' }); const h = document.querySelector('body > header'); if (h) h.style.transform = ''; window.scrollTo(0, y); }
 }
 let modalBackFn = null; // «atrás» dentro de una ventana (p. ej. de la lista de un grupo a los grupos); devuelve true si lo ha gestionado
+/* ⌨️ Con el teclado abierto, la ventana se sube y se encoge para que la caja de texto quede a la vista (Android e iPhone) */
+(() => {
+  const vv = window.visualViewport; if (!vv) return;
+  const fit = () => {
+    const kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)), on = kb > 80;
+    document.documentElement.style.setProperty('--kb', (on ? kb : 0) + 'px'); document.documentElement.classList.toggle('kb-open', on);
+    if (on) { const a = document.activeElement; if (a && /^(TEXTAREA|INPUT)$/.test(a.tagName) && a.closest('#modalRoot')) setTimeout(() => a.scrollIntoView({ block: 'nearest' }), 50); }
+  };
+  vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit);
+})();
 function openModal(html, handlers = {}) {
   modalHandlers = handlers; modalBackFn = null;
   const root = $('#modalRoot');
@@ -7827,6 +7837,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.18.1', ['⌨️ Con el teclado abierto, las ventanas se suben para que veas lo que escribes.'], 'quiet'],
   ['5.18.0', ['💬 Nuevo: escribe a Esteban dentro de la app. Toca el botón de los dos bocadillos de arriba: tu código, una duda, algo que falla o una idea. Te contesta ahí mismo y verás un número en el botón cuando lo haga.', '✈️ ¿Prefieres Telegram? Lo tienes dentro de esa misma ventana, abajo.']],
   ['5.17.2', ['💬 El Coach IA ocupa toda la pantalla: los ejemplos se ven sin desplazarte.'], 'quiet'],
   ['5.17.1', ['💬 Coach IA: en vez de botones, ejemplos de lo que le puedes pedir.', '📥 Si te propone un bloque, también puedes añadirlo como día nuevo a uno de tus bloques (con Deshacer).'], 'quiet'],
