@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.17.2';
+const APP_VERSION = '5.18.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6705,8 +6705,256 @@ const CONTACT_MAIL = 'fitnestebanapp@gmail.com';
 const CONTACT_URL = 'https://t.me/fitnesteban?direct'; // Telegram de Esteban
 const CHANNEL_URL = 'https://t.me/fitnesteban'; // canal público: presentación de la app
 const TG_PLAY_URL = 'https://play.google.com/store/apps/details?id=org.telegram.messenger', TG_IOS_URL = 'https://apps.apple.com/app/telegram-messenger/id686449807';
-const contactBtn = (txt = 'Contacto', cls = '') => `<a class="contact-btn ${cls}" href="${CONTACT_URL}" target="_blank" rel="noopener">${icon('send', 'w-4 h-4')}<span>${txt}</span></a>`;
+// 💬 todos los «Contacto / Escribir / Pedir mi código» abren el chat con Esteban dentro de la app (Telegram queda como alternativa dentro)
+const contactBtn = (txt = 'Contacto', cls = '', pre = '') => `<button class="contact-btn ${cls}" data-msgbox="${esc(pre || (/c[oó]digo/i.test(txt) ? 'Hola, Esteban. Me gustaría seguir usando FITNESTEBAN: ¿me pasas mi código?' : ''))}" type="button">${icon('send', 'w-4 h-4')}<span>${txt}</span></button>`;
 const EMAIL_NOTICE = `FITNESTEBAN guardará tu correo para enviarte la guía de la app y, si tú le escribes, resolverte dudas. Nadie más verá tu correo. La app sigue siendo privada. Puedes cambiar el correo en los Ajustes. Si quieres que lo borre, pídeselo a Esteban en «Contacto».`;
+/* =========================================================================
+   💬 Mensajes con Esteban dentro de la app (script v17: hoja «mensajes»)
+   Usuario: escribe y lee sus respuestas aquí. Esteban: los ve en 👥 Usuarios → 💬 Mensajes.
+   ========================================================================= */
+const MSG_Q_KEY = 'fitnesteban_msgq', MSG_SEEN_KEY = 'fitnesteban_msgseen', MSG_CT_KEY = 'fitnesteban_msgct';
+async function msgWho() { return { h: access.ok || lsGet(ACCESS_KEY)?.code || lsGet(TRIAL_KEY)?.h ? await myHash() : '', d: deviceId() }; }
+const msgVisitor = () => !lsGet(ACCESS_KEY)?.code && !lsGet(TRIAL_KEY)?.h; // aún sin código ni prueba: deja nombre y contacto
+async function msgApi(op, extra = {}) {
+  const url = access.usageUrl; if (!url) throw new Error('nourl');
+  const w = await msgWho(), qs = new URLSearchParams({ op, h: w.h, d: w.d, ...extra, t2: Date.now() });
+  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 20000);
+  try { const r = await fetch(`${url}?${qs}`, { cache: 'no-store', signal: ctl.signal }); const j = await r.json(); if (!(j.ver >= 17)) throw new Error('old'); return j; }
+  catch (e) { if (e.message === 'old') throw e; throw new Error('net'); } finally { clearTimeout(tm); }
+}
+const msgTime = ts => { const d = new Date(ts); if (isNaN(d)) return ''; const day = d.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10) ? '' : `${fmtDateShort(d.toISOString().slice(0, 10))} · `; return day + d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }); };
+const msgBubble = (m, mine) => `<div class="msg-b ${mine ? 'msg-me' : 'msg-you'}${m.q ? ' msg-q' : ''}"><div class="whitespace-pre-wrap break-words">${esc(m.t)}</div><div class="msg-t">${m.q ? '⏳ Se enviará al volver la conexión' : esc(msgTime(m.ts))}</div></div>`;
+/* Cola: lo que no se pudo enviar (sin datos) sale solo al volver la conexión */
+async function msgFlush() {
+  const q = lsGet(MSG_Q_KEY) || []; if (!q.length || !navigator.onLine || !access.usageUrl) return;
+  const left = [];
+  for (const m of q) { try { await msgApi('msg', { t: m.t, p: m.p || '', ct: m.ct || '' }); } catch (e) { if (e.message !== 'old') left.push(m); } }
+  lsSet(MSG_Q_KEY, left);
+  if (q.length !== left.length && $('#msgBody') && !access.me?.admin) msgBoxLoad();
+}
+window.addEventListener('online', () => setTimeout(msgFlush, 1500));
+/* ¿Te ha contestado Esteban? (al abrir la app y al volver a ella; como mucho cada 3 minutos) */
+let msgCheckAt = 0;
+async function msgCheck(force) {
+  if (!access.usageUrl || !navigator.onLine || access.me?.admin || (!force && Date.now() - msgCheckAt < 180000)) return;
+  msgCheckAt = Date.now();
+  try {
+    msgFlush();
+    const j = await msgApi('hilo'), seen = lsGet(MSG_SEEN_KEY) || '';
+    ui.msgThread = j.msgs || [];
+    const nw = ui.msgThread.filter(m => m.de === 'e' && m.ts > seen).length;
+    if (nw && !ui.msgNew) toast(`💬 Esteban te ha ${nw === 1 ? 'respondido' : `escrito ${nw} mensajes`}. Toca el botón de los bocadillos de arriba para leerlo.`);
+    ui.msgNew = nw; msgBadge();
+  } catch { /* sin script v17 o sin conexión: nada */ }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { msgCheck(); if (access.me?.admin) msgPendCheck(); } });
+function msgBadge() {
+  const b = $('#mailBtn'); if (!b) return;
+  let n = b.querySelector('.ub-n'); const k = ui.msgNew || 0;
+  if (!k) { n?.remove(); return; }
+  if (!n) { n = document.createElement('span'); n.className = 'ub-n ub-msg'; b.appendChild(n); }
+  n.textContent = String(k); b.setAttribute('aria-label', `Escribir a Esteban · ${k} sin leer`);
+}
+/* La ventana del usuario: su conversación con Esteban */
+function msgBox(pre = '') {
+  const vis = msgVisitor(), ct = lsGet(MSG_CT_KEY) || {};
+  openModal(`
+    <div class="cal-head flex items-center gap-2 pb-3">
+      <img src="icons/logo-128.png" alt="" class="w-9 h-9 rounded-full" /><div class="min-w-0"><h3 class="modal-title leading-tight">Escribir a Esteban</h3><p class="text-[11px] text-mute">Te contesto aquí mismo, dentro de la app</p></div>
+      <button class="ml-auto w-8 h-8 rounded-full border border-line text-mute" data-close type="button" aria-label="Cerrar">✕</button>
+    </div>
+    <div id="msgBody" class="cal-body space-y-2"><p class="text-[12px] text-mute text-center mt-6"><span class="spinner"></span> Cargando…</p></div>
+    <div class="cal-foot space-y-2">
+      ${vis ? `<div class="grid grid-cols-2 gap-2"><input id="msgName" class="field py-2 text-sm" maxlength="40" placeholder="Tu nombre" value="${esc(ct.p || profileOf()?.name || '')}" /><input id="msgCt" class="field py-2 text-sm" maxlength="80" placeholder="Correo o teléfono" value="${esc(ct.ct || '')}" /></div><p class="text-[10px] text-mute leading-snug">Aún no tienes código: déjame tu correo o teléfono por si no vuelves a abrir la app.</p>` : ''}
+      <form id="msgForm" class="flex gap-2 items-end"><textarea id="msgInput" rows="2" class="field flex-1 resize-none max-h-32 py-2.5" maxlength="800" placeholder="Escribe tu mensaje…">${esc(pre)}</textarea><button class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button></form>
+      <p class="text-[11px] text-mute text-center">¿Prefieres Telegram? <a class="text-brand underline" href="${CONTACT_URL}" target="_blank" rel="noopener">Escríbeme allí</a></p>
+    </div>`, { sheetClass: 'sheet-fixed', retry: () => msgBoxLoad() });
+  $('#msgForm').addEventListener('submit', e => { e.preventDefault(); msgSend(); });
+  msgBoxLoad();
+}
+function msgBoxRender(err) {
+  const b = $('#msgBody'); if (!b) return;
+  const q = (lsGet(MSG_Q_KEY) || []).map(m => ({ ...m, q: true })), all = [...(ui.msgThread || []).map(m => ({ ...m, mine: m.de === 'u' })), ...q.map(m => ({ ...m, mine: true }))];
+  if (err === 'old') { b.innerHTML = `<div class="text-center mt-6 space-y-3"><p class="text-sm text-mute">Los mensajes dentro de la app aún no están activos.</p>${contactTgBtn('Escribir por Telegram', 'mx-auto')}</div>`; $('#msgForm')?.classList.add('hidden'); return; }
+  b.innerHTML = (all.length ? all.map(m => msgBubble(m, m.mine)).join('') : `<div class="text-center mt-6"><div class="text-3xl">👋</div><p class="text-sm text-mute mt-2 leading-relaxed">Pregúntame lo que quieras: tu código, una duda de la app, algo que no funciona o una idea.<br>Te contesto aquí; verás el aviso en el botón de los bocadillos de arriba.</p></div>`)
+    + (err === 'net' ? '<p class="text-[11px] text-amber-300 text-center">Sin conexión: lo que escribas se enviará solo al volver.</p>' : '');
+  b.scrollTop = b.scrollHeight;
+  const last = (ui.msgThread || []).filter(m => m.de === 'e').pop(); if (last) { lsSet(MSG_SEEN_KEY, last.ts); ui.msgNew = 0; msgBadge(); }
+}
+async function msgBoxLoad() {
+  msgBoxRender();
+  try { msgFlush(); const j = await msgApi('hilo'); ui.msgThread = j.msgs || []; msgBoxRender(); }
+  catch (e) { msgBoxRender(e.message === 'old' ? 'old' : 'net'); }
+}
+async function msgSend() {
+  const inp = $('#msgInput'), t = String(inp?.value || '').trim(); if (!t) return;
+  const vis = msgVisitor(), p = vis ? String($('#msgName')?.value || '').trim() : String(profileOf()?.name || '').trim(), ct = vis ? String($('#msgCt')?.value || '').trim() : '';
+  if (vis && (!p || !ct)) { toast('Pon tu nombre y un correo o teléfono para poder contestarte', 'warn'); ($('#msgName')?.value ? $('#msgCt') : $('#msgName'))?.focus(); return; }
+  if (vis) lsSet(MSG_CT_KEY, { p, ct });
+  inp.value = '';
+  const ts = new Date().toISOString();
+  try { await msgApi('msg', { t, p, ct }); ui.msgThread = [...(ui.msgThread || []), { ts, de: 'u', t }]; toast('✓ Enviado. Te contesto aquí en cuanto lo vea.'); }
+  catch (e) {
+    if (e.message === 'old') { inp.value = t; return msgBoxRender('old'); }
+    lsSet(MSG_Q_KEY, [...(lsGet(MSG_Q_KEY) || []), { t, p, ct, ts }]);
+  }
+  msgBoxRender();
+}
+const contactTgBtn = (txt = 'Telegram', cls = '') => `<a class="contact-btn ${cls}" href="${CONTACT_URL}" target="_blank" rel="noopener">${icon('send', 'w-4 h-4')}<span>${txt}</span></a>`;
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-msgbox], #mailBtn'); if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  const fromLock = !!b.closest('#lockScreen');
+  msgBox(b.dataset.msgbox || ''); if (fromLock) $('#modalRoot').style.zIndex = 50;
+}, true);
+
+/* ---------- Administrador: bandeja de mensajes y «Para escribir» ---------- */
+async function msgPendCheck() {
+  if (!access.usageUrl || !navigator.onLine || !access.me?.admin) return;
+  try { const r = await fetch(`${access.usageUrl}?op=pend&t=${Date.now()}`, { cache: 'no-store' }); const j = await r.json(); if (j.ver >= 17) { ui.msgPend = +j.n || 0; usersBadge(); } } catch { /* nada */ }
+}
+function msgThreads() {
+  const T = {};
+  for (const m of ui.msgs || []) { const t = T[m.id] || (T[m.id] = { id: m.id, msgs: [], nm: '', ct: '' }); t.msgs.push(m); if (m.de === 'u') { if (m.nm) t.nm = m.nm; if (m.ct) t.ct = m.ct; } }
+  return Object.values(T).map(t => ({ ...t, last: t.msgs[t.msgs.length - 1], pend: t.msgs[t.msgs.length - 1].de === 'u' })).sort((a, b) => b.last.ts.localeCompare(a.last.ts));
+}
+function msgWhoName(id, t = {}) {
+  const x = (access.list || []).find(y => y.hash === id); if (x) return accessWho(x);
+  const u = ui.usage?.[id]; if (u?.m) return u.m;
+  return t.nm ? `${t.nm} (sin código)` : 'Alguien sin código';
+}
+function msgWhoState(id) {
+  const x = (access.list || []).find(y => y.hash === id); if (x) { const st = accStatus(x); return st === 'exp' ? 'Caducado' : st === 'free' ? 'Free' : st === 'admin' ? 'Admin' : `Código · hasta ${fmtDateShort(x.hasta)}`; }
+  if (id in (ui.trialH || {})) return `Prueba${ui.trialH[id] ? ` · hasta ${fmtDateShort(ui.trialH[id])}` : ''}`;
+  return 'Sin código';
+}
+function msgAdminCardHTML() {
+  if (ui.usageOld16) return `<div class="acc-ref mt-2"><b>💬 Mensajes</b><p class="text-[12px] text-mute mt-1">Para recibir mensajes dentro de la app, actualiza el script de uso a la v17 (Reconfigurar → nueva versión).</p></div>`;
+  if (!ui.msgs) return '';
+  const th = msgThreads(), p = th.filter(t => t.pend).length, W = toWriteList();
+  return `<div class="grid grid-cols-2 gap-2 mt-2">
+    <button class="msg-card${p ? ' msg-card-on' : ''}" data-act="msgInbox" type="button"><span class="text-[15px] font-extrabold">💬 Mensajes</span><span class="text-[12px] ${p ? 'text-amber-300' : 'text-mute'}">${p ? `${p} sin responder` : th.length ? 'Todo respondido' : 'Ninguno aún'}</span></button>
+    <button class="msg-card${W.length ? ' msg-card-on' : ''}" data-act="toWrite" type="button"><span class="text-[15px] font-extrabold">📝 Para escribir</span><span class="text-[12px] ${W.length ? 'text-amber-300' : 'text-mute'}">${W.length ? `${W.length} ${W.length === 1 ? 'persona' : 'personas'}` : 'Nadie ahora'}</span></button>
+  </div>`;
+}
+function msgInboxModal() {
+  const th = msgThreads();
+  openModal(`<div class="flex items-center justify-between gap-2"><h3 class="modal-title">💬 Mensajes</h3><button class="w-8 h-8 rounded-full border border-line text-mute" data-close type="button" aria-label="Cerrar">✕</button></div>
+    ${th.length ? `<div class="space-y-1.5">${th.map(t => `<button class="msg-row${t.pend ? ' msg-row-on' : ''}" data-mact="open" data-id="${esc(t.id)}" type="button"><span class="flex items-center justify-between gap-2"><b class="truncate">${t.pend ? '🟠 ' : ''}${esc(msgWhoName(t.id, t))}</b><span class="text-[11px] text-mute shrink-0">${esc(msgTime(t.last.ts))}</span></span><span class="block text-[12px] text-mute truncate">${t.last.de === 'e' ? 'Tú: ' : ''}${esc(t.last.t)}</span></button>`).join('')}</div>` : '<p class="text-sm text-mute">Aún no te ha escrito nadie. Cuando alguien pulse «Escribir a Esteban», aparecerá aquí.</p>'}
+    <label class="flex items-center justify-between gap-3 text-[13px] pt-2 border-t border-line"><span>✉️ Avisarme también por correo<span class="block text-[11px] text-mute">Te llega un correo con cada mensaje nuevo</span></span><input id="msgAvisos" type="checkbox" class="w-5 h-5 accent-cyan-400 shrink-0" ${ui.msgAvisos !== false ? 'checked' : ''} /></label>`, {
+    open: (r, b) => msgThreadModal(b.dataset.id)
+  });
+  $('#msgAvisos')?.addEventListener('change', async e => { const v = e.target.checked; try { await msgAdminApi('avisos', { v: v ? '1' : '0' }); ui.msgAvisos = v; toast(v ? 'Te avisaré por correo' : 'Sin avisos por correo'); } catch { e.target.checked = !v; toast('No se pudo cambiar (¿sin conexión?)', 'warn'); } });
+}
+async function msgAdminApi(op, extra) {
+  const key = await secretDec(lsGet(USE_KEY), ui.accessPin);
+  const r = await fetch(`${access.usageUrl}?${new URLSearchParams({ key, op, ...extra, t: Date.now() })}`, { cache: 'no-store' }); const j = await r.json();
+  if (!j.ok) throw new Error('fallo'); return j;
+}
+function msgThreadModal(id, pre = '', back = null) {
+  const t = msgThreads().find(x => x.id === id) || { id, msgs: [], nm: '', ct: '' };
+  const u = ui.usage?.[id], mail = u?.m || '';
+  openModal(`
+    <div class="cal-head flex items-center gap-2 pb-3"><button class="w-8 h-8 rounded-full border border-line text-mute shrink-0" data-mact="back" type="button" aria-label="Volver">‹</button>
+      <div class="min-w-0"><h3 class="modal-title leading-tight truncate">${esc(msgWhoName(id, t))}</h3><p class="text-[11px] text-mute truncate">${esc(msgWhoState(id))}${t.ct ? ` · ${esc(t.ct)}` : mail ? ` · ${esc(mail)}` : ''}</p></div>
+      <button class="ml-auto w-8 h-8 rounded-full border border-line text-mute shrink-0" data-close type="button" aria-label="Cerrar">✕</button></div>
+    <div id="msgBody" class="cal-body space-y-2">${t.msgs.length ? t.msgs.map(m => msgBubble(m, m.de === 'e')).join('') : '<p class="text-[12px] text-mute text-center mt-6">Aún no os habéis escrito. Lo verá la próxima vez que abra la app, con aviso en el botón de los bocadillos.</p>'}</div>
+    <div class="cal-foot"><form id="msgForm" class="flex gap-2 items-end"><textarea id="msgInput" rows="3" class="field flex-1 resize-none max-h-[200px] py-2.5" maxlength="1500" placeholder="Tu respuesta…">${esc(pre)}</textarea><button class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button></form>
+      <div class="flex items-center justify-between gap-2 mt-1.5"><p class="text-[11px] text-mute">Lo verá dentro de la app la próxima vez que la abra.</p>${t.msgs.some(m => m.de === 'u') ? '<button class="chip chip-sm shrink-0" data-mact="ai" type="button">✨ Sugerir respuesta</button>' : ''}</div></div>`, {
+    sheetClass: 'sheet-fixed',
+    back: () => (back || msgInboxModal)(),
+    ai: async (r, b) => {
+      if (!state.settings.apiKey) return toast('Necesitas tu clave de Gemini (Ajustes → IA)', 'warn');
+      b.disabled = true; b.innerHTML = '<span class="spinner"></span> Pensando…';
+      try { const txt = await msgSuggest(id, t); const inp = $('#msgInput'); if (inp) { inp.value = txt; inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight + 4, 200) + 'px'; inp.focus(); } b.innerHTML = '✨ Otra'; }
+      catch (e) { toast(e.message || 'No se pudo sugerir', 'warn'); b.innerHTML = '✨ Sugerir respuesta'; }
+      b.disabled = false;
+    }
+  });
+  const b = $('#msgBody'); if (b) b.scrollTop = b.scrollHeight;
+  $('#msgForm').addEventListener('submit', async e => {
+    e.preventDefault(); const inp = $('#msgInput'), txt = String(inp.value || '').trim(); if (!txt) return;
+    const btn = e.target.querySelector('button'); btn.disabled = true;
+    try { const j = await msgAdminApi('resp', { id, t: txt }); ui.msgs = [...(ui.msgs || []), { ts: j.ts, id, de: 'e', t: txt }]; state.settings.wrote = { ...(state.settings.wrote || {}), [id]: todayISO() }; persist(); msgThreadModal(id, '', back); usersBadge(); if (ui.accPage) render(); toast('✓ Enviado'); }
+    catch { btn.disabled = false; toast('No se pudo enviar (¿sin conexión?). Vuelve a probar.', 'warn'); }
+  });
+}
+/* ✨ Respuesta sugerida por la IA (con tu clave): breve, cercana y con lo que la app sabe de esa persona. Nunca se envía sola */
+async function msgSuggest(id, t) {
+  const x = (access.list || []).find(y => y.hash === id), u = ui.usage?.[id], T = netToday() || todayISO();
+  const name = msgWhoName(id, t), first = name.includes('@') ? '' : name.replace(/ \(sin código\)$/, '').split(/\s+/)[0];
+  const who = { nombre: first || '(desconocido)', situacion: msgWhoState(id), dias_que_le_quedan: x?.hasta ? daysBetween(T, x.hasta) : id in (ui.trialH || {}) && ui.trialH[id] ? daysBetween(T, ui.trialH[id]) : null, ultimo_uso: u?.last ? (daysBetween(u.last, T) === 0 ? 'hoy' : `hace ${daysBetween(u.last, T)} días`) : 'desconocido', dias_de_uso: u?.days || null, duo: !!x?.duo };
+  const conv = t.msgs.slice(-12).map(m => `${m.de === 'e' ? 'ESTEBAN' : 'USUARIO'}: ${m.t}`).join('\n');
+  const prompt = `Eres el ayudante de Esteban, que hace y lleva la app de entrenamiento y nutrición FITNESTEBAN. Redacta la PRÓXIMA respuesta de Esteban a este usuario.
+Cómo escribe Esteban: español de España, tuteo, cercano y directo, como un amigo que sabe del tema. Breve: 1 a 3 frases. Sin firma, sin saludos largos, como mucho un emoji. Ortografía perfecta.
+Lo que sabes de la app (no inventes nada más; si no lo sabes, que Esteban diga que lo mira y le contesta):
+- Se empieza con un periodo de prueba de 7 días entrando con Google. Después hace falta un código personal que da Esteban (planes de 1, 3 o 6 meses; DÚO para dos personas). Nunca digas precios ni cifras de dinero: si los pide, escribe exactamente [PRECIO] para que Esteban lo complete.
+- Un código vale para un solo dispositivo. Si cambia de móvil, Esteban libera el antiguo y entra con el mismo código.
+- Los datos se guardan solo en su móvil; la copia de seguridad va a su Google Drive (Ajustes).
+- El Coach IA usa una clave gratuita de Gemini que pone cada uno en Ajustes → IA; la guía (botón ?) explica cómo sacarla.
+- Coach: responde con sus datos, crea o cambia bloques, lee fotos de la pizarra o de la hoja del entreno (botón 📷) y propone comidas.
+- Dieta: apuntar comida por foto, por voz, por código de barras o buscándola.
+- Si algo falla, pedir una captura de pantalla.
+Lo que sabe Esteban de esta persona: ${JSON.stringify(who)}
+Conversación (lo último es lo que hay que responder):
+${conv}
+Devuelve SOLO JSON: {"respuesta":"..."}`;
+  const r = parseJSONLoose(await callGemini([{ text: prompt }], { timeout: 30000, temperature: 0.5 }));
+  const out = String(r?.respuesta || '').trim();
+  if (!out) throw new Error('La IA no devolvió nada. Vuelve a probar.');
+  return out;
+}
+/* 📝 Quién está a punto de caducar y apenas la usa: para escribirle a tiempo (como mucho una vez por semana) */
+function toWriteList() {
+  const T = netToday() || todayISO(), W = state.settings.wrote || {}, out = [];
+  const ok = (id, hasta, extra) => {
+    if (!hasta) return; const left = daysBetween(T, hasta); if (left < 0 || left > 3) return;
+    const u = ui.usage?.[id], ago = u?.last ? daysBetween(u.last, T) : 99; if (ago < 2) return;
+    if (W[id] && daysBetween(W[id], T) < 7) return;
+    out.push({ id, left, ago, hasta, mail: u?.m || '', ...extra });
+  };
+  for (const x of access.list || []) if (!x.admin && !trialConv().has(x.hash)) ok(x.hash, x.hasta, { name: accessWho(x), kind: 'código' });
+  for (const u of trialRows()) { const h = String(u.h).toLowerCase(); ok(h, ui.trialH?.[h], { name: u.m || 'Prueba', kind: 'prueba' }); }
+  return out.sort((a, b) => a.left - b.left);
+}
+const TW_TPL = [
+  ['Preguntar qué falla', (p) => `¡Hola${p.first ? ', ' + p.first : ''}! Te escribe Esteban, el de FITNESTEBAN 💪 He visto que estos días casi no has entrado y quería preguntarte, sin compromiso: ¿hay algo que no te convence o que no entiendes? Me ayuda muchísimo saberlo para mejorarla. Y si es falta de tiempo, también vale 😄`],
+  ['Ofrecer ayuda', (p) => `¡Hola${p.first ? ', ' + p.first : ''}! Soy Esteban, de FITNESTEBAN. ${p.kind === 'prueba' ? 'Te' : 'A tu código le'} ${p.left === 0 ? 'queda menos de un día' : p.left === 1 ? 'queda 1 día' : `quedan ${p.left} días`} y he visto que no te ha dado tiempo a sacarle mucho partido. Si quieres, te dejo montado tu entreno según los días que vas al gimnasio, o te enseño en 5 minutos a apuntar la comida con una foto. Dime y lo hacemos 👍`],
+  ['Último día', (p) => `¡Hola${p.first ? ', ' + p.first : ''}! Soy Esteban. ${p.kind === 'prueba' ? 'Tu periodo de prueba' : 'Tu acceso'} de FITNESTEBAN termina el ${fmtDateShort(p.hasta)}. Si te ha servido y quieres seguir, dímelo y ${p.kind === 'prueba' ? 'te paso tu código' : 'lo renovamos'}. Y si no era para ti, sin problema: me encantaría que me dijeras en una frase por qué, que me ayuda mucho a mejorarla. ¡Gracias por probarla! 🙌`]
+];
+function toWriteModal() {
+  const W = toWriteList();
+  openModal(`<div class="flex items-center justify-between gap-2"><h3 class="modal-title">📝 Para escribir</h3><button class="w-8 h-8 rounded-full border border-line text-mute" data-close type="button" aria-label="Cerrar">✕</button></div>
+    <p class="text-[12px] text-mute leading-snug">Les quedan 3 días o menos y llevan 2 o más sin entrar. Un mensaje tuyo a tiempo vale más que diez después. Cada persona sale como mucho una vez por semana.</p>
+    ${W.length ? `<div class="space-y-2">${W.map(p => `<div class="tw-row"><div class="flex items-center justify-between gap-2"><b class="truncate">${esc(p.name)}</b><span class="text-[11px] text-amber-300 shrink-0">${p.kind === 'prueba' ? 'Prueba' : 'Código'} · ${p.left === 0 ? 'último día' : `quedan ${p.left} d`}</span></div>
+      <p class="text-[11px] text-mute">${p.ago >= 99 ? 'Aún no la ha abierto' : `Sin entrar desde hace ${plural(p.ago, 'día', 'días')}`}</p>
+      <div class="grid grid-cols-[1fr_auto] gap-1.5 mt-2"><button class="btn-primary text-[13px] py-2" data-mact="write" data-id="${esc(p.id)}" type="button">✍️ Escribirle</button><button class="btn-ghost text-[12px] px-3 py-2" data-mact="done" data-id="${esc(p.id)}" type="button">✓ Ya está</button></div></div>`).join('')}</div>`
+    : '<p class="text-sm text-mute">Ahora mismo no hay nadie a punto de caducar que lleve días sin entrar. 👌</p>'}`, {
+    write: (r, b) => { const p = W.find(x => x.id === b.dataset.id); if (p) twEditor(p); },
+    done: (r, b) => { twDone(b.dataset.id, true); }
+  });
+}
+/* ✍️ El mensaje, a la vista y editable antes de mandarlo (por la app, WhatsApp o correo) */
+function twEditor(p, k = ui.twTpl || 0, txt = null) {
+  const first = String(p.name || '').includes('@') ? '' : String(p.name || '').split(/\s+/)[0];
+  const text = txt ?? TW_TPL[k][1]({ ...p, first });
+  openModal(`<div class="flex items-center gap-2"><button class="w-8 h-8 rounded-full border border-line text-mute shrink-0" data-mact="back" type="button" aria-label="Volver">‹</button><h3 class="modal-title truncate">✍️ ${esc(p.name)}</h3><button class="ml-auto w-8 h-8 rounded-full border border-line text-mute shrink-0" data-close type="button" aria-label="Cerrar">✕</button></div>
+    <div class="flex gap-1.5 flex-wrap">${TW_TPL.map(([n], i) => `<button class="chip chip-sm${i === k ? ' chip-on' : ''}" data-mact="tpl" data-i="${i}" type="button">${n}</button>`).join('')}</div>
+    <textarea id="twText" rows="9" class="field w-full text-[14px] leading-snug py-2.5">${esc(text)}</textarea>
+    <p class="text-[11px] text-mute -mt-1">Cámbialo lo que quieras antes de enviarlo.</p>
+    <div class="grid gap-2">
+      <button class="btn-primary" data-mact="app" type="button">💬 Enviar por la app</button>
+      <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="copy" type="button">📋 Copiar para WhatsApp</button>${p.mail ? '<button class="btn-ghost" data-mact="mail" type="button">✉️ Por correo</button>' : '<button class="btn-ghost opacity-50" type="button" disabled>✉️ Sin correo</button>'}</div>
+    </div>`, {
+    back: () => toWriteModal(),
+    tpl: (r, b) => { ui.twTpl = +b.dataset.i; twEditor(p, ui.twTpl); },
+    app: async (r, b) => { const t = $('#twText').value.trim(); if (!t) return; b.disabled = true; try { const j = await msgAdminApi('resp', { id: p.id, t }); ui.msgs = [...(ui.msgs || []), { ts: j.ts, id: p.id, de: 'e', t }]; twDone(p.id, false); toast('✓ Enviado: lo verá al abrir la app'); toWriteModal(); } catch { b.disabled = false; toast('No se pudo enviar (¿sin conexión?)', 'warn'); } },
+    copy: async () => { try { await navigator.clipboard.writeText($('#twText').value.trim()); twDone(p.id, false); toast('📋 Copiado: pégalo en WhatsApp'); } catch { toast('No se pudo copiar', 'warn'); } },
+    mail: () => { const t = $('#twText').value.trim(); twDone(p.id, false); location.href = `mailto:${p.mail}?subject=${encodeURIComponent('FITNESTEBAN')}&body=${encodeURIComponent(t)}`; }
+  });
+}
+function twDone(id, redraw) { state.settings.wrote = { ...(state.settings.wrote || {}), [id]: todayISO() }; persist(); if (redraw) toWriteModal(); if (ui.accPage) render(); }
+
 async function googleEmail() { return (await googleAuth()).email; }
 async function googleAuth() {
   if (!navigator.onLine) throw new Error('Sin conexión a internet');
@@ -7579,6 +7827,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.18.0', ['💬 Nuevo: escribe a Esteban dentro de la app. Toca el botón de los dos bocadillos de arriba: tu código, una duda, algo que falla o una idea. Te contesta ahí mismo y verás un número en el botón cuando lo haga.', '✈️ ¿Prefieres Telegram? Lo tienes dentro de esa misma ventana, abajo.']],
   ['5.17.2', ['💬 El Coach IA ocupa toda la pantalla: los ejemplos se ven sin desplazarte.'], 'quiet'],
   ['5.17.1', ['💬 Coach IA: en vez de botones, ejemplos de lo que le puedes pedir.', '📥 Si te propone un bloque, también puedes añadirlo como día nuevo a uno de tus bloques (con Deshacer).'], 'quiet'],
   ['5.17.0', ['📷 Coach IA: pásale una foto de tu entreno (la pizarra o la hoja de tu clase) y, si quieres, dicta qué hacer. Lo prepara como un día nuevo de tu bloque y tú pulsas «Aplicar».'], 'quiet'],
@@ -8026,7 +8275,7 @@ const GUIDE = [
   ]],
   ['ℹ️ La app', [
     '🔄 Se <b>actualiza sola</b> al abrirla o volver a ella. Después verás una vez las novedades; puedes volver a verlas desde esta guía. Tu versión, en Ajustes → Aplicación.',
-    '✈️ El avión de papel de arriba abre Telegram para escribir a Esteban: dudas, fallos o ideas.',
+    '💬 El botón de los dos bocadillos de arriba abre tu chat con Esteban dentro de la app: tu código, dudas, fallos o ideas. Te contesta ahí mismo y verás un número en el botón cuando lo haga. Si lo prefieres, dentro tienes Telegram.',
     '📤 «Compartir la app» (Ajustes y abajo en esta guía) envía a quien quieras el enlace de la app: podrá probarla 7 días entrando con su cuenta de Google.',
     '🔒 Qué datos usa la app y dónde se guardan: <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.'
   ]]
@@ -9460,6 +9709,8 @@ const actions = {
   accFicha: b => { b.classList.add('acc-tap'); setTimeout(() => { b.classList.remove('acc-tap'); accFichaModal(b.dataset.hash); }, 160); }, // se ilumina la fila que has tocado y luego se abre su ficha
   closeAccess: () => { ui.accessOpen = false; render(); },
   accPage: () => { ui.accPage = true; render(); window.scrollTo({ top: 0 }); },
+  msgInbox: () => msgInboxModal(),
+  toWrite: () => toWriteModal(),
   accPageClose: () => { ui.accPage = false; render(); window.scrollTo({ top: 0 }); },
   duoJoin: b => duoJoinModal(b.dataset.hash),
   duoSplit: b => duoSplitModal(b.dataset.hash),
@@ -10057,7 +10308,7 @@ function unlock(me) {
   if (ui.view === 'settings') render();
   if (needsOnboarding(me)) setTimeout(() => themeAsk(onboarding), 300);
   else if (!newsChecked) { newsChecked = true; themeAsk(() => { maybeShowNews(); setTimeout(maybeAskEmail, 2500); }); }
-  setTimeout(emailSync, 4000);
+  setTimeout(emailSync, 4000); setTimeout(() => { msgCheck(true); msgPendCheck(); }, 5000);
   // biblioteca al día al entrar: avisos de bloques nuevos e iconos
   setTimeout(() => { const before = JSON.stringify(remoteLib.map(x => x.lib)); fetchRemoteLib().then(() => { if (JSON.stringify(remoteLib.map(x => x.lib)) !== before && (ui.view === 'home' || ui.view === 'train') && !$('#modalRoot').classList.contains('open')) render(); }); }, 1500);
 }
@@ -10216,6 +10467,7 @@ async function loadUsage() {
     ui.usage = {}; for (const x of d.rows || []) { x.v = usageVer(x.v); ui.usage[String(x.h).toLowerCase()] = x; }
     ui.trialH = {}; // 🧪 filas del periodo de prueba: su huella es la del correo (así no dependen de la columna «nombre»)
     for (const x of d.rows || []) { const m = String(x.m || '').trim().toLowerCase(), h = String(x.h).toLowerCase(); if (m && !(access.list || []).some(y => y.hash === h) && await trialHashOf(m) === h) ui.trialH[h] = (String(x.nm || '').match(/\d{4}-\d{2}-\d{2}/) || [''])[0] || (x.first ? addDays(fecha10(x.first), TRIAL_DAYS - 1) : ''); }
+    ui.msgs = Array.isArray(d.msgs) ? d.msgs : null; ui.msgAvisos = d.avisos !== false; ui.usageOld16 = !(d.ver >= 17); if (ui.msgs) { ui.msgPend = msgThreads().filter(t => t.pend).length; usersBadge(); }
     ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageOld12 = !(d.ver >= 12); ui.usageOld13 = !(d.ver >= 14); ui.usageOld14 = !(d.ver >= 15); ui.usageOld15 = !(d.ver >= 16); ui.refs = {}; for (const x of d.refs || []) if (x.m) ui.refs[String(x.m).toLowerCase()] = { ref: String(x.ref || ''), ini: String(x.ini || '') }; ui.usageVer = +d.ver || 0;
     // nombres puestos en otro dispositivo tuyo: se copian aquí si aquí no tienes uno
     let got = 0;
@@ -10238,7 +10490,7 @@ function usageLine(hash) {
   return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(ver || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${(+u.days || 1) === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} dispositivo${u.n === 1 ? '' : 's'} (límite: ${DEVICE_LIMIT}${u.n > DEVICE_LIMIT ? '; los que ya tenía se mantienen' : ''})`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="min-w-0 break-words text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${dv.p && !(access.list || []).some(x => x.hash === hash && x.anon) ? `<b class="text-white">${esc(dv.p)}</b> · ` : ''}${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}${dv.k ? ` · ${dv.k} día${dv.k === 1 ? '' : 's'} de uso` : ''}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 break-words">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
 }
 function usageScript(key) {
-  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 1; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos; periodo de prueba de 7 días con Google) · v13
+  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 1; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos; periodo de prueba de 7 días con Google; mensajes dentro de la app) · v17
 const READ_KEY = '${key}';
 const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
 const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre', 'correo', 'alta', 'dispositivos', 'bloqueos'];
@@ -10287,6 +10539,29 @@ function escribeDisp_(h, x) {
 }
 function nombres_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('nombres') || '{}'); } catch (e) { return {}; } }
 function salida_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+// 💬 Mensajes con Esteban: hoja «mensajes» (fecha, quién, de: u = usuario / e = Esteban, texto, nombre, contacto)
+function msgHoja_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName('mensajes');
+  if (!sh) { sh = ss.insertSheet('mensajes'); sh.getRange('A:F').setNumberFormat('@'); sh.appendRow(['fecha', 'quien', 'de', 'texto', 'nombre', 'contacto']); }
+  return sh;
+}
+function msgFilas_() { return msgHoja_().getDataRange().getValues().slice(1).map(r => ({ ts: String(r[0]), id: String(r[1]), de: String(r[2]), t: String(r[3]), nm: String(r[4] || ''), ct: String(r[5] || '') })); }
+// quién escribe: su código (si este móvil está registrado en él), su prueba (si es la de este móvil) o, si no, «v_» + el móvil (aún sin código)
+function quien_(h, d) {
+  if (!d) return '';
+  if (/^[0-9a-f]{32}$/.test(h)) {
+    if (huellas_().indexOf(h) >= 0) { const x = disp_()[h]; if (x && (x.d || []).some(v => v.id === d)) return h; }
+    else if (PropertiesService.getScriptProperties().getProperty('pd_' + d) === h) return h;
+  }
+  return 'v_' + d;
+}
+function limpia_(t, n) { t = String(t || '').replace(/[<>]/g, '').trim().slice(0, n); return /^[=+\\-@]/.test(t) ? "'" + t : t; }
+function msgPend_() { const u = {}; msgFilas_().forEach(r => { u[r.id] = r.de; }); return Object.keys(u).filter(k => u[k] === 'u').length; }
+function avisaCorreo_(nm, ct, t) {
+  if (PropertiesService.getScriptProperties().getProperty('avisos') === '0') return;
+  try { MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '💬 FITNESTEBAN · mensaje de ' + (nm || 'alguien'), t + '\\n\\n' + (ct ? 'Contacto: ' + ct + '\\n' : '') + 'Contesta desde la app: 👥 Usuarios → 💬 Mensajes.'); } catch (e) { }
+}
 function doPost(e) {
   try {
     const b = JSON.parse(e.postData.contents);
@@ -10336,7 +10611,7 @@ function doPost(e) {
 // ▶ Para comprobar permisos: elige «probar» arriba y pulsa Ejecutar. Debe decir cuántos códigos y filas hay.
 function probar() {
   const n = huellas_().length, f = hoja_().getLastRow() - 1;
-  Logger.log('OK · códigos en acceso.txt: ' + n + ' · filas en la hoja: ' + f);
+  Logger.log('OK · códigos en acceso.txt: ' + n + ' · filas en la hoja: ' + f + ' · mensajes: ' + msgFilas_().length + ' · correos que puede enviar hoy: ' + MailApp.getRemainingDailyQuota());
 }
 function doGet(e) {
   try { return doGet_(e); } catch (err) { return salida_({ ok: false, error: 'script: ' + String((err && err.message) || err).slice(0, 200) }); }
@@ -10390,6 +10665,25 @@ function doGet_(e) {
       return salida_({ ok: true, allowed: true, h: h, hasta: x.hasta, m: m });
     } finally { lock.releaseLock(); }
   }
+  // 💬 el usuario lee su conversación o escribe a Esteban (máx. 10 mensajes cada 6 horas por persona)
+  if (q.op === 'hilo' || q.op === 'msg') {
+    const id = quien_(String(q.h || '').toLowerCase(), String(q.d || '').slice(0, 40));
+    if (!id) return salida_({ ok: false });
+    if (q.op === 'msg') {
+      const t = limpia_(q.t, 800); if (!t) return salida_({ ok: false });
+      const c = CacheService.getScriptCache(), ck = 'mc_' + id, n = +(c.get(ck) || 0);
+      if (n >= 10) return salida_({ ok: false, error: 'limite' });
+      c.put(ck, String(n + 1), 21600);
+      const nm = limpia_(q.p, 40), ct = limpia_(q.ct, 80), ts = new Date().toISOString();
+      const lock = LockService.getScriptLock(); lock.waitLock(10000);
+      try { msgHoja_().appendRow([ts, id, 'u', t, nm, ct]); } finally { lock.releaseLock(); }
+      avisaCorreo_(nm, ct, t);
+      return salida_({ ok: true, ver: 17, ts: ts });
+    }
+    return salida_({ ok: true, ver: 17, msgs: msgFilas_().filter(r => r.id === id).slice(-60).map(r => ({ ts: r.ts, de: r.de, t: r.t })) });
+  }
+  // cuántas conversaciones esperan respuesta (solo el número, para el aviso de tu app)
+  if (q.op === 'pend') return salida_({ ok: true, ver: 17, n: msgPend_() });
   // cuántas personas han abierto la app hoy (solo el número: sin nombres ni correos)
   if (q.op === 'hoy') {
     const c = CacheService.getScriptCache(); let n = c.get('hoy');
@@ -10397,13 +10691,22 @@ function doGet_(e) {
       const hoy = fecha_(new Date()), adm = admins_(), dd = disp_(); let k = 0;
       hoja_().getDataRange().getValues().slice(1).forEach(r => { const h = String(r[0]).toLowerCase(); if (fecha_(r[1]) !== hoy || adm.indexOf(h) >= 0) return; const q = {}; ((dd[h] || {}).d || []).forEach(v => { if (v.last === hoy) q[String(v.p || v.id).toLowerCase()] = 1; }); k += Math.max(1, Object.keys(q).length); });
       n = String(k); c.put('hoy', n, 60); }
-    return salida_({ ok: true, ver: 16, hoy: +n });
+    return salida_({ ok: true, ver: 17, hoy: +n });
   }
   if (q.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
+  // 💬 contestar (o escribir primero) a una persona, y encender o apagar el aviso por correo
+  if (q.op === 'resp') {
+    const id = String(q.id || ''), t = limpia_(q.t, 1500);
+    if (!/^([0-9a-f]{32}|v_[\\w-]{1,40})$/.test(id) || !t) return salida_({ ok: false });
+    const ts = new Date().toISOString(), lock = LockService.getScriptLock(); lock.waitLock(10000);
+    try { msgHoja_().appendRow([ts, id, 'e', t, 'Esteban', '']); } finally { lock.releaseLock(); }
+    return salida_({ ok: true, ver: 17, ts: ts });
+  }
+  if (q.op === 'avisos') { PropertiesService.getScriptProperties().setProperty('avisos', q.v === '0' ? '0' : '1'); return salida_({ ok: true, ver: 17 }); }
   const datos = hoja_().getDataRange().getValues().slice(1);
   const dd = disp_();
   const refs = []; Object.entries(PropertiesService.getScriptProperties().getProperties()).forEach(([k, v]) => { if (k.indexOf('p_') !== 0) return; try { const x = JSON.parse(v); if (x && x.ref) refs.push({ m: x.m, ref: x.ref, ini: x.ini }); } catch (e) {} });
-  return salida_({ ok: true, ver: 16, refs: refs, rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
+  return salida_({ ok: true, ver: 17, refs: refs, avisos: PropertiesService.getScriptProperties().getProperty('avisos') !== '0', msgs: msgFilas_().slice(-800), rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
 }`;
 }
 /* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
@@ -10645,6 +10948,7 @@ const activeN = () => ui.usage ? Object.entries(ui.usage).filter(([h, u]) => u.l
 /* 🟢 Numerito de activos hoy sobre el botón 👥 de la cabecera (solo admin; sin nombres, solo la cifra) */
 function usersBadge() {
   const ub = $('#usersBtn'); if (!ub) return;
+  { let m = ub.querySelector('.ub-m'); const k = ui.msgPend || 0; if (!k) m?.remove(); else { if (!m) { m = document.createElement('span'); m.className = 'ub-m'; ub.appendChild(m); } m.textContent = '💬' + k; } }
   const n = activeN(); let b = ub.querySelector('.ub-n');
   if (typeof n !== 'number' || n < 1) { b?.remove(); return; }
   if (!b) { b = document.createElement('span'); b.className = 'ub-n'; ub.appendChild(b); }
@@ -10842,7 +11146,7 @@ function usersPageHTML() {
     ${accFilterHTML(list)}
   </div>
   <button class="w-full text-left text-[13px] mt-2 px-1" data-act="pays" type="button">💶 ${esc(mes.charAt(0).toUpperCase() + mes.slice(1))}: <b>${eur(p.mes)}</b> · Este año: <b>${eur(p.ano)}</b> <span class="text-mute">(solo en este móvil) ›</span></button>
-  ${f === 'all' && !ui.accQ ? refSummaryHTML() : ''}
+  ${f === 'all' && !ui.accQ ? msgAdminCardHTML() + refSummaryHTML() : ''}
   ${attnBtn}
   <div id="accRows" class="mt-2 space-y-1.5">${body}${trialRowsHTML()}</div>
   <p class="text-[12px] text-mute text-center hidden mt-3" id="accNone">Nadie coincide con la búsqueda.</p>
