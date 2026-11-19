@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.16.9';
+const APP_VERSION = '5.16.10';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7524,6 +7524,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.16.10', ['👥 Usuarios con 5 filtros: Todos (sin caducados, con las pruebas en curso), Hoy (también pruebas), ⚠️ Atención (caducan pronto, caducados y con plan pero sin usarla +7 días), Free y En prueba. DÚO e individual se buscan escribiéndolo. El buscador busca en todos.', '📱 Los códigos antiguos con 2 móviles salen como un DÚO: un punto por móvil y los dos nombres de perfil.'], 'admin'],
   ['5.16.9', ['🛡️ Nuevo bloque PECHO en Entreno › Bloques: dos días de pecho para hacer en la misma semana. El día 1, pesado y empezando por la parte alta; el día 2, con más repeticiones y el pecho trabajando estirado. Cada ejercicio trae 2 alternativas (⇄) para casa o si algo molesta, y el Coach te va subiendo el peso.']],
   ['5.16.8', ['🛡️ Bloque PECHO con su foto.'], 'quiet'],
   ['5.16.7', ['🛡️ Bloque PECHO (2 días) en la biblioteca, de momento solo visible para ti para probarlo.', '🧍 3D: «Flexiones en TRX» ya no enseña por error la animación del face pull.'], 'admin'],
@@ -10550,19 +10551,28 @@ function planPill(x) {
   if (st === 'exp') return `${d}<span class="text-rose-300">Caducado</span>`;
   return `${d}<span class="${st === 'soon' ? 'text-amber-300' : 'text-slate-300'}">${esc(planName(x.plan))} · ${left === 0 ? 'hoy' : left + ' d'}</span>`;
 }
+/* 👥 Filtros de Usuarios: Todos (sin caducados) · Hoy · Atención · Free · En prueba. DÚO e individual se buscan escribiendo «dúo» o «individual» */
+const ACC_FS = ['all', 'today', 'attn', 'free', 'trial'];
+const accIdle = x => { if (x.admin || accStatus(x) !== 'ok' || !isPaidPlan(x.plan || '')) return false; const u = ui.usage?.[x.hash]; return !!ui.usage && (!u || daysBetween(u.last, todayISO()) > 7); };
+function accGroups(list) { // por fila (los DÚO juntos): estado para los filtros
+  const seen = new Set(), G = [];
+  for (const x of list) { if (seen.has(x.hash)) continue; const m = duoMate(x); if (m) seen.add(m.hash); seen.add(x.hash); const P = m ? [x, m] : [x];
+    G.push({ x, m, st: accStatus(x), today: P.some(y => ui.usage?.[y.hash]?.last === todayISO()), idle: P.every(accIdle) && !x.admin }); }
+  return G;
+}
 function accFilterHTML(list) {
-  const n = k => list.filter(x => accStatus(x) === k).length;
-  const idle = list.filter(x => !x.admin && (() => { const u = ui.usage?.[x.hash]; return !u || daysBetween(u.last, todayISO()) > 7; })()).length;
-  const hoy = list.filter(x => !x.admin && ui.usage?.[x.hash]?.last === todayISO()).length;
-  const F = [['all', 'Todos', list.length], ['today', '🟢 Hoy', ui.usage ? hoy : null], ['soon', 'Caducan pronto', n('soon')], ['exp', 'Caducados', n('exp')], ['idle', 'Sin usar +7 d', ui.usage ? idle : null], ['duo', '👥 DÚO', new Set(list.filter(x => duoMate(x)).map(x => x.duo)).size], ['ind', '👤 Individual', list.filter(x => !x.admin && !duoMate(x) && isPaidPlan(x.plan || '')).length], ['free', 'Free', n('free')], ['trial', '🧪 En prueba', ui.usage ? trialRows().length : null]];
-  return `<input class="field" id="accSearch" placeholder="🔎 Buscar por nombre o correo" autocomplete="off" value="${esc(ui.accQ || '')}" />
+  const G = accGroups(list), T = trialRows(), t = netToday() || todayISO(), live = T.filter(u => !u.hasta || u.hasta >= t);
+  const attn = G.filter(g => !g.x.admin && (['soon', 'exp'].includes(g.st) || g.idle)).length;
+  const F = [['all', 'Todos', G.filter(g => g.st !== 'exp').length + live.length], ['today', '🟢 Hoy', ui.usage ? G.filter(g => g.today && !g.x.admin).length + T.filter(u => u.last === todayISO()).length : null], ['attn', '⚠️ Atención', attn], ['free', 'Free', G.filter(g => g.st === 'free').length], ['trial', '🧪 En prueba', ui.usage ? T.length : null]];
+  if (!ACC_FS.includes(ui.accF || 'all')) ui.accF = 'all';
+  return `<input class="field" id="accSearch" placeholder="🔎 Buscar por nombre, correo, «dúo»…" autocomplete="off" value="${esc(ui.accQ || '')}" />
     <div class="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" id="accChips" data-noswipe>${F.filter(f => f[2] !== null).map(([k, l, c]) => `<button class="chip chip-sm shrink-0 ${(ui.accF || 'all') === k ? 'chip-on' : ''}" data-act="accF" data-k="${k}" type="button">${l} <span class="opacity-70">${c}</span></button>`).join('')}</div>`;
 }
 function accFilterDom() {
   const q = normTxt(($('#accSearch')?.value || '').trim()); ui.accQ = $('#accSearch')?.value || '';
   let n = 0;
-  document.querySelectorAll('#accRows .acc-row').forEach(r => { const okF = !r.dataset.f; const hit = !q || r.dataset.s.includes(q); r.style.display = hit ? '' : 'none'; if (hit && !r.hidden) n++; });
-  document.querySelectorAll('#accRows .acc-row-h').forEach(h => { h.style.display = q ? 'none' : ''; });
+  document.querySelectorAll('#accRows .acc-row').forEach(r => { const hit = q ? r.dataset.s.includes(q) : !r.dataset.off; r.style.display = hit ? '' : 'none'; r.hidden = false; if (hit) n++; });
+  document.querySelectorAll('#accRows .acc-row-h').forEach(h => { h.style.display = q || h.dataset.off ? 'none' : ''; h.hidden = false; });
   const none = $('#accNone'); if (none) { none.classList.toggle('hidden', n > 0); none.textContent = q ? 'Nadie coincide con la búsqueda.' : 'Nadie en este filtro.'; }
 }
 document.addEventListener('input', e => { if (e.target.id === 'accSearch') accFilterDom(); });
@@ -10663,12 +10673,13 @@ function refGiftModal(m, k) {
 }
 function trialRowsHTML() {
   const T = trialRows(); if (!T.length) return '';
-  const show = !ui.accF || ui.accF === 'all' || ui.accF === 'trial', t = netToday() || todayISO();
-  return `<div class="lbl mt-2 acc-row-h" ${show ? '' : 'hidden'}>🧪 En periodo de prueba · ${T.length}</div>` + T.map(u => {
+  const f = ui.accF || 'all', t = netToday() || todayISO(), inF = u => f === 'trial' || (f === 'all' && (!u.hasta || u.hasta >= t)) || (f === 'today' && u.last === todayISO());
+  const nShow = T.filter(inF).length, off = a => a ? '' : 'data-off="1" style="display:none"';
+  return `<div class="lbl mt-2 acc-row-h" ${off(nShow)}>🧪 En periodo de prueba · ${nShow}</div>` + T.map(u => { const show = inF(u);
     const left = u.hasta ? daysBetween(t, u.hasta) : null, ago = u.last ? daysBetween(u.last, todayISO()) : null, open = ui.accOpenH === u.h;
     const dot = ago === 0 ? 'u-today' : ago !== null && ago <= 7 ? 'u-week' : 'u-old', who = u.m || 'Sin correo';
     const pill = left === null ? '' : left < 0 ? '<span class="text-rose-300">Terminada</span>' : `<span class="${left <= 3 ? 'text-amber-300' : 'text-cyan-300'}">Prueba · ${left === 0 ? 'hoy' : left + ' d'}</span>`;
-    return `<div class="acc-row st-trial ${open ? 'acc-open' : ''}" data-s="${esc(normTxt(who + ' prueba'))}" ${show ? '' : 'hidden'}>
+    return `<div class="acc-row st-trial ${open ? 'acc-open' : ''}" data-s="${esc(normTxt(who + ' prueba'))}" ${off(show)}>
       <button class="w-full flex items-center gap-2 px-3 py-2.5 text-left" data-act="accRow" data-hash="${esc(u.h)}" type="button"><span class="u-dot ${dot}"></span>
         <span class="flex-1 min-w-0"><span class="block font-semibold text-[13px] truncate ${ago === 0 ? 'text-emerald-300' : ''}">${esc(who)}</span><span class="block text-[11px] text-mute">${ago === 0 ? 'Activo hoy' : ago === null ? '' : `Último uso hace ${plural(ago, 'día', 'días')}`} · ${plural(u.days || 1, 'día', 'días')} de uso${refOf(u.m) ? ` · 🤝 ${esc(refOf(u.m))}` : ''}</span></span>
         <span class="text-[11px] shrink-0">${pill}</span><span class="tri shrink-0 ${open ? 'rotate-180' : ''}"></span></button>
@@ -10679,13 +10690,17 @@ function trialRowsHTML() {
 }
 const PIN_TTL = 2 * 60 * 60e3, pinOk = () => !!ui.accessPin && Date.now() - (ui.pinAt || 0) < PIN_TTL;
 const accDot = h => { const u = ui.usage?.[h], ago = u ? daysBetween(u.last, todayISO()) : null; return !u ? 'u-none' : ago === 0 ? 'u-today' : ago <= 7 ? 'u-week' : 'u-old'; };
-function accPersonRowHTML(x) {
+function accPersonRowHTML(x, vis = true) {
   const me = x.hash === access.me.hash, st = accStatus(x), u = ui.usage?.[x.hash], ago = u ? daysBetween(u.last, todayISO()) : null;
-  const visF = ui.accF === 'trial' ? false : (!ui.accF || ui.accF === 'all' || ui.accF === st || (ui.accF === 'idle' && !x.admin && (ago === null || ago > 7)) || (ui.accF === 'today' && !x.admin && ago === 0)) || (me && (!ui.accF || ui.accF === 'all')) || (ui.accF === 'ind' && !x.admin && isPaidPlan(x.plan || ''));
-  const name = accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`;
-  return `<button class="acc-row acc-line st-${st}" data-act="accFicha" data-hash="${esc(x.hash)}" data-s="${esc(normTxt([accessWho(x), u?.m || '', x.hash.slice(-4)].join(' ')))}" ${visF ? '' : 'hidden'} type="button">
-    <span class="u-dot ${accDot(x.hash)}"></span><span class="flex-1 min-w-0 text-left font-semibold text-[14px] break-words ${ago === 0 ? 'text-emerald-300' : ''}">${name}${me ? ' <span class="text-mute font-normal text-[12px]">(tú)</span>' : ''}</span>
-    <span class="text-[11.5px] shrink-0 text-right">${x.admin ? '<span class="text-brand">admin</span>' : planPill(x)}</span><span class="text-mute text-lg leading-none">›</span></button>`;
+  const visF = vis !== false;
+  // código antiguo compartido (2 móviles): como un DÚO, un punto por móvil y los dos nombres de perfil si son distintos
+  const D = !x.admin && (u?.ds || []).length >= 2 ? [...u.ds].sort((a, b) => String(b.last || '').localeCompare(String(a.last || ''))).slice(0, 2) : null;
+  const dDot = d => { const a = d.last ? daysBetween(d.last, todayISO()) : null; return a === null ? 'u-none' : a === 0 ? 'u-today' : a <= 7 ? 'u-week' : 'u-old'; };
+  const dn = D ? [...new Set(D.map(d => String(d.p || '').trim()).filter(Boolean))] : [];
+  const name = D && dn.length === 2 ? `${esc(dn[0])} + ${esc(dn[1])}` : accessWho(x) ? esc(accessWho(x)) : `<span class="text-amber-300">Sin nombre</span> <span class="text-mute font-mono">…${esc(x.hash.slice(-4))}</span>`;
+  return `<button class="acc-row acc-line st-${st}" data-act="accFicha" data-hash="${esc(x.hash)}" data-s="${esc(normTxt([accessWho(x), u?.m || '', ...dn, D ? '2 moviles compartido' : '', x.hash.slice(-4), x.admin ? 'admin' : isPaidPlan(x.plan || '') ? 'individual ' + planName(x.plan) : st].join(' ')))}" ${visF ? '' : 'data-off="1" style="display:none"'} type="button">
+    ${D ? `<span class="flex flex-col gap-1 shrink-0">${D.map(d => `<span class="u-dot ${dDot(d)}"></span>`).join('')}</span>` : `<span class="u-dot ${accDot(x.hash)}"></span>`}<span class="flex-1 min-w-0 text-left font-semibold text-[14px] break-words ${ago === 0 && !D ? 'text-emerald-300' : ''}">${name}${me ? ' <span class="text-mute font-normal text-[12px]">(tú)</span>' : ''}</span>
+    <span class="text-[11.5px] shrink-0 text-right">${x.admin ? '<span class="text-brand">admin</span>' : (D ? '<span class="text-cyan-300">2 móviles</span> · ' : '') + planPill(x)}</span><span class="text-mute text-lg leading-none">›</span></button>`;
 }
 /* 👥 Usuarios y planes: pantalla completa (solo admin, con Acceso abierto) */
 function accSummaryHTML(list) {
@@ -10696,13 +10711,10 @@ function accSummaryHTML(list) {
     <button class="grid grid-cols-2 gap-2 w-full text-left" data-act="pays" type="button">${tile(eur(p.mes), 'cobrado este mes', 'text-brand')}${tile(eur(p.ano), 'cobrado este año ›', 'text-brand')}</button>
     <p class="text-[11px] text-mute">${n('free')} Free · los cobros se apuntan al crear o renovar y solo se guardan en este móvil.</p>`;
 }
-function accPairRowHTML(x, m) {
-  const f = ui.accF || 'all', st = accStatus(x), n1 = accessWho(x) || 'Sin nombre', n2 = accessWho(m) || 'Sin nombre';
-  const idle = [x, m].some(y => { const u = ui.usage?.[y.hash]; return !u || daysBetween(u.last, todayISO()) > 7; });
-  const today = [x, m].some(y => ui.usage?.[y.hash]?.last === todayISO());
-  const vis = f === 'all' || f === 'duo' || f === st || (f === 'idle' && idle) || (f === 'today' && today);
-  const sx = normTxt([n1, n2, ui.usage?.[x.hash]?.m || '', ui.usage?.[m.hash]?.m || '', x.hash.slice(-4), m.hash.slice(-4), 'duo'].join(' '));
-  return `<button class="acc-row acc-line st-${['exp', 'soon'].includes(st) ? st : 'duo'}" data-act="accFicha" data-hash="${esc(x.hash)}" data-s="${esc(sx)}" ${vis ? '' : 'hidden'} type="button">
+function accPairRowHTML(x, m, vis = true) {
+  const st = accStatus(x), n1 = accessWho(x) || 'Sin nombre', n2 = accessWho(m) || 'Sin nombre';
+  const sx = normTxt([n1, n2, ui.usage?.[x.hash]?.m || '', ui.usage?.[m.hash]?.m || '', x.hash.slice(-4), m.hash.slice(-4), 'duo dúo pareja', planName(x.plan || '')].join(' '));
+  return `<button class="acc-row acc-line st-${['exp', 'soon'].includes(st) ? st : 'duo'}" data-act="accFicha" data-hash="${esc(x.hash)}" data-s="${esc(sx)}" ${vis ? '' : 'data-off="1" style="display:none"'} type="button">
     <span class="flex flex-col gap-1 shrink-0"><span class="u-dot ${accDot(x.hash)}"></span><span class="u-dot ${accDot(m.hash)}"></span></span>
     <span class="flex-1 min-w-0 text-left font-semibold text-[14px] break-words">${esc(n1)} + ${esc(n2)}</span>
     <span class="text-[11.5px] shrink-0 text-right">${planPill(x)}</span><span class="text-mute text-lg leading-none">›</span></button>`;
@@ -10731,9 +10743,21 @@ function accFichaModal(hash) {
 }
 function usersPageHTML() {
   const list = access.list || [], gh = !!lsGet(GH_KEY), p = paysSummary(), mes = new Date().toLocaleDateString('es-ES', { month: 'long' });
-  const groups = L => { const seen = new Set(); return accSorted(L).map(x => { if (seen.has(x.hash)) return ''; const m = duoMate(x); if (m) { seen.add(m.hash); return accPairRowHTML(x, m); } return accPersonRowHTML(x); }).join(''); };
-  const attn = x => !x.admin && ['exp', 'soon'].includes(accStatus(x)), split = (!ui.accF || ui.accF === 'all') && !ui.accQ;
-  const A = split ? list.filter(x => attn(x) || (duoMate(x) && attn(duoMate(x)))) : [], R = split ? list.filter(x => !A.includes(x)) : list;
+  const f = ACC_FS.includes(ui.accF || 'all') ? ui.accF || 'all' : 'all', G = accGroups(list), T = netToday() || todayISO();
+  const row = (g, v) => g.m ? accPairRowHTML(g.x, g.m, v) : accPersonRowHTML(g.x, v);
+  const by = (A, k) => [...A].sort(k);
+  const asc = (a, b) => (a.x.hasta || '').localeCompare(b.x.hasta || ''), name = (a, b) => accessWho(a.x).localeCompare(accessWho(b.x), 'es');
+  const sec = (title, A, v = true) => A.length ? `${title ? `<div class="lbl acc-row-h mt-2" ${v ? '' : 'data-off="1" style="display:none"'}>${title} · ${A.length}</div>` : ''}${A.map(g => row(g, v)).join('')}` : '';
+  const soon = by(G.filter(g => !g.x.admin && g.st === 'soon'), asc), exp = by(G.filter(g => !g.x.admin && g.st === 'exp'), (a, b) => (b.x.hasta || '').localeCompare(a.x.hasta || '')), idle = by(G.filter(g => g.idle && g.st === 'ok'), name);
+  const attnN = soon.length + exp.length + idle.length;
+  let body;
+  if (f === 'attn') body = sec('⏳ Caducan pronto', soon) + sec('⛔ Caducados', exp) + sec('💤 Con plan, pero sin usarla desde hace más de 7 días', idle) + sec('', G.filter(g => ![...soon, ...exp, ...idle].includes(g)), false);
+  else {
+    const inF = g => f === 'all' ? g.st !== 'exp' : f === 'today' ? g.today && !g.x.admin : f === 'free' ? g.st === 'free' : false;
+    const S = by(G, (a, b) => { const w = g => g.st === 'admin' || g.x.admin ? -2 : g.st === 'free' ? 1e6 : g.st === 'exp' ? 2e6 : daysBetween(T, g.x.hasta); return w(a) - w(b) || name(a, b); });
+    body = S.map(g => row(g, inF(g))).join('');
+  }
+  const attnBtn = f === 'all' && attnN ? `<button class="acc-attn" data-act="accF" data-k="attn" type="button">⚠️ ${attnN === 1 ? '1 persona requiere' : `${attnN} personas requieren`} atención ›</button>` : '';
   return `<div class="users-top">
     <div class="flex items-center justify-between gap-2"><button class="flex items-center gap-1.5 text-[13px] text-brand" data-act="accPageClose" type="button"><span class="tri rotate-90"></span> Ajustes</button>
       ${gh ? '<button class="chip chip-sm chip-on" data-act="newAccess" type="button">＋ Nuevo código</button>' : ''}</div>
@@ -10741,10 +10765,9 @@ function usersPageHTML() {
     ${accFilterHTML(list)}
   </div>
   <button class="w-full text-left text-[13px] mt-2 px-1" data-act="pays" type="button">💶 ${esc(mes.charAt(0).toUpperCase() + mes.slice(1))}: <b>${eur(p.mes)}</b> · Este año: <b>${eur(p.ano)}</b> <span class="text-mute">(solo en este móvil) ›</span></button>
-  ${split ? refSummaryHTML() : ''}
-  <div id="accRows" class="mt-2 space-y-1.5">
-    ${A.length ? `<div class="lbl acc-row-h">⚠️ Requieren atención · ${A.filter(x => !duoMate(x) || x.hash < duoMate(x).hash).length}</div>${groups(A)}<div class="lbl acc-row-h mt-3">Resto</div>` : ''}
-    ${groups(R)}${trialRowsHTML()}</div>
+  ${f === 'all' && !ui.accQ ? refSummaryHTML() : ''}
+  ${attnBtn}
+  <div id="accRows" class="mt-2 space-y-1.5">${body}${trialRowsHTML()}</div>
   <p class="text-[12px] text-mute text-center hidden mt-3" id="accNone">Nadie coincide con la búsqueda.</p>
   ${list.length ? '<button class="btn-ghost w-full mt-4" data-act="copyHashes" type="button">📋 Copiar huellas y nombres (para tu hoja)</button>' : ''}`;
 }
