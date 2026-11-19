@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.16.11';
+const APP_VERSION = '5.16.12';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7524,6 +7524,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.16.12', ['👥 Usuarios: quien pasa de la prueba a un código (mismo correo) sale una sola vez, en su código; en su ficha se ve desde cuándo y cuántos días usó la prueba.'], 'quiet'],
   ['5.16.11', ['👥 Usuarios: la pastilla «Hoy» cuenta personas, igual que «X activos hoy» (en un DÚO o código compartido cuenta a cada uno que haya entrado).'], 'quiet'],
   ['5.16.10', ['👥 Usuarios con 5 filtros: Todos (sin caducados, con las pruebas en curso), Hoy (también pruebas), ⚠️ Atención (caducan pronto, caducados y con plan pero sin usarla +7 días), Free y En prueba. DÚO e individual se buscan escribiéndolo. El buscador busca en todos.', '📱 Los códigos antiguos con 2 móviles salen como un DÚO: un punto por móvil y los dos nombres de perfil.'], 'admin'],
   ['5.16.9', ['🛡️ Nuevo bloque PECHO en Entreno › Bloques: dos días de pecho para hacer en la misma semana. El día 1, pesado y empezando por la parte alta; el día 2, con más repeticiones y el pecho trabajando estirado. Cada ejercicio trae 2 alternativas (⇄) para casa o si algo molesta, y el Coach te va subiendo el peso.']],
@@ -10580,7 +10581,7 @@ document.addEventListener('input', e => { if (e.target.id === 'accSearch') accFi
 /* 🟢 Activos hoy: el script da solo el número (sin PIN). Se pide al ver Ajustes, como mucho una vez por minuto */
 /* Personas activas hoy: un código antiguo compartido (2 dispositivos) cuenta a cada persona; el mismo perfil en móvil y tableta cuenta una vez */
 const peopleToday = u => { const t = todayISO(), k = new Set((u.ds || []).filter(v => v.last === t).map(v => String(v.p || v.id).toLowerCase())); return Math.max(1, k.size); };
-const activeN = () => ui.usage ? Object.entries(ui.usage).filter(([h, u]) => u.last === todayISO() && !(access.list || []).find(x => x.hash === h)?.admin).reduce((a, [, u]) => a + peopleToday(u), 0) : ui.hoyN;
+const activeN = () => ui.usage ? Object.entries(ui.usage).filter(([h, u]) => u.last === todayISO() && !trialConv().has(String(h).toLowerCase()) && !(access.list || []).find(x => x.hash === h)?.admin).reduce((a, [, u]) => a + peopleToday(u), 0) : ui.hoyN;
 /* 🟢 Numerito de activos hoy sobre el botón 👥 de la cabecera (solo admin; sin nombres, solo la cifra) */
 function usersBadge() {
   const ub = $('#usersBtn'); if (!ub) return;
@@ -10606,10 +10607,19 @@ async function loadActiveCount() {
   } catch { /* sin dato: no se muestra */ }
 }
 /* 🧪 Quien está en periodo de prueba (filas de la hoja que no son de ningún código de acceso.txt) */
+/* Prueba que ya pasó a código: mismo correo en una fila de un código de acceso.txt → es la misma persona, se muestra solo en su código */
+function trialConv() {
+  const T = ui.trialH || {}, C = new Map();
+  for (const u of Object.values(ui.usage || {})) { const h = String(u.h).toLowerCase(); if (h in T || !u.m || !(access.list || []).some(y => y.hash === h)) continue; C.set(String(u.m).trim().toLowerCase(), h); }
+  const out = new Map(); // hash de la prueba → hash del código
+  for (const u of Object.values(ui.usage || {})) { const h = String(u.h).toLowerCase(), c = C.get(String(u.m || '').trim().toLowerCase()); if (h in T && c) out.set(h, c); }
+  return out;
+}
+const trialOfCode = h => { for (const [t, c] of trialConv()) if (c === h) return ui.usage?.[t] || Object.values(ui.usage || {}).find(u => String(u.h).toLowerCase() === t); return null; };
 function trialRows() {
   if (!ui.usage) return [];
-  const T = ui.trialH || {};
-  return Object.values(ui.usage).filter(u => String(u.h).toLowerCase() in T).map(u => ({ ...u, hasta: T[String(u.h).toLowerCase()] }))
+  const T = ui.trialH || {}, conv = trialConv();
+  return Object.values(ui.usage).filter(u => String(u.h).toLowerCase() in T && !conv.has(String(u.h).toLowerCase())).map(u => ({ ...u, hasta: T[String(u.h).toLowerCase()] }))
     .sort((a, b) => (b.last || '').localeCompare(a.last || ''));
 }
 const refOf = m => ui.refs?.[String(m || '').trim().toLowerCase()]?.ref || '';
@@ -10731,6 +10741,7 @@ function accFichaModal(hash) {
       <div class="text-[12px]">${y.admin ? '<span class="text-brand">Administrador · sin límite</span>' : `⏳ ${planLabel(y)}`}${y.beta ? ' · <span class="text-cyan-300">🧪 beta</span>' : ''}${y.anon ? ' · <span class="text-mute">🙈 nombre de perfil oculto</span>' : ''}</div>
       <div class="flex items-center justify-between gap-2 min-h-[30px]">${has ? `<span class="font-mono text-[16px] font-black tracking-[.15em] ${shown ? 'text-brand' : 'text-mute'}">${shown ? fmtCode(shown) : '••••-••••'}</span><span class="flex gap-1.5"><button class="iconbtn iconbtn-sm" data-act="showCode" data-hash="${esc(y.hash)}" type="button" aria-label="Ver código">${shown ? '🙈' : '👁'}</button><button class="iconbtn iconbtn-sm" data-act="copyCode" data-hash="${esc(y.hash)}" type="button" aria-label="Copiar código">📋</button></span>` : '<span class="text-amber-300 text-[11px]">Código no guardado: si lo necesita, dale uno nuevo.</span>'}</div>
       ${usageLine(y.hash)}
+      ${(() => { const tr = trialOfCode(y.hash); return tr ? `<div class="text-[11px] text-mute">🧪 Antes, periodo de prueba${tr.first ? ` desde el ${esc(fmtDateShort(tr.first))}` : ''} · ${plural(tr.days || 1, 'día', 'días')} de uso</div>` : ''; })()}
       ${refOf(ui.usage?.[y.hash]?.m) ? `<div class="text-[12px]">🤝 Se la recomendó: <b>${esc(refOf(ui.usage?.[y.hash]?.m))}</b>${(() => { const r = refPeople().find(z => z.m === String(ui.usage?.[y.hash]?.m || '').toLowerCase()); return r?.st === 'paid' ? (r.gift ? ` · ✅ regalo dado` : ` <button class="ref-gift mt-1" data-act="refGift" data-m="${esc(r.m)}" data-k="${esc(r.refK)}" type="button">🎁 Dar ${r.gd} días a ${esc(r.ref)} ›</button>`) : ''; })()}</div>` : ''}
       ${gh && !y.admin ? `<div class="grid grid-cols-5 gap-1 pt-1">${big('nameAccess', y.hash, '✎', 'Nombre', 'ficha-sm')}${big('regenAccess', y.hash, '🔄', 'Código nuevo', 'ficha-sm')}${big('betaAccess', y.hash, '🧪', y.beta ? 'Quitar beta' : 'Beta', 'ficha-sm')}${big('anonAccess', y.hash, y.anon ? '👤' : '🙈', y.anon ? 'Mostrar nombre' : 'Ocultar nombre', 'ficha-sm')}${big('delAccess', y.hash, '🗑', 'Quitar acceso', 'ficha-sm ficha-del')}</div>` : `<div class="pt-1">${big('nameAccess', y.hash, '✎', 'Nombre')}</div>`}
     </div>`; };
