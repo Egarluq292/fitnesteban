@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.18.7';
+const APP_VERSION = '5.18.8';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6854,7 +6854,8 @@ async function msgPendCheck() {
 function msgThreads() {
   const T = {};
   for (const m of ui.msgs || []) { const t = T[m.id] || (T[m.id] = { id: m.id, msgs: [], nm: '', ct: '' }); t.msgs.push(m); if (m.de === 'u') { if (m.nm) t.nm = m.nm; if (m.ct) t.ct = m.ct; } }
-  return Object.values(T).map(t => ({ ...t, last: t.msgs[t.msgs.length - 1], pend: t.msgs[t.msgs.length - 1].de === 'u' })).sort((a, b) => b.last.ts.localeCompare(a.last.ts));
+  const H = { ...(state.settings.msgDone || {}), ...(ui.msgHechos || {}) }; // ✓ marcadas como leídas (en el script v19; si no, solo en este móvil)
+  return Object.values(T).map(t => { const last = t.msgs[t.msgs.length - 1]; return { ...t, last, pend: last.de === 'u' && !((H[t.id] || '') >= last.ts) }; }).sort((a, b) => b.last.ts.localeCompare(a.last.ts));
 }
 function msgWhoName(id, t = {}) {
   const x = (access.list || []).find(y => y.hash === id); if (x) return accessWho(x);
@@ -6926,8 +6927,8 @@ function msgPollStart() {
     try {
       const key = await secretDec(lsGet(USE_KEY), ui.accessPin), r = await fetch(`${access.usageUrl}?key=${encodeURIComponent(key)}&t2=${Date.now()}`, { cache: 'no-store' }), d = await r.json();
       if (!d.ok || !Array.isArray(d.msgs)) return;
-      const before = JSON.stringify([ui.msgs, ui.msgVistos]); ui.msgs = d.msgs; ui.msgVistos = d.vistos || null;
-      if (JSON.stringify([ui.msgs, ui.msgVistos]) === before) return;
+      const before = JSON.stringify([ui.msgs, ui.msgVistos, ui.msgHechos]); ui.msgs = d.msgs; ui.msgVistos = d.vistos || null; ui.msgHechos = d.hechos || null;
+      if (JSON.stringify([ui.msgs, ui.msgVistos, ui.msgHechos]) === before) return;
       ui.msgPend = msgThreads().filter(t => t.pend).length; usersBadge();
       const b2 = $('#msgBody[data-thread]');
       if (b2) { const id = b2.dataset.thread, t = msgThreads().find(x => x.id === id) || { id, msgs: [] }, low = b2.scrollHeight - b2.scrollTop - b2.clientHeight < 80; b2.innerHTML = msgThreadBodyHTML(id, t); if (low) b2.scrollTop = b2.scrollHeight; }
@@ -6944,9 +6945,17 @@ function msgThreadModal(id, pre = '', back = null) {
       <button class="ml-auto w-8 h-8 rounded-full border border-line text-mute shrink-0" data-close type="button" aria-label="Cerrar">✕</button></div>
     <div id="msgBody" class="cal-body space-y-2" data-thread="${esc(id)}">${msgThreadBodyHTML(id, t)}</div>
     <div class="cal-foot"><form id="msgForm" class="flex gap-2 items-end"><textarea id="msgInput" rows="3" class="field flex-1 resize-none max-h-[200px] py-2.5" maxlength="1500" placeholder="Tu respuesta…">${esc(pre)}</textarea><button class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button></form>
-      <div class="flex items-center justify-between gap-2 mt-1.5"><p class="text-[11px] text-mute">Lo verá dentro de la app la próxima vez que la abra.</p>${t.msgs.some(m => m.de === 'u') ? '<button class="chip chip-sm shrink-0" data-mact="ai" type="button">✨ Sugerir respuesta</button>' : ''}</div></div>`, {
+      <div class="flex items-center justify-between gap-2 mt-1.5"><p class="text-[11px] text-mute">Lo verá dentro de la app la próxima vez que la abra.</p>${t.msgs.some(m => m.de === 'u') ? '<button class="chip chip-sm shrink-0" data-mact="ai" type="button">✨ Sugerir respuesta</button>' : ''}</div>
+      ${t.pend ? '<button class="btn-ghost w-full text-[13px] mt-2 py-2" data-mact="hecho" type="button">✓ Marcar como leído (sin responder)</button>' : ''}</div>`, {
     sheetClass: 'sheet-fixed sheet-full',
     back: () => (back || msgInboxModal)(),
+    hecho: async (r, b) => {
+      const m = t.last.ts; b.disabled = true;
+      state.settings.msgDone = { ...(state.settings.msgDone || {}), [id]: m }; persist();
+      try { await msgAdminApi('hecho', { id, m }); ui.msgHechos = { ...(ui.msgHechos || {}), [id]: m }; } catch { /* script anterior a la v19: queda marcado solo en este móvil */ }
+      ui.msgPend = msgThreads().filter(x => x.pend).length; usersBadge(); if (ui.accPage) render();
+      toast('✓ Marcado como leído. Si vuelve a escribir, te saldrá otra vez.'); (back || msgInboxModal)();
+    },
     ai: async (r, b) => {
       if (!state.settings.apiKey) return toast('Necesitas tu clave de Gemini (Ajustes → IA)', 'warn');
       b.disabled = true; b.innerHTML = '<span class="spinner"></span> Pensando…';
@@ -7912,6 +7921,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.18.8', ['✓ Mensajes: «Marcar como leído» para quitar una conversación de «sin responder» sin contestar (script v19).', '📶 La línea «Uso» de Acceso dice qué versión del script tienes.'], 'quiet'],
   ['5.18.7', ['💬 Mensajes de un código compartido: encima de cada mensaje sale quién lo ha escrito.'], 'quiet'],
   ['5.18.6', ['💬 Mensajes: con la conversación abierta, lo nuevo entra solo (cada 10 segundos), sin salir y volver a entrar.'], 'quiet'],
   ['5.18.5', ['✓✓ Mensajes: Esteban ve si has abierto su respuesta (lo explica la política de privacidad).'], 'quiet'],
@@ -10560,7 +10570,7 @@ async function loadUsage() {
     ui.usage = {}; for (const x of d.rows || []) { x.v = usageVer(x.v); ui.usage[String(x.h).toLowerCase()] = x; }
     ui.trialH = {}; // 🧪 filas del periodo de prueba: su huella es la del correo (así no dependen de la columna «nombre»)
     for (const x of d.rows || []) { const m = String(x.m || '').trim().toLowerCase(), h = String(x.h).toLowerCase(); if (m && !(access.list || []).some(y => y.hash === h) && await trialHashOf(m) === h) ui.trialH[h] = (String(x.nm || '').match(/\d{4}-\d{2}-\d{2}/) || [''])[0] || (x.first ? addDays(fecha10(x.first), TRIAL_DAYS - 1) : ''); }
-    ui.msgs = Array.isArray(d.msgs) ? d.msgs : null; ui.msgVistos = d.vistos || null; ui.msgAvisos = d.avisos !== false; ui.usageOld16 = !(d.ver >= 17); if (ui.msgs) { ui.msgPend = msgThreads().filter(t => t.pend).length; usersBadge(); }
+    ui.msgs = Array.isArray(d.msgs) ? d.msgs : null; ui.msgVistos = d.vistos || null; ui.msgHechos = d.hechos || null; ui.usageVer = +d.ver || 0; ui.msgAvisos = d.avisos !== false; ui.usageOld16 = !(d.ver >= 17); if (ui.msgs) { ui.msgPend = msgThreads().filter(t => t.pend).length; usersBadge(); }
     ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageOld12 = !(d.ver >= 12); ui.usageOld13 = !(d.ver >= 14); ui.usageOld14 = !(d.ver >= 15); ui.usageOld15 = !(d.ver >= 16); ui.refs = {}; for (const x of d.refs || []) if (x.m) ui.refs[String(x.m).toLowerCase()] = { ref: String(x.ref || ''), ini: String(x.ini || '') }; ui.usageVer = +d.ver || 0;
     // nombres puestos en otro dispositivo tuyo: se copian aquí si aquí no tienes uno
     let got = 0;
@@ -10583,7 +10593,7 @@ function usageLine(hash) {
   return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(ver || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${(+u.days || 1) === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} dispositivo${u.n === 1 ? '' : 's'} (límite: ${DEVICE_LIMIT}${u.n > DEVICE_LIMIT ? '; los que ya tenía se mantienen' : ''})`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="min-w-0 break-words text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${dv.p && !(access.list || []).some(x => x.hash === hash && x.anon) ? `<b class="text-white">${esc(dv.p)}</b> · ` : ''}${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}${dv.k ? ` · ${dv.k} día${dv.k === 1 ? '' : 's'} de uso` : ''}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 break-words">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
 }
 function usageScript(key) {
-  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 1; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos; periodo de prueba de 7 días con Google; mensajes dentro de la app, con «visto») · v18
+  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 1; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos; periodo de prueba de 7 días con Google; mensajes dentro de la app, con «visto» y «marcar como leído») · v19
 const READ_KEY = '${key}';
 const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
 const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre', 'correo', 'alta', 'dispositivos', 'bloqueos'];
@@ -10650,7 +10660,8 @@ function quien_(h, d) {
   return 'v_' + d;
 }
 function limpia_(t, n) { t = String(t || '').replace(/[<>]/g, '').trim().slice(0, n); return /^[=+\\-@]/.test(t) ? "'" + t : t; }
-function msgPend_() { const u = {}; msgFilas_().forEach(r => { u[r.id] = r.de; }); return Object.keys(u).filter(k => u[k] === 'u').length; }
+// sin responder: su último mensaje es del usuario y Esteban no lo ha marcado como leído («hd_» guarda hasta qué mensaje)
+function msgPend_() { const u = {}, P = PropertiesService.getScriptProperties(); msgFilas_().forEach(r => { u[r.id] = r; }); return Object.keys(u).filter(k => u[k].de === 'u' && !(String(P.getProperty('hd_' + k) || '') >= u[k].ts)).length; }
 function avisaCorreo_(nm, ct, t) {
   if (PropertiesService.getScriptProperties().getProperty('avisos') === '0') return;
   try { MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '💬 FITNESTEBAN · mensaje de ' + (nm || 'alguien'), t + '\\n\\n' + (ct ? 'Contacto: ' + ct + '\\n' : '') + 'Contesta desde la app: 👥 Usuarios → 💬 Mensajes.'); } catch (e) { }
@@ -10771,9 +10782,9 @@ function doGet_(e) {
       const lock = LockService.getScriptLock(); lock.waitLock(10000);
       try { msgHoja_().appendRow([ts, id, 'u', t, nm, ct]); } finally { lock.releaseLock(); }
       avisaCorreo_(nm, ct, t);
-      return salida_({ ok: true, ver: 18, ts: ts });
+      return salida_({ ok: true, ver: 19, ts: ts });
     }
-    return salida_({ ok: true, ver: 18, msgs: msgFilas_().filter(r => r.id === id).slice(-60).map(r => ({ ts: r.ts, de: r.de, t: r.t })) });
+    return salida_({ ok: true, ver: 19, msgs: msgFilas_().filter(r => r.id === id).slice(-60).map(r => ({ ts: r.ts, de: r.de, t: r.t })) });
   }
   // ✓✓ el usuario ha abierto su conversación y ha visto hasta el mensaje de Esteban con fecha «m»
   if (q.op === 'visto') {
@@ -10781,10 +10792,10 @@ function doGet_(e) {
     if (!id || !/^\\d{4}-\\d{2}-\\d{2}T/.test(m)) return salida_({ ok: false });
     const P = PropertiesService.getScriptProperties(), prev = JSON.parse(P.getProperty('vs_' + id) || '{}');
     if (!prev.m || m > prev.m) P.setProperty('vs_' + id, JSON.stringify({ m: m, at: new Date().toISOString() }));
-    return salida_({ ok: true, ver: 18 });
+    return salida_({ ok: true, ver: 19 });
   }
   // cuántas conversaciones esperan respuesta (solo el número, para el aviso de tu app)
-  if (q.op === 'pend') return salida_({ ok: true, ver: 18, n: msgPend_() });
+  if (q.op === 'pend') return salida_({ ok: true, ver: 19, n: msgPend_() });
   // cuántas personas han abierto la app hoy (solo el número: sin nombres ni correos)
   if (q.op === 'hoy') {
     const c = CacheService.getScriptCache(); let n = c.get('hoy');
@@ -10792,7 +10803,7 @@ function doGet_(e) {
       const hoy = fecha_(new Date()), adm = admins_(), dd = disp_(); let k = 0;
       hoja_().getDataRange().getValues().slice(1).forEach(r => { const h = String(r[0]).toLowerCase(); if (fecha_(r[1]) !== hoy || adm.indexOf(h) >= 0) return; const q = {}; ((dd[h] || {}).d || []).forEach(v => { if (v.last === hoy) q[String(v.p || v.id).toLowerCase()] = 1; }); k += Math.max(1, Object.keys(q).length); });
       n = String(k); c.put('hoy', n, 60); }
-    return salida_({ ok: true, ver: 18, hoy: +n });
+    return salida_({ ok: true, ver: 19, hoy: +n });
   }
   if (q.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
   // 💬 contestar (o escribir primero) a una persona, y encender o apagar el aviso por correo
@@ -10801,14 +10812,15 @@ function doGet_(e) {
     if (!/^([0-9a-f]{32}|v_[\\w-]{1,40})$/.test(id) || !t) return salida_({ ok: false });
     const ts = new Date().toISOString(), lock = LockService.getScriptLock(); lock.waitLock(10000);
     try { msgHoja_().appendRow([ts, id, 'e', t, 'Esteban', '']); } finally { lock.releaseLock(); }
-    return salida_({ ok: true, ver: 18, ts: ts });
+    return salida_({ ok: true, ver: 19, ts: ts });
   }
-  if (q.op === 'avisos') { PropertiesService.getScriptProperties().setProperty('avisos', q.v === '0' ? '0' : '1'); return salida_({ ok: true, ver: 18 }); }
+  if (q.op === 'hecho') { const id = String(q.id || ''), m = String(q.m || '').slice(0, 30); if (!/^([0-9a-f]{32}|v_[\\w-]{1,40})$/.test(id) || !m) return salida_({ ok: false }); PropertiesService.getScriptProperties().setProperty('hd_' + id, m); return salida_({ ok: true, ver: 19 }); }
+  if (q.op === 'avisos') { PropertiesService.getScriptProperties().setProperty('avisos', q.v === '0' ? '0' : '1'); return salida_({ ok: true, ver: 19 }); }
   const datos = hoja_().getDataRange().getValues().slice(1);
   const dd = disp_();
   const refs = []; Object.entries(PropertiesService.getScriptProperties().getProperties()).forEach(([k, v]) => { if (k.indexOf('p_') !== 0) return; try { const x = JSON.parse(v); if (x && x.ref) refs.push({ m: x.m, ref: x.ref, ini: x.ini }); } catch (e) {} });
-  const vistos = {}; Object.entries(PropertiesService.getScriptProperties().getProperties()).forEach(([k, v]) => { if (k.indexOf('vs_') === 0) { try { vistos[k.slice(3)] = JSON.parse(v); } catch (e) {} } });
-  return salida_({ ok: true, ver: 18, vistos: vistos, refs: refs, avisos: PropertiesService.getScriptProperties().getProperty('avisos') !== '0', msgs: msgFilas_().slice(-800), rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
+  const vistos = {}, hechos = {}; Object.entries(PropertiesService.getScriptProperties().getProperties()).forEach(([k, v]) => { if (k.indexOf('vs_') === 0) { try { vistos[k.slice(3)] = JSON.parse(v); } catch (e) {} } if (k.indexOf('hd_') === 0) hechos[k.slice(3)] = v; });
+  return salida_({ ok: true, ver: 19, vistos: vistos, hechos: hechos, refs: refs, avisos: PropertiesService.getScriptProperties().getProperty('avisos') !== '0', msgs: msgFilas_().slice(-800), rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
 }`;
 }
 /* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
@@ -11268,7 +11280,7 @@ function accessSectionHTML() {
     ${list.length ? `<p class="text-[12px] text-slate-300">💶 Este mes: <b class="text-white">${eur(paysSummary().mes)}</b> · Este año: <b class="text-white">${eur(paysSummary().ano)}</b> <span class="text-mute">(solo en este móvil)</span></p>` : ''}
     <button class="btn-primary w-full" data-act="accPage" type="button">👥 Usuarios y planes</button>
     ${access.usageUrl && lsGet(USE_KEY)
-      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : ui.usageOld12 ? '<span class="text-amber-300">actualiza el script a la v12 (Reconfigurar → nueva versión) para activar el periodo de prueba con Google</span>' : ui.usageOld13 ? '<span class="text-amber-300">actualiza el script a la v14 (Reconfigurar → nueva versión): las pruebas nuevas pasan a 7 días</span>' : ui.usageOld14 ? '<span class="text-amber-300">actualiza el script a la v15 (Reconfigurar → nueva versión): el número de activos de la cabecera contará a las 2 personas de los códigos antiguos compartidos</span>' : ui.usageOld15 ? '<span class="text-amber-300">actualiza el script a la v16 (Reconfigurar → nueva versión) para ver quién ha recomendado la app a cada persona</span>' : 'actualizado ahora · nombres, correos, altas y quién usa cada dispositivo') : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
+      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : ui.usageOld12 ? '<span class="text-amber-300">actualiza el script a la v12 (Reconfigurar → nueva versión) para activar el periodo de prueba con Google</span>' : ui.usageOld13 ? '<span class="text-amber-300">actualiza el script a la v14 (Reconfigurar → nueva versión): las pruebas nuevas pasan a 7 días</span>' : ui.usageOld14 ? '<span class="text-amber-300">actualiza el script a la v15 (Reconfigurar → nueva versión): el número de activos de la cabecera contará a las 2 personas de los códigos antiguos compartidos</span>' : ui.usageOld15 ? '<span class="text-amber-300">actualiza el script a la v16 (Reconfigurar → nueva versión) para ver quién ha recomendado la app a cada persona</span>' : (ui.usageVer < 19 ? `<span class="text-amber-300">script v${ui.usageVer}: actualiza a la v19 (Reconfigurar → nueva versión) para «visto» y «marcar como leído»</span>` : `script v${ui.usageVer} ✓ · actualizado ahora`)) : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
       : access.usageUrl ? `<button class="btn-ghost w-full" data-act="usageHere" type="button">📶 Ver quién usa la app en este dispositivo</button>`
       : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
     ${access.usageUrl && lsGet(USE_KEY) ? (lsGet(SHEET_KEY) && !ui.sheetEdit
