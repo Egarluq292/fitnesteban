@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.18.5';
+const APP_VERSION = '5.18.6';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6803,6 +6803,12 @@ function msgBox(pre = '') {
     </div>`, { sheetClass: 'sheet-fixed sheet-full', retry: () => msgBoxLoad() });
   $('#msgForm').addEventListener('submit', e => { e.preventDefault(); msgSend(); });
   msgBoxLoad();
+  // 🔄 mientras la tiene abierta, la respuesta de Esteban entra sola
+  const pt = setInterval(async () => {
+    if (!$('#msgBody') || !$('#msgForm') || $('#msgBody[data-thread]')) return clearInterval(pt);
+    if (document.visibilityState !== 'visible' || !navigator.onLine) return;
+    try { const j = await msgApi('hilo'), n = JSON.stringify(j.msgs || []); if (n !== JSON.stringify(ui.msgThread || [])) { ui.msgThread = j.msgs || []; msgBoxRender(); } } catch { /* nada */ }
+  }, 10000);
 }
 function msgBoxRender(err) {
   const b = $('#msgBody'); if (!b) return;
@@ -6873,11 +6879,12 @@ function msgInboxModal() {
   const th = msgThreads();
   openModal(`<div class="flex items-center justify-between gap-2"><h3 class="modal-title">💬 Mensajes</h3><button class="w-8 h-8 rounded-full border border-line text-mute" data-close type="button" aria-label="Cerrar">✕</button></div>
     <button class="btn-primary w-full" data-mact="new" type="button">✍️ Escribir a alguien</button>
-    ${th.length ? `<div class="space-y-1.5">${th.map(t => `<button class="msg-row${t.pend ? ' msg-row-on' : ''}" data-mact="open" data-id="${esc(t.id)}" type="button"><span class="flex items-center justify-between gap-2"><b class="truncate">${t.pend ? '🟠 ' : ''}${esc(msgWhoName(t.id, t))}</b><span class="text-[11px] text-mute shrink-0">${esc(msgTime(t.last.ts))}</span></span><span class="block text-[12px] text-mute truncate">${t.last.de === 'e' ? `${ui.msgVistos ? (ui.msgVistos[t.id]?.m >= t.last.ts ? '✓✓ ' : '✓ ') : ''}Tú: ` : ''}${esc(t.last.t)}</span></button>`).join('')}</div>` : '<p class="text-sm text-mute">Aún no te ha escrito nadie. Cuando alguien pulse «Escribir a Esteban», aparecerá aquí.</p>'}
+    ${th.length ? `<div id="msgInboxL" class="space-y-1.5">${th.map(t => `<button class="msg-row${t.pend ? ' msg-row-on' : ''}" data-mact="open" data-id="${esc(t.id)}" type="button"><span class="flex items-center justify-between gap-2"><b class="truncate">${t.pend ? '🟠 ' : ''}${esc(msgWhoName(t.id, t))}</b><span class="text-[11px] text-mute shrink-0">${esc(msgTime(t.last.ts))}</span></span><span class="block text-[12px] text-mute truncate">${t.last.de === 'e' ? `${ui.msgVistos ? (ui.msgVistos[t.id]?.m >= t.last.ts ? '✓✓ ' : '✓ ') : ''}Tú: ` : ''}${esc(t.last.t)}</span></button>`).join('')}</div>` : '<p class="text-sm text-mute">Aún no te ha escrito nadie. Cuando alguien pulse «Escribir a Esteban», aparecerá aquí.</p>'}
     <label class="flex items-center justify-between gap-3 text-[13px] pt-2 border-t border-line"><span>✉️ Avisarme también por correo<span class="block text-[11px] text-mute">Te llega un correo con cada mensaje nuevo</span></span><input id="msgAvisos" type="checkbox" class="w-5 h-5 accent-cyan-400 shrink-0" ${ui.msgAvisos !== false ? 'checked' : ''} /></label>`, {
     open: (r, b) => msgThreadModal(b.dataset.id),
     new: () => msgPickModal()
   });
+  if (th.length) msgPollStart();
   $('#msgAvisos')?.addEventListener('change', async e => { const v = e.target.checked; try { await msgAdminApi('avisos', { v: v ? '1' : '0' }); ui.msgAvisos = v; toast(v ? 'Te avisaré por correo' : 'Sin avisos por correo'); } catch { e.target.checked = !v; toast('No se pudo cambiar (¿sin conexión?)', 'warn'); } });
 }
 /* ✍️ Empezar tú una conversación: con quien tenga código o esté en prueba (lo verá al abrir la app) */
@@ -6905,6 +6912,27 @@ function msgVistoHTML(id, t) {
   const v = ui.msgVistos[id];
   return v?.m && v.m >= lastE.ts ? `<p class="msg-visto">✓✓ Visto · ${esc(msgTime(v.at))}</p>` : '<p class="msg-visto msg-novisto">✓ Enviado · aún no lo ha abierto</p>';
 }
+const msgThreadBodyHTML = (id, t) => t.msgs.length ? t.msgs.map(m => msgBubble(m, m.de === 'e')).join('') + msgVistoHTML(id, t) : '<p class="text-[12px] text-mute text-center mt-6">Aún no os habéis escrito. Lo verá la próxima vez que abra la app, con aviso en el botón de los bocadillos.</p>';
+/* 🔄 Con la bandeja o una conversación abierta, los mensajes nuevos (y los «visto») entran solos cada 10 s */
+let msgPollT = null;
+function msgPollStart() {
+  clearInterval(msgPollT);
+  msgPollT = setInterval(async () => {
+    const body = $('#msgBody[data-thread]'), inbox = $('#msgInboxL');
+    if (!body && !inbox) { clearInterval(msgPollT); msgPollT = null; return; }
+    if (document.visibilityState !== 'visible' || !navigator.onLine || !ui.accessPin) return;
+    try {
+      const key = await secretDec(lsGet(USE_KEY), ui.accessPin), r = await fetch(`${access.usageUrl}?key=${encodeURIComponent(key)}&t2=${Date.now()}`, { cache: 'no-store' }), d = await r.json();
+      if (!d.ok || !Array.isArray(d.msgs)) return;
+      const before = JSON.stringify([ui.msgs, ui.msgVistos]); ui.msgs = d.msgs; ui.msgVistos = d.vistos || null;
+      if (JSON.stringify([ui.msgs, ui.msgVistos]) === before) return;
+      ui.msgPend = msgThreads().filter(t => t.pend).length; usersBadge();
+      const b2 = $('#msgBody[data-thread]');
+      if (b2) { const id = b2.dataset.thread, t = msgThreads().find(x => x.id === id) || { id, msgs: [] }, low = b2.scrollHeight - b2.scrollTop - b2.clientHeight < 80; b2.innerHTML = msgThreadBodyHTML(id, t); if (low) b2.scrollTop = b2.scrollHeight; }
+      else if ($('#msgInboxL') && !$('#modalRoot input:focus')) msgInboxModal();
+    } catch { /* sin conexión: se vuelve a probar */ }
+  }, 10000);
+}
 function msgThreadModal(id, pre = '', back = null) {
   const t = msgThreads().find(x => x.id === id) || { id, msgs: [], nm: '', ct: '' };
   const u = ui.usage?.[id], mail = u?.m || '';
@@ -6912,7 +6940,7 @@ function msgThreadModal(id, pre = '', back = null) {
     <div class="cal-head flex items-center gap-2 pb-3"><button class="w-8 h-8 rounded-full border border-line text-mute shrink-0" data-mact="back" type="button" aria-label="Volver">‹</button>
       <div class="min-w-0"><h3 class="modal-title leading-tight truncate">${esc(msgWhoName(id, t))}</h3><p class="text-[11px] text-mute truncate">${esc(msgWhoState(id))}${t.ct ? ` · ${esc(t.ct)}` : mail ? ` · ${esc(mail)}` : ''}</p></div>
       <button class="ml-auto w-8 h-8 rounded-full border border-line text-mute shrink-0" data-close type="button" aria-label="Cerrar">✕</button></div>
-    <div id="msgBody" class="cal-body space-y-2">${t.msgs.length ? t.msgs.map(m => msgBubble(m, m.de === 'e')).join('') + msgVistoHTML(id, t) : '<p class="text-[12px] text-mute text-center mt-6">Aún no os habéis escrito. Lo verá la próxima vez que abra la app, con aviso en el botón de los bocadillos.</p>'}</div>
+    <div id="msgBody" class="cal-body space-y-2" data-thread="${esc(id)}">${msgThreadBodyHTML(id, t)}</div>
     <div class="cal-foot"><form id="msgForm" class="flex gap-2 items-end"><textarea id="msgInput" rows="3" class="field flex-1 resize-none max-h-[200px] py-2.5" maxlength="1500" placeholder="Tu respuesta…">${esc(pre)}</textarea><button class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button></form>
       <div class="flex items-center justify-between gap-2 mt-1.5"><p class="text-[11px] text-mute">Lo verá dentro de la app la próxima vez que la abra.</p>${t.msgs.some(m => m.de === 'u') ? '<button class="chip chip-sm shrink-0" data-mact="ai" type="button">✨ Sugerir respuesta</button>' : ''}</div></div>`, {
     sheetClass: 'sheet-fixed sheet-full',
@@ -6926,6 +6954,7 @@ function msgThreadModal(id, pre = '', back = null) {
     }
   });
   const b = $('#msgBody'); if (b) b.scrollTop = b.scrollHeight;
+  msgPollStart();
   $('#msgForm').addEventListener('submit', async e => {
     e.preventDefault(); const inp = $('#msgInput'), txt = String(inp.value || '').trim(); if (!txt) return;
     const btn = e.target.querySelector('button'); btn.disabled = true;
@@ -7881,6 +7910,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.18.6', ['💬 Mensajes: con la conversación abierta, lo nuevo entra solo (cada 10 segundos), sin salir y volver a entrar.'], 'quiet'],
   ['5.18.5', ['✓✓ Mensajes: Esteban ve si has abierto su respuesta (lo explica la política de privacidad).'], 'quiet'],
   ['5.18.4', ['💬 «Escribir a Esteban» a pantalla completa, también con el teclado abierto.', '✍️ Usuarios: puedes empezar tú una conversación («Escribir a alguien» en Mensajes, o desde la ficha).'], 'quiet'],
   ['5.18.3', ['⌨️ Teclado: las ventanas se ajustan a la parte visible de la pantalla en cualquier navegador (también en los que ponen el teclado encima sin avisar).'], 'quiet'],
