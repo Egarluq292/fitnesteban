@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.18.8';
+const APP_VERSION = '5.19.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7921,6 +7921,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.19.0', ['🎄 ¡Arranca la Operación Polvorón! El calendario de AD(GYM)VIENTO ya está en Inicio: pulsa «Unirme a la operación» y elige tu nivel.', '🎁 Del 1 al 24 de diciembre se abre una casilla cada día: rutinas de 20 minutos en casa con una mochila y retos cortos, cada ejercicio con su animación 3D.'], null, { img: 'news-polvoron.webp', hi: true }],
   ['5.18.8', ['✓ Mensajes: «Marcar como leído» para quitar una conversación de «sin responder» sin contestar (script v19).', '📶 La línea «Uso» de Acceso dice qué versión del script tienes.'], 'quiet'],
   ['5.18.7', ['💬 Mensajes de un código compartido: encima de cada mensaje sale quién lo ha escrito.'], 'quiet'],
   ['5.18.6', ['💬 Mensajes: con la conversación abierta, lo nuevo entra solo (cada 10 segundos), sin salir y volver a entrar.'], 'quiet'],
@@ -8320,6 +8321,11 @@ const GUIDE = [
     '⏱ En los retos por tiempo (plancha), la prueba inicial y el test de máximo tienen <b>Cronometrar</b>: 3 segundos para colocarte, cuenta hacia arriba y al parar apunta los segundos solo.',
     '📸 Al terminar un reto o un test, «Tarjeta» crea una imagen para compartir. Las kcal se suman al gym del día en Dieta.'
   ]],
+  ['🎄 Operación Polvorón', [
+    'El <b>calendario de AD(GYM)VIENTO</b>: del 1 al 24 de diciembre se abre una casilla cada día a las 00:00. Te apuntas desde Inicio con «Unirme a la operación» y eliges tu nivel: <b>Suave</b>, <b>Medio</b> o <b>Fuerte</b> (lo cambias cuando quieras).',
+    '🏠 9 casillas son <b>rutinas en casa</b> de unos 20 minutos (o la versión de 10) con una mochila como peso; ⚡ las otras 15 son <b>retos cortos</b> para hacer a lo largo del día, con ideas para comer y cenar.',
+    '🧍 Cada ejercicio tiene su <b>animación en 3D</b>, que funciona también sin conexión. Si empiezas tarde, las casillas de días pasados siguen abiertas.'
+  ]],
   ['🔥 Cardio', [
     'En Entreno → <b>🔥 CARDIO</b>: elige la actividad, los minutos y la intensidad. «Calcular» estima las calorías <b>netas</b> (lo que gastas por encima del reposo) con tu último peso; con clave de IA, más afinado.',
     '«<b>＋ Otras</b>» (la última píldora de Actividad en «Registrar cardio»): quita las que no haces, añade otras (correr, natación, pádel, remo…) o crea la tuya. «Funcional» (circuitos, HIIT, CrossFit y clases) viene activada.',
@@ -8642,7 +8648,7 @@ const ADV_DAYS = {
   23: { ...advC('A bailar', 'Baila {v} seguidas, como quieras.', ['1 canción', '2 canciones', '3 canciones'], 'Cuenta como entreno si acabas con calor.'), ...advM({ desc: 'Lubina al horno con patata y cebolla', kcal: 480, prot: 34, carbs: 36, fat: 20 }, { desc: 'Verduras a la plancha con jamón serrano', kcal: 230, prot: 16, carbs: 14, fat: 12 }) },
   24: { ...advC('Nochebuena', 'Antes de la cena: {v} y un paseo de 15 minutos.', ['20 sentadillas', '40 sentadillas', '60 sentadillas'], 'Misión cumplida, agente. Ahora sí: ese polvorón es tuyo.'), ...advM({ desc: 'Comida ligera: crema de verduras y pechuga a la plancha', kcal: 380, prot: 34, carbs: 22, fat: 16 }, { desc: 'Cena de Nochebuena: disfrútala sin contar', kcal: 0, prot: 0, carbs: 0, fat: 0, skip: true }) }
 };
-const ADV_READY = false; // ⚠️ se pone a true el día del lanzamiento (20 de noviembre); hasta entonces solo se ve el anuncio
+const ADV_READY = true; // lanzado el 20 de noviembre de 2026
 const ADV_KEY = 'fitnesteban_advdate'; // solo para pruebas: fecha simulada
 function advToday() { return lsGet(ADV_KEY) || netToday() || todayISO(); }
 // Temporada: del 24 de noviembre (anuncio) al 6 de enero (Reyes). Devuelve el año de ese diciembre o null.
