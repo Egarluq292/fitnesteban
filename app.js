@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.19.0';
+const APP_VERSION = '5.19.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7921,6 +7921,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.19.1', ['☀️ Modo claro: el aviso de fin de prueba o de acceso ya se lee bien.'], 'quiet'],
   ['5.19.0', ['🎄 ¡Arranca la Operación Polvorón! El calendario de AD(GYM)VIENTO ya está en Inicio: pulsa «Unirme a la operación» y elige tu nivel.', '🎁 Del 1 al 24 de diciembre se abre una casilla cada día: rutinas de 20 minutos en casa con una mochila y retos cortos, cada ejercicio con su animación 3D.'], null, { img: 'news-polvoron.webp', hi: true }],
   ['5.18.8', ['✓ Mensajes: «Marcar como leído» para quitar una conversación de «sin responder» sin contestar (script v19).', '📶 La línea «Uso» de Acceso dice qué versión del script tienes.'], 'quiet'],
   ['5.18.7', ['💬 Mensajes de un código compartido: encima de cada mensaje sale quién lo ha escrito.'], 'quiet'],
