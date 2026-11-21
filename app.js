@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.19.5';
+const APP_VERSION = '5.20.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6735,26 +6735,84 @@ const TG_PLAY_URL = 'https://play.google.com/store/apps/details?id=org.telegram.
 const contactBtn = (txt = 'Contacto', cls = '', pre = '') => `<button class="contact-btn ${cls}" data-msgbox="${esc(pre || (/c[oó]digo/i.test(txt) ? 'Hola, Esteban. Me gustaría seguir usando FITNESTEBAN: ¿me pasas mi código?' : ''))}" type="button">${icon('send', 'w-4 h-4')}<span>${txt}</span></button>`;
 const EMAIL_NOTICE = `FITNESTEBAN guardará tu correo para enviarte la guía de la app y, si tú le escribes, resolverte dudas. Nadie más verá tu correo. La app sigue siendo privada. Puedes cambiar el correo en los Ajustes. Si quieres que lo borre, pídeselo a Esteban en «Contacto».`;
 /* =========================================================================
-   💬 Mensajes con Esteban dentro de la app (script v17: hoja «mensajes»)
+   💬 Mensajes con Esteban dentro de la app (Supabase, en la UE: función «mensajes»)
    Usuario: escribe y lee sus respuestas aquí. Esteban: los ve en 👥 Usuarios → 💬 Mensajes.
+   Llegan al instante (canal en tiempo real) y, si se activa, con notificación en el móvil.
    ========================================================================= */
+const SB_URL = 'https://qzbbbctyxgfaryqncrpe.supabase.co', SB_KEY = 'sb_publishable_X9Md3p_37UNuq9F52ojRjA_0C4E_MXw', SB_FN = SB_URL + '/functions/v1/mensajes';
+const VAPID_PUB = 'BBnHY9mp3SFKsoBQ1GXjq1AHyLnDrpKvGKvDtNYNsGQDP82DD-PJWDoOJ8IZVK8DgFCmatx8s8I7eOd4CEc66XE';
+const MSG_TK_KEY = 'fitnesteban_msgtk', ADM_TOPIC_KEY = 'fitnesteban_admtopic', PUSH_KEY = 'fitnesteban_push', SB_IMP_KEY = 'fitnesteban_sbimp';
+// 🔑 la llave secreta de la conversación de este móvil (aleatoria; solo la conoce esta app)
+function msgTk() {
+  let t = lsGet(MSG_TK_KEY);
+  if (!/^[A-Za-z0-9_-]{20,64}$/.test(t || '')) { const a = new Uint8Array(24); crypto.getRandomValues(a); t = 't' + [...a].map(x => x.toString(36).padStart(2, '0')).join('').slice(0, 40); lsSet(MSG_TK_KEY, t); }
+  return t;
+}
+const isoTs = v => { const d = new Date(v); return isNaN(d) ? String(v || '') : d.toISOString(); };
+async function sbCall(body, ms = 20000) {
+  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), ms);
+  let r; try { r = await fetch(SB_FN, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SB_KEY }, body: JSON.stringify(body), cache: 'no-store', signal: ctl.signal }); } catch { throw new Error('net'); } finally { clearTimeout(tm); }
+  try { return await r.json(); } catch { throw new Error('fallo'); }
+}
+/* ⚡ Tiempo real: un canal abierto con Supabase; cuando Esteban (o el usuario) escribe, llega el aviso al momento */
+const rt = { ws: null, up: false, topics: {}, joined: new Set(), ref: 0, hb: null, retry: 0 };
+const rtOk = topic => rt.up && rt.joined.has(topic);
+function rtSend(topic, event, payload) { try { if (rt.ws?.readyState === 1) rt.ws.send(JSON.stringify({ topic, event, payload, ref: String(++rt.ref) })); } catch { /* nada */ } }
+function rtJoin(t) { rtSend('realtime:' + t, 'phx_join', { config: { broadcast: { self: false }, presence: { key: '' }, private: false } }); }
+function rtSub(topic, fn) { const nuevo = !rt.topics[topic]; rt.topics[topic] = fn; if (!rt.ws) rtOpen(); else if (rt.up && nuevo) rtJoin(topic); }
+function rtOpen() {
+  if (rt.ws || !navigator.onLine || typeof WebSocket === 'undefined' || !Object.keys(rt.topics).length) return;
+  let ws; try { ws = new WebSocket(`${SB_URL.replace(/^https/, 'wss')}/realtime/v1/websocket?apikey=${SB_KEY}&vsn=1.0.0`); } catch { return; }
+  rt.ws = ws;
+  ws.onopen = () => { rt.up = true; rt.retry = 0; Object.keys(rt.topics).forEach(rtJoin); clearInterval(rt.hb); rt.hb = setInterval(() => rtSend('phoenix', 'heartbeat', {}), 25000); };
+  ws.onmessage = e => {
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+    const t = String(m.topic || '').replace(/^realtime:/, '');
+    if (m.event === 'phx_reply' && m.payload?.status === 'ok' && rt.topics[t]) rt.joined.add(t);
+    if (m.event === 'phx_error' || m.event === 'phx_close') rt.joined.delete(t);
+    if (m.event === 'broadcast') { try { rt.topics[t]?.(m.payload?.payload || {}); } catch { /* nada */ } }
+  };
+  ws.onclose = () => {
+    clearInterval(rt.hb); rt.ws = null; rt.up = false; rt.joined.clear();
+    if (Object.keys(rt.topics).length) setTimeout(() => { if (document.visibilityState === 'visible') rtOpen(); }, Math.min(60000, 2000 * 2 ** rt.retry++));
+  };
+  ws.onerror = () => { try { ws.close(); } catch { /* nada */ } };
+}
+window.addEventListener('online', () => setTimeout(rtOpen, 1000));
+/* 🔔 Notificaciones en el móvil (aunque la app esté cerrada). En iPhone, solo con la app añadida a la pantalla de inicio */
+const pushCan = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const b64u = s => { const b = atob((s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+async function pushOn(admin, ask = true) {
+  if (!pushCan()) throw new Error('nopush');
+  if (Notification.permission !== 'granted') { if (!ask) return; if (await Notification.requestPermission() !== 'granted') throw new Error('perm'); }
+  const reg = await navigator.serviceWorker.ready;
+  const s = await reg.pushManager.getSubscription() || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID_PUB) });
+  const sub = s.toJSON();
+  if (admin) { const key = await secretDec(lsGet(USE_KEY), ui.accessPin); const j = await sbCall({ op: 'sub', key, sub }); if (!j.ok) throw new Error('fallo'); }
+  else await msgApi('sub', { sub });
+  lsSet(PUSH_KEY, { on: admin ? 'adm' : 'u', at: todayISO() });
+}
+async function pushOff() { try { const s = await (await navigator.serviceWorker.ready).pushManager.getSubscription(); await s?.unsubscribe(); } catch { /* nada */ } lsSet(PUSH_KEY, null); }
+const pushMsg = e => e.message === 'perm' ? 'Has bloqueado las notificaciones: actívalas para esta app en los ajustes del navegador o del móvil.' : e.message === 'nopush' ? (/iPhone|iPad/.test(navigator.userAgent) ? 'En iPhone, primero añade la app a la pantalla de inicio (Compartir → Añadir a pantalla de inicio) y ábrela desde ahí.' : 'Este navegador no permite notificaciones.') : 'No se pudieron activar (¿sin conexión?). Vuelve a probar.';
+// una vez al día se renueva en silencio (el móvil puede cambiar la dirección de los avisos)
+function pushRefresh(admin) { const p = lsGet(PUSH_KEY); if (p?.on === (admin ? 'adm' : 'u') && p.at !== todayISO() && pushCan() && Notification.permission === 'granted') pushOn(admin, false).catch(() => { }); }
 const MSG_Q_KEY = 'fitnesteban_msgq', MSG_SEEN_KEY = 'fitnesteban_msgseen', MSG_CT_KEY = 'fitnesteban_msgct';
 async function msgWho() { return { h: access.ok || lsGet(ACCESS_KEY)?.code || lsGet(TRIAL_KEY)?.h ? await myHash() : '', d: deviceId() }; }
 const msgVisitor = () => !lsGet(ACCESS_KEY)?.code && !lsGet(TRIAL_KEY)?.h; // aún sin código ni prueba: deja nombre y contacto
 async function msgApi(op, extra = {}) {
-  const url = access.usageUrl; if (!url) throw new Error('nourl');
-  const w = await msgWho(), qs = new URLSearchParams({ op, h: w.h, d: w.d, ...extra, t2: Date.now() });
-  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 20000);
-  try { const r = await fetch(`${url}?${qs}`, { cache: 'no-store', signal: ctl.signal }); const j = await r.json(); if (!(j.ver >= 17)) throw new Error('old'); return j; }
-  catch (e) { if (e.message === 'old') throw e; throw new Error('net'); } finally { clearTimeout(tm); }
+  const w = await msgWho(), vis = msgVisitor(), c = lsGet(MSG_CT_KEY) || {};
+  const j = await sbCall({ op, tk: msgTk(), h: w.h, d: w.d, p: vis ? c.p || '' : String(profileOf()?.name || ''), ct: vis ? c.ct || '' : '', ...extra });
+  if (!j.ok) throw new Error(j.error === 'limite' ? 'limite' : 'fallo');
+  if (j.msgs) j.msgs = j.msgs.map(m => ({ ...m, ts: isoTs(m.ts) })); if (j.ts) j.ts = isoTs(j.ts);
+  return j;
 }
 const msgTime = ts => { const d = new Date(ts); if (isNaN(d)) return ''; const day = d.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10) ? '' : `${fmtDateShort(d.toISOString().slice(0, 10))} · `; return day + d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }); };
-const msgBubble = (m, mine, who = '') => `<div class="msg-b ${mine ? 'msg-me' : 'msg-you'}${m.q ? ' msg-q' : ''}"${m.q ? '' : ` data-ts="${esc(m.ts)}"`}>${who ? `<div class="msg-who">${esc(who)}</div>` : ''}<div class="whitespace-pre-wrap break-words">${esc(m.t)}</div><div class="msg-t">${m.q ? '⏳ Se enviará al volver la conexión' : esc(msgTime(m.ts))}</div></div>`;
+const msgBubble = (m, mine, who = '') => `<div class="msg-b ${mine ? 'msg-me' : 'msg-you'}${m.q ? ' msg-q' : ''}"${m.q ? '' : ` data-ts="${esc(m.ts)}"`}${m.mid ? ` data-mid="${+m.mid}"` : ''}>${who ? `<div class="msg-who">${esc(who)}</div>` : ''}<div class="whitespace-pre-wrap break-words">${esc(m.t)}</div><div class="msg-t">${m.q ? '⏳ Se enviará al volver la conexión' : esc(msgTime(m.ts))}</div></div>`;
 /* Cola: lo que no se pudo enviar (sin datos) sale solo al volver la conexión */
 async function msgFlush() {
-  const q = lsGet(MSG_Q_KEY) || []; if (!q.length || !navigator.onLine || !access.usageUrl) return;
+  const q = lsGet(MSG_Q_KEY) || []; if (!q.length || !navigator.onLine) return;
   const left = [];
-  for (const m of q) { try { await msgApi('msg', { t: m.t, p: m.p || '', ct: m.ct || '' }); } catch (e) { if (e.message !== 'old') left.push(m); } }
+  for (const m of q) { try { await msgApi('msg', { t: m.t, p: m.p || '', ct: m.ct || '' }); } catch (e) { if (e.message === 'net') left.push(m); } }
   lsSet(MSG_Q_KEY, left);
   if (q.length !== left.length && $('#msgBody') && !access.me?.admin) msgBoxLoad();
 }
@@ -6762,18 +6820,28 @@ window.addEventListener('online', () => setTimeout(msgFlush, 1500));
 /* ¿Te ha contestado Esteban? (al abrir la app y al volver a ella; como mucho cada 3 minutos) */
 let msgCheckAt = 0;
 async function msgCheck(force) {
-  if (!access.usageUrl || !navigator.onLine || access.me?.admin || (!force && Date.now() - msgCheckAt < 180000)) return;
+  if (!navigator.onLine || access.me?.admin || (!force && Date.now() - msgCheckAt < 180000)) return;
   msgCheckAt = Date.now();
+  rtSub('u-' + msgTk(), () => msgCheck(true)); pushRefresh(false);
   try {
     msgFlush();
-    msgVisto(); const j = await msgApi('hilo'), seen = lsGet(MSG_SEEN_KEY) || '';
-    ui.msgThread = j.msgs || [];
+    msgVisto(); const j = await msgApi('hilo'), seen = isoTs(lsGet(MSG_SEEN_KEY) || 0);
+    const before = JSON.stringify(ui.msgThread || []); ui.msgThread = j.msgs || [];
+    const open = $('#msgBody') && $('#msgForm') && !$('#msgBody[data-thread]');
+    if (open) { if (JSON.stringify(ui.msgThread) !== before) msgBoxRender(); return; }
     const nw = ui.msgThread.filter(m => m.de === 'e' && m.ts > seen).length;
     if (nw && !ui.msgNew) toast(`💬 Esteban te ha ${nw === 1 ? 'respondido' : `escrito ${nw} mensajes`}. Toca el botón de los bocadillos de arriba para leerlo.`);
     ui.msgNew = nw; msgBadge();
-  } catch { /* sin script v17 o sin conexión: nada */ }
+  } catch { /* sin conexión: nada */ }
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { msgCheck(); if (access.me?.admin) msgPendCheck(); } });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { rtOpen(); msgCheck(); if (access.me?.admin) msgPendCheck(); } });
+// 🔔 al tocar una notificación: abre la conversación
+function msgFromPush() {
+  if (!access.ok) return;
+  if (access.me?.admin) { msgPendCheck(); if (ui.accessPin) sbAdminLoad().then(() => msgInboxModal()).catch(() => { }); }
+  else { msgCheck(true); msgBox(); }
+}
+navigator.serviceWorker?.addEventListener('message', e => { if (e.data?.msg) msgFromPush(); });
 function msgBadge() {
   const b = $('#mailBtn'); if (!b) return;
   let n = b.querySelector('.ub-n'); const k = ui.msgNew || 0;
@@ -6784,7 +6852,7 @@ function msgBadge() {
 /* ✓✓ Al abrir la conversación, Esteban ve que has leído su último mensaje (lo explica la política de privacidad). Si no hay conexión, se avisa la próxima vez */
 const MSG_VISTO_KEY = 'fitnesteban_msgvisto';
 async function msgVisto() {
-  const seen = lsGet(MSG_SEEN_KEY) || ''; if (!seen || seen <= (lsGet(MSG_VISTO_KEY) || '') || !navigator.onLine) return;
+  const seen = lsGet(MSG_SEEN_KEY) || ''; if (!seen || isoTs(seen) <= isoTs(lsGet(MSG_VISTO_KEY) || 0) || !navigator.onLine) return;
   try { await msgApi('visto', { m: seen }); lsSet(MSG_VISTO_KEY, seen); } catch { /* script antiguo o sin conexión: se reintenta */ }
 }
 /* La ventana del usuario: su conversación con Esteban */
@@ -6799,9 +6867,12 @@ function msgBox(pre = '') {
     <div class="cal-foot space-y-2">
       ${vis ? `<div class="grid grid-cols-2 gap-2"><input id="msgName" class="field py-2 text-sm" maxlength="40" placeholder="Tu nombre" value="${esc(ct.p || profileOf()?.name || '')}" /><input id="msgCt" class="field py-2 text-sm" maxlength="80" placeholder="Correo o teléfono" value="${esc(ct.ct || '')}" /></div><p class="text-[10px] text-mute leading-snug">Aún no tienes código: déjame tu correo o teléfono por si no vuelves a abrir la app.</p>` : ''}
       <form id="msgForm" class="flex gap-2 items-end"><textarea id="msgInput" rows="2" class="field flex-1 resize-none max-h-32 py-2.5" maxlength="800" placeholder="Escribe tu mensaje…">${esc(pre)}</textarea><button class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button></form>
+      ${pushCan() && lsGet(PUSH_KEY)?.on !== 'u' && !access.me?.admin ? '<button id="msgPush" class="btn-ghost w-full text-[13px] py-2" type="button">🔔 Avisarme en el móvil cuando Esteban conteste</button>' : ''}
       <p class="text-[11px] text-mute text-center">¿Prefieres Telegram? <a class="text-brand underline" href="${CONTACT_URL}" target="_blank" rel="noopener">Escríbeme allí</a></p>
     </div>`, { sheetClass: 'sheet-fixed sheet-full', retry: () => msgBoxLoad() });
   $('#msgForm').addEventListener('submit', e => { e.preventDefault(); msgSend(); });
+  $('#msgPush')?.addEventListener('click', async e => { const b = e.currentTarget; b.disabled = true; try { await pushOn(false); b.remove(); toast('🔔 Listo: te llegará un aviso cuando te conteste'); } catch (err) { b.disabled = false; toast(pushMsg(err), 'warn'); } });
+  if (!access.me?.admin) rtSub('u-' + msgTk(), () => msgCheck(true));
   msgBoxLoad();
   // 🔄 mientras la tiene abierta, la respuesta de Esteban entra sola
   let wait = 15000;
@@ -6812,14 +6883,13 @@ function msgBox(pre = '') {
       try { const j = await msgApi('hilo'), n = JSON.stringify(j.msgs || []); if (n !== JSON.stringify(ui.msgThread || [])) { ui.msgThread = j.msgs || []; msgBoxRender(); } wait = Date.now() - t0 > 8000 ? Math.min(60000, wait * 2) : 15000; }
       catch { wait = Math.min(60000, wait * 2); }
     }
-    setTimeout(tick, wait); // una detrás de otra, nunca varias a la vez
+    setTimeout(tick, rtOk('u-' + msgTk()) ? 60000 : wait); // con el canal en tiempo real abierto, esto es solo por si acaso
   };
   setTimeout(tick, wait);
 }
 function msgBoxRender(err) {
   const b = $('#msgBody'); if (!b) return;
   const q = (lsGet(MSG_Q_KEY) || []).map(m => ({ ...m, q: true })), all = [...(ui.msgThread || []).map(m => ({ ...m, mine: m.de === 'u' })), ...q.map(m => ({ ...m, mine: true }))];
-  if (err === 'old') { b.innerHTML = `<div class="text-center mt-6 space-y-3"><p class="text-sm text-mute">Los mensajes dentro de la app aún no están activos.</p>${contactTgBtn('Escribir por Telegram', 'mx-auto')}</div>`; $('#msgForm')?.classList.add('hidden'); return; }
   b.innerHTML = (all.length ? all.map(m => msgBubble(m, m.mine)).join('') : `<div class="text-center mt-6"><div class="text-3xl">👋</div><p class="text-sm text-mute mt-2 leading-relaxed">Pregúntame lo que quieras: tu código, una duda de la app, algo que no funciona o una idea.<br>Te contesto aquí; verás el aviso en el botón de los bocadillos de arriba.</p></div>`)
     + (err === 'net' ? '<p class="text-[11px] text-amber-300 text-center">Sin conexión: lo que escribas se enviará solo al volver.</p>' : '');
   b.scrollTop = b.scrollHeight;
@@ -6828,7 +6898,7 @@ function msgBoxRender(err) {
 async function msgBoxLoad() {
   msgBoxRender();
   try { msgFlush(); const j = await msgApi('hilo'); ui.msgThread = j.msgs || []; msgBoxRender(); }
-  catch (e) { msgBoxRender(e.message === 'old' ? 'old' : 'net'); }
+  catch (e) { msgBoxRender(e.message === 'net' ? 'net' : ''); }
 }
 async function msgSend() {
   const inp = $('#msgInput'), t = String(inp?.value || '').trim(); if (!t) return;
@@ -6837,9 +6907,10 @@ async function msgSend() {
   if (vis) lsSet(MSG_CT_KEY, { p, ct });
   inp.value = '';
   const ts = new Date().toISOString();
-  try { await msgApi('msg', { t, p, ct }); ui.msgThread = [...(ui.msgThread || []), { ts, de: 'u', t }]; toast('✓ Enviado. Te contesto aquí en cuanto lo vea.'); }
+  try { const j = await msgApi('msg', { t, p, ct }); ui.msgThread = [...(ui.msgThread || []), { id: j.id, ts: j.ts || ts, de: 'u', t }]; toast('✓ Enviado. Te contesto aquí en cuanto lo vea.'); }
   catch (e) {
-    if (e.message === 'old') { inp.value = t; return msgBoxRender('old'); }
+    if (e.message === 'limite') { inp.value = t; return toast('Has enviado muchos mensajes seguidos. Espera un rato a que te conteste 🙂', 'warn'); }
+    if (e.message === 'fallo') { inp.value = t; return toast('No se pudo enviar. Vuelve a probar en un momento.', 'warn'); }
     lsSet(MSG_Q_KEY, [...(lsGet(MSG_Q_KEY) || []), { t, p, ct, ts }]);
   }
   msgBoxRender();
@@ -6853,9 +6924,49 @@ document.addEventListener('click', e => {
 }, true);
 
 /* ---------- Administrador: bandeja de mensajes y «Para escribir» ---------- */
+// globo de mensajes sin PIN: solo el número (con el canal de tu móvil, guardado la primera vez que abres los mensajes)
 async function msgPendCheck() {
-  if (!access.usageUrl || !navigator.onLine || !access.me?.admin) return;
-  try { const r = await fetchT(`${access.usageUrl}?op=pend&t=${Date.now()}`, 20000); const j = await r.json(); if (j.ver >= 17) { ui.msgPend = +j.n || 0; usersBadge(); } } catch { /* nada */ }
+  const topic = lsGet(ADM_TOPIC_KEY); if (!topic || !navigator.onLine || !access.me?.admin) return;
+  rtSub(topic, msgAdminEvent); pushRefresh(true);
+  try { const j = await sbCall({ op: 'pend', topic }); if (j.ok) { ui.msgPend = +j.n || 0; usersBadge(); } } catch { /* nada */ }
+}
+// ⚡ alguien ha escrito (o ha leído): si tienes los mensajes abiertos, se recargan; si no, solo el número
+let msgEvT = null;
+function msgAdminEvent() { clearTimeout(msgEvT); msgEvT = setTimeout(() => { if (ui.accessPin && ui.msgs) sbAdminLoad().catch(() => { }); else msgPendCheck(); }, 400); }
+// 📥 todas las conversaciones (con tu clave). Cada persona = su código o su prueba; quien aún no tiene, su conversación
+async function sbAdminLoad() {
+  const key = await secretDec(lsGet(USE_KEY), ui.accessPin);
+  const d = await sbCall({ op: 'lista', key }); if (!d.ok) throw new Error(d.error === 'clave' ? 'clave' : 'fallo');
+  if (d.topic && d.topic !== lsGet(ADM_TOPIC_KEY)) lsSet(ADM_TOPIC_KEY, d.topic);
+  if (d.topic) rtSub(d.topic, msgAdminEvent);
+  const H = {}; for (const h of d.hilos || []) H[h.tk] = h;
+  const idOf = tk => H[tk]?.h || String(tk).replace(/^old:/, '');
+  const msgs = (d.msgs || []).map(m => ({ id: idOf(m.tk), mid: m.id, de: m.de, t: m.t, nm: m.nm || '', ct: m.de === 'u' ? H[m.tk]?.ct || '' : '', ts: isoTs(m.ts) }));
+  const V = {}, D = {};
+  for (const h of d.hilos || []) { const id = idOf(h.tk); if (h.visto_m && isoTs(h.visto_m) > (V[id]?.m || '')) V[id] = { m: isoTs(h.visto_m), at: isoTs(h.visto_at) }; if (h.hecho_m && isoTs(h.hecho_m) > (D[id] || '')) D[id] = isoTs(h.hecho_m); }
+  const before = JSON.stringify([ui.msgs, ui.msgVistos, ui.msgHechos]);
+  ui.msgs = msgs; ui.msgVistos = V; ui.msgHechos = D; ui.usageOld16 = false;
+  ui.msgPend = msgThreads().filter(t => t.pend).length; usersBadge();
+  const changed = JSON.stringify([ui.msgs, ui.msgVistos, ui.msgHechos]) !== before;
+  if (changed) msgAdminRedraw();
+  return changed;
+}
+function msgAdminRedraw() {
+  const b2 = $('#msgBody[data-thread]');
+  if (b2) { const id = b2.dataset.thread, t = msgThreads().find(x => x.id === id) || { id, msgs: [] }, low = b2.scrollHeight - b2.scrollTop - b2.clientHeight < 80; b2.innerHTML = msgThreadBodyHTML(id, t); if (low) b2.scrollTop = b2.scrollHeight; }
+  else if ($('#msgInboxL') && !$('#modalRoot input:focus')) msgInboxModal();
+  if (ui.accPage && !$('#modalRoot').classList.contains('open')) render();
+}
+// 📦 las conversaciones del registro de Google pasan a Supabase (y las que aún lleguen allí desde apps sin actualizar)
+async function sbImport(g) {
+  if (!g || !Array.isArray(g.msgs) || !ui.accessPin) return;
+  const w = lsGet(SB_IMP_KEY) || '', L = g.msgs.filter(m => isoTs(m.ts) > w); if (!L.length) return;
+  try {
+    const key = await secretDec(lsGet(USE_KEY), ui.accessPin);
+    const j = await sbCall({ op: 'importa', key, msgs: L, vistos: g.vistos || {}, hechos: { ...(state.settings.msgDone || {}), ...(g.hechos || {}) } }, 60000);
+    if (!j.ok) return; lsSet(SB_IMP_KEY, L.map(m => isoTs(m.ts)).sort().pop());
+    if (j.n) { toast(`💬 ${j.n === 1 ? '1 mensaje pasado' : `${j.n} mensajes pasados`} del registro de Google al sistema nuevo`); await sbAdminLoad(); }
+  } catch { /* se reintenta la próxima vez */ }
 }
 function msgThreads() {
   const T = {};
@@ -6874,8 +6985,7 @@ function msgWhoState(id) {
   return 'Sin código';
 }
 function msgAdminCardHTML() {
-  if (ui.usageOld16) return `<div class="acc-ref mt-2"><b>💬 Mensajes</b><p class="text-[12px] text-mute mt-1">Para recibir mensajes dentro de la app, actualiza el script de uso a la v17 (Reconfigurar → nueva versión).</p></div>`;
-  if (!ui.msgs) return '';
+  if (!ui.msgs) return ui.msgErr ? `<div class="acc-ref mt-2"><b>💬 Mensajes</b><p class="text-[12px] text-mute mt-1">${esc(ui.msgErr)}</p></div>` : '';
   const th = msgThreads(), p = th.filter(t => t.pend).length, W = toWriteList();
   return `<div class="grid grid-cols-2 gap-2 mt-2">
     <button class="msg-card${p ? ' msg-card-on' : ''}" data-act="msgInbox" type="button"><span class="text-[15px] font-extrabold">💬 Mensajes</span><span class="text-[12px] ${p ? 'text-amber-300' : 'text-mute'}">${p ? `${p} sin responder` : th.length ? 'Todo respondido' : 'Ninguno aún'}</span></button>
@@ -6887,12 +6997,12 @@ function msgInboxModal() {
   openModal(`<div class="flex items-center justify-between gap-2"><h3 class="modal-title">💬 Mensajes</h3><button class="w-8 h-8 rounded-full border border-line text-mute" data-close type="button" aria-label="Cerrar">✕</button></div>
     <button class="btn-primary w-full" data-mact="new" type="button">✍️ Escribir a alguien</button>
     ${th.length ? `<div id="msgInboxL" class="space-y-1.5">${th.map(t => `<button class="msg-row${t.pend ? ' msg-row-on' : ''}" data-mact="open" data-id="${esc(t.id)}" type="button"><span class="flex items-center justify-between gap-2"><b class="truncate">${t.pend ? '🟠 ' : ''}${esc(msgWhoName(t.id, t))}</b><span class="text-[11px] text-mute shrink-0">${esc(msgTime(t.last.ts))}</span></span><span class="block text-[12px] text-mute truncate">${t.last.de === 'e' ? `${ui.msgVistos ? (ui.msgVistos[t.id]?.m >= t.last.ts ? '✓✓ ' : '✓ ') : ''}Tú: ` : ''}${esc(t.last.t)}</span></button>`).join('')}</div>` : '<p class="text-sm text-mute">Aún no te ha escrito nadie. Cuando alguien pulse «Escribir a Esteban», aparecerá aquí.</p>'}
-    <label class="flex items-center justify-between gap-3 text-[13px] pt-2 border-t border-line"><span>✉️ Avisarme también por correo<span class="block text-[11px] text-mute">Te llega un correo con cada mensaje nuevo</span></span><input id="msgAvisos" type="checkbox" class="w-5 h-5 accent-cyan-400 shrink-0" ${ui.msgAvisos !== false ? 'checked' : ''} /></label>`, {
+    ${pushCan() ? `<label class="flex items-center justify-between gap-3 text-[13px] pt-2 border-t border-line"><span>🔔 Avisarme en este móvil<span class="block text-[11px] text-mute">Notificación con cada mensaje nuevo, aunque tengas la app cerrada</span></span><input id="msgAvisos" type="checkbox" class="w-5 h-5 accent-cyan-400 shrink-0" ${lsGet(PUSH_KEY)?.on === 'adm' && Notification.permission === 'granted' ? 'checked' : ''} /></label>` : ''}`, {
     open: (r, b) => msgThreadModal(b.dataset.id),
     new: () => msgPickModal()
   });
   if (th.length) msgPollStart();
-  $('#msgAvisos')?.addEventListener('change', async e => { const v = e.target.checked; try { await msgAdminApi('avisos', { v: v ? '1' : '0' }); ui.msgAvisos = v; toast(v ? 'Te avisaré por correo' : 'Sin avisos por correo'); } catch { e.target.checked = !v; toast('No se pudo cambiar (¿sin conexión?)', 'warn'); } });
+  $('#msgAvisos')?.addEventListener('change', async e => { const v = e.target.checked; e.target.disabled = true; try { if (v) { await pushOn(true); toast('🔔 Te avisaré en este móvil con cada mensaje'); } else { await pushOff(); toast('Sin avisos en este móvil'); } } catch (err) { e.target.checked = !v; toast(pushMsg(err), 'warn'); } e.target.disabled = false; });
 }
 /* ✍️ Empezar tú una conversación: con quien tenga código o esté en prueba (lo verá al abrir la app) */
 function msgPickModal() {
@@ -6910,8 +7020,8 @@ function msgPickModal() {
 }
 async function msgAdminApi(op, extra) {
   const key = await secretDec(lsGet(USE_KEY), ui.accessPin);
-  const r = await fetch(`${access.usageUrl}?${new URLSearchParams({ key, op, ...extra, t2: Date.now() }) /* «t» es el texto: el anticaché va en «t2» */}`, { cache: 'no-store' }); const j = await r.json();
-  if (!j.ok) throw new Error('fallo'); return j;
+  const j = await sbCall({ op, key, ...extra }); if (!j.ok) throw new Error('fallo');
+  if (j.ts) j.ts = isoTs(j.ts); return j;
 }
 function msgVistoHTML(id, t) {
   const lastE = [...t.msgs].reverse().find(m => m.de === 'e'); if (!lastE || t.msgs[t.msgs.length - 1].de !== 'e') return '';
@@ -6921,33 +7031,19 @@ function msgVistoHTML(id, t) {
 }
 // código compartido (2 móviles o 2 nombres): encima de cada mensaje suyo, quién lo escribe
 const msgShared = (id, t) => (ui.usage?.[id]?.ds || []).length >= 2 || new Set(t.msgs.filter(m => m.de === 'u' && m.nm).map(m => m.nm)).size > 1;
-const msgThreadBodyHTML = (id, t) => t.msgs.length ? t.msgs.map(m => msgBubble(m, m.de === 'e', m.de === 'u' && m.nm && msgShared(id, t) ? m.nm : '')).join('') + msgVistoHTML(id, t) : '<p class="text-[12px] text-mute text-center mt-6">Aún no os habéis escrito. Lo verá la próxima vez que abra la app, con aviso en el botón de los bocadillos.</p>';
+const msgThreadBodyHTML = (id, t) => t.msgs.length ? t.msgs.map(m => msgBubble(m, m.de === 'e', m.de === 'u' && m.nm && msgShared(id, t) ? m.nm : '')).join('') + msgVistoHTML(id, t) : '<p class="text-[12px] text-mute text-center mt-6">Aún no os habéis escrito. Le llegará al momento si tiene la app abierta; si no, al abrirla, con aviso en el botón de los bocadillos (o en su móvil, si lo ha activado).</p>';
 /* 🔄 Con la bandeja o una conversación abierta, los mensajes nuevos (y los «visto») entran solos cada 15 s (más espaciado si Google va lento) */
 let msgPollT = null;
 function msgPollStart() {
   clearTimeout(msgPollT);
   let wait = 15000;
   const tick = async () => {
-    const body = $('#msgBody[data-thread]'), inbox = $('#msgInboxL');
-    if (!body && !inbox) { msgPollT = null; return; }
+    if (!$('#msgBody[data-thread]') && !$('#msgInboxL')) { msgPollT = null; return; }
     if (document.visibilityState === 'visible' && navigator.onLine && ui.accessPin) {
       const t0 = Date.now();
-      try {
-        const key = await secretDec(lsGet(USE_KEY), ui.accessPin), op = ui.usageVer >= 20 ? '&op=msgs' : '';
-        const r = await fetchT(`${access.usageUrl}?key=${encodeURIComponent(key)}${op}&t2=${Date.now()}`, 20000), d = await r.json();
-        if (d.ok && Array.isArray(d.msgs)) {
-          const before = JSON.stringify([ui.msgs, ui.msgVistos, ui.msgHechos]); ui.msgs = d.msgs; ui.msgVistos = d.vistos || null; ui.msgHechos = d.hechos || null;
-          if (JSON.stringify([ui.msgs, ui.msgVistos, ui.msgHechos]) !== before) {
-            ui.msgPend = msgThreads().filter(t => t.pend).length; usersBadge();
-            const b2 = $('#msgBody[data-thread]');
-            if (b2) { const id = b2.dataset.thread, t = msgThreads().find(x => x.id === id) || { id, msgs: [] }, low = b2.scrollHeight - b2.scrollTop - b2.clientHeight < 80; b2.innerHTML = msgThreadBodyHTML(id, t); if (low) b2.scrollTop = b2.scrollHeight; }
-            else if ($('#msgInboxL') && !$('#modalRoot input:focus')) msgInboxModal();
-          }
-        }
-        wait = Date.now() - t0 > 8000 ? Math.min(60000, wait * 2) : 15000; // si Google va lento, se pregunta menos
-      } catch { wait = Math.min(60000, wait * 2); }
+      try { await sbAdminLoad(); wait = Date.now() - t0 > 8000 ? Math.min(60000, wait * 2) : 15000; } catch { wait = Math.min(60000, wait * 2); }
     }
-    msgPollT = setTimeout(tick, wait); // la siguiente, solo cuando ha terminado esta
+    msgPollT = setTimeout(tick, rtOk(lsGet(ADM_TOPIC_KEY)) ? 60000 : wait); // con el canal en tiempo real abierto, esto es solo por si acaso
   };
   msgPollT = setTimeout(tick, wait);
 }
@@ -6960,14 +7056,14 @@ function msgThreadModal(id, pre = '', back = null) {
       <button class="ml-auto w-8 h-8 rounded-full border border-line text-mute shrink-0" data-close type="button" aria-label="Cerrar">✕</button></div>
     <div id="msgBody" class="cal-body space-y-2" data-thread="${esc(id)}">${msgThreadBodyHTML(id, t)}</div>
     <div class="cal-foot"><form id="msgForm" class="flex gap-2 items-end"><textarea id="msgInput" rows="3" class="field flex-1 resize-none max-h-[200px] py-2.5" maxlength="1500" placeholder="Tu respuesta…">${esc(pre)}</textarea><button class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button></form>
-      <div class="flex items-center justify-between gap-2 mt-1.5"><p class="text-[11px] text-mute">Lo verá dentro de la app la próxima vez que la abra.</p>${t.msgs.some(m => m.de === 'u') ? '<button class="chip chip-sm shrink-0" data-mact="ai" type="button">✨ Sugerir respuesta</button>' : ''}</div>
+      <div class="flex items-center justify-between gap-2 mt-1.5"><p class="text-[11px] text-mute">Le llega al momento si tiene la app abierta, o con aviso si lo ha activado.</p>${t.msgs.some(m => m.de === 'u') ? '<button class="chip chip-sm shrink-0" data-mact="ai" type="button">✨ Sugerir respuesta</button>' : ''}</div>
       ${t.pend ? '<button class="btn-ghost w-full text-[13px] mt-2 py-2" data-mact="hecho" type="button">✓ Marcar como leído (sin responder)</button>' : ''}</div>`, {
     sheetClass: 'sheet-fixed sheet-full',
     back: () => (back || msgInboxModal)(),
     hecho: async (r, b) => {
       const m = t.last.ts; b.disabled = true;
       state.settings.msgDone = { ...(state.settings.msgDone || {}), [id]: m }; persist();
-      try { await msgAdminApi('hecho', { id, m }); ui.msgHechos = { ...(ui.msgHechos || {}), [id]: m }; } catch { /* script anterior a la v19: queda marcado solo en este móvil */ }
+      try { await msgAdminApi('hecho', { id, m }); ui.msgHechos = { ...(ui.msgHechos || {}), [id]: m }; } catch { /* sin conexión: queda marcado solo en este móvil */ }
       ui.msgPend = msgThreads().filter(x => x.pend).length; usersBadge(); if (ui.accPage) render();
       toast('✓ Marcado como leído. Si vuelve a escribir, te saldrá otra vez.'); (back || msgInboxModal)();
     },
@@ -6988,22 +7084,22 @@ function msgThreadModal(id, pre = '', back = null) {
       e.stopPropagation();
       if (!del.classList.contains('sure')) { del.classList.add('sure'); del.textContent = '¿Seguro? Toca otra vez para borrarlo'; return; }
       del.disabled = true; del.textContent = 'Borrando…';
-      const ts = del.dataset.ts;
+      const mid = +del.dataset.mid;
       try {
-        const j = await msgAdminApi('borra', { id, ts }); if (!(j.ver >= 20)) throw new Error('old');
-        ui.msgs = (ui.msgs || []).filter(m => !(m.id === id && m.ts === ts)); ui.msgPend = msgThreads().filter(x => x.pend).length; usersBadge(); if (ui.accPage) render();
+        if (!mid) throw new Error('nomid'); await msgAdminApi('borra', { id: mid });
+        ui.msgs = (ui.msgs || []).filter(m => m.mid !== mid); ui.msgPend = msgThreads().filter(x => x.pend).length; usersBadge(); if (ui.accPage) render();
         const t2 = msgThreads().find(x => x.id === id) || { id, msgs: [] }; b.innerHTML = msgThreadBodyHTML(id, t2); toast('🗑️ Mensaje borrado');
-      } catch (err) { del.disabled = false; del.classList.remove('sure'); del.textContent = '🗑️ Borrar este mensaje'; toast(err.message === 'old' || err.message === 'fallo' ? 'Para borrar, actualiza el script a la v20 (Acceso → Reconfigurar)' : 'No se pudo borrar (¿sin conexión?)', 'warn'); }
+      } catch (err) { del.disabled = false; del.classList.remove('sure'); del.textContent = '🗑️ Borrar este mensaje'; toast('No se pudo borrar (¿sin conexión?)', 'warn'); }
       return;
     }
     b.querySelectorAll('.msg-del').forEach(x => x.remove());
     if (!bub) return;
-    bub.insertAdjacentHTML('afterend', `<button class="msg-del ${bub.classList.contains('msg-me') ? 'msg-del-r' : ''}" data-ts="${esc(bub.dataset.ts)}" type="button">🗑️ Borrar este mensaje</button>`);
+    bub.insertAdjacentHTML('afterend', `<button class="msg-del ${bub.classList.contains('msg-me') ? 'msg-del-r' : ''}" data-mid="${+bub.dataset.mid || 0}" type="button">🗑️ Borrar este mensaje</button>`);
   });
   $('#msgForm').addEventListener('submit', async e => {
     e.preventDefault(); const inp = $('#msgInput'), txt = String(inp.value || '').trim(); if (!txt) return;
     const btn = e.target.querySelector('button'); btn.disabled = true;
-    try { const j = await msgAdminApi('resp', { id, t: txt }); ui.msgs = [...(ui.msgs || []), { ts: j.ts, id, de: 'e', t: txt }]; state.settings.wrote = { ...(state.settings.wrote || {}), [id]: todayISO() }; persist(); msgThreadModal(id, '', back); usersBadge(); if (ui.accPage) render(); toast('✓ Enviado'); }
+    try { const j = await msgAdminApi('resp', { id, t: txt }); ui.msgs = [...(ui.msgs || []), { ts: j.ts, id, mid: j.id, de: 'e', t: txt }]; state.settings.wrote = { ...(state.settings.wrote || {}), [id]: todayISO() }; persist(); msgThreadModal(id, '', back); usersBadge(); if (ui.accPage) render(); toast('✓ Enviado'); }
     catch { btn.disabled = false; toast('No se pudo enviar (¿sin conexión?). Vuelve a probar.', 'warn'); }
   });
 }
@@ -7076,7 +7172,7 @@ function twEditor(p, k = ui.twTpl || 0, txt = null) {
     </div>`, {
     back: () => toWriteModal(),
     tpl: (r, b) => { ui.twTpl = +b.dataset.i; twEditor(p, ui.twTpl); },
-    app: async (r, b) => { const t = $('#twText').value.trim(); if (!t) return; b.disabled = true; try { const j = await msgAdminApi('resp', { id: p.id, t }); ui.msgs = [...(ui.msgs || []), { ts: j.ts, id: p.id, de: 'e', t }]; twDone(p.id, false); toast('✓ Enviado: lo verá al abrir la app'); toWriteModal(); } catch { b.disabled = false; toast('No se pudo enviar (¿sin conexión?)', 'warn'); } },
+    app: async (r, b) => { const t = $('#twText').value.trim(); if (!t) return; b.disabled = true; try { const j = await msgAdminApi('resp', { id: p.id, t }); ui.msgs = [...(ui.msgs || []), { ts: j.ts, id: p.id, mid: j.id, de: 'e', t }]; twDone(p.id, false); toast('✓ Enviado: lo verá al abrir la app'); toWriteModal(); } catch { b.disabled = false; toast('No se pudo enviar (¿sin conexión?)', 'warn'); } },
     copy: async () => { try { await navigator.clipboard.writeText($('#twText').value.trim()); twDone(p.id, false); toast('📋 Copiado: pégalo en WhatsApp'); } catch { toast('No se pudo copiar', 'warn'); } },
     mail: () => { const t = $('#twText').value.trim(); twDone(p.id, false); location.href = `mailto:${p.mail}?subject=${encodeURIComponent('FITNESTEBAN')}&body=${encodeURIComponent(t)}`; }
   });
@@ -7955,6 +8051,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.20.0', ['💬 Los mensajes con Esteban ahora llegan al instante: si tienes la conversación abierta, su respuesta aparece sola, sin salir y volver a entrar.', '🔔 Nuevo: en «Escribir a Esteban» (el botón de los dos bocadillos, arriba) pulsa «Avisarme en el móvil cuando Esteban conteste» y te llegará una notificación aunque tengas la app cerrada. En iPhone funciona con la app añadida a la pantalla de inicio.']],
   ['5.19.5', ['⏳ Si tu acceso o tu periodo de prueba está a punto de terminar, te llega un correo de aviso 3 días antes (si nos dejaste tu correo).'], 'quiet'],
   ['5.19.4', ['💶 Cobros: ya puedes apuntar a mano un cobro que no quedó anotado (persona, plan, modalidad, importe y fecha).'], 'quiet'],
   ['5.19.3', ['🛟 Mensajes: la app ya no amontona consultas si Google va lento (una cada vez, más espaciadas) y nunca se queda cargando más de 25 segundos.'], 'quiet'],
@@ -8422,7 +8519,7 @@ const GUIDE = [
   ]],
   ['ℹ️ La app', [
     '🔄 Se <b>actualiza sola</b> al abrirla o volver a ella. Después verás una vez las novedades; puedes volver a verlas desde esta guía. Tu versión, en Ajustes → Aplicación.',
-    '💬 El botón de los dos bocadillos de arriba abre tu chat con Esteban dentro de la app: tu código, dudas, fallos o ideas. Te contesta ahí mismo y verás un número en el botón cuando lo haga. Si lo prefieres, dentro tienes Telegram.',
+    '💬 El botón de los dos bocadillos de arriba abre tu chat con Esteban dentro de la app: tu código, dudas, fallos o ideas. Te contesta ahí mismo y verás un número en el botón cuando lo haga. Dentro puedes pulsar «🔔 Avisarme en el móvil cuando Esteban conteste» para recibir una notificación aunque tengas la app cerrada (en iPhone, solo con la app añadida a la pantalla de inicio). Si lo prefieres, dentro tienes Telegram.',
     '📤 «Compartir la app» (Ajustes y abajo en esta guía) envía a quien quieras el enlace de la app: podrá probarla 7 días entrando con su cuenta de Google.',
     '🔒 Qué datos usa la app y dónde se guardan: <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.'
   ]]
@@ -10457,6 +10554,7 @@ function unlock(me) {
   if (needsOnboarding(me)) setTimeout(() => themeAsk(onboarding), 300);
   else if (!newsChecked) { newsChecked = true; themeAsk(() => { maybeShowNews(); setTimeout(maybeAskEmail, 2500); }); }
   setTimeout(emailSync, 4000); setTimeout(() => { msgCheck(true); msgPendCheck(); }, 5000);
+  try { if (new URLSearchParams(location.search).has('msg')) { history.replaceState(null, '', location.pathname); setTimeout(msgFromPush, 1200); } } catch { /* nada */ }
   // biblioteca al día al entrar: avisos de bloques nuevos e iconos
   setTimeout(() => { const before = JSON.stringify(remoteLib.map(x => x.lib)); fetchRemoteLib().then(() => { if (JSON.stringify(remoteLib.map(x => x.lib)) !== before && (ui.view === 'home' || ui.view === 'train') && !$('#modalRoot').classList.contains('open')) render(); }); }, 1500);
 }
@@ -10620,7 +10718,8 @@ async function loadUsage() {
     ui.usage = {}; for (const x of d.rows || []) { x.v = usageVer(x.v); ui.usage[String(x.h).toLowerCase()] = x; }
     ui.trialH = {}; // 🧪 filas del periodo de prueba: su huella es la del correo (así no dependen de la columna «nombre»)
     for (const x of d.rows || []) { const m = String(x.m || '').trim().toLowerCase(), h = String(x.h).toLowerCase(); if (m && !(access.list || []).some(y => y.hash === h) && await trialHashOf(m) === h) ui.trialH[h] = (String(x.nm || '').match(/\d{4}-\d{2}-\d{2}/) || [''])[0] || (x.first ? addDays(fecha10(x.first), TRIAL_DAYS - 1) : ''); }
-    ui.msgs = Array.isArray(d.msgs) ? d.msgs : null; ui.msgVistos = d.vistos || null; ui.msgHechos = d.hechos || null; ui.usageVer = +d.ver || 0; ui.msgAvisos = d.avisos !== false; ui.usageOld16 = !(d.ver >= 17); if (ui.msgs) { ui.msgPend = msgThreads().filter(t => t.pend).length; usersBadge(); }
+    ui.usageVer = +d.ver || 0; ui.usageOld16 = false;
+    { const g = Array.isArray(d.msgs) ? { msgs: d.msgs, vistos: d.vistos, hechos: d.hechos } : null; sbAdminLoad().then(() => { ui.msgErr = ''; return sbImport(g); }).catch(e => { ui.msgErr = e.message === 'clave' ? 'Supabase no reconoce tu clave: revisa el secreto ADMIN_KEY (debe ser igual que READ_KEY).' : 'No se pudo conectar con los mensajes (¿sin conexión?).'; if (ui.accPage || ui.accessOpen) render(); }); }
     ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageOld12 = !(d.ver >= 12); ui.usageOld13 = !(d.ver >= 14); ui.usageOld14 = !(d.ver >= 15); ui.usageOld15 = !(d.ver >= 16); ui.refs = {}; for (const x of d.refs || []) if (x.m) ui.refs[String(x.m).toLowerCase()] = { ref: String(x.ref || ''), ini: String(x.ini || '') }; ui.usageVer = +d.ver || 0;
     // nombres puestos en otro dispositivo tuyo: se copian aquí si aquí no tienes uno
     let got = 0;
