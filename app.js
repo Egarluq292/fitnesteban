@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.20.1';
+const APP_VERSION = '5.20.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -8078,6 +8078,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.20.2', ['🔔 Entérate al momento cuando Esteban te escriba, aunque tengas la app cerrada: actívalo en Ajustes → Aplicación → «Avisos de Esteban». En iPhone funciona con la app añadida a la pantalla de inicio.', '☁️ El aviso de guardar la copia en Drive ya solo sale si has cambiado algo desde la última copia, y tiene un botón «Hoy no».']],
   ['5.20.1', ['🔔 Avisos de Esteban: actívalos o quítalos en Ajustes → Aplicación. La primera vez que Esteban te escribe, el chat te pregunta si quieres que te avise.', '📝 «Para escribir»: plantilla «Renovar (con precios)» con el nombre y la fecha de cada persona.', '☁️ El aviso de copia en Drive solo sale si has cambiado algo desde la última copia, y ahora tiene «Hoy no».'], 'quiet'],
   ['5.20.0', ['💬 Los mensajes con Esteban ahora llegan al instante: si tienes la conversación abierta, su respuesta aparece sola, sin salir y volver a entrar.', '🔔 Nuevo: en «Escribir a Esteban» (el botón de los dos bocadillos, arriba) pulsa «Avisarme en el móvil cuando Esteban conteste» y te llegará una notificación aunque tengas la app cerrada. En iPhone funciona con la app añadida a la pantalla de inicio.']],
   ['5.19.5', ['⏳ Si tu acceso o tu periodo de prueba está a punto de terminar, te llega un correo de aviso 3 días antes (si nos dejaste tu correo).'], 'quiet'],
