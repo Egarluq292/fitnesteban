@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.20.0';
+const APP_VERSION = '5.20.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -5991,6 +5991,7 @@ function renderSettings() {
     ${access.usageUrl ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span class="min-w-0">🔑 Este dispositivo: <span class="${/✓/.test(deviceDiag) ? 'text-emerald-300' : 'text-amber-300'}">${esc(deviceDiag || 'sin comprobar')}</span><br><span class="opacity-70">${esc(deviceLabel())} · script …${esc(access.usageUrl.replace(/\/exec.*$/, '').slice(-6))}</span></span><button class="underline text-brand shrink-0" data-act="devCheck" type="button">Comprobar</button></div>` : ''}
     <div><div class="lbl mb-1.5">Tema</div><div class="grid grid-cols-3 gap-1.5">${[['dark', '🌙 Oscuro'], ['light', '☀️ Claro'], ['auto', '📱 Auto']].map(([k, l]) => `<button class="chip justify-center whitespace-nowrap px-2 ${themePref() === k ? 'chip-on' : ''}" data-act="setTheme" data-k="${k}" type="button">${l}</button>`).join('')}</div>
       <p class="text-[11px] text-mute mt-1.5">«Auto» sigue el modo claro u oscuro de tu móvil.</p></div>
+    ${access.me?.admin ? '' : pushSetHTML()}
     <button class="btn-danger w-full" data-act="wipe" type="button">Borrar todo</button>
     <p class="text-[11px] text-mute">Versión ${APP_VERSION} · ${state.sessions.length} sesiones · ${Object.keys(state.meals).length} días de dieta</p>
 `)}`;
@@ -6260,8 +6261,12 @@ async function driveUpload(interactive) {
   } catch { /* no es grave */ }
   state.settings.lastDriveBackup = todayISO();
   state.settings.lastBackup = todayISO();
+  state.settings.driveSig = driveSig();
   persist();
 }
+/* ¿Ha cambiado algo desde la última copia en Drive? (sin contar fechas de copia ni avisos ya vistos) */
+const DRIVE_VOL = new Set(['lastDriveBackup', 'lastBackup', 'driveSig', 'driveSkip', 'lastSeenVersion', '_sig', 'dataAt']);
+function driveSig() { try { return String(hashStr(JSON.stringify(state, (k, v) => DRIVE_VOL.has(k) ? undefined : v))); } catch { return ''; } }
 
 async function driveConnect() {
   ui.driveBusy = true; render();
@@ -6357,12 +6362,14 @@ async function maybeAutoDriveBackup() {
   const s = state.settings;
   if (!s.driveConnected || s.autoDrive === false || !navigator.onLine) return;
   const age = s.lastDriveBackup ? daysBetween(s.lastDriveBackup, todayISO()) : 99;
-  if (age < 1) return;
+  if (age < 1 || s.driveSkip === todayISO()) return;
+  if (s.driveSig && s.driveSig === driveSig()) return; // nada nuevo desde la última copia: no hace falta otra
   if (storedToken()) {
     try { const nw = await driveHasNewer(); if (nw) return newerBanner(nw); await driveUpload(false); toast('Copia diaria guardada en Drive ✓'); render(); return; } catch { /* sigue: pide permiso */ }
   }
-  $('#topBanner').innerHTML = `<div class="banner-info mt-3"><span>☁️ Toca para guardar la copia diaria en Drive${s.lastDriveBackup ? ` (última hace ${age} ${age === 1 ? 'día' : 'días'})` : ''}.</span><button class="btn-banner shrink-0" id="doDriveBackup" type="button">Guardar</button></div>`;
+  $('#topBanner').innerHTML = `<div class="banner-info mt-3"><span>☁️ Toca para guardar la copia diaria en Drive${s.lastDriveBackup ? ` (última hace ${age} ${age === 1 ? 'día' : 'días'})` : ''}.</span><span class="flex gap-1.5 shrink-0"><button class="btn-banner" id="skipDriveBackup" type="button" style="opacity:.75">Hoy no</button><button class="btn-banner" id="doDriveBackup" type="button">Guardar</button></span></div>`;
   $('#doDriveBackup').onclick = () => driveBackupNow();
+  $('#skipDriveBackup').onclick = () => { s.driveSkip = todayISO(); persist(); $('#topBanner').innerHTML = ''; };
   loadGis().catch(() => null); // precarga para que la ventana de Google abra al instante
 }
 
@@ -6796,6 +6803,16 @@ async function pushOff() { try { const s = await (await navigator.serviceWorker.
 const pushMsg = e => e.message === 'perm' ? 'Has bloqueado las notificaciones: actívalas para esta app en los ajustes del navegador o del móvil.' : e.message === 'nopush' ? (/iPhone|iPad/.test(navigator.userAgent) ? 'En iPhone, primero añade la app a la pantalla de inicio (Compartir → Añadir a pantalla de inicio) y ábrela desde ahí.' : 'Este navegador no permite notificaciones.') : 'No se pudieron activar (¿sin conexión?). Vuelve a probar.';
 // una vez al día se renueva en silencio (el móvil puede cambiar la dirección de los avisos)
 function pushRefresh(admin) { const p = lsGet(PUSH_KEY); if (p?.on === (admin ? 'adm' : 'u') && p.at !== todayISO() && pushCan() && Notification.permission === 'granted') pushOn(admin, false).catch(() => { }); }
+const PUSH_ASK_KEY = 'fitnesteban_pushask';
+const pushUserOn = () => lsGet(PUSH_KEY)?.on === 'u' && pushCan() && Notification.permission === 'granted';
+// ⚙️ Ajustes → Aplicación: activar o quitar los avisos de Esteban
+function pushSetHTML() {
+  const on = pushUserOn();
+  const why = !pushCan() ? (isIOS() ? 'En iPhone, primero añade la app a la pantalla de inicio (Compartir → «Añadir a pantalla de inicio») y ábrela desde ahí.' : 'Este navegador no permite notificaciones.') : Notification.permission === 'denied' ? 'Las tienes bloqueadas: actívalas para esta app en los ajustes de notificaciones del móvil.' : on ? 'Te llega una notificación cuando Esteban te escribe, aunque tengas la app cerrada.' : 'Actívalos para enterarte cuando Esteban te escriba, aunque tengas la app cerrada.';
+  return `<div><div class="flex items-center justify-between gap-2"><span class="lbl">🔔 Avisos de Esteban</span>${pushCan() && Notification.permission !== 'denied' ? `<button class="chip chip-sm ${on ? '' : 'chip-on'}" data-act="pushToggle" type="button">${on ? 'Quitar' : 'Activar'}</button>` : ''}</div><p class="text-[11px] text-mute mt-1">${on ? '<span class="text-emerald-300">Activados ✓</span> · ' : ''}${why}</p></div>`;
+}
+// 💬 la primera vez que Esteban te escribe: ¿quieres que te avise? (se pregunta una sola vez)
+const pushAskNow = () => !access.me?.admin && pushCan() && Notification.permission !== 'denied' && !pushUserOn() && !lsGet(PUSH_ASK_KEY) && (ui.msgThread || []).some(m => m.de === 'e');
 const MSG_Q_KEY = 'fitnesteban_msgq', MSG_SEEN_KEY = 'fitnesteban_msgseen', MSG_CT_KEY = 'fitnesteban_msgct';
 async function msgWho() { return { h: access.ok || lsGet(ACCESS_KEY)?.code || lsGet(TRIAL_KEY)?.h ? await myHash() : '', d: deviceId() }; }
 const msgVisitor = () => !lsGet(ACCESS_KEY)?.code && !lsGet(TRIAL_KEY)?.h; // aún sin código ni prueba: deja nombre y contacto
@@ -6867,7 +6884,7 @@ function msgBox(pre = '') {
     <div class="cal-foot space-y-2">
       ${vis ? `<div class="grid grid-cols-2 gap-2"><input id="msgName" class="field py-2 text-sm" maxlength="40" placeholder="Tu nombre" value="${esc(ct.p || profileOf()?.name || '')}" /><input id="msgCt" class="field py-2 text-sm" maxlength="80" placeholder="Correo o teléfono" value="${esc(ct.ct || '')}" /></div><p class="text-[10px] text-mute leading-snug">Aún no tienes código: déjame tu correo o teléfono por si no vuelves a abrir la app.</p>` : ''}
       <form id="msgForm" class="flex gap-2 items-end"><textarea id="msgInput" rows="2" class="field flex-1 resize-none max-h-32 py-2.5" maxlength="800" placeholder="Escribe tu mensaje…">${esc(pre)}</textarea><button class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button></form>
-      ${pushCan() && lsGet(PUSH_KEY)?.on !== 'u' && !access.me?.admin ? '<button id="msgPush" class="btn-ghost w-full text-[13px] py-2" type="button">🔔 Avisarme en el móvil cuando Esteban conteste</button>' : ''}
+      ${pushCan() && !pushUserOn() && !access.me?.admin ? '<button id="msgPush" class="btn-ghost w-full text-[13px] py-2" type="button">🔔 Avisarme en el móvil cuando Esteban conteste</button>' : ''}
       <p class="text-[11px] text-mute text-center">¿Prefieres Telegram? <a class="text-brand underline" href="${CONTACT_URL}" target="_blank" rel="noopener">Escríbeme allí</a></p>
     </div>`, { sheetClass: 'sheet-fixed sheet-full', retry: () => msgBoxLoad() });
   $('#msgForm').addEventListener('submit', e => { e.preventDefault(); msgSend(); });
@@ -6891,8 +6908,17 @@ function msgBoxRender(err) {
   const b = $('#msgBody'); if (!b) return;
   const q = (lsGet(MSG_Q_KEY) || []).map(m => ({ ...m, q: true })), all = [...(ui.msgThread || []).map(m => ({ ...m, mine: m.de === 'u' })), ...q.map(m => ({ ...m, mine: true }))];
   b.innerHTML = (all.length ? all.map(m => msgBubble(m, m.mine)).join('') : `<div class="text-center mt-6"><div class="text-3xl">👋</div><p class="text-sm text-mute mt-2 leading-relaxed">Pregúntame lo que quieras: tu código, una duda de la app, algo que no funciona o una idea.<br>Te contesto aquí; verás el aviso en el botón de los bocadillos de arriba.</p></div>`)
-    + (err === 'net' ? '<p class="text-[11px] text-amber-300 text-center">Sin conexión: lo que escribas se enviará solo al volver.</p>' : '');
+    + (err === 'net' ? '<p class="text-[11px] text-amber-300 text-center">Sin conexión: lo que escribas se enviará solo al volver.</p>' : '')
+    + (pushAskNow() ? `<div id="pushAsk" style="border:1px solid var(--line,rgba(148,163,184,.25));border-radius:14px;padding:12px;margin-top:10px"><p class="text-[13px] leading-snug"><b>🔔 ¿Te aviso cuando Esteban te escriba?</b><br><span class="text-mute text-[12px]">Te llegará una notificación aunque tengas la app cerrada. Puedes quitarlo cuando quieras en Ajustes.</span></p><div class="grid grid-cols-2 gap-2 mt-2.5"><button class="btn-primary text-[13px] py-2" data-pa="si" type="button">Sí, avísame</button><button class="btn-ghost text-[13px] py-2" data-pa="no" type="button">Ahora no</button></div></div>` : '');
   b.scrollTop = b.scrollHeight;
+  $('#msgPush')?.classList.toggle('hidden', !!$('#pushAsk') || pushUserOn());
+  $('#pushAsk')?.addEventListener('click', async e => {
+    const k = e.target.closest('[data-pa]')?.dataset.pa; if (!k) return;
+    if (k === 'no') { lsSet(PUSH_ASK_KEY, 1); $('#pushAsk')?.remove(); $('#msgPush')?.classList.remove('hidden'); return; }
+    e.target.disabled = true;
+    try { await pushOn(false); lsSet(PUSH_ASK_KEY, 1); $('#pushAsk')?.remove(); toast('🔔 Listo: te avisaré cuando Esteban te escriba'); }
+    catch (err) { e.target.disabled = false; toast(pushMsg(err), 'warn'); }
+  });
   const last = (ui.msgThread || []).filter(m => m.de === 'e').pop(); if (last) { lsSet(MSG_SEEN_KEY, last.ts); ui.msgNew = 0; msgBadge(); msgVisto(); }
 }
 async function msgBoxLoad() {
@@ -7144,7 +7170,7 @@ function toWriteList() {
 const TW_TPL = [
   ['Preguntar qué falla', (p) => `¡Hola${p.first ? ', ' + p.first : ''}! Te escribe Esteban, el de FITNESTEBAN 💪 He visto que estos días casi no has entrado y quería preguntarte, sin compromiso: ¿hay algo que no te convence o que no entiendes? Me ayuda muchísimo saberlo para mejorarla. Y si es falta de tiempo, también vale 😄`],
   ['Ofrecer ayuda', (p) => `¡Hola${p.first ? ', ' + p.first : ''}! Soy Esteban, de FITNESTEBAN. ${p.kind === 'prueba' ? 'Te' : 'A tu código le'} ${p.left === 0 ? 'queda menos de un día' : p.left === 1 ? 'queda 1 día' : `quedan ${p.left} días`} y he visto que no te ha dado tiempo a sacarle mucho partido. Si quieres, te dejo montado tu entreno según los días que vas al gimnasio, o te enseño en 5 minutos a apuntar la comida con una foto. Dime y lo hacemos 👍`],
-  ['Último día', (p) => `¡Hola${p.first ? ', ' + p.first : ''}! Soy Esteban. ${p.kind === 'prueba' ? 'Tu periodo de prueba' : 'Tu acceso'} de FITNESTEBAN termina el ${fmtDateShort(p.hasta)}. Si te ha servido y quieres seguir, dímelo y ${p.kind === 'prueba' ? 'te paso tu código' : 'lo renovamos'}. Y si no era para ti, sin problema: me encantaría que me dijeras en una frase por qué, que me ayuda mucho a mejorarla. ¡Gracias por probarla! 🙌`]
+  ['Renovar (con precios)', (p) => { const L = m => ['1m', '3m', '6m'].map(k => `· ${k[0]} ${k === '1m' ? 'mes' : 'meses'}: ${eur(PRICES[m][k])}`).join('\n'); return `¡Hola${p.first ? ', ' + p.first : ''}! Soy Esteban. ${p.kind === 'prueba' ? 'Tu periodo de prueba' : 'Tu acceso'} de FITNESTEBAN termina el ${fmtDateShort(p.hasta)}${p.left === 0 ? ' (hoy)' : p.left === 1 ? ' (mañana)' : ''}.\n\nPara ${p.kind === 'prueba' ? 'seguir usándola' : 'renovarlo'}:\n\nIndividual (1 cuenta):\n${L('ind')}\n\nDÚO (2 cuentas, por ejemplo con tu pareja o un compañero de entreno):\n${L('duo')}\n\nDime cuál prefieres y ${p.kind === 'prueba' ? 'te paso tu código' : 'lo renuevo'} sin perder nada de lo que tienes guardado 🚀.`; }]
 ];
 function toWriteModal() {
   const W = toWriteList();
@@ -7164,7 +7190,7 @@ function twEditor(p, k = ui.twTpl || 0, txt = null) {
   const text = txt ?? TW_TPL[k][1]({ ...p, first });
   openModal(`<div class="flex items-center gap-2"><button class="w-8 h-8 rounded-full border border-line text-mute shrink-0" data-mact="back" type="button" aria-label="Volver">‹</button><h3 class="modal-title truncate">✍️ ${esc(p.name)}</h3><button class="ml-auto w-8 h-8 rounded-full border border-line text-mute shrink-0" data-close type="button" aria-label="Cerrar">✕</button></div>
     <div class="flex gap-1.5 flex-wrap">${TW_TPL.map(([n], i) => `<button class="chip chip-sm${i === k ? ' chip-on' : ''}" data-mact="tpl" data-i="${i}" type="button">${n}</button>`).join('')}</div>
-    <textarea id="twText" rows="9" class="field w-full text-[14px] leading-snug py-2.5">${esc(text)}</textarea>
+    <textarea id="twText" rows="15" class="field w-full text-[14px] leading-snug py-2.5">${esc(text)}</textarea>
     <p class="text-[11px] text-mute -mt-1">Cámbialo lo que quieras antes de enviarlo.</p>
     <div class="grid gap-2">
       <button class="btn-primary" data-mact="app" type="button">💬 Enviar por la app</button>
@@ -7176,6 +7202,7 @@ function twEditor(p, k = ui.twTpl || 0, txt = null) {
     copy: async () => { try { await navigator.clipboard.writeText($('#twText').value.trim()); twDone(p.id, false); toast('📋 Copiado: pégalo en WhatsApp'); } catch { toast('No se pudo copiar', 'warn'); } },
     mail: () => { const t = $('#twText').value.trim(); twDone(p.id, false); location.href = `mailto:${p.mail}?subject=${encodeURIComponent('FITNESTEBAN')}&body=${encodeURIComponent(t)}`; }
   });
+  const ta = $('#twText'); if (ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 4 + 'px'; } // el mensaje entero a la vista, sin recortar
 }
 function twDone(id, redraw) { state.settings.wrote = { ...(state.settings.wrote || {}), [id]: todayISO() }; persist(); if (redraw) toWriteModal(); if (ui.accPage) render(); }
 
@@ -8051,6 +8078,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.20.1', ['🔔 Avisos de Esteban: actívalos o quítalos en Ajustes → Aplicación. La primera vez que Esteban te escribe, el chat te pregunta si quieres que te avise.', '📝 «Para escribir»: plantilla «Renovar (con precios)» con el nombre y la fecha de cada persona.', '☁️ El aviso de copia en Drive solo sale si has cambiado algo desde la última copia, y ahora tiene «Hoy no».'], 'quiet'],
   ['5.20.0', ['💬 Los mensajes con Esteban ahora llegan al instante: si tienes la conversación abierta, su respuesta aparece sola, sin salir y volver a entrar.', '🔔 Nuevo: en «Escribir a Esteban» (el botón de los dos bocadillos, arriba) pulsa «Avisarme en el móvil cuando Esteban conteste» y te llegará una notificación aunque tengas la app cerrada. En iPhone funciona con la app añadida a la pantalla de inicio.']],
   ['5.19.5', ['⏳ Si tu acceso o tu periodo de prueba está a punto de terminar, te llega un correo de aviso 3 días antes (si nos dejaste tu correo).'], 'quiet'],
   ['5.19.4', ['💶 Cobros: ya puedes apuntar a mano un cobro que no quedó anotado (persona, plan, modalidad, importe y fecha).'], 'quiet'],
@@ -8519,7 +8547,7 @@ const GUIDE = [
   ]],
   ['ℹ️ La app', [
     '🔄 Se <b>actualiza sola</b> al abrirla o volver a ella. Después verás una vez las novedades; puedes volver a verlas desde esta guía. Tu versión, en Ajustes → Aplicación.',
-    '💬 El botón de los dos bocadillos de arriba abre tu chat con Esteban dentro de la app: tu código, dudas, fallos o ideas. Te contesta ahí mismo y verás un número en el botón cuando lo haga. Dentro puedes pulsar «🔔 Avisarme en el móvil cuando Esteban conteste» para recibir una notificación aunque tengas la app cerrada (en iPhone, solo con la app añadida a la pantalla de inicio). Si lo prefieres, dentro tienes Telegram.',
+    '💬 El botón de los dos bocadillos de arriba abre tu chat con Esteban dentro de la app: tu código, dudas, fallos o ideas. Te contesta ahí mismo y verás un número en el botón cuando lo haga. Para recibir una notificación cuando te escriba, aunque tengas la app cerrada, actívala en Ajustes → Aplicación → «🔔 Avisos de Esteban» o con el botón de dentro del chat (en iPhone, solo con la app añadida a la pantalla de inicio). Si lo prefieres, dentro tienes Telegram.',
     '📤 «Compartir la app» (Ajustes y abajo en esta guía) envía a quien quieras el enlace de la app: podrá probarla 7 días entrando con su cuenta de Google.',
     '🔒 Qué datos usa la app y dónde se guardan: <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.'
   ]]
@@ -9998,6 +10026,7 @@ const actions = {
   v5Open: () => profileModal(),
   v5Close: () => { state.settings.v5x = true; persist(); render(); },
   pays: b => paysModal(b.dataset.hash || ''),
+  pushToggle: async b => { b.disabled = true; try { if (pushUserOn()) { await pushOff(); toast('Avisos de Esteban desactivados'); } else { await pushOn(false); lsSet(PUSH_ASK_KEY, 1); toast('🔔 Listo: te avisaré cuando Esteban te escriba'); } } catch (e) { toast(pushMsg(e), 'warn'); } render(); },
   setTheme: b => { try { localStorage.setItem(THEME_KEY, b.dataset.k); } catch { /* nada */ } applyTheme(); render(); },
   retoCard: b => openRetoCard(b.dataset.reto, b.dataset.at),
   libNewSee: () => { libMarkSeen(); go('train'); ui.trainHome = true; render(); },
