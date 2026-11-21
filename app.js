@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.19.3';
+const APP_VERSION = '5.19.5';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7955,6 +7955,8 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.19.5', ['⏳ Si tu acceso o tu periodo de prueba está a punto de terminar, te llega un correo de aviso 3 días antes (si nos dejaste tu correo).'], 'quiet'],
+  ['5.19.4', ['💶 Cobros: ya puedes apuntar a mano un cobro que no quedó anotado (persona, plan, modalidad, importe y fecha).'], 'quiet'],
   ['5.19.3', ['🛟 Mensajes: la app ya no amontona consultas si Google va lento (una cada vez, más espaciadas) y nunca se queda cargando más de 25 segundos.'], 'quiet'],
   ['5.19.2', ['🗑️ Mensajes: toca un mensaje de una conversación para borrarlo (script v20).', '⚠️ Usuarios: si no se puede leer el registro, lo dice arriba (sin conexión o error del script) con «Reintentar».'], 'quiet'],
   ['5.19.1', ['☀️ Modo claro: el aviso de fin de prueba o de acceso ya se lee bien.'], 'quiet'],
@@ -10641,7 +10643,7 @@ function usageLine(hash) {
   return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(ver || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${(+u.days || 1) === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} dispositivo${u.n === 1 ? '' : 's'} (límite: ${DEVICE_LIMIT}${u.n > DEVICE_LIMIT ? '; los que ya tenía se mantienen' : ''})`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="min-w-0 break-words text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${dv.p && !(access.list || []).some(x => x.hash === hash && x.anon) ? `<b class="text-white">${esc(dv.p)}</b> · ` : ''}${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}${dv.k ? ` · ${dv.k} día${dv.k === 1 ? '' : 's'} de uso` : ''}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 break-words">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
 }
 function usageScript(key) {
-  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 1; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos; periodo de prueba de 7 días con Google; mensajes dentro de la app, con «visto», «marcar como leído» y borrar) · v20
+  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 1; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos; periodo de prueba de 7 días con Google; mensajes dentro de la app, con «visto», «marcar como leído» y borrar; aviso por correo 3 días antes de caducar) · v21
 const READ_KEY = '${key}';
 const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
 const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre', 'correo', 'alta', 'dispositivos', 'bloqueos'];
@@ -10762,6 +10764,30 @@ function doPost(e) {
   } catch (err) { return salida_({ ok: false }); }
 }
 // ▶ Para comprobar permisos: elige «probar» arriba y pulsa Ejecutar. Debe decir cuántos códigos y filas hay.
+// ⏰ Aviso por correo 3 días antes de que termine un código o un periodo de prueba (una vez por cada fecha). Se activa una sola vez ejecutando «instalarAvisos».
+function avisosCaducidad() {
+  const P = PropertiesService.getScriptProperties(), hoy = fecha_(new Date()), props = P.getProperties();
+  const correo = {}, nombre = {}, conCodigo = {};
+  hoja_().getDataRange().getValues().slice(1).forEach(r => { const h = String(r[0]).toLowerCase(), c = String(r[6] || '').trim(); if (c.indexOf('@') > 0) { correo[h] = c; conCodigo[c.toLowerCase()] = 1; } if (r[5]) nombre[h] = String(r[5]).split(' ')[0]; });
+  const dias = f => Math.round((new Date(f + 'T12:00:00Z') - new Date(hoy + 'T12:00:00Z')) / 864e5);
+  const lista = [];
+  acl_().forEach(p => { const h = p[0].toLowerCase(); if (p.slice(1).some(x => x.toLowerCase() === 'admin')) return; const f = hasta_(h); if (f && correo[h]) lista.push({ h: h, m: correo[h], f: f, prueba: false }); });
+  Object.keys(props).forEach(k => { if (k.indexOf('p_') !== 0) return; try { const x = JSON.parse(props[k]); if (x && x.m && x.hasta && !conCodigo[String(x.m).toLowerCase()]) lista.push({ h: k.slice(2), m: String(x.m), f: x.hasta, prueba: true }); } catch (e) {} });
+  let n = 0;
+  lista.forEach(u => {
+    const q = dias(u.f); if (q < 1 || q > 3 || props['av_' + u.h] === u.f) return;
+    const que = u.prueba ? 'tu periodo de prueba de' : 'tu acceso a', cuando = q === 1 ? 'mañana' : 'en ' + q + ' días', fecha = u.f.slice(8, 10) + '/' + u.f.slice(5, 7);
+    const cuerpo = '¡Hola' + (nombre[u.h] ? ', ' + nombre[u.h] : '') + '!\\n\\nTe escribo para recordarte que ' + que + ' FITNESTEBAN termina el ' + fecha + ' (' + cuando + ').\\n\\nSi quieres seguir, escríbeme desde la propia app (el botón de los dos bocadillos, arriba) o contestando a este correo, y lo dejamos listo.\\n\\nUn saludo,\\nEsteban · FITNESTEBAN\\nhttps://fitnesteban.app';
+    try { MailApp.sendEmail({ to: u.m, subject: '⏳ ' + que.charAt(0).toUpperCase() + que.slice(1) + ' FITNESTEBAN termina el ' + fecha, body: cuerpo, name: 'FITNESTEBAN' }); P.setProperty('av_' + u.h, u.f); n++; } catch (e) { Logger.log('No se pudo avisar a ' + u.m + ': ' + e); }
+  });
+  Logger.log('Avisos de caducidad enviados hoy: ' + n);
+}
+// actívalo una vez (▶ Ejecutar): cada día, hacia las 10:00, mira quién termina en 3 días o menos
+function instalarAvisos() {
+  ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction() === 'avisosCaducidad') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('avisosCaducidad').timeBased().everyDays(1).atHour(10).inTimezone('Europe/Madrid').create();
+  Logger.log('✓ Aviso diario activado (hacia las 10:00)');
+}
 function probar() {
   const n = huellas_().length, f = hoja_().getLastRow() - 1;
   Logger.log('OK · códigos en acceso.txt: ' + n + ' · filas en la hoja: ' + f + ' · mensajes: ' + msgFilas_().length + ' · correos que puede enviar hoy: ' + MailApp.getRemainingDailyQuota());
@@ -10831,9 +10857,9 @@ function doGet_(e) {
       const lock = LockService.getScriptLock(); lock.waitLock(10000);
       try { msgHoja_().appendRow([ts, id, 'u', t, nm, ct]); c.remove('msgs'); } finally { lock.releaseLock(); }
       avisaCorreo_(nm, ct, t);
-      return salida_({ ok: true, ver: 20, ts: ts });
+      return salida_({ ok: true, ver: 21, ts: ts });
     }
-    return salida_({ ok: true, ver: 20, msgs: msgFilas_().filter(r => r.id === id).slice(-60).map(r => ({ ts: r.ts, de: r.de, t: r.t })) });
+    return salida_({ ok: true, ver: 21, msgs: msgFilas_().filter(r => r.id === id).slice(-60).map(r => ({ ts: r.ts, de: r.de, t: r.t })) });
   }
   // ✓✓ el usuario ha abierto su conversación y ha visto hasta el mensaje de Esteban con fecha «m»
   if (q.op === 'visto') {
@@ -10841,10 +10867,10 @@ function doGet_(e) {
     if (!id || !/^\\d{4}-\\d{2}-\\d{2}T/.test(m)) return salida_({ ok: false });
     const P = PropertiesService.getScriptProperties(), prev = JSON.parse(P.getProperty('vs_' + id) || '{}');
     if (!prev.m || m > prev.m) P.setProperty('vs_' + id, JSON.stringify({ m: m, at: new Date().toISOString() }));
-    return salida_({ ok: true, ver: 20 });
+    return salida_({ ok: true, ver: 21 });
   }
   // cuántas conversaciones esperan respuesta (solo el número, para el aviso de tu app)
-  if (q.op === 'pend') return salida_({ ok: true, ver: 20, n: msgPend_() });
+  if (q.op === 'pend') return salida_({ ok: true, ver: 21, n: msgPend_() });
   // cuántas personas han abierto la app hoy (solo el número: sin nombres ni correos)
   if (q.op === 'hoy') {
     const c = CacheService.getScriptCache(); let n = c.get('hoy');
@@ -10852,7 +10878,7 @@ function doGet_(e) {
       const hoy = fecha_(new Date()), adm = admins_(), dd = disp_(); let k = 0;
       hoja_().getDataRange().getValues().slice(1).forEach(r => { const h = String(r[0]).toLowerCase(); if (fecha_(r[1]) !== hoy || adm.indexOf(h) >= 0) return; const q = {}; ((dd[h] || {}).d || []).forEach(v => { if (v.last === hoy) q[String(v.p || v.id).toLowerCase()] = 1; }); k += Math.max(1, Object.keys(q).length); });
       n = String(k); c.put('hoy', n, 60); }
-    return salida_({ ok: true, ver: 20, hoy: +n });
+    return salida_({ ok: true, ver: 21, hoy: +n });
   }
   if (q.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
   // 💬 contestar (o escribir primero) a una persona, y encender o apagar el aviso por correo
@@ -10861,27 +10887,27 @@ function doGet_(e) {
     if (!/^([0-9a-f]{32}|v_[\\w-]{1,40})$/.test(id) || !t) return salida_({ ok: false });
     const ts = new Date().toISOString(), lock = LockService.getScriptLock(); lock.waitLock(10000);
     try { msgHoja_().appendRow([ts, id, 'e', t, 'Esteban', '']); CacheService.getScriptCache().remove('msgs'); } finally { lock.releaseLock(); }
-    return salida_({ ok: true, ver: 20, ts: ts });
+    return salida_({ ok: true, ver: 21, ts: ts });
   }
   // 💬 solo los mensajes (para la actualización automática de tu app: mucho más ligera que la lista completa)
   if (q.op === 'msgs') {
     const vistos = {}, hechos = {}; Object.entries(PropertiesService.getScriptProperties().getProperties()).forEach(([k, v]) => { if (k.indexOf('vs_') === 0) { try { vistos[k.slice(3)] = JSON.parse(v); } catch (e) {} } if (k.indexOf('hd_') === 0) hechos[k.slice(3)] = v; });
-    return salida_({ ok: true, ver: 20, msgs: msgFilas_().slice(-800), vistos: vistos, hechos: hechos });
+    return salida_({ ok: true, ver: 21, msgs: msgFilas_().slice(-800), vistos: vistos, hechos: hechos });
   }
   if (q.op === 'borra') {
     const id = String(q.id || ''), ts = String(q.ts || '');
     if (!id || !ts) return salida_({ ok: false });
     const sh = msgHoja_(), lock = LockService.getScriptLock(); lock.waitLock(10000);
-    try { const v = sh.getDataRange().getValues(); for (let i = v.length - 1; i >= 1; i--) if (String(v[i][0]) === ts && String(v[i][1]) === id) { sh.deleteRow(i + 1); CacheService.getScriptCache().remove('msgs'); return salida_({ ok: true, ver: 20 }); } } finally { lock.releaseLock(); }
-    return salida_({ ok: true, ver: 20, nada: true });
+    try { const v = sh.getDataRange().getValues(); for (let i = v.length - 1; i >= 1; i--) if (String(v[i][0]) === ts && String(v[i][1]) === id) { sh.deleteRow(i + 1); CacheService.getScriptCache().remove('msgs'); return salida_({ ok: true, ver: 21 }); } } finally { lock.releaseLock(); }
+    return salida_({ ok: true, ver: 21, nada: true });
   }
-  if (q.op === 'hecho') { const id = String(q.id || ''), m = String(q.m || '').slice(0, 30); if (!/^([0-9a-f]{32}|v_[\\w-]{1,40})$/.test(id) || !m) return salida_({ ok: false }); PropertiesService.getScriptProperties().setProperty('hd_' + id, m); return salida_({ ok: true, ver: 20 }); }
-  if (q.op === 'avisos') { PropertiesService.getScriptProperties().setProperty('avisos', q.v === '0' ? '0' : '1'); return salida_({ ok: true, ver: 20 }); }
+  if (q.op === 'hecho') { const id = String(q.id || ''), m = String(q.m || '').slice(0, 30); if (!/^([0-9a-f]{32}|v_[\\w-]{1,40})$/.test(id) || !m) return salida_({ ok: false }); PropertiesService.getScriptProperties().setProperty('hd_' + id, m); return salida_({ ok: true, ver: 21 }); }
+  if (q.op === 'avisos') { PropertiesService.getScriptProperties().setProperty('avisos', q.v === '0' ? '0' : '1'); return salida_({ ok: true, ver: 21 }); }
   const datos = hoja_().getDataRange().getValues().slice(1);
   const dd = disp_();
   const refs = []; Object.entries(PropertiesService.getScriptProperties().getProperties()).forEach(([k, v]) => { if (k.indexOf('p_') !== 0) return; try { const x = JSON.parse(v); if (x && x.ref) refs.push({ m: x.m, ref: x.ref, ini: x.ini }); } catch (e) {} });
   const vistos = {}, hechos = {}; Object.entries(PropertiesService.getScriptProperties().getProperties()).forEach(([k, v]) => { if (k.indexOf('vs_') === 0) { try { vistos[k.slice(3)] = JSON.parse(v); } catch (e) {} } if (k.indexOf('hd_') === 0) hechos[k.slice(3)] = v; });
-  return salida_({ ok: true, ver: 20, vistos: vistos, hechos: hechos, refs: refs, avisos: PropertiesService.getScriptProperties().getProperty('avisos') !== '0', msgs: msgFilas_().slice(-800), rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
+  return salida_({ ok: true, ver: 21, vistos: vistos, hechos: hechos, refs: refs, avisos: PropertiesService.getScriptProperties().getProperty('avisos') !== '0', msgs: msgFilas_().slice(-800), rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
 }`;
 }
 /* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
@@ -11411,11 +11437,20 @@ function planLabel(x) {
 /* 💶 Cobros apuntados (solo en este móvil): ver, corregir o borrar (p. ej. los de una prueba) */
 function paysModal(onlyHash = '') {
   const rows = () => Object.entries(state.accessPays || {}).filter(([h]) => !onlyHash || h === onlyHash).flatMap(([h, arr]) => arr.map((p, i) => ({ h, i, ...p }))).sort((a, b) => b.d.localeCompare(a.d));
-  let editing = null, del = null;
+  let editing = null, del = null, adding = false;
   const who = h => state.accessNames?.[h] || `Sin nombre …${h.slice(-4)}`;
+  // ＋ apuntar un cobro que no quedó anotado (persona, plan, modalidad, importe y fecha)
+  const people = () => (access.list || []).filter(x => !x.admin).map(x => ({ h: x.hash, n: accessWho(x) || `Código …${x.hash.slice(-4)}` })).sort((a, b) => a.n.localeCompare(b.n, 'es'));
+  const addForm = () => `<div class="rounded-xl bg-white/5 px-3 py-2.5 space-y-2"><div class="text-[13px] font-semibold">＋ Apuntar un cobro</div>
+    ${onlyHash ? '' : `<label class="lbl">Persona<select class="field mt-1" id="apWho">${people().map(p => `<option value="${esc(p.h)}">${esc(p.n)}</option>`).join('')}</select></label>`}
+    <div class="grid grid-cols-2 gap-2"><label class="lbl">Plan<select class="field mt-1" id="apPlan"><option value="1m">1 mes</option><option value="3m" selected>3 meses</option><option value="6m">6 meses</option></select></label>
+      <label class="lbl">Modalidad<select class="field mt-1" id="apMod"><option value="ind">Individual</option><option value="duo">DÚO</option></select></label></div>
+    <div class="grid grid-cols-2 gap-2"><label class="lbl">Importe (€)<input class="field mt-1" id="apEur" inputmode="decimal" value="${PRICES.ind['3m'].toFixed(2).replace('.', ',')}" /></label><label class="lbl">Fecha del cobro<input class="field mt-1" id="apDate" type="date" value="${todayISO()}" /></label></div>
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="addno" type="button">Cancelar</button><button class="btn-primary" data-mact="addok" type="button">Guardar</button></div></div>`;
   const html = () => { const R = rows(), tot = R.reduce((a, p) => a + p.eur, 0);
     return `<h3 class="modal-title">💶 Cobros${onlyHash ? ` · ${esc(who(onlyHash))}` : ''}</h3>
-    <p class="text-[12px] text-mute -mt-1">Solo se guardan en este móvil. Corrige el importe o la fecha, o borra los que no sean de verdad.</p>
+    <p class="text-[12px] text-mute -mt-1">Solo se guardan en este móvil. Corrige el importe o la fecha, borra los que no sean de verdad o apunta uno que faltara.</p>
+    ${adding ? addForm() : `<button class="btn-ghost w-full text-[13px]" data-mact="add" type="button">＋ Apuntar un cobro que falta</button>`}
     <div class="space-y-1.5 overflow-y-auto" style="max-height:52vh">${R.length ? R.map(p => { const k = `${p.h}:${p.i}`;
       if (editing === k) return `<div class="rounded-xl bg-white/5 px-3 py-2 space-y-2"><div class="text-[13px] font-semibold">${esc(who(p.h))} · ${esc(planName(p.k))}${p.mod === 'duo' ? ' DÚO' : ''}</div>
         <div class="grid grid-cols-2 gap-2"><label class="lbl">Importe (€)<input class="field mt-1" id="payEur" inputmode="decimal" value="${(+p.eur).toFixed(2).replace('.', ',')}" /></label><label class="lbl">Fecha<input class="field mt-1" id="payDate" type="date" value="${esc(p.d)}" /></label></div>
@@ -11427,7 +11462,18 @@ function paysModal(onlyHash = '') {
     <button class="btn-ghost w-full" data-close type="button">Cerrar</button>`; };
   const redraw = root => { root.querySelector('.modal-sheet').innerHTML = html(); };
   const at = k => { const [h, i] = k.split(':'); return [h, +i]; };
+  const priceFill = () => { const k = $('#apPlan')?.value, m = $('#apMod')?.value, i = $('#apEur'); if (i && PRICES[m]?.[k] != null) i.value = PRICES[m][k].toFixed(2).replace('.', ','); };
+  const hook = () => { ['#apPlan', '#apMod'].forEach(s => $(s)?.addEventListener('change', priceFill)); };
+  const redraw2 = root => { redraw(root); hook(); };
   openModal(html(), {
+    add: root => { adding = true; editing = null; del = null; redraw2(root); },
+    addno: root => { adding = false; redraw(root); },
+    addok: root => {
+      const h = onlyHash || $('#apWho')?.value, k = $('#apPlan').value, mod = $('#apMod').value, v = parseFloat(String($('#apEur').value).replace(',', '.')), d = $('#apDate').value;
+      if (!h) return toast('Elige la persona', 'warn'); if (!(v >= 0)) return toast('Escribe un importe válido', 'warn'); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return toast('Elige una fecha', 'warn');
+      state.accessPays = state.accessPays || {}; (state.accessPays[h] = state.accessPays[h] || []).push({ d, k, mod, eur: Math.round(v * 100) / 100 }); persist();
+      adding = false; redraw(root); render(); toast('Cobro apuntado ✓');
+    },
     edit: (root, b) => { editing = b.dataset.k; del = null; redraw(root); },
     cancel: root => { editing = null; redraw(root); },
     save: root => { const [h, i] = at(editing), p = state.accessPays[h]?.[i]; if (!p) return;
