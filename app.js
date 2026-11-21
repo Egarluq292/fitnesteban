@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.20.4';
+const APP_VERSION = '5.20.5';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4375,7 +4375,7 @@ function queComoModal(pick) {
     fast: () => { lsSet('fitnesteban_qcfast', fast ? 0 : 1); if (s0 === 'rapido') lsSet('fitnesteban_qcsty', 'var'); queComoModal(tp); },
     close: () => ia ? qcAsk({ L, B, rest, tp, sty, fast }) : qcShow({ L, B, rest, tp }, qcLocal(B, tp), 'Con tus comidas habituales y alimentos básicos (sin IA).'),
     home: () => { if (!ia) return toast('Añade tu clave de Gemini en Ajustes para usar esta opción', 'warn'); qcHome({ L, B, rest, tp, sty, fast }); },
-    photo: () => { if (!ia) return toast('Añade tu clave de Gemini en Ajustes para usar esta opción', 'warn'); ui.qc = { L, B, rest, tp, sty, fast }; qcFile.click(); }
+    photo: () => { if (!ia) return toast('Añade tu clave de Gemini en Ajustes para usar esta opción', 'warn'); ui.qc = { L, B, rest, tp, sty, fast }; camShot(qcFile, '📷 Tu nevera o despensa'); }
   });
 }
 function qcHome(cx, pre = lsGet('fitnesteban_qchave') || '', title = '🏠 ¿Qué tienes en casa?') {
@@ -4932,7 +4932,7 @@ function barMissing(code, why = '') {
     <p class="text-[11px] text-mute text-center -mt-1">La IA la lee y la guardo para la próxima vez que escanees este producto.</p>` : ''}
     <button class="btn-ghost w-full" data-mact="hand" type="button">✍️ Escribirlo a mano</button>
     <button class="text-xs text-mute underline w-full" data-close type="button">Cancelar</button>`, {
-    label: () => { ui.labelCode = code; labelFile.click(); },
+    label: () => { ui.labelCode = code; camShot(labelFile, '🏷️ Foto de la etiqueta'); },
     hand: () => { closeModal(); if (!ui.aiResult) ui.aiResult = { desc: ui.mealDesc.trim() || ui.mealType, items: [], kcal: 0, prot: 0, carbs: 0, fat: 0, note: '' }; addIngManual(); }
   });
 }
@@ -4948,7 +4948,7 @@ labelFile.addEventListener('change', async e => {
     <button class="btn-primary w-full" data-mact="again" type="button">📷 Repetir la foto</button>
     <button class="btn-ghost w-full" data-mact="hand" type="button">✍️ Escribirlo a mano</button>
     <button class="text-xs text-mute underline w-full" data-close type="button">Cancelar</button>`, {
-    again: () => { ui.labelCode = code; labelFile.click(); },
+    again: () => { ui.labelCode = code; camShot(labelFile, '🏷️ Foto de la etiqueta'); },
     hand: () => { closeModal(); if (!ui.aiResult) ui.aiResult = { desc: ui.mealDesc.trim() || ui.mealType, items: [], kcal: 0, prot: 0, carbs: 0, fat: 0, note: '' }; addIngManual(); }
   });
   let r;
@@ -5088,6 +5088,40 @@ function renderMealResult(ai) {
   </div>`;
 }
 
+/* 📷 Cámara dentro de la app: la del móvil deja la app en segundo plano y algunos (HyperOS…) la cierran por memoria y la foto se pierde.
+   Aquí la foto se hace sin salir; luego pasa por el mismo camino que si la hubieras elegido («input»). Si no hay cámara, la de siempre */
+let camStream = null;
+function camStop() { try { camStream?.getTracks().forEach(t => t.stop()); } catch { /* nada */ } camStream = null; }
+function camFeed(input, file) { try { const dt = new DataTransfer(); dt.items.add(file); input.files = dt.files; input.dispatchEvent(new Event('change', { bubbles: true })); } catch { toast('No se pudo usar la foto. Prueba con 🖼️ Galería.', 'error'); } }
+function camPickNative(input) { const had = input.hasAttribute('capture'); input.removeAttribute('capture'); input.click(); if (had) setTimeout(() => input.setAttribute('capture', 'environment'), 1500); }
+async function camShot(input, title = '📷 Haz la foto', gallery = input) {
+  if (!navigator.mediaDevices?.getUserMedia || !window.DataTransfer) return input.click();
+  openModal(`<h3 class="modal-title">${title}</h3>
+    <div style="position:relative;border-radius:18px;overflow:hidden;background:#000;height:min(64vh,620px)"><video id="camVideo" playsinline muted autoplay style="width:100%;height:100%;object-fit:cover"></video><p id="camMsg" class="text-[13px] text-center" style="position:absolute;left:0;right:0;bottom:0;padding:10px;color:#fff;background:rgba(0,0,0,.5)">Abriendo la cámara…</p></div>
+    <div class="flex items-center justify-between gap-3">
+      <button class="btn-ghost px-3 py-3 text-[14px]" data-mact="gal" type="button">🖼️ Galería</button>
+      <button id="camShoot" data-mact="shoot" type="button" aria-label="Hacer la foto" disabled style="width:74px;height:74px;border-radius:50%;border:5px solid #fff;background:#00d2df;box-shadow:0 0 0 3px rgba(0,0,0,.35);flex:none;opacity:.4"></button>
+      <button class="btn-ghost px-3 py-3 text-[14px]" data-close type="button">Cancelar</button>
+    </div>`, {
+    sheetClass: 'sheet-fixed sheet-full',
+    shoot: async () => {
+      const v = $('#camVideo'); if (!v?.videoWidth) return;
+      const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0);
+      navigator.vibrate?.(30);
+      const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92)); camStop(); closeModal();
+      if (!blob) return toast('No se pudo hacer la foto. Prueba con 🖼️ Galería.', 'error');
+      camFeed(input, new File([blob], 'foto.jpg', { type: 'image/jpeg' }));
+    },
+    gal: () => { camStop(); closeModal(); camPickNative(gallery); }
+  });
+  const msg = t => { const el = $('#camMsg'); if (el) { el.textContent = t; el.style.display = t ? '' : 'none'; } };
+  try { camStop(); camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false }); }
+  catch (e) { return msg(e.name === 'NotAllowedError' ? 'Sin permiso para la cámara: actívalo para esta app en los ajustes del móvil, o usa 🖼️ Galería.' : 'No se pudo abrir la cámara. Usa 🖼️ Galería.'); }
+  const v = $('#camVideo'); if (!v) return camStop(); // ya cerraste la ventana
+  v.srcObject = camStream; await v.play().catch(() => { });
+  msg(''); const b = $('#camShoot'); if (b) { b.disabled = false; b.style.opacity = '1'; }
+  const watch = setInterval(() => { if (!$('#camVideo')) { clearInterval(watch); camStop(); } }, 500); // ventana cerrada: se apaga la cámara
+}
 async function compressImage(file, max = 1024) {
   const url = URL.createObjectURL(file);
   try {
@@ -8099,6 +8133,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.20.5', ['📷 La cámara se abre dentro de la app (Dieta, etiquetas, ¿Qué como? y cardio): ya no sales a la cámara del móvil, así que el móvil no puede cerrar la app y la foto no se pierde. Si prefieres una foto que ya tienes, «🖼️ Galería».'], 'quiet'],
   ['5.20.4', ['📷 Al volver de la cámara, algunos móviles mandaban un «atrás» que cerraba el panel de la comida y te llevaba a Inicio: ahora se ignora y la foto se queda.', '📷 Si el móvil cierra la app mientras haces la foto (falta de memoria), al volver te deja en Dieta con el panel abierto y te explica qué ha pasado.'], 'quiet'],
   ['5.20.3', ['📷 Al hacer o elegir una foto (Dieta, etiquetas, código de barras, ¿Qué como?, cardio, Coach), la app ya no se actualiza por detrás: la foto no se pierde ni vuelves a la pantalla principal.'], 'quiet'],
   ['5.20.2', ['🔔 Entérate al momento cuando Esteban te escriba, aunque tengas la app cerrada: actívalo en Ajustes → Aplicación → «Avisos de Esteban». En iPhone funciona con la app añadida a la pantalla de inicio.', '☁️ El aviso de guardar la copia en Drive ya solo sale si has cambiado algo desde la última copia, y tiene un botón «Hoy no».']],
@@ -9658,7 +9693,7 @@ const actions = {
   cdType: b => { keepCardioInputs(); ui.cardio.type = b.dataset.type; ui.cardio.est = null; render(); },
   cdInt: b => { keepCardioInputs(); ui.cardio.intensity = b.dataset.int; ui.cardio.est = null; render(); },
   cdEstimate: () => estimateCardio(),
-  cdShot: b => { if (b.dataset.cam) cdShotFile.setAttribute('capture', 'environment'); else cdShotFile.removeAttribute('capture'); cdShotFile.click(); },
+  cdShot: b => { cdShotFile.removeAttribute('capture'); if (b.dataset.cam) camShot(cdShotFile, '⌚ Foto del reloj o la pantalla'); else cdShotFile.click(); },
   cdCancel: () => { ui.cardio.est = null; render(); },
   cdSave: () => {
     const c = ui.cardio;
@@ -9749,7 +9784,7 @@ const actions = {
   saveSession: () => saveSession(),
 
   mealType: b => { ui.mealType = b.dataset.type; render(); },
-  photo: () => $('#mealPhotoInput').click(),
+  photo: () => camShot($('#mealPhotoInput'), '📷 Foto del plato', $('#mealGalleryInput')),
   gallery: () => $('#mealGalleryInput').click(),
   clearImg: () => { ui.img = null; render(); },
   analyze: () => analyzeMeal(),
