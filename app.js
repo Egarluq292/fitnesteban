@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.20.3';
+const APP_VERSION = '5.20.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6538,6 +6538,26 @@ function dietBackToToday() { const T = todayISO(); if (ui.dietDate !== T && !die
    Chrome ignora los pasos de historial creados sin tocar la pantalla, así que se usa CloseWatcher (hecho para esto);
    en navegadores sin él, una entrada de historial que se repone con cada toque. */
 let backGuard = false, backCW = null, backPause = 0;
+/* 📷 Cámara o galería abiertas: el móvil deja la app en segundo plano y, al volver, algunos (HyperOS, Mi Browser…) mandan un «atrás»
+   que cerraba el panel de la comida (y la foto) y llevaba a Inicio. Mientras eliges la foto y justo al volver, ese «atrás» se ignora */
+const PICK_KEY = 'fitnesteban_pick';
+document.addEventListener('click', e => { if (e.target?.matches?.('input[type=file]')) { ui.pickAt = Date.now(); ui.pickDone = 0; try { localStorage.setItem(PICK_KEY, JSON.stringify({ at: Date.now(), view: ui.view, cam: e.target.hasAttribute('capture'), meal: e.target.id === 'mealPhotoInput' })); } catch { /* nada */ } } }, true);
+document.addEventListener('change', e => { if (e.target?.matches?.('input[type=file]')) { ui.pickDone = Date.now(); try { localStorage.removeItem(PICK_KEY); } catch { /* nada */ } } }, true);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && ui.pickAt) setTimeout(() => { if (Date.now() - ui.pickAt > 3000) try { localStorage.removeItem(PICK_KEY); } catch { /* nada */ } }, 4000); });
+/* Si el móvil cerró la app mientras tenías la cámara delante (pasa en algunos Android por falta de memoria), al volver te lo explica */
+function pickLost() {
+  let p = null; try { p = JSON.parse(localStorage.getItem(PICK_KEY) || 'null'); localStorage.removeItem(PICK_KEY); } catch { /* nada */ }
+  if (!p || Date.now() - p.at > 10 * 60000) return;
+  if (p.meal && p.view === 'diet') { go('diet'); ui.addOpen = true; render(); }
+  toast(`📷 Tu móvil cerró la app mientras ${p.cam ? 'hacías' : 'elegías'} la foto y se ha perdido. ${p.cam ? 'Prueba a hacerla con la cámara normal y luego elígela con 🖼️ Galería.' : 'Vuelve a elegirla.'}`, 'warn');
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') ui.visAt = Date.now(); });
+const inPicker = () => {
+  const t = Date.now(), p = ui.pickAt || 0; if (!p || t - p > 10 * 60000) return false;
+  if (document.visibilityState === 'hidden') return true; // con la cámara o la galería delante
+  if ((ui.visAt || 0) < p) return t - p < 1500; // aún abriéndose
+  return t - ui.visAt < 3000 || (!!ui.pickDone && t - ui.pickDone < 4000); // recién vuelto
+};
 const HAS_CW = typeof window.CloseWatcher === 'function';
 function appBack() {
   if ($('#modalRoot')?.classList.contains('open')) { if (!modalBackFn?.()) closeModal(); return true; }
@@ -6558,6 +6578,7 @@ function armBack() {
   try { history.pushState({ fsGuard: 1 }, ''); backGuard = true; } catch { /* sin historial */ }
 }
 function onBack() {
+  if (inPicker()) { armBack(); return; } // «atrás» fantasma al volver de la cámara: no cierra nada
   if (appBack()) { armBack(); return; }
   toast('Pulsa atrás otra vez para salir');
   backPause = Date.now() + 2500; // sin vigilante durante 2,5 s: el siguiente «atrás» cierra la app
@@ -8078,6 +8099,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.20.4', ['📷 Al volver de la cámara, algunos móviles mandaban un «atrás» que cerraba el panel de la comida y te llevaba a Inicio: ahora se ignora y la foto se queda.', '📷 Si el móvil cierra la app mientras haces la foto (falta de memoria), al volver te deja en Dieta con el panel abierto y te explica qué ha pasado.'], 'quiet'],
   ['5.20.3', ['📷 Al hacer o elegir una foto (Dieta, etiquetas, código de barras, ¿Qué como?, cardio, Coach), la app ya no se actualiza por detrás: la foto no se pierde ni vuelves a la pantalla principal.'], 'quiet'],
   ['5.20.2', ['🔔 Entérate al momento cuando Esteban te escriba, aunque tengas la app cerrada: actívalo en Ajustes → Aplicación → «Avisos de Esteban». En iPhone funciona con la app añadida a la pantalla de inicio.', '☁️ El aviso de guardar la copia en Drive ya solo sale si has cambiado algo desde la última copia, y tiene un botón «Hoy no».']],
   ['5.20.1', ['🔔 Avisos de Esteban: actívalos o quítalos en Ajustes → Aplicación. La primera vez que Esteban te escribe, el chat te pregunta si quieres que te avise.', '📝 «Para escribir»: plantilla «Renovar (con precios)» con el nombre y la fecha de cada persona.', '☁️ El aviso de copia en Drive solo sale si has cambiado algo desde la última copia, y ahora tiene «Hoy no».'], 'quiet'],
@@ -10182,7 +10204,7 @@ app.addEventListener('focusin', e => {
 app.addEventListener('focusin', e => { if (e.target.classList?.contains('field-set')) setTimeout(() => e.target.select?.(), 0); });
 
 async function onMealImage(e) {
-  const f = e.target.files[0]; e.target.value = ''; ui.pickAt = 0;
+  const f = e.target.files[0]; e.target.value = '';
   if (!f) return;
   try { ui.img = await compressImage(f); render(); } catch (err) { toast(err.message, 'error'); }
 }
@@ -10345,8 +10367,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   /* Actualización automática: la versión nueva toma el control sola; se recarga en un momento seguro
      (nunca escribiendo, con una ventana abierta o con el cronómetro en marcha: entonces espera a que salgas de la app) */
   // 📷 eligiendo o haciendo una foto (la cámara deja la app en segundo plano) o con una foto pendiente de estimar: tampoco se recarga
-  document.addEventListener('click', e => { if (e.target?.matches?.('input[type=file]')) ui.pickAt = Date.now(); }, true);
-  const picking = () => Date.now() - (ui.pickAt || 0) < 5 * 60000 || !!ui.img;
+  const picking = () => inPicker() || !!ui.img;
   const busy = () => !!timer.endAt || picking() || $('#modalRoot')?.classList.contains('open') || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
   const reloadNow = () => { if (refreshing) return; refreshing = true; try { persist(); savePrevCopy(localStorage.getItem(STORE_KEY), APP_VERSION); } catch { /* nada */ } location.reload(); };
   navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -10587,7 +10608,7 @@ function unlock(me) {
   if (ui.view === 'settings') render();
   if (needsOnboarding(me)) setTimeout(() => themeAsk(onboarding), 300);
   else if (!newsChecked) { newsChecked = true; themeAsk(() => { maybeShowNews(); setTimeout(maybeAskEmail, 2500); }); }
-  setTimeout(emailSync, 4000); setTimeout(() => { msgCheck(true); msgPendCheck(); }, 5000);
+  setTimeout(emailSync, 4000); setTimeout(() => { msgCheck(true); msgPendCheck(); }, 5000); setTimeout(pickLost, 900);
   try { if (new URLSearchParams(location.search).has('msg')) { history.replaceState(null, '', location.pathname); setTimeout(msgFromPush, 1200); } } catch { /* nada */ }
   // biblioteca al día al entrar: avisos de bloques nuevos e iconos
   setTimeout(() => { const before = JSON.stringify(remoteLib.map(x => x.lib)); fetchRemoteLib().then(() => { if (JSON.stringify(remoteLib.map(x => x.lib)) !== before && (ui.view === 'home' || ui.view === 'train') && !$('#modalRoot').classList.contains('open')) render(); }); }, 1500);
