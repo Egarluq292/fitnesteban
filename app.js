@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.19.2';
+const APP_VERSION = '5.19.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6804,11 +6804,17 @@ function msgBox(pre = '') {
   $('#msgForm').addEventListener('submit', e => { e.preventDefault(); msgSend(); });
   msgBoxLoad();
   // 🔄 mientras la tiene abierta, la respuesta de Esteban entra sola
-  const pt = setInterval(async () => {
-    if (!$('#msgBody') || !$('#msgForm') || $('#msgBody[data-thread]')) return clearInterval(pt);
-    if (document.visibilityState !== 'visible' || !navigator.onLine) return;
-    try { const j = await msgApi('hilo'), n = JSON.stringify(j.msgs || []); if (n !== JSON.stringify(ui.msgThread || [])) { ui.msgThread = j.msgs || []; msgBoxRender(); } } catch { /* nada */ }
-  }, 10000);
+  let wait = 15000;
+  const tick = async () => {
+    if (!$('#msgBody') || !$('#msgForm') || $('#msgBody[data-thread]')) return;
+    if (document.visibilityState === 'visible' && navigator.onLine) {
+      const t0 = Date.now();
+      try { const j = await msgApi('hilo'), n = JSON.stringify(j.msgs || []); if (n !== JSON.stringify(ui.msgThread || [])) { ui.msgThread = j.msgs || []; msgBoxRender(); } wait = Date.now() - t0 > 8000 ? Math.min(60000, wait * 2) : 15000; }
+      catch { wait = Math.min(60000, wait * 2); }
+    }
+    setTimeout(tick, wait); // una detrás de otra, nunca varias a la vez
+  };
+  setTimeout(tick, wait);
 }
 function msgBoxRender(err) {
   const b = $('#msgBody'); if (!b) return;
@@ -6849,7 +6855,7 @@ document.addEventListener('click', e => {
 /* ---------- Administrador: bandeja de mensajes y «Para escribir» ---------- */
 async function msgPendCheck() {
   if (!access.usageUrl || !navigator.onLine || !access.me?.admin) return;
-  try { const r = await fetch(`${access.usageUrl}?op=pend&t=${Date.now()}`, { cache: 'no-store' }); const j = await r.json(); if (j.ver >= 17) { ui.msgPend = +j.n || 0; usersBadge(); } } catch { /* nada */ }
+  try { const r = await fetchT(`${access.usageUrl}?op=pend&t=${Date.now()}`, 20000); const j = await r.json(); if (j.ver >= 17) { ui.msgPend = +j.n || 0; usersBadge(); } } catch { /* nada */ }
 }
 function msgThreads() {
   const T = {};
@@ -6916,25 +6922,34 @@ function msgVistoHTML(id, t) {
 // código compartido (2 móviles o 2 nombres): encima de cada mensaje suyo, quién lo escribe
 const msgShared = (id, t) => (ui.usage?.[id]?.ds || []).length >= 2 || new Set(t.msgs.filter(m => m.de === 'u' && m.nm).map(m => m.nm)).size > 1;
 const msgThreadBodyHTML = (id, t) => t.msgs.length ? t.msgs.map(m => msgBubble(m, m.de === 'e', m.de === 'u' && m.nm && msgShared(id, t) ? m.nm : '')).join('') + msgVistoHTML(id, t) : '<p class="text-[12px] text-mute text-center mt-6">Aún no os habéis escrito. Lo verá la próxima vez que abra la app, con aviso en el botón de los bocadillos.</p>';
-/* 🔄 Con la bandeja o una conversación abierta, los mensajes nuevos (y los «visto») entran solos cada 10 s */
+/* 🔄 Con la bandeja o una conversación abierta, los mensajes nuevos (y los «visto») entran solos cada 15 s (más espaciado si Google va lento) */
 let msgPollT = null;
 function msgPollStart() {
-  clearInterval(msgPollT);
-  msgPollT = setInterval(async () => {
+  clearTimeout(msgPollT);
+  let wait = 15000;
+  const tick = async () => {
     const body = $('#msgBody[data-thread]'), inbox = $('#msgInboxL');
-    if (!body && !inbox) { clearInterval(msgPollT); msgPollT = null; return; }
-    if (document.visibilityState !== 'visible' || !navigator.onLine || !ui.accessPin) return;
-    try {
-      const key = await secretDec(lsGet(USE_KEY), ui.accessPin), r = await fetch(`${access.usageUrl}?key=${encodeURIComponent(key)}&t2=${Date.now()}`, { cache: 'no-store' }), d = await r.json();
-      if (!d.ok || !Array.isArray(d.msgs)) return;
-      const before = JSON.stringify([ui.msgs, ui.msgVistos, ui.msgHechos]); ui.msgs = d.msgs; ui.msgVistos = d.vistos || null; ui.msgHechos = d.hechos || null;
-      if (JSON.stringify([ui.msgs, ui.msgVistos, ui.msgHechos]) === before) return;
-      ui.msgPend = msgThreads().filter(t => t.pend).length; usersBadge();
-      const b2 = $('#msgBody[data-thread]');
-      if (b2) { const id = b2.dataset.thread, t = msgThreads().find(x => x.id === id) || { id, msgs: [] }, low = b2.scrollHeight - b2.scrollTop - b2.clientHeight < 80; b2.innerHTML = msgThreadBodyHTML(id, t); if (low) b2.scrollTop = b2.scrollHeight; }
-      else if ($('#msgInboxL') && !$('#modalRoot input:focus')) msgInboxModal();
-    } catch { /* sin conexión: se vuelve a probar */ }
-  }, 10000);
+    if (!body && !inbox) { msgPollT = null; return; }
+    if (document.visibilityState === 'visible' && navigator.onLine && ui.accessPin) {
+      const t0 = Date.now();
+      try {
+        const key = await secretDec(lsGet(USE_KEY), ui.accessPin), op = ui.usageVer >= 20 ? '&op=msgs' : '';
+        const r = await fetchT(`${access.usageUrl}?key=${encodeURIComponent(key)}${op}&t2=${Date.now()}`, 20000), d = await r.json();
+        if (d.ok && Array.isArray(d.msgs)) {
+          const before = JSON.stringify([ui.msgs, ui.msgVistos, ui.msgHechos]); ui.msgs = d.msgs; ui.msgVistos = d.vistos || null; ui.msgHechos = d.hechos || null;
+          if (JSON.stringify([ui.msgs, ui.msgVistos, ui.msgHechos]) !== before) {
+            ui.msgPend = msgThreads().filter(t => t.pend).length; usersBadge();
+            const b2 = $('#msgBody[data-thread]');
+            if (b2) { const id = b2.dataset.thread, t = msgThreads().find(x => x.id === id) || { id, msgs: [] }, low = b2.scrollHeight - b2.scrollTop - b2.clientHeight < 80; b2.innerHTML = msgThreadBodyHTML(id, t); if (low) b2.scrollTop = b2.scrollHeight; }
+            else if ($('#msgInboxL') && !$('#modalRoot input:focus')) msgInboxModal();
+          }
+        }
+        wait = Date.now() - t0 > 8000 ? Math.min(60000, wait * 2) : 15000; // si Google va lento, se pregunta menos
+      } catch { wait = Math.min(60000, wait * 2); }
+    }
+    msgPollT = setTimeout(tick, wait); // la siguiente, solo cuando ha terminado esta
+  };
+  msgPollT = setTimeout(tick, wait);
 }
 function msgThreadModal(id, pre = '', back = null) {
   const t = msgThreads().find(x => x.id === id) || { id, msgs: [], nm: '', ct: '' };
@@ -7940,6 +7955,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.19.3', ['🛟 Mensajes: la app ya no amontona consultas si Google va lento (una cada vez, más espaciadas) y nunca se queda cargando más de 25 segundos.'], 'quiet'],
   ['5.19.2', ['🗑️ Mensajes: toca un mensaje de una conversación para borrarlo (script v20).', '⚠️ Usuarios: si no se puede leer el registro, lo dice arriba (sin conexión o error del script) con «Reintentar».'], 'quiet'],
   ['5.19.1', ['☀️ Modo claro: el aviso de fin de prueba o de acceso ya se lee bien.'], 'quiet'],
   ['5.19.0', ['🎄 ¡Arranca la Operación Polvorón! El calendario de AD(GYM)VIENTO ya está en Inicio: pulsa «Unirme a la operación» y elige tu nivel.', '🎁 Del 1 al 24 de diciembre se abre una casilla cada día: rutinas de 20 minutos en casa con una mochila y retos cortos, cada ejercicio con su animación 3D.'], null, { img: 'news-polvoron.webp', hi: true }],
@@ -10585,13 +10601,18 @@ function usageVer(v) {
   const t = String(v || '').trim().replace(/^v/i, ''), m = t.match(/^[A-Z][a-z]{2} ([A-Z][a-z]{2}) (\d{2}) (\d{4})/);
   return m && MES3[m[1]] ? `${+m[2]}.${MES3[m[1]]}.${+m[3] % 100}` : t;
 }
+/* ⏱️ Ninguna consulta a tu script espera más de 25 s: si Google se atasca, se avisa en vez de quedarse cargando */
+async function fetchT(url, ms = 25000) {
+  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), ms);
+  try { return await fetch(url, { cache: 'no-store', signal: ctl.signal }); } finally { clearTimeout(tm); }
+}
 async function loadUsage() {
   const enc = lsGet(USE_KEY);
   if (!access.usageUrl || !enc || !ui.accessPin || ui.usageLoading) return;
   ui.usageLoading = true;
   try {
     const key = await secretDec(enc, ui.accessPin);
-    const r = await fetch(`${access.usageUrl}?key=${encodeURIComponent(key)}&t=${Date.now()}`, { cache: 'no-store' });
+    const r = await fetchT(`${access.usageUrl}?key=${encodeURIComponent(key)}&t=${Date.now()}`);
     const d = await r.json();
     if (!d.ok) throw new Error(d.error === 'clave' ? 'La clave del registro no coincide con la del script' : 'El registro no respondió bien');
     ui.usage = {}; for (const x of d.rows || []) { x.v = usageVer(x.v); ui.usage[String(x.h).toLowerCase()] = x; }
@@ -10604,7 +10625,7 @@ async function loadUsage() {
     for (const x of d.rows || []) { const h = String(x.h).toLowerCase(), nm = String(x.nm || '').trim(); if (nm && nm !== 'Sin nombre' && nm !== 'Yo (admin)' && !state.accessNames[h]) { state.accessNames[h] = nm.slice(0, 24); got++; } }
     if (got) { persist(); toast(`${got} ${got === 1 ? 'nombre recuperado' : 'nombres recuperados'} de tus otros dispositivos`); }
     if (!ui.usageOld) syncUsageNames();
-  } catch (e) { ui.usageErr = e instanceof TypeError || !navigator.onLine ? 'Sin conexión con tu script de Google (¿cobertura?)' : e instanceof SyntaxError ? 'Tu script de Google ha dado un error en vez de los datos. Mira en Apps Script → Ejecuciones cuál es, o vuelve a pegarlo (Acceso → Reconfigurar).' : (e.message || 'No se pudo leer el registro de uso'); ui.usage = null; }
+  } catch (e) { ui.usageErr = e?.name === 'AbortError' ? 'Google tarda demasiado en responder (tu script puede estar saturado). Prueba en unos minutos.' : e instanceof TypeError || !navigator.onLine ? 'Sin conexión con tu script de Google (¿cobertura?)' : e instanceof SyntaxError ? 'Tu script de Google ha dado un error en vez de los datos. Mira en Apps Script → Ejecuciones cuál es, o vuelve a pegarlo (Acceso → Reconfigurar).' : (e.message || 'No se pudo leer el registro de uso'); ui.usage = null; }
   ui.usageLoading = false; ui.usageAt = Date.now();
   if ((ui.accessOpen || ui.accPage) && ui.view === 'settings') render();
 }
@@ -10676,7 +10697,8 @@ function msgHoja_() {
   if (!sh) { sh = ss.insertSheet('mensajes'); sh.getRange('A:F').setNumberFormat('@'); sh.appendRow(['fecha', 'quien', 'de', 'texto', 'nombre', 'contacto']); }
   return sh;
 }
-function msgFilas_() { return msgHoja_().getDataRange().getValues().slice(1).map(r => ({ ts: String(r[0]), id: String(r[1]), de: String(r[2]), t: String(r[3]), nm: String(r[4] || ''), ct: String(r[5] || '') })); }
+// los mensajes se guardan 30 s en la caché: así las consultas seguidas no abren la hoja cada vez (se borra al escribir o borrar)
+function msgFilas_() { const c = CacheService.getScriptCache(), k = c.get('msgs'); if (k) { try { return JSON.parse(k); } catch (e) {} } const v = msgHoja_().getDataRange().getValues().slice(1).map(r => ({ ts: String(r[0]), id: String(r[1]), de: String(r[2]), t: String(r[3]), nm: String(r[4] || ''), ct: String(r[5] || '') })); try { const j = JSON.stringify(v); if (j.length < 95000) c.put('msgs', j, 30); } catch (e) {} return v; }
 // quién escribe: su código (si este móvil está registrado en él), su prueba (si es la de este móvil) o, si no, «v_» + el móvil (aún sin código)
 function quien_(h, d) {
   if (!d) return '';
@@ -10807,7 +10829,7 @@ function doGet_(e) {
       c.put(ck, String(n + 1), 21600);
       const nm = limpia_(q.p, 40), ct = limpia_(q.ct, 80), ts = new Date().toISOString();
       const lock = LockService.getScriptLock(); lock.waitLock(10000);
-      try { msgHoja_().appendRow([ts, id, 'u', t, nm, ct]); } finally { lock.releaseLock(); }
+      try { msgHoja_().appendRow([ts, id, 'u', t, nm, ct]); c.remove('msgs'); } finally { lock.releaseLock(); }
       avisaCorreo_(nm, ct, t);
       return salida_({ ok: true, ver: 20, ts: ts });
     }
@@ -10838,14 +10860,19 @@ function doGet_(e) {
     const id = String(q.id || ''), t = limpia_(q.t, 1500);
     if (!/^([0-9a-f]{32}|v_[\\w-]{1,40})$/.test(id) || !t) return salida_({ ok: false });
     const ts = new Date().toISOString(), lock = LockService.getScriptLock(); lock.waitLock(10000);
-    try { msgHoja_().appendRow([ts, id, 'e', t, 'Esteban', '']); } finally { lock.releaseLock(); }
+    try { msgHoja_().appendRow([ts, id, 'e', t, 'Esteban', '']); CacheService.getScriptCache().remove('msgs'); } finally { lock.releaseLock(); }
     return salida_({ ok: true, ver: 20, ts: ts });
+  }
+  // 💬 solo los mensajes (para la actualización automática de tu app: mucho más ligera que la lista completa)
+  if (q.op === 'msgs') {
+    const vistos = {}, hechos = {}; Object.entries(PropertiesService.getScriptProperties().getProperties()).forEach(([k, v]) => { if (k.indexOf('vs_') === 0) { try { vistos[k.slice(3)] = JSON.parse(v); } catch (e) {} } if (k.indexOf('hd_') === 0) hechos[k.slice(3)] = v; });
+    return salida_({ ok: true, ver: 20, msgs: msgFilas_().slice(-800), vistos: vistos, hechos: hechos });
   }
   if (q.op === 'borra') {
     const id = String(q.id || ''), ts = String(q.ts || '');
     if (!id || !ts) return salida_({ ok: false });
     const sh = msgHoja_(), lock = LockService.getScriptLock(); lock.waitLock(10000);
-    try { const v = sh.getDataRange().getValues(); for (let i = v.length - 1; i >= 1; i--) if (String(v[i][0]) === ts && String(v[i][1]) === id) { sh.deleteRow(i + 1); return salida_({ ok: true, ver: 20 }); } } finally { lock.releaseLock(); }
+    try { const v = sh.getDataRange().getValues(); for (let i = v.length - 1; i >= 1; i--) if (String(v[i][0]) === ts && String(v[i][1]) === id) { sh.deleteRow(i + 1); CacheService.getScriptCache().remove('msgs'); return salida_({ ok: true, ver: 20 }); } } finally { lock.releaseLock(); }
     return salida_({ ok: true, ver: 20, nada: true });
   }
   if (q.op === 'hecho') { const id = String(q.id || ''), m = String(q.m || '').slice(0, 30); if (!/^([0-9a-f]{32}|v_[\\w-]{1,40})$/.test(id) || !m) return salida_({ ok: false }); PropertiesService.getScriptProperties().setProperty('hd_' + id, m); return salida_({ ok: true, ver: 20 }); }
@@ -11114,7 +11141,7 @@ async function loadActiveCount() {
   if (!access.me?.admin || !access.usageUrl || !navigator.onLine || Date.now() - (ui.hoyAt || 0) < 60000) return;
   ui.hoyAt = Date.now();
   try {
-    const d = await (await fetch(`${access.usageUrl}?op=hoy&t=${Date.now()}`, { cache: 'no-store' })).json();
+    const d = await (await fetchT(`${access.usageUrl}?op=hoy&t=${Date.now()}`, 20000)).json();
     if (typeof d.hoy === 'number') { ui.hoyN = d.hoy; usersBadge(); if (ui.view === 'settings') render(); }
   } catch { /* sin dato: no se muestra */ }
 }
