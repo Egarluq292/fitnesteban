@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.19.1';
+const APP_VERSION = '5.19.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6749,7 +6749,7 @@ async function msgApi(op, extra = {}) {
   catch (e) { if (e.message === 'old') throw e; throw new Error('net'); } finally { clearTimeout(tm); }
 }
 const msgTime = ts => { const d = new Date(ts); if (isNaN(d)) return ''; const day = d.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10) ? '' : `${fmtDateShort(d.toISOString().slice(0, 10))} · `; return day + d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }); };
-const msgBubble = (m, mine, who = '') => `<div class="msg-b ${mine ? 'msg-me' : 'msg-you'}${m.q ? ' msg-q' : ''}">${who ? `<div class="msg-who">${esc(who)}</div>` : ''}<div class="whitespace-pre-wrap break-words">${esc(m.t)}</div><div class="msg-t">${m.q ? '⏳ Se enviará al volver la conexión' : esc(msgTime(m.ts))}</div></div>`;
+const msgBubble = (m, mine, who = '') => `<div class="msg-b ${mine ? 'msg-me' : 'msg-you'}${m.q ? ' msg-q' : ''}"${m.q ? '' : ` data-ts="${esc(m.ts)}"`}>${who ? `<div class="msg-who">${esc(who)}</div>` : ''}<div class="whitespace-pre-wrap break-words">${esc(m.t)}</div><div class="msg-t">${m.q ? '⏳ Se enviará al volver la conexión' : esc(msgTime(m.ts))}</div></div>`;
 /* Cola: lo que no se pudo enviar (sin datos) sale solo al volver la conexión */
 async function msgFlush() {
   const q = lsGet(MSG_Q_KEY) || []; if (!q.length || !navigator.onLine || !access.usageUrl) return;
@@ -6966,6 +6966,25 @@ function msgThreadModal(id, pre = '', back = null) {
   });
   const b = $('#msgBody'); if (b) b.scrollTop = b.scrollHeight;
   msgPollStart();
+  // 🗑️ toca un mensaje para borrarlo (de la hoja y de su app); dos toques para confirmar
+  b?.addEventListener('click', async e => {
+    const del = e.target.closest('.msg-del'), bub = e.target.closest('.msg-b[data-ts]');
+    if (del) {
+      e.stopPropagation();
+      if (!del.classList.contains('sure')) { del.classList.add('sure'); del.textContent = '¿Seguro? Toca otra vez para borrarlo'; return; }
+      del.disabled = true; del.textContent = 'Borrando…';
+      const ts = del.dataset.ts;
+      try {
+        const j = await msgAdminApi('borra', { id, ts }); if (!(j.ver >= 20)) throw new Error('old');
+        ui.msgs = (ui.msgs || []).filter(m => !(m.id === id && m.ts === ts)); ui.msgPend = msgThreads().filter(x => x.pend).length; usersBadge(); if (ui.accPage) render();
+        const t2 = msgThreads().find(x => x.id === id) || { id, msgs: [] }; b.innerHTML = msgThreadBodyHTML(id, t2); toast('🗑️ Mensaje borrado');
+      } catch (err) { del.disabled = false; del.classList.remove('sure'); del.textContent = '🗑️ Borrar este mensaje'; toast(err.message === 'old' || err.message === 'fallo' ? 'Para borrar, actualiza el script a la v20 (Acceso → Reconfigurar)' : 'No se pudo borrar (¿sin conexión?)', 'warn'); }
+      return;
+    }
+    b.querySelectorAll('.msg-del').forEach(x => x.remove());
+    if (!bub) return;
+    bub.insertAdjacentHTML('afterend', `<button class="msg-del ${bub.classList.contains('msg-me') ? 'msg-del-r' : ''}" data-ts="${esc(bub.dataset.ts)}" type="button">🗑️ Borrar este mensaje</button>`);
+  });
   $('#msgForm').addEventListener('submit', async e => {
     e.preventDefault(); const inp = $('#msgInput'), txt = String(inp.value || '').trim(); if (!txt) return;
     const btn = e.target.querySelector('button'); btn.disabled = true;
@@ -7921,6 +7940,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.19.2', ['🗑️ Mensajes: toca un mensaje de una conversación para borrarlo (script v20).', '⚠️ Usuarios: si no se puede leer el registro, lo dice arriba (sin conexión o error del script) con «Reintentar».'], 'quiet'],
   ['5.19.1', ['☀️ Modo claro: el aviso de fin de prueba o de acceso ya se lee bien.'], 'quiet'],
   ['5.19.0', ['🎄 ¡Arranca la Operación Polvorón! El calendario de AD(GYM)VIENTO ya está en Inicio: pulsa «Unirme a la operación» y elige tu nivel.', '🎁 Del 1 al 24 de diciembre se abre una casilla cada día: rutinas de 20 minutos en casa con una mochila y retos cortos, cada ejercicio con su animación 3D.'], null, { img: 'news-polvoron.webp', hi: true }],
   ['5.18.8', ['✓ Mensajes: «Marcar como leído» para quitar una conversación de «sin responder» sin contestar (script v19).', '📶 La línea «Uso» de Acceso dice qué versión del script tienes.'], 'quiet'],
@@ -10584,9 +10604,9 @@ async function loadUsage() {
     for (const x of d.rows || []) { const h = String(x.h).toLowerCase(), nm = String(x.nm || '').trim(); if (nm && nm !== 'Sin nombre' && nm !== 'Yo (admin)' && !state.accessNames[h]) { state.accessNames[h] = nm.slice(0, 24); got++; } }
     if (got) { persist(); toast(`${got} ${got === 1 ? 'nombre recuperado' : 'nombres recuperados'} de tus otros dispositivos`); }
     if (!ui.usageOld) syncUsageNames();
-  } catch (e) { ui.usageErr = e.message || 'No se pudo leer el registro de uso'; ui.usage = null; }
+  } catch (e) { ui.usageErr = e instanceof TypeError || !navigator.onLine ? 'Sin conexión con tu script de Google (¿cobertura?)' : e instanceof SyntaxError ? 'Tu script de Google ha dado un error en vez de los datos. Mira en Apps Script → Ejecuciones cuál es, o vuelve a pegarlo (Acceso → Reconfigurar).' : (e.message || 'No se pudo leer el registro de uso'); ui.usage = null; }
   ui.usageLoading = false; ui.usageAt = Date.now();
-  if (ui.accessOpen && ui.view === 'settings') render();
+  if ((ui.accessOpen || ui.accPage) && ui.view === 'settings') render();
 }
 function usageLine(hash) {
   if (!access.usageUrl || !lsGet(USE_KEY)) return '';
@@ -10600,7 +10620,7 @@ function usageLine(hash) {
   return `<div class="text-[11px] ${ago <= 2 ? 'text-emerald-300' : ago <= 7 ? 'text-amber-300' : 'text-rose-300'}">${ago <= 2 ? '🟢' : ago <= 7 ? '🟡' : '🔴'} ${when} · v${esc(ver || '?')}${old ? ' <span class="text-amber-300">(desactualizada)</span>' : ''} <span class="text-mute">· ${+u.days || 1} día${(+u.days || 1) === 1 ? '' : 's'} de uso</span></div>${u.n !== undefined ? `<div class="text-[11px] ${u.b ? 'text-amber-300' : 'text-mute'}">🔑 ${(access.list || []).some(x => x.hash === hash && x.admin) ? `${u.n} dispositivo${u.n === 1 ? '' : 's'} · sin límite (administrador)` : `${u.n} dispositivo${u.n === 1 ? '' : 's'} (límite: ${DEVICE_LIMIT}${u.n > DEVICE_LIMIT ? '; los que ya tenía se mantienen' : ''})`}${u.b ? ` · ⛔ ${u.b} intento${u.b === 1 ? '' : 's'} bloqueado${u.b === 1 ? '' : 's'}` : ''}</div>${(u.ds || []).map(dv => { const ago = dv.last ? daysBetween(dv.last, todayISO()) : null; return `<div class="flex items-center justify-between gap-2 text-[11px] pl-3"><span class="min-w-0 break-words text-slate-300">${/Android|iPhone/.test(dv.n || '') ? '📱' : /iPad/.test(dv.n || '') ? '📲' : '💻'} ${dv.p && !(access.list || []).some(x => x.hash === hash && x.anon) ? `<b class="text-white">${esc(dv.p)}</b> · ` : ''}${esc(dv.n || 'Dispositivo')} <span class="text-mute">· ${ago === null ? 'sin fecha' : ago <= 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}${dv.k ? ` · ${dv.k} día${dv.k === 1 ? '' : 's'} de uso` : ''}</span></span><button class="underline text-rose-300 shrink-0" data-act="relDev" data-hash="${esc(hash)}" data-dev="${esc(dv.id)}" type="button">Quitar</button></div>`; }).join('')}` : ''}${u.m || u.i ? `<div class="text-[11px] text-slate-300 break-words">${u.i ? `📅 Alta ${esc(fmtDateShort(u.i))}/${esc(u.i.slice(2, 4))}` : ''}${u.m && u.i ? ' · ' : ''}${u.m ? `✉️ ${esc(u.m)}` : ''}</div>` : ''}`;
 }
 function usageScript(key) {
-  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 1; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos; periodo de prueba de 7 días con Google; mensajes dentro de la app, con «visto» y «marcar como leído») · v19
+  return `// FITNESTEBAN · registro de uso (último uso, versión, nombre, correo, fecha de alta y dispositivos por código con quién los usa, máx. 1; caducidad de planes; nombres ocultos; nombres compartidos entre tus dispositivos; periodo de prueba de 7 días con Google; mensajes dentro de la app, con «visto», «marcar como leído» y borrar) · v20
 const READ_KEY = '${key}';
 const ACL_URL = 'https://egarluq292.github.io/fitnesteban/acceso.txt';
 const COLS = ['huella', 'ultimo_uso', 'version', 'primer_uso', 'dias_de_uso', 'nombre', 'correo', 'alta', 'dispositivos', 'bloqueos'];
@@ -10789,9 +10809,9 @@ function doGet_(e) {
       const lock = LockService.getScriptLock(); lock.waitLock(10000);
       try { msgHoja_().appendRow([ts, id, 'u', t, nm, ct]); } finally { lock.releaseLock(); }
       avisaCorreo_(nm, ct, t);
-      return salida_({ ok: true, ver: 19, ts: ts });
+      return salida_({ ok: true, ver: 20, ts: ts });
     }
-    return salida_({ ok: true, ver: 19, msgs: msgFilas_().filter(r => r.id === id).slice(-60).map(r => ({ ts: r.ts, de: r.de, t: r.t })) });
+    return salida_({ ok: true, ver: 20, msgs: msgFilas_().filter(r => r.id === id).slice(-60).map(r => ({ ts: r.ts, de: r.de, t: r.t })) });
   }
   // ✓✓ el usuario ha abierto su conversación y ha visto hasta el mensaje de Esteban con fecha «m»
   if (q.op === 'visto') {
@@ -10799,10 +10819,10 @@ function doGet_(e) {
     if (!id || !/^\\d{4}-\\d{2}-\\d{2}T/.test(m)) return salida_({ ok: false });
     const P = PropertiesService.getScriptProperties(), prev = JSON.parse(P.getProperty('vs_' + id) || '{}');
     if (!prev.m || m > prev.m) P.setProperty('vs_' + id, JSON.stringify({ m: m, at: new Date().toISOString() }));
-    return salida_({ ok: true, ver: 19 });
+    return salida_({ ok: true, ver: 20 });
   }
   // cuántas conversaciones esperan respuesta (solo el número, para el aviso de tu app)
-  if (q.op === 'pend') return salida_({ ok: true, ver: 19, n: msgPend_() });
+  if (q.op === 'pend') return salida_({ ok: true, ver: 20, n: msgPend_() });
   // cuántas personas han abierto la app hoy (solo el número: sin nombres ni correos)
   if (q.op === 'hoy') {
     const c = CacheService.getScriptCache(); let n = c.get('hoy');
@@ -10810,7 +10830,7 @@ function doGet_(e) {
       const hoy = fecha_(new Date()), adm = admins_(), dd = disp_(); let k = 0;
       hoja_().getDataRange().getValues().slice(1).forEach(r => { const h = String(r[0]).toLowerCase(); if (fecha_(r[1]) !== hoy || adm.indexOf(h) >= 0) return; const q = {}; ((dd[h] || {}).d || []).forEach(v => { if (v.last === hoy) q[String(v.p || v.id).toLowerCase()] = 1; }); k += Math.max(1, Object.keys(q).length); });
       n = String(k); c.put('hoy', n, 60); }
-    return salida_({ ok: true, ver: 19, hoy: +n });
+    return salida_({ ok: true, ver: 20, hoy: +n });
   }
   if (q.key !== READ_KEY) return salida_({ ok: false, error: 'clave' });
   // 💬 contestar (o escribir primero) a una persona, y encender o apagar el aviso por correo
@@ -10819,15 +10839,22 @@ function doGet_(e) {
     if (!/^([0-9a-f]{32}|v_[\\w-]{1,40})$/.test(id) || !t) return salida_({ ok: false });
     const ts = new Date().toISOString(), lock = LockService.getScriptLock(); lock.waitLock(10000);
     try { msgHoja_().appendRow([ts, id, 'e', t, 'Esteban', '']); } finally { lock.releaseLock(); }
-    return salida_({ ok: true, ver: 19, ts: ts });
+    return salida_({ ok: true, ver: 20, ts: ts });
   }
-  if (q.op === 'hecho') { const id = String(q.id || ''), m = String(q.m || '').slice(0, 30); if (!/^([0-9a-f]{32}|v_[\\w-]{1,40})$/.test(id) || !m) return salida_({ ok: false }); PropertiesService.getScriptProperties().setProperty('hd_' + id, m); return salida_({ ok: true, ver: 19 }); }
-  if (q.op === 'avisos') { PropertiesService.getScriptProperties().setProperty('avisos', q.v === '0' ? '0' : '1'); return salida_({ ok: true, ver: 19 }); }
+  if (q.op === 'borra') {
+    const id = String(q.id || ''), ts = String(q.ts || '');
+    if (!id || !ts) return salida_({ ok: false });
+    const sh = msgHoja_(), lock = LockService.getScriptLock(); lock.waitLock(10000);
+    try { const v = sh.getDataRange().getValues(); for (let i = v.length - 1; i >= 1; i--) if (String(v[i][0]) === ts && String(v[i][1]) === id) { sh.deleteRow(i + 1); return salida_({ ok: true, ver: 20 }); } } finally { lock.releaseLock(); }
+    return salida_({ ok: true, ver: 20, nada: true });
+  }
+  if (q.op === 'hecho') { const id = String(q.id || ''), m = String(q.m || '').slice(0, 30); if (!/^([0-9a-f]{32}|v_[\\w-]{1,40})$/.test(id) || !m) return salida_({ ok: false }); PropertiesService.getScriptProperties().setProperty('hd_' + id, m); return salida_({ ok: true, ver: 20 }); }
+  if (q.op === 'avisos') { PropertiesService.getScriptProperties().setProperty('avisos', q.v === '0' ? '0' : '1'); return salida_({ ok: true, ver: 20 }); }
   const datos = hoja_().getDataRange().getValues().slice(1);
   const dd = disp_();
   const refs = []; Object.entries(PropertiesService.getScriptProperties().getProperties()).forEach(([k, v]) => { if (k.indexOf('p_') !== 0) return; try { const x = JSON.parse(v); if (x && x.ref) refs.push({ m: x.m, ref: x.ref, ini: x.ini }); } catch (e) {} });
   const vistos = {}, hechos = {}; Object.entries(PropertiesService.getScriptProperties().getProperties()).forEach(([k, v]) => { if (k.indexOf('vs_') === 0) { try { vistos[k.slice(3)] = JSON.parse(v); } catch (e) {} } if (k.indexOf('hd_') === 0) hechos[k.slice(3)] = v; });
-  return salida_({ ok: true, ver: 19, vistos: vistos, hechos: hechos, refs: refs, avisos: PropertiesService.getScriptProperties().getProperty('avisos') !== '0', msgs: msgFilas_().slice(-800), rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
+  return salida_({ ok: true, ver: 20, vistos: vistos, hechos: hechos, refs: refs, avisos: PropertiesService.getScriptProperties().getProperty('avisos') !== '0', msgs: msgFilas_().slice(-800), rows: datos.map(r => ({ h: String(r[0]), nm: String(r[5] || ''), last: fecha_(r[1]), v: String(r[2]), first: fecha_(r[3]), days: +r[4] || 1, m: String(r[6] || ''), i: r[7] ? fecha_(r[7]) : '', n: ((dd[String(r[0])] || {}).d || []).length, b: (dd[String(r[0])] || {}).b || 0, ds: ((dd[String(r[0])] || {}).d || []).map(v => anon_(String(r[0]).toLowerCase()) ? Object.assign({}, v, { p: '' }) : v) })) });
 }`;
 }
 /* Manda al script la lista huella → nombre (solo con la sección Acceso abierta con PIN) */
@@ -11265,6 +11292,7 @@ function usersPageHTML() {
     <div class="flex items-center justify-between gap-2"><button class="flex items-center gap-1.5 text-[13px] text-brand" data-act="accPageClose" type="button"><span class="tri rotate-90"></span> Ajustes</button>
       ${gh ? '<button class="chip chip-sm chip-on" data-act="newAccess" type="button">＋ Nuevo código</button>' : ''}</div>
     <h2 class="text-xl font-black mt-1 flex items-center gap-2.5 flex-wrap">👥 Usuarios ${activeChip()}</h2>
+    ${ui.usageErr ? `<div class="mt-2 rounded-xl px-3 py-2 text-[12px] flex items-start gap-2" style="border:1px solid rgba(251,113,133,.5);background:rgba(244,63,94,.1);color:#fecdd3"><span class="flex-1">⚠️ No se pudo leer el registro: ${esc(ui.usageErr)}</span><button class="underline shrink-0" data-act="usageRefresh" type="button">Reintentar</button></div>` : !ui.usage && ui.usageLoading ? '<div class="mt-2 text-[12px] text-mute"><span class="spinner"></span> Consultando el registro…</div>' : ''}
     ${accFilterHTML(list)}
   </div>
   <button class="w-full text-left text-[13px] mt-2 px-1" data-act="pays" type="button">💶 ${esc(mes.charAt(0).toUpperCase() + mes.slice(1))}: <b>${eur(p.mes)}</b> · Este año: <b>${eur(p.ano)}</b> <span class="text-mute">(solo en este móvil) ›</span></button>
@@ -11287,7 +11315,7 @@ function accessSectionHTML() {
     ${list.length ? `<p class="text-[12px] text-slate-300">💶 Este mes: <b class="text-white">${eur(paysSummary().mes)}</b> · Este año: <b class="text-white">${eur(paysSummary().ano)}</b> <span class="text-mute">(solo en este móvil)</span></p>` : ''}
     <button class="btn-primary w-full" data-act="accPage" type="button">👥 Usuarios y planes</button>
     ${access.usageUrl && lsGet(USE_KEY)
-      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : ui.usageOld12 ? '<span class="text-amber-300">actualiza el script a la v12 (Reconfigurar → nueva versión) para activar el periodo de prueba con Google</span>' : ui.usageOld13 ? '<span class="text-amber-300">actualiza el script a la v14 (Reconfigurar → nueva versión): las pruebas nuevas pasan a 7 días</span>' : ui.usageOld14 ? '<span class="text-amber-300">actualiza el script a la v15 (Reconfigurar → nueva versión): el número de activos de la cabecera contará a las 2 personas de los códigos antiguos compartidos</span>' : ui.usageOld15 ? '<span class="text-amber-300">actualiza el script a la v16 (Reconfigurar → nueva versión) para ver quién ha recomendado la app a cada persona</span>' : (ui.usageVer < 19 ? `<span class="text-amber-300">script v${ui.usageVer}: actualiza a la v19 (Reconfigurar → nueva versión) para «visto» y «marcar como leído»</span>` : `script v${ui.usageVer} ✓ · actualizado ahora`)) : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
+      ? `<div class="flex items-center justify-between gap-2 text-[11px] text-mute"><span>📶 Uso: ${ui.usageErr ? `<span class="text-rose-300">${esc(ui.usageErr)}</span>` : ui.usageLoading ? 'consultando…' : ui.usage ? (ui.usageOld ? '<span class="text-amber-300">actualiza el script (Reconfigurar) para que los nombres pasen solos a la hoja</span>' : ui.usageNoMail ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): correos, fecha de alta y límite de dispositivos</span>' : ui.usageOld9 ? '<span class="text-amber-300">actualiza el script (Reconfigurar → nueva versión): activos hoy y caducidad comprobada por Google</span>' : ui.usageOld10 ? '<span class="text-amber-300">actualiza el script a la v10 (Reconfigurar → nueva versión) para ver quién usa cada dispositivo</span>' : ui.usageOld12 ? '<span class="text-amber-300">actualiza el script a la v12 (Reconfigurar → nueva versión) para activar el periodo de prueba con Google</span>' : ui.usageOld13 ? '<span class="text-amber-300">actualiza el script a la v14 (Reconfigurar → nueva versión): las pruebas nuevas pasan a 7 días</span>' : ui.usageOld14 ? '<span class="text-amber-300">actualiza el script a la v15 (Reconfigurar → nueva versión): el número de activos de la cabecera contará a las 2 personas de los códigos antiguos compartidos</span>' : ui.usageOld15 ? '<span class="text-amber-300">actualiza el script a la v16 (Reconfigurar → nueva versión) para ver quién ha recomendado la app a cada persona</span>' : (ui.usageVer < 20 ? `<span class="text-amber-300">script v${ui.usageVer}: actualiza a la v20 (Reconfigurar → nueva versión) para «visto», «marcar como leído» y borrar mensajes</span>` : `script v${ui.usageVer} ✓ · actualizado ahora`)) : '—'}</span><span class="flex gap-3 shrink-0"><button class="underline" data-act="usageSetup" type="button">Reconfigurar</button><button class="underline" data-act="usageRefresh" type="button">Actualizar</button></span></div>`
       : access.usageUrl ? `<button class="btn-ghost w-full" data-act="usageHere" type="button">📶 Ver quién usa la app en este dispositivo</button>`
       : gh ? `<button class="btn-ghost w-full" data-act="usageSetup" type="button">📶 Ver quién usa la app (configurar)</button>` : ''}
     ${access.usageUrl && lsGet(USE_KEY) ? (lsGet(SHEET_KEY) && !ui.sheetEdit
