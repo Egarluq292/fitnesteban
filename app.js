@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.20.2';
+const APP_VERSION = '5.20.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -8078,6 +8078,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.20.3', ['📷 Al hacer o elegir una foto (Dieta, etiquetas, código de barras, ¿Qué como?, cardio, Coach), la app ya no se actualiza por detrás: la foto no se pierde ni vuelves a la pantalla principal.'], 'quiet'],
   ['5.20.2', ['🔔 Entérate al momento cuando Esteban te escriba, aunque tengas la app cerrada: actívalo en Ajustes → Aplicación → «Avisos de Esteban». En iPhone funciona con la app añadida a la pantalla de inicio.', '☁️ El aviso de guardar la copia en Drive ya solo sale si has cambiado algo desde la última copia, y tiene un botón «Hoy no».']],
   ['5.20.1', ['🔔 Avisos de Esteban: actívalos o quítalos en Ajustes → Aplicación. La primera vez que Esteban te escribe, el chat te pregunta si quieres que te avise.', '📝 «Para escribir»: plantilla «Renovar (con precios)» con el nombre y la fecha de cada persona.', '☁️ El aviso de copia en Drive solo sale si has cambiado algo desde la última copia, y ahora tiene «Hoy no».'], 'quiet'],
   ['5.20.0', ['💬 Los mensajes con Esteban ahora llegan al instante: si tienes la conversación abierta, su respuesta aparece sola, sin salir y volver a entrar.', '🔔 Nuevo: en «Escribir a Esteban» (el botón de los dos bocadillos, arriba) pulsa «Avisarme en el móvil cuando Esteban conteste» y te llegará una notificación aunque tengas la app cerrada. En iPhone funciona con la app añadida a la pantalla de inicio.']],
@@ -10181,7 +10182,7 @@ app.addEventListener('focusin', e => {
 app.addEventListener('focusin', e => { if (e.target.classList?.contains('field-set')) setTimeout(() => e.target.select?.(), 0); });
 
 async function onMealImage(e) {
-  const f = e.target.files[0]; e.target.value = '';
+  const f = e.target.files[0]; e.target.value = ''; ui.pickAt = 0;
   if (!f) return;
   try { ui.img = await compressImage(f); render(); } catch (err) { toast(err.message, 'error'); }
 }
@@ -10343,16 +10344,19 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   const hadController = !!navigator.serviceWorker.controller; // en la primera instalación no hace falta recargar
   /* Actualización automática: la versión nueva toma el control sola; se recarga en un momento seguro
      (nunca escribiendo, con una ventana abierta o con el cronómetro en marcha: entonces espera a que salgas de la app) */
-  const busy = () => !!timer.endAt || $('#modalRoot')?.classList.contains('open') || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
+  // 📷 eligiendo o haciendo una foto (la cámara deja la app en segundo plano) o con una foto pendiente de estimar: tampoco se recarga
+  document.addEventListener('click', e => { if (e.target?.matches?.('input[type=file]')) ui.pickAt = Date.now(); }, true);
+  const picking = () => Date.now() - (ui.pickAt || 0) < 5 * 60000 || !!ui.img;
+  const busy = () => !!timer.endAt || picking() || $('#modalRoot')?.classList.contains('open') || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
   const reloadNow = () => { if (refreshing) return; refreshing = true; try { persist(); savePrevCopy(localStorage.getItem(STORE_KEY), APP_VERSION); } catch { /* nada */ } location.reload(); };
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (refreshing || !hadController) return;
     // con el descanso en marcha NUNCA se recarga (ni con la app en segundo plano): recargar borraría los pitidos programados
-    const canNow = () => !timer.endAt && (document.visibilityState === 'hidden' || !busy());
+    const canNow = () => !timer.endAt && !picking() && (document.visibilityState === 'hidden' || !busy());
     if (canNow()) return reloadNow();
     $('#topBanner').innerHTML = '';
     const tryLater = () => { if (canNow()) reloadNow(); else setTimeout(tryLater, 5000); };
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && !timer.endAt) reloadNow(); });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && !timer.endAt && !picking()) reloadNow(); });
     setTimeout(tryLater, 5000);
   });
   // comprobar si hay versión nueva cada vez que vuelves a la app
