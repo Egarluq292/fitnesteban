@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.20.6';
+const APP_VERSION = '5.20.7';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -8133,6 +8133,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.20.7', ['🎁 Nuevo código: puedes elegir el día en que termina (para regalar días); te dice cuántos días de regalo son y el precio no cambia.'], 'quiet'],
   ['5.20.6', ['👥 DÚO desde una prueba: puedes elegir también la prueba de la segunda persona y las dos se unen a sus códigos, sin filas repetidas.'], 'quiet'],
   ['5.20.5', ['📷 La cámara se abre dentro de la app (Dieta, etiquetas, ¿Qué como? y cardio): ya no sales a la cámara del móvil, así que el móvil no puede cerrar la app y la foto no se pierde. Si prefieres una foto que ya tienes, «🖼️ Galería».'], 'quiet'],
   ['5.20.4', ['📷 Al volver de la cámara, algunos móviles mandaban un «atrás» que cerraba el panel de la comida y te llevaba a Inicio: ahora se ignora y la foto se queda.', '📷 Si el móvil cierra la app mientras haces la foto (falta de memoria), al volver te deja en Dieta con el panel abierto y te explica qué ha pasado.'], 'quiet'],
@@ -11762,7 +11763,9 @@ function planModal(hash) {
   });
 }
 function newAccessModal(who = '', plan = '1m', from0 = '', mail = '') {
-  let k = plan, who0 = who, who2 = '', nd = 15, mod = 'ind', from = from0, mail2 = '';
+  let k = plan, who0 = who, who2 = '', nd = 15, mod = 'ind', from = from0, mail2 = '', endSel = '', endAuto = '';
+  // 🎁 fecha de fin a mano (para regalar días): por defecto la que sale del plan; si la cambias, manda la tuya (el precio no cambia)
+  const endCalc = () => isPaidPlan(k) && PLANS[k]?.[1] ? planTokens(k, from)[1].slice(6) : '';
   // 🧪 en un DÚO, la segunda persona también puede venir de su prueba: se elige aquí y se une a su código (sin filas duplicadas)
   const trials2 = () => (typeof trialRows === 'function' ? trialRows() : []).filter(u => u.m && String(u.m).toLowerCase() !== String(mail || '').toLowerCase());
   const html = () => `<h3 class="modal-title">Nuevo código de acceso</h3>
@@ -11773,12 +11776,13 @@ function newAccessModal(who = '', plan = '1m', from0 = '', mail = '') {
     ${mod === 'duo' && isPaidPlan(k) ? `<label class="lbl">Segunda persona<input class="field mt-1" name="who2" maxlength="24" placeholder="Ej: Luis" value="${esc(who2)}" /></label>` : ''}
     ${priceLine(k, isPaidPlan(k) ? mod : 'ind')}
     ${isPaidPlan(k) ? `<label class="lbl">Empieza a contar <span class="text-mute font-normal">(si aún está de prueba, pon el día que le acaba)</span><input class="field mt-1" name="from" type="date" value="${esc(from || todayISO())}" /></label>` : ''}
-    <p class="text-[11px] text-mute">${k === 'custom' ? 'Cuenta desde hoy (fecha de la red). Podrás cambiarlo con ⏳.' : PLANS[k][1] ? `Caducará el ${esc(fmtDateShort(planTokens(k, isPaidPlan(k) ? from : '')[1].slice(6)))}. Podrás renovarlo con ⏳.` : 'Sin caducidad.'}${mod === 'duo' && isPaidPlan(k) ? ' Son dos códigos independientes que caducan y se renuevan juntos.' : ''}</p>
+    ${endCalc() ? `<label class="lbl">Termina el <span class="text-mute font-normal">(cámbialo si quieres regalarle días)</span><input class="field mt-1" name="end" type="date" value="${esc((endAuto = endCalc(), endSel || endAuto))}" /></label>${endSel && endSel !== endAuto ? `<p class="text-[11px] text-emerald-300 -mt-1">🎁 ${endSel > endAuto ? `${daysBetween(endAuto, endSel)} días de regalo` : `${daysBetween(endSel, endAuto)} días menos`} sobre lo que le toca (${esc(fmtDateShort(endAuto))}).</p>` : ''}` : ''}
+    <p class="text-[11px] text-mute">${k === 'custom' ? 'Cuenta desde hoy (fecha de la red). Podrás cambiarlo con ⏳.' : PLANS[k][1] ? `Caducará el ${esc(fmtDateShort(endCalc() ? endSel || endCalc() : planTokens(k, isPaidPlan(k) ? from : '')[1].slice(6)))}. Podrás renovarlo con ⏳.` : 'Sin caducidad.'}${mod === 'duo' && isPaidPlan(k) ? ' Son dos códigos independientes que caducan y se renuevan juntos.' : ''}</p>
     <button class="btn-primary w-full" data-mact="next" type="button">Continuar</button>`;
-  const keep = root => { if (root.querySelector('[name=mail2]')) mail2 = mval(root, 'mail2') || ''; if (root.querySelector('[name=from]')) from = mval(root, 'from') || ''; who0 = mval(root, 'who'); who2 = root.querySelector('[name=who2]') ? mval(root, 'who2') : who2; if (k === 'custom') nd = +mval(root, 'pdays') || nd; };
+  const keep = root => { if (root.querySelector('[name=end]')) { const v = mval(root, 'end'); endSel = v && v !== endAuto ? v : ''; } if (root.querySelector('[name=mail2]')) mail2 = mval(root, 'mail2') || ''; if (root.querySelector('[name=from]')) from = mval(root, 'from') || ''; who0 = mval(root, 'who'); who2 = root.querySelector('[name=who2]') ? mval(root, 'who2') : who2; if (k === 'custom') nd = +mval(root, 'pdays') || nd; };
   openModal(html(), {
     autofocus: true,
-    plan: (root, b) => { keep(root); k = b.dataset.k; root.querySelector('.modal-sheet').innerHTML = html(); },
+    plan: (root, b) => { keep(root); k = b.dataset.k; endSel = ''; root.querySelector('.modal-sheet').innerHTML = html(); },
     mod: (root, b) => { keep(root); mod = b.dataset.v; root.querySelector('.modal-sheet').innerHTML = html(); },
     m2: root => { const old = mail2; keep(root); if (mail2 && (!who2 || who2 === old.split('@')[0].slice(0, 24))) who2 = mail2.split('@')[0].slice(0, 24); if (!mail2 && who2 === old.split('@')[0].slice(0, 24)) who2 = ''; root.querySelector('.modal-sheet').innerHTML = html(); },
     next: root => {
@@ -11786,8 +11790,9 @@ function newAccessModal(who = '', plan = '1m', from0 = '', mail = '') {
       const clean = v => v.trim().replace(/\s+/g, ' '), w1 = clean(who0), duo = mod === 'duo' && isPaidPlan(k), w2 = clean(who2);
       if (!w1 || (duo && !w2)) return toast(duo ? 'Pon el nombre de las dos personas' : 'Pon un nombre', 'warn');
       const kk = planResolve(k, root);
+      if (endSel && endSel <= todayISO()) return toast('La fecha de fin tiene que ser después de hoy', 'warn');
       askPin({ title: duo ? `DÚO para ${esc(w1)} y ${esc(w2)}` : `Crear código para ${esc(w1)}`, text: 'Tu PIN abre la llave de GitHub para añadir el código a la lista.', onPin: async pin => {
-        const did = duo ? Math.random().toString(36).slice(2, 8) : '', toks = [...planTokens(kk, isPaidPlan(kk) ? from : ''), ...(duo ? ['duo=' + did] : [])];
+        const did = duo ? Math.random().toString(36).slice(2, 8) : '', toks = [...planTokens(kk, isPaidPlan(kk) ? from : '').map(t => endSel && kk === k && /^hasta=/.test(t) ? 'hasta=' + endSel : t), ...(duo ? ['duo=' + did] : [])];
         const people = duo ? [w1, w2] : [w1], made = [];
         for (const w of people) { const code = newCode(); made.push({ w, code, hash: await codeHash(code) }); }
         await ghEditAcl(pin, lines => [...lines.filter(l => l.trim()), ...made.map(m => [m.hash, ...toks].join(' '))], `Acceso: nuevo código${duo ? ' DÚO' : ''} (${kk})`);
@@ -11800,7 +11805,10 @@ function newAccessModal(who = '', plan = '1m', from0 = '', mail = '') {
       } });
     }
   });
-  $('#modalRoot .modal-sheet')?.addEventListener('change', e => { if (e.target.name === 'mail2') modalHandlers.m2?.($('#modalRoot')); });
+  $('#modalRoot .modal-sheet')?.addEventListener('change', e => {
+    if (e.target.name === 'mail2') modalHandlers.m2?.($('#modalRoot'));
+    if (e.target.name === 'from' || e.target.name === 'end') { const r = $('#modalRoot'); keep(r); r.querySelector('.modal-sheet').innerHTML = html(); }
+  });
 }
 
 function duoShareModal(made) {
