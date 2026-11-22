@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.20.7';
+const APP_VERSION = '5.20.8';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -8133,6 +8133,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.20.8', ['🎁 Días regalados: se apuntan solos al crear un código que empieza más tarde o termina más tarde de lo que toca, y salen en la ficha y en los cobros. También puedes apuntarlos a mano desde la ficha.'], 'quiet'],
   ['5.20.7', ['🎁 Nuevo código: puedes elegir el día en que termina (para regalar días); te dice cuántos días de regalo son y el precio no cambia.'], 'quiet'],
   ['5.20.6', ['👥 DÚO desde una prueba: puedes elegir también la prueba de la segunda persona y las dos se unen a sus códigos, sin filas repetidas.'], 'quiet'],
   ['5.20.5', ['📷 La cámara se abre dentro de la app (Dieta, etiquetas, ¿Qué como? y cardio): ya no sales a la cámara del móvil, así que el móvil no puede cerrar la app y la foto no se pierde. Si prefieres una foto que ya tienes, «🖼️ Galería».'], 'quiet'],
@@ -10004,6 +10005,16 @@ const actions = {
   export: () => exportBackup(),
   editProfile: () => profileModal(),
   newAccess: () => newAccessModal(),
+  giftNew: b => { const h = b.dataset.hash, x = (access.list || []).find(y => y.hash === h), mate = x ? duoMate(x) : null;
+    openModal(`<h3 class="modal-title">🎁 Días regalados · ${esc(accessWho(x) || 'Sin nombre')}</h3>
+      <p class="text-[12px] text-mute -mt-1">Solo para que te acuerdes: no cambia su fecha de fin (eso se hace con ⏳). Se guarda en este móvil.</p>
+      <div class="grid grid-cols-3 gap-2"><label class="lbl">Días<input class="field mt-1" name="gd" inputmode="numeric" maxlength="3" placeholder="8" /></label><label class="lbl col-span-2">Nota <span class="text-mute font-normal">(opcional)</span><input class="field mt-1" name="gn" maxlength="80" placeholder="Ej: hasta fin de noviembre" /></label></div>
+      ${mate ? `<label class="flex items-center gap-2 text-[13px]"><input type="checkbox" name="gm" checked /> También para ${esc(accessWho(mate) || 'su pareja de DÚO')}</label>` : ''}
+      <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-close type="button">Cancelar</button><button class="btn-primary" data-mact="ok" type="button">Guardar</button></div>`, {
+      autofocus: true,
+      ok: root => { const d = parseInt(mval(root, 'gd'), 10); if (!(d > 0 && d < 1000)) return toast('Pon cuántos días', 'warn'); giftAdd([h, ...(mate && root.querySelector('[name=gm]')?.checked ? [mate.hash] : [])], d, mval(root, 'gn').trim()); toast(`🎁 Apuntados ${plural(d, 'día', 'días')} de regalo`); accFichaModal(x.hash); }
+    }); },
+  giftDel: b => { const L = state.settings.gifts?.[b.dataset.hash]; if (!L) return; L.splice(+b.dataset.i, 1); persist(); accFichaModal($('[data-ficha]')?.dataset.ficha || b.dataset.hash); },
   trialCode: b => newAccessModal(b.dataset.who || '', '1m', b.dataset.from || '', b.dataset.mail || ''),
   openAccess: then => {
     if (typeof then !== 'function') then = null;
@@ -11503,6 +11514,7 @@ function accFichaModal(hash) {
       <div class="flex items-center justify-between gap-2 min-h-[30px]">${has ? `<span class="font-mono text-[16px] font-black tracking-[.15em] ${shown ? 'text-brand' : 'text-mute'}">${shown ? fmtCode(shown) : '••••-••••'}</span><span class="flex gap-1.5"><button class="iconbtn iconbtn-sm" data-act="showCode" data-hash="${esc(y.hash)}" type="button" aria-label="Ver código">${shown ? '🙈' : '👁'}</button><button class="iconbtn iconbtn-sm" data-act="copyCode" data-hash="${esc(y.hash)}" type="button" aria-label="Copiar código">📋</button></span>` : '<span class="text-amber-300 text-[11px]">Código no guardado: si lo necesita, dale uno nuevo.</span>'}</div>
       ${usageLine(y.hash)}
       ${(() => { const tr = trialOfCode(y.hash); return tr ? `${tr.m && !ui.usage?.[y.hash]?.m ? `<div class="text-[12px]">✉️ ${esc(tr.m)}</div>` : ''}<div class="text-[11px] text-mute">🧪 Antes, periodo de prueba${tr.first ? ` desde el ${esc(fmtDateShort(tr.first))}` : ''} · ${plural(tr.days || 1, 'día', 'días')} de uso</div>` : ''; })()}
+      ${y.admin ? '' : giftHTML(y.hash, gh)}
       ${refOf(ui.usage?.[y.hash]?.m) ? `<div class="text-[12px]">🤝 Se la recomendó: <b>${esc(refOf(ui.usage?.[y.hash]?.m))}</b>${(() => { const r = refPeople().find(z => z.m === String(ui.usage?.[y.hash]?.m || '').toLowerCase()); return r?.st === 'paid' ? (r.gift ? ` · ✅ regalo dado` : ` <button class="ref-gift mt-1" data-act="refGift" data-m="${esc(r.m)}" data-k="${esc(r.refK)}" type="button">🎁 Dar ${r.gd} días a ${esc(r.ref)} ›</button>`) : ''; })()}</div>` : ''}
       ${gh && !y.admin ? `<div class="grid grid-cols-5 gap-1 pt-1">${big('nameAccess', y.hash, '✎', 'Nombre', 'ficha-sm')}${big('regenAccess', y.hash, '🔄', 'Código nuevo', 'ficha-sm')}${big('betaAccess', y.hash, '🧪', y.beta ? 'Quitar beta' : 'Beta', 'ficha-sm')}${big('anonAccess', y.hash, y.anon ? '👤' : '🙈', y.anon ? 'Mostrar nombre' : 'Ocultar nombre', 'ficha-sm')}${big('delAccess', y.hash, '🗑', 'Quitar acceso', 'ficha-sm ficha-del')}</div>` : `<div class="pt-1">${big('nameAccess', y.hash, '✎', 'Nombre')}</div>`}
     </div>`; };
@@ -11598,7 +11610,14 @@ const PRICES = { ind: { '1m': 14.90, '3m': 37.90, '6m': 59.90 }, duo: { '1m': 23
 const eur = n => `${(Math.round(n * 100) / 100).toFixed(2).replace('.', ',')} €`;
 const isPaidPlan = k => !!PRICES.ind[k];
 const duoMate = x => x?.duo ? (access.list || []).find(y => y.duo === x.duo && y.hash !== x.hash) : null;
-function addPay(hash, k, mod, price) { state.accessPays = state.accessPays || {}; (state.accessPays[hash] = state.accessPays[hash] || []).push({ d: todayISO(), k, mod, eur: price }); persist(); }
+function addPay(hash, k, mod, price, gift = 0) { state.accessPays = state.accessPays || {}; (state.accessPays[hash] = state.accessPays[hash] || []).push({ d: todayISO(), k, mod, eur: price, ...(gift > 0 ? { gift } : {}) }); persist(); }
+/* 🎁 Días regalados: se apuntan con la persona (y con su pareja de DÚO) para verlos en su ficha y en los cobros. Solo en tu móvil */
+function giftAdd(hashes, d, note = '') { if (!(d > 0)) return; const G = state.settings.gifts = state.settings.gifts || {}; for (const h of hashes) (G[h] = G[h] || []).push({ d: Math.round(d), note: String(note).slice(0, 80), at: todayISO() }); persist(); }
+function giftHTML(h, gh) {
+  const L = state.settings.gifts?.[h] || [];
+  const rows = L.map((g, i) => `<div class="flex items-start justify-between gap-2 text-[12px]"><span class="text-emerald-300">🎁 ${plural(g.d, 'día regalado', 'días regalados')}${g.note ? ` <span class="text-mute">(${esc(g.note)})</span>` : ''}<span class="text-mute"> · ${esc(fmtDateShort(g.at))}</span></span>${gh ? `<button class="text-mute px-1 shrink-0" data-act="giftDel" data-hash="${esc(h)}" data-i="${i}" type="button" aria-label="Quitar">✕</button>` : ''}</div>`).join('');
+  return rows + (gh ? `<button class="text-[12px] text-brand underline" data-act="giftNew" data-hash="${esc(h)}" type="button">🎁 Apuntar días regalados</button>` : '');
+}
 function lastPay(hash) { const a = state.accessPays?.[hash] || []; return a[a.length - 1] || null; }
 function paysSummary() {
   const T = todayISO(), m = T.slice(0, 7), y = T.slice(0, 4); let mes = 0, ano = 0;
@@ -11646,7 +11665,7 @@ function paysModal(onlyHash = '') {
       if (editing === k) return `<div class="rounded-xl bg-white/5 px-3 py-2 space-y-2"><div class="text-[13px] font-semibold">${esc(who(p.h))} · ${esc(planName(p.k))}${p.mod === 'duo' ? ' DÚO' : ''}</div>
         <div class="grid grid-cols-2 gap-2"><label class="lbl">Importe (€)<input class="field mt-1" id="payEur" inputmode="decimal" value="${(+p.eur).toFixed(2).replace('.', ',')}" /></label><label class="lbl">Fecha<input class="field mt-1" id="payDate" type="date" value="${esc(p.d)}" /></label></div>
         <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="cancel" type="button">Cancelar</button><button class="btn-primary" data-mact="save" type="button">Guardar</button></div></div>`;
-      return `<div class="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2"><div class="flex-1 min-w-0"><div class="text-[13px] font-semibold break-words">${esc(who(p.h))}</div><div class="text-[11px] text-mute">${esc(fmtDateShort(p.d))}/${esc(p.d.slice(2, 4))} · ${esc(planName(p.k))}${p.mod === 'duo' ? ' DÚO' : ''}</div></div>
+      return `<div class="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2"><div class="flex-1 min-w-0"><div class="text-[13px] font-semibold break-words">${esc(who(p.h))}</div><div class="text-[11px] text-mute">${esc(fmtDateShort(p.d))}/${esc(p.d.slice(2, 4))} · ${esc(planName(p.k))}${p.mod === 'duo' ? ' DÚO' : ''}${p.gift ? ` · <span class="text-emerald-300">🎁 +${plural(p.gift, 'día', 'días')}</span>` : ''}</div></div>
         <b class="text-[14px] shrink-0">${eur(p.eur)}</b>
         ${del === k ? `<button class="chip chip-sm shrink-0 text-rose-300" data-mact="delok" data-k="${k}" type="button">¿Borrar?</button>` : `<button class="iconbtn iconbtn-sm" data-mact="edit" data-k="${k}" type="button" aria-label="Editar">✎</button><button class="iconbtn iconbtn-sm" data-mact="del" data-k="${k}" type="button" aria-label="Borrar">🗑</button>`}</div>`; }).join('') : '<p class="text-[13px] text-mute text-center py-4">No hay cobros apuntados.</p>'}</div>
     ${R.length ? `<div class="flex justify-between text-[13px] px-1"><span class="text-mute">Total</span><b>${eur(tot)}</b></div>` : ''}
@@ -11681,7 +11700,7 @@ function payInfoHTML(x, inPair = false) { // en la ficha: modalidad, último pag
   const mate = duoMate(x), lp = lastPay(x.hash) || (mate ? lastPay(mate.hash) : null), T = netToday() || todayISO();
   const near = x.hasta && daysBetween(T, x.hasta) <= 7;
   return `${mate && !inPair ? `<div class="text-[11px] text-cyan-300">👥 DÚO con ${esc(state.accessNames[mate.hash] || 'sin nombre')}</div>` : ''}
-    ${lp ? `<div class="text-[11px] text-mute">💶 Último pago: ${eur(lp.eur)} · ${esc(planName(lp.k))}${lp.mod === 'duo' ? ' DÚO' : ''} · ${esc(fmtDateShort(lp.d))} · <button class="underline text-brand" data-act="pays" data-hash="${esc(mate && !(state.accessPays?.[x.hash] || []).length ? mate.hash : x.hash)}" type="button">editar</button></div>` : ''}
+    ${lp ? `<div class="text-[11px] text-mute">💶 Último pago: ${eur(lp.eur)} · ${esc(planName(lp.k))}${lp.mod === 'duo' ? ' DÚO' : ''}${lp.gift ? ` <span class="text-emerald-300">🎁 +${plural(lp.gift, 'día', 'días')}</span>` : ''} · ${esc(fmtDateShort(lp.d))} · <button class="underline text-brand" data-act="pays" data-hash="${esc(mate && !(state.accessPays?.[x.hash] || []).length ? mate.hash : x.hash)}" type="button">editar</button></div>` : ''}
     ${x.hasta && !inPair ? `<button class="text-[12px] underline ${near ? 'text-amber-300' : 'text-brand'}" data-act="renewMsg" data-hash="${esc(x.hash)}" type="button">💬 Recordar renovación</button>` : ''}
     ${gh && mate ? `<button class="block text-[12px] underline text-mute" data-act="duoSplit" data-hash="${esc(x.hash)}" type="button">Separar el DÚO</button>` : gh && x.hasta && isPaidPlan(x.plan || '') ? `<button class="block text-[12px] underline text-cyan-300" data-act="duoJoin" data-hash="${esc(x.hash)}" type="button">👥 Unir en DÚO con otra persona</button>` : ''}`;
 }
@@ -11799,7 +11818,11 @@ function newAccessModal(who = '', plan = '1m', from0 = '', mail = '') {
         for (const m of made) { state.accessNames[m.hash] = m.w; await saveAccessCode(m.hash, m.code, pin); }
         if (mail) state.settings.trialOf = { ...(state.settings.trialOf || {}), [made[0].hash]: mail }; // la prueba de la que viene: para verla como una sola persona
         if (duo && mail2) state.settings.trialOf = { ...(state.settings.trialOf || {}), [made[1].hash]: mail2 };
-        if (isPaidPlan(kk)) addPay(made[0].hash, kk, duo ? 'duo' : 'ind', PRICES[duo ? 'duo' : 'ind'][kk]);
+        // 🎁 regalo: empezar a contar más tarde (desde que acaba su prueba, o desde hoy) y/o terminar más tarde de lo que toca
+        const base = from0 && from0 > todayISO() ? from0 : todayISO(), gS = isPaidPlan(kk) && from > base ? daysBetween(base, from) : 0, gE = endSel && endSel > endAuto && kk === k ? daysBetween(endAuto, endSel) : 0;
+        const gNote = [gS ? `del ${fmtDateShort(base)} al ${fmtDateShort(addDays(from, -1))}` : '', gE ? `hasta el ${fmtDateShort(endSel)} en vez del ${fmtDateShort(endAuto)}` : ''].filter(Boolean).join(' y ');
+        giftAdd(made.map(m => m.hash), gS + gE, gNote);
+        if (isPaidPlan(kk)) addPay(made[0].hash, kk, duo ? 'duo' : 'ind', PRICES[duo ? 'duo' : 'ind'][kk], gS + gE);
         ui.accessPin = pin; persist(); render(); syncUsageNames();
         if (duo) duoShareModal(made); else codeShareModal(`Código para ${esc(w1)}`, w1, made[0].code);
       } });
