@@ -14,3 +14,5 @@ bff66ad7b5b25711a298a0b609dafbea plan=prueba hasta=2026-11-16
 a72da065c477d57c890803274433f872 plan=1m hasta=2026-12-21
 8f64eda0b8d566996b3836ce4c37865e plan=d5 hasta=2026-11-23
 0bb34d7a64e7bb589357b0cece0e733b plan=3m hasta=2027-03-01
+ce1dad06109b686c822a7aa84e19fd0f plan=3m hasta=2027-03-01 duo=ajud7t
+52f0c29760b4dbd75fcf2c0d0c5f5525 plan=3m hasta=2027-03-01 duo=ajud7t
