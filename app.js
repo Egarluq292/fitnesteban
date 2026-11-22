@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.20.5';
+const APP_VERSION = '5.20.6';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -8133,6 +8133,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.20.6', ['👥 DÚO desde una prueba: puedes elegir también la prueba de la segunda persona y las dos se unen a sus códigos, sin filas repetidas.'], 'quiet'],
   ['5.20.5', ['📷 La cámara se abre dentro de la app (Dieta, etiquetas, ¿Qué como? y cardio): ya no sales a la cámara del móvil, así que el móvil no puede cerrar la app y la foto no se pierde. Si prefieres una foto que ya tienes, «🖼️ Galería».'], 'quiet'],
   ['5.20.4', ['📷 Al volver de la cámara, algunos móviles mandaban un «atrás» que cerraba el panel de la comida y te llevaba a Inicio: ahora se ignora y la foto se queda.', '📷 Si el móvil cierra la app mientras haces la foto (falta de memoria), al volver te deja en Dieta con el panel abierto y te explica qué ha pasado.'], 'quiet'],
   ['5.20.3', ['📷 Al hacer o elegir una foto (Dieta, etiquetas, código de barras, ¿Qué como?, cardio, Coach), la app ya no se actualiza por detrás: la foto no se pierde ni vuelves a la pantalla principal.'], 'quiet'],
@@ -11761,21 +11762,25 @@ function planModal(hash) {
   });
 }
 function newAccessModal(who = '', plan = '1m', from0 = '', mail = '') {
-  let k = plan, who0 = who, who2 = '', nd = 15, mod = 'ind', from = from0;
+  let k = plan, who0 = who, who2 = '', nd = 15, mod = 'ind', from = from0, mail2 = '';
+  // 🧪 en un DÚO, la segunda persona también puede venir de su prueba: se elige aquí y se une a su código (sin filas duplicadas)
+  const trials2 = () => (typeof trialRows === 'function' ? trialRows() : []).filter(u => u.m && String(u.m).toLowerCase() !== String(mail || '').toLowerCase());
   const html = () => `<h3 class="modal-title">Nuevo código de acceso</h3>
     <div><div class="lbl mb-1.5">Plan</div>${planChips(k)}</div>${planCustomHTML(k, nd)}
     ${isPaidPlan(k) ? `<div><div class="lbl mb-1.5">Modalidad</div>${modChips(mod)}</div>` : ''}
     <label class="lbl">${mod === 'duo' && isPaidPlan(k) ? 'Primera persona' : '¿Para quién es?'} (solo lo verás tú)<input class="field mt-1" name="who" maxlength="24" placeholder="Ej: Ana" value="${esc(who0)}" /></label>
+    ${mod === 'duo' && isPaidPlan(k) && trials2().length ? `<label class="lbl">¿La segunda persona está de prueba? <span class="text-mute font-normal">(se une a su código y no sale repetida)</span><select class="field mt-1" name="mail2"><option value="">No, es nueva</option>${trials2().map(u => `<option value="${esc(String(u.m).toLowerCase())}" ${String(u.m).toLowerCase() === mail2 ? 'selected' : ''}>${esc(String(u.m))}${u.hasta ? ` · prueba hasta el ${esc(fmtDateShort(u.hasta))}` : ''}</option>`).join('')}</select></label>` : ''}
     ${mod === 'duo' && isPaidPlan(k) ? `<label class="lbl">Segunda persona<input class="field mt-1" name="who2" maxlength="24" placeholder="Ej: Luis" value="${esc(who2)}" /></label>` : ''}
     ${priceLine(k, isPaidPlan(k) ? mod : 'ind')}
     ${isPaidPlan(k) ? `<label class="lbl">Empieza a contar <span class="text-mute font-normal">(si aún está de prueba, pon el día que le acaba)</span><input class="field mt-1" name="from" type="date" value="${esc(from || todayISO())}" /></label>` : ''}
     <p class="text-[11px] text-mute">${k === 'custom' ? 'Cuenta desde hoy (fecha de la red). Podrás cambiarlo con ⏳.' : PLANS[k][1] ? `Caducará el ${esc(fmtDateShort(planTokens(k, isPaidPlan(k) ? from : '')[1].slice(6)))}. Podrás renovarlo con ⏳.` : 'Sin caducidad.'}${mod === 'duo' && isPaidPlan(k) ? ' Son dos códigos independientes que caducan y se renuevan juntos.' : ''}</p>
     <button class="btn-primary w-full" data-mact="next" type="button">Continuar</button>`;
-  const keep = root => { if (root.querySelector('[name=from]')) from = mval(root, 'from') || ''; who0 = mval(root, 'who'); who2 = root.querySelector('[name=who2]') ? mval(root, 'who2') : who2; if (k === 'custom') nd = +mval(root, 'pdays') || nd; };
+  const keep = root => { if (root.querySelector('[name=mail2]')) mail2 = mval(root, 'mail2') || ''; if (root.querySelector('[name=from]')) from = mval(root, 'from') || ''; who0 = mval(root, 'who'); who2 = root.querySelector('[name=who2]') ? mval(root, 'who2') : who2; if (k === 'custom') nd = +mval(root, 'pdays') || nd; };
   openModal(html(), {
     autofocus: true,
     plan: (root, b) => { keep(root); k = b.dataset.k; root.querySelector('.modal-sheet').innerHTML = html(); },
     mod: (root, b) => { keep(root); mod = b.dataset.v; root.querySelector('.modal-sheet').innerHTML = html(); },
+    m2: root => { const old = mail2; keep(root); if (mail2 && (!who2 || who2 === old.split('@')[0].slice(0, 24))) who2 = mail2.split('@')[0].slice(0, 24); if (!mail2 && who2 === old.split('@')[0].slice(0, 24)) who2 = ''; root.querySelector('.modal-sheet').innerHTML = html(); },
     next: root => {
       keep(root);
       const clean = v => v.trim().replace(/\s+/g, ' '), w1 = clean(who0), duo = mod === 'duo' && isPaidPlan(k), w2 = clean(who2);
@@ -11788,13 +11793,16 @@ function newAccessModal(who = '', plan = '1m', from0 = '', mail = '') {
         await ghEditAcl(pin, lines => [...lines.filter(l => l.trim()), ...made.map(m => [m.hash, ...toks].join(' '))], `Acceso: nuevo código${duo ? ' DÚO' : ''} (${kk})`);
         for (const m of made) { state.accessNames[m.hash] = m.w; await saveAccessCode(m.hash, m.code, pin); }
         if (mail) state.settings.trialOf = { ...(state.settings.trialOf || {}), [made[0].hash]: mail }; // la prueba de la que viene: para verla como una sola persona
+        if (duo && mail2) state.settings.trialOf = { ...(state.settings.trialOf || {}), [made[1].hash]: mail2 };
         if (isPaidPlan(kk)) addPay(made[0].hash, kk, duo ? 'duo' : 'ind', PRICES[duo ? 'duo' : 'ind'][kk]);
         ui.accessPin = pin; persist(); render(); syncUsageNames();
         if (duo) duoShareModal(made); else codeShareModal(`Código para ${esc(w1)}`, w1, made[0].code);
       } });
     }
   });
+  $('#modalRoot .modal-sheet')?.addEventListener('change', e => { if (e.target.name === 'mail2') modalHandlers.m2?.($('#modalRoot')); });
 }
+
 function duoShareModal(made) {
   const msg = `Hola ${made[0].w} y ${made[1].w}, aquí tenéis vuestros códigos personales de FITNESTEBAN DÚO:\n${made.map(m => `${m.w}: ${fmtCode(m.code)}`).join('\n')}\nhttps://fitnesteban.app`;
   openModal(`<h3 class="modal-title">👥 DÚO creado</h3>
