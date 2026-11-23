@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.24.1';
+const APP_VERSION = '5.25.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7364,7 +7364,7 @@ async function emailSync() {
     if (m && !st.email) { st.email = m; persist(); } // así lo ve y lo puede cambiar en Ajustes, y no se le vuelve a pedir
     if (!url || !code || !access.ok || !navigator.onLine || !m) return;
     const h = await myHash(); if (!h || st.emailSent === h + '|' + m) return; // se envía una vez por correo Y por código: al pasar de la prueba a un código, su fila nueva también lo recibe; quitarlo de la app no lo borra de la hoja (lo dice el aviso)
-    await fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ h, v: 'v' + APP_VERSION, m, i: installDate() }) });
+    await Promise.allSettled([fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ h, v: 'v' + APP_VERSION, m, i: installDate() }) }), sbPing(h, { m })]);
     st.emailSent = h + '|' + m; persist();
   } catch { /* se reintenta al volver a abrir la app */ }
 }
@@ -8195,6 +8195,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.25.0', ['📶 Registro de uso y dispositivos también en Supabase: la Gestión y la entrada siguen funcionando aunque Google no conteste.'], 'quiet'],
   ['5.24.1', ['🔔 Al entrar con tu PIN, la app vuelve a apuntar tu móvil para los avisos: si caducan, se recuperan solos.'], 'quiet'],
   ['5.24.0', ['🔔 Recordatorios con hora: te llega una notificación a su hora, aunque no abras la app.', '☁️ Copia cifrada de tu gestión (cobros, recordatorios, nombres…) en Supabase: no se pierde si cambias de móvil.'], 'quiet'],
   ['5.23.0', ['⏳ Recordar: «Caducan pronto» automático con Renovar, Escribirle con precios y Hecho.', '⚡ Respuestas rápidas en el chat.', '📊 Resumen del mes en Cobros.', '⌛ Las pruebas acabadas quedan plegadas al final de «Pruebas».'], 'quiet'],
@@ -10145,7 +10146,7 @@ const actions = {
     const h = b.dataset.hash, enc = lsGet(USE_KEY);
     if (!enc || !ui.accessPin || !access.usageUrl) return toast('Abre Acceso con tu PIN', 'warn');
     if (!confirm('¿Quitar este dispositivo? Dejará de poder entrar con su código y su plaza queda libre para otro dispositivo.')) return;
-    try { const k = await secretDec(enc, ui.accessPin); await fetch(access.usageUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ k, release: h, dev: b.dataset.dev }) }); toast('Dispositivo quitado ✓'); setTimeout(() => { ui.usage = null; loadUsage(); render(); }, 1200); }
+    try { const k = await secretDec(enc, ui.accessPin); await Promise.allSettled([fetch(access.usageUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ k, release: h, dev: b.dataset.dev }) }), sbCall({ op: 'libera', key: k, h, dev: b.dataset.dev || '' })]); toast('Dispositivo quitado ✓'); setTimeout(() => { ui.usage = null; loadUsage(); render(); }, 1200); }
     catch (e) { toast('No se pudo liberar: ' + e.message, 'error'); }
   },
   usageRefresh: () => { ui.usage = null; ui.usageErr = ''; loadUsage(); render(); },
@@ -10639,7 +10640,21 @@ const blockedMsg = () => `Este código es personal y ya se está usando en otro 
 let deviceSure = false; // ¿el script ha contestado de verdad? (si no, se vuelve a preguntar al volver a la app)
 let deviceDiag = ''; // qué contestó el script la última vez (se ve en Ajustes → Aplicación)
 let deviceReason = ''; // 'exp' si el script dice que el plan ha caducado
+// 📱 primero Supabase (rápido); si no contesta, como siempre, tu script de Google
 async function deviceAllowed(code, me) {
+  deviceSure = false;
+  if (navigator.onLine) try {
+    const h = await codeHash(code), anon = (access.list || []).some(x => x.hash === h && x.anon);
+    const d = await sbCall({ op: 'check', h, d: deviceId(), l: deviceLabel(), p: anon ? '' : String(profileOf()?.name || '').trim().slice(0, 30) }, 12000);
+    if (d.ok && typeof d.allowed === 'boolean') {
+      deviceSure = true; deviceReason = d.reason || '';
+      deviceDiag = d.reason === 'exp' ? 'plan caducado' : d.allowed ? `registrado ✓ (${d.n} dispositivo${d.n === 1 ? '' : 's'})` : 'bloqueado (límite de dispositivos)';
+      return d.allowed || !!me?.admin;
+    }
+  } catch { /* se prueba con Google */ }
+  return deviceAllowedGas(code, me);
+}
+async function deviceAllowedGas(code, me) {
   const url = access.usageUrl; deviceSure = false;
   if (!url) { deviceDiag = 'sin dirección del script en acceso.txt'; return true; }
   if (!navigator.onLine) { deviceDiag = 'sin conexión'; return true; }
@@ -10870,6 +10885,9 @@ async function secretEnc(text, pin) {
 const secretDec = (e, pin) => codeDec(e, pin);
 /* Huella con la que este móvil aparece en la hoja: la de su código o, si está de prueba, la de su prueba */
 async function myHash() { const code = lsGet(ACCESS_KEY)?.code; return code ? codeHash(code) : (lsGet(TRIAL_KEY)?.h || ''); }
+const USO_IMP_KEY = 'fitnesteban_usoimp';
+// 📶 también a Supabase (registro de uso y dispositivos): «tr» = viene de una prueba
+const sbPing = (h, extra = {}) => sbCall({ op: 'ping', h, v: 'v' + APP_VERSION, i: installDate(), tr: lsGet(ACCESS_KEY)?.code ? 0 : 1, ...extra }).catch(() => { });
 async function usagePing() {
   try {
     const url = access.usageUrl, code = lsGet(ACCESS_KEY)?.code || lsGet(TRIAL_KEY)?.h;
@@ -10879,7 +10897,7 @@ async function usagePing() {
     // solo móviles que han visto la frase de las condiciones (instalados desde la 4.26) y el administrador
     if (!access.me?.admin && !state.settings.usageOk) return;
     const h = await myHash();
-    await fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ h, v: 'v' + APP_VERSION, i: installDate() }) });
+    await Promise.allSettled([fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ h, v: 'v' + APP_VERSION, i: installDate() }) }), sbPing(h)]);
     lsSet(PING_KEY, mark);
   } catch { /* sin conexión: mañana se vuelve a intentar */ }
 }
@@ -10901,9 +10919,17 @@ async function loadUsage() {
   ui.usageLoading = true;
   try {
     const key = await secretDec(enc, ui.accessPin);
-    const r = await fetchT(`${access.usageUrl}?key=${encodeURIComponent(key)}&t=${Date.now()}`);
-    const d = await r.json();
-    if (!d.ok) throw new Error(d.error === 'clave' ? 'La clave del registro no coincide con la del script' : 'El registro no respondió bien');
+    // 📶 el registro se lee a la vez de Supabase (rápido) y de tu hoja de Google; si Google no contesta, basta con Supabase
+    const [g, sb] = await Promise.allSettled([fetchT(`${access.usageUrl}?key=${encodeURIComponent(key)}&t=${Date.now()}`).then(r => r.json()), sbCall({ op: 'usos', key }, 20000)]);
+    let d = g.status === 'fulfilled' && g.value?.ok ? g.value : null;
+    const sbRows = sb.status === 'fulfilled' && sb.value?.ok && Array.isArray(sb.value.rows) ? sb.value.rows : null;
+    if (!d && !sbRows) { if (g.status === 'fulfilled') throw new Error(g.value?.error === 'clave' ? 'La clave del registro no coincide con la del script' : 'El registro no respondió bien'); throw g.reason; }
+    if (d && sbRows && !lsGet(USO_IMP_KEY)) sbCall({ op: 'importa_uso', key, rows: d.rows || [] }, 60000).then(j => { if (j.ok) lsSet(USO_IMP_KEY, todayISO()); }).catch(() => { });
+    if (sbRows) {
+      const M = new Map((d?.rows || []).map(x => [String(x.h).toLowerCase(), x])), lo = (...a) => a.filter(Boolean).sort()[0] || '';
+      for (const s0 of sbRows) { const x = M.get(s0.h); M.set(s0.h, x ? { ...x, ...s0, nm: x.nm, last: (s0.last || '') >= (x.last || '') ? s0.last : x.last, v: (s0.last || '') >= (x.last || '') ? s0.v || x.v : x.v, days: Math.max(+s0.days || 0, +x.days || 0), first: lo(s0.first, x.first), i: lo(s0.i, x.i), m: s0.m || x.m } : s0); }
+      d = { ...(d || { ok: true, ver: ui.usageVer || 21, refs: [], msgs: null }), rows: [...M.values()] };
+    }
     ui.usage = {}; for (const x of d.rows || []) { x.v = usageVer(x.v); ui.usage[String(x.h).toLowerCase()] = x; }
     ui.trialH = {}; // 🧪 filas del periodo de prueba: su huella es la del correo (así no dependen de la columna «nombre»)
     for (const x of d.rows || []) { const m = String(x.m || '').trim().toLowerCase(), h = String(x.h).toLowerCase(); if (m && !(access.list || []).some(y => y.hash === h) && await trialHashOf(m) === h) ui.trialH[h] = (String(x.nm || '').match(/\d{4}-\d{2}-\d{2}/) || [''])[0] || (x.first ? addDays(fecha10(x.first), TRIAL_DAYS - 1) : ''); }
@@ -11455,7 +11481,8 @@ async function loadActiveCount() {
   if (!access.me?.admin || !access.usageUrl || !navigator.onLine || Date.now() - (ui.hoyAt || 0) < 60000) return;
   ui.hoyAt = Date.now();
   try {
-    const d = await (await fetchT(`${access.usageUrl}?op=hoy&t=${Date.now()}`, 20000)).json();
+    let d = await sbCall({ op: 'hoy' }, 12000).catch(() => ({}));
+    if (typeof d.hoy !== 'number') d = await (await fetchT(`${access.usageUrl}?op=hoy&t=${Date.now()}`, 20000)).json();
     if (typeof d.hoy === 'number') { ui.hoyN = d.hoy; usersBadge(); if (ui.view === 'settings') render(); }
   } catch { /* sin dato: no se muestra */ }
 }
