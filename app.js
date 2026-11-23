@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.20.8';
+const APP_VERSION = '5.21.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6879,12 +6879,43 @@ async function msgApi(op, extra = {}) {
   return j;
 }
 const msgTime = ts => { const d = new Date(ts); if (isNaN(d)) return ''; const day = d.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10) ? '' : `${fmtDateShort(d.toISOString().slice(0, 10))} · `; return day + d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }); };
-const msgBubble = (m, mine, who = '') => `<div class="msg-b ${mine ? 'msg-me' : 'msg-you'}${m.q ? ' msg-q' : ''}"${m.q ? '' : ` data-ts="${esc(m.ts)}"`}${m.mid ? ` data-mid="${+m.mid}"` : ''}>${who ? `<div class="msg-who">${esc(who)}</div>` : ''}<div class="whitespace-pre-wrap break-words">${esc(m.t)}</div><div class="msg-t">${m.q ? '⏳ Se enviará al volver la conexión' : esc(msgTime(m.ts))}</div></div>`;
+const msgMid = m => +m.mid || (typeof m.id === 'number' ? m.id : 0);
+const msgBubble = (m, mine, who = '', qWho = '') => `<div class="msg-b ${mine ? 'msg-me' : 'msg-you'}${m.q ? ' msg-q' : ''}"${m.q ? '' : ` data-ts="${esc(m.ts)}"`}${msgMid(m) ? ` data-mid="${msgMid(m)}"` : ''}>${who ? `<div class="msg-who">${esc(who)}</div>` : ''}${m.re_t ? `<div class="msg-cita" data-ref="${+m.re || 0}">${qWho ? `<b>${esc(qWho)}</b>` : ''}<span>${esc(m.re_t)}</span></div>` : ''}<div class="whitespace-pre-wrap break-words">${esc(m.t)}</div><div class="msg-t">${m.q ? '⏳ Se enviará al volver la conexión' : esc(msgTime(m.ts))}</div></div>`;
+/* ↩️ Responder a un mensaje concreto: desliza la burbuja hacia la derecha (como en WhatsApp). Tocar la cita lleva al original */
+const msgPrev = t => String(t || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+const msgReplyBar = () => `<div id="msgReply" class="msg-reply" hidden><div class="min-w-0 flex-1"><b>↩️ Respondiendo a</b><span id="msgReplyT"></span></div><button type="button" data-noreply aria-label="No responder a ese mensaje">✕</button></div>`;
+function msgReplySet(id, t, who = '') {
+  ui.msgRe = id ? { id, t: msgPrev(t) } : null;
+  const bar = $('#msgReply'); if (!bar) return;
+  bar.hidden = !id; if (id) { $('#msgReplyT').textContent = (who ? who + ': ' : '') + msgPrev(t); $('#msgInput')?.focus(); }
+}
+function msgGestures(body, textOf, whoOf) {
+  if (!body || body.dataset.gest) return; body.dataset.gest = 1;
+  let b = null, x0 = 0, y0 = 0, dx = 0, modo = null, avis = false;
+  const fin = () => { if (b) { b.style.transition = 'transform .18s'; b.style.transform = ''; if (modo === 'h' && dx >= 60) { const id = +b.dataset.mid; if (id) { msgReplySet(id, textOf(id), whoOf(id)); body.dataset.swiped = Date.now(); } } } b = null; modo = null; dx = 0; avis = false; };
+  body.addEventListener('pointerdown', e => { const x = e.target.closest('.msg-b[data-mid]'); if (!x) return; b = x; x0 = e.clientX; y0 = e.clientY; dx = 0; modo = null; });
+  body.addEventListener('pointermove', e => {
+    if (!b) return; const mx = e.clientX - x0, my = e.clientY - y0;
+    if (!modo && Math.hypot(mx, my) > 10) { modo = mx > 0 && Math.abs(mx) > Math.abs(my) * 1.2 ? 'h' : 'v'; if (modo === 'h') { b.style.transition = 'none'; try { b.setPointerCapture(e.pointerId); } catch { /* nada */ } } }
+    if (modo !== 'h') return;
+    dx = Math.max(0, Math.min(mx, 90)); b.style.transform = `translateX(${dx}px)`;
+    if (dx >= 60 && !avis) { avis = true; navigator.vibrate?.(10); } if (dx < 60) avis = false;
+  });
+  body.addEventListener('pointerup', fin); body.addEventListener('pointercancel', fin);
+  body.addEventListener('click', e => {
+    if (Date.now() - (+body.dataset.swiped || 0) < 400) { e.stopPropagation(); e.preventDefault(); return; }
+    const c = e.target.closest('.msg-cita'); if (!c) return;
+    e.stopPropagation(); const d = body.querySelector(`.msg-b[data-mid="${+c.dataset.ref}"]`);
+    if (!d) return toast('Ese mensaje ya no está');
+    d.scrollIntoView({ behavior: 'smooth', block: 'center' }); d.classList.remove('msg-flash'); void d.offsetWidth; d.classList.add('msg-flash');
+  }, true);
+  body.closest('.modal-sheet')?.addEventListener('click', e => { if (e.target.closest('[data-noreply]')) msgReplySet(null); });
+}
 /* Cola: lo que no se pudo enviar (sin datos) sale solo al volver la conexión */
 async function msgFlush() {
   const q = lsGet(MSG_Q_KEY) || []; if (!q.length || !navigator.onLine) return;
   const left = [];
-  for (const m of q) { try { await msgApi('msg', { t: m.t, p: m.p || '', ct: m.ct || '' }); } catch (e) { if (e.message === 'net') left.push(m); } }
+  for (const m of q) { try { await msgApi('msg', { t: m.t, p: m.p || '', ct: m.ct || '', ...(m.re ? { re: m.re, re_t: m.re_t } : {}) }); } catch (e) { if (e.message === 'net') left.push(m); } }
   lsSet(MSG_Q_KEY, left);
   if (q.length !== left.length && $('#msgBody') && !access.me?.admin) msgBoxLoad();
 }
@@ -6938,6 +6969,7 @@ function msgBox(pre = '') {
     <div id="msgBody" class="cal-body space-y-2"><p class="text-[12px] text-mute text-center mt-6"><span class="spinner"></span> Cargando…</p></div>
     <div class="cal-foot space-y-2">
       ${vis ? `<div class="grid grid-cols-2 gap-2"><input id="msgName" class="field py-2 text-sm" maxlength="40" placeholder="Tu nombre" value="${esc(ct.p || profileOf()?.name || '')}" /><input id="msgCt" class="field py-2 text-sm" maxlength="80" placeholder="Correo o teléfono" value="${esc(ct.ct || '')}" /></div><p class="text-[10px] text-mute leading-snug">Aún no tienes código: déjame tu correo o teléfono por si no vuelves a abrir la app.</p>` : ''}
+      ${msgReplyBar()}
       <form id="msgForm" class="flex gap-2 items-end"><textarea id="msgInput" rows="2" class="field flex-1 resize-none max-h-32 py-2.5" maxlength="800" placeholder="Escribe tu mensaje…">${esc(pre)}</textarea><button class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button></form>
       ${pushCan() && !pushUserOn() && !access.me?.admin ? '<button id="msgPush" class="btn-ghost w-full text-[13px] py-2" type="button">🔔 Avisarme en el móvil cuando Esteban conteste</button>' : ''}
       <p class="text-[11px] text-mute text-center">¿Prefieres Telegram? <a class="text-brand underline" href="${CONTACT_URL}" target="_blank" rel="noopener">Escríbeme allí</a></p>
@@ -6945,6 +6977,9 @@ function msgBox(pre = '') {
   $('#msgForm').addEventListener('submit', e => { e.preventDefault(); msgSend(); });
   $('#msgPush')?.addEventListener('click', async e => { const b = e.currentTarget; b.disabled = true; try { await pushOn(false); b.remove(); toast('🔔 Listo: te llegará un aviso cuando te conteste'); } catch (err) { b.disabled = false; toast(pushMsg(err), 'warn'); } });
   if (!access.me?.admin) rtSub('u-' + msgTk(), () => msgCheck(true));
+  ui.msgRe = null;
+  const byId = id => (ui.msgThread || []).find(m => m.id === id);
+  msgGestures($('#msgBody'), id => byId(id)?.t, id => byId(id)?.de === 'e' ? 'Esteban' : 'Tú');
   msgBoxLoad();
   // 🔄 mientras la tiene abierta, la respuesta de Esteban entra sola
   let wait = 15000;
@@ -6962,7 +6997,8 @@ function msgBox(pre = '') {
 function msgBoxRender(err) {
   const b = $('#msgBody'); if (!b) return;
   const q = (lsGet(MSG_Q_KEY) || []).map(m => ({ ...m, q: true })), all = [...(ui.msgThread || []).map(m => ({ ...m, mine: m.de === 'u' })), ...q.map(m => ({ ...m, mine: true }))];
-  b.innerHTML = (all.length ? all.map(m => msgBubble(m, m.mine)).join('') : `<div class="text-center mt-6"><div class="text-3xl">👋</div><p class="text-sm text-mute mt-2 leading-relaxed">Pregúntame lo que quieras: tu código, una duda de la app, algo que no funciona o una idea.<br>Te contesto aquí; verás el aviso en el botón de los bocadillos de arriba.</p></div>`)
+  const deOf = id => (ui.msgThread || []).find(m => m.id === id)?.de;
+  b.innerHTML = (all.length ? all.map(m => msgBubble(m, m.mine, '', m.re ? (deOf(m.re) === 'e' ? 'Esteban' : deOf(m.re) === 'u' ? 'Tú' : '') : '')).join('') : `<div class="text-center mt-6"><div class="text-3xl">👋</div><p class="text-sm text-mute mt-2 leading-relaxed">Pregúntame lo que quieras: tu código, una duda de la app, algo que no funciona o una idea.<br>Te contesto aquí; verás el aviso en el botón de los bocadillos de arriba.</p></div>`)
     + (err === 'net' ? '<p class="text-[11px] text-amber-300 text-center">Sin conexión: lo que escribas se enviará solo al volver.</p>' : '')
     + (pushAskNow() ? `<div id="pushAsk" style="border:1px solid var(--line,rgba(148,163,184,.25));border-radius:14px;padding:12px;margin-top:10px"><p class="text-[13px] leading-snug"><b>🔔 ¿Te aviso cuando Esteban te escriba?</b><br><span class="text-mute text-[12px]">Te llegará una notificación aunque tengas la app cerrada. Puedes quitarlo cuando quieras en Ajustes.</span></p><div class="grid grid-cols-2 gap-2 mt-2.5"><button class="btn-primary text-[13px] py-2" data-pa="si" type="button">Sí, avísame</button><button class="btn-ghost text-[13px] py-2" data-pa="no" type="button">Ahora no</button></div></div>` : '');
   b.scrollTop = b.scrollHeight;
@@ -6987,12 +7023,12 @@ async function msgSend() {
   if (vis && (!p || !ct)) { toast('Pon tu nombre y un correo o teléfono para poder contestarte', 'warn'); ($('#msgName')?.value ? $('#msgCt') : $('#msgName'))?.focus(); return; }
   if (vis) lsSet(MSG_CT_KEY, { p, ct });
   inp.value = '';
-  const ts = new Date().toISOString();
-  try { const j = await msgApi('msg', { t, p, ct }); ui.msgThread = [...(ui.msgThread || []), { id: j.id, ts: j.ts || ts, de: 'u', t }]; toast('✓ Enviado. Te contesto aquí en cuanto lo vea.'); }
+  const ts = new Date().toISOString(), R = ui.msgRe ? { re: ui.msgRe.id, re_t: ui.msgRe.t } : {}; msgReplySet(null);
+  try { const j = await msgApi('msg', { t, p, ct, ...R }); ui.msgThread = [...(ui.msgThread || []), { id: j.id, ts: j.ts || ts, de: 'u', t, ...R }]; toast('✓ Enviado. Te contesto aquí en cuanto lo vea.'); }
   catch (e) {
     if (e.message === 'limite') { inp.value = t; return toast('Has enviado muchos mensajes seguidos. Espera un rato a que te conteste 🙂', 'warn'); }
     if (e.message === 'fallo') { inp.value = t; return toast('No se pudo enviar. Vuelve a probar en un momento.', 'warn'); }
-    lsSet(MSG_Q_KEY, [...(lsGet(MSG_Q_KEY) || []), { t, p, ct, ts }]);
+    lsSet(MSG_Q_KEY, [...(lsGet(MSG_Q_KEY) || []), { t, p, ct, ts, ...R }]);
   }
   msgBoxRender();
 }
@@ -7022,7 +7058,7 @@ async function sbAdminLoad() {
   if (d.topic) rtSub(d.topic, msgAdminEvent);
   const H = {}; for (const h of d.hilos || []) H[h.tk] = h;
   const idOf = tk => H[tk]?.h || String(tk).replace(/^old:/, '');
-  const msgs = (d.msgs || []).map(m => ({ id: idOf(m.tk), mid: m.id, de: m.de, t: m.t, nm: m.nm || '', ct: m.de === 'u' ? H[m.tk]?.ct || '' : '', ts: isoTs(m.ts) }));
+  const msgs = (d.msgs || []).map(m => ({ id: idOf(m.tk), mid: m.id, de: m.de, t: m.t, nm: m.nm || '', ct: m.de === 'u' ? H[m.tk]?.ct || '' : '', ts: isoTs(m.ts), ...(m.re ? { re: m.re, re_t: m.re_t || '' } : {}) }));
   const V = {}, D = {};
   for (const h of d.hilos || []) { const id = idOf(h.tk); if (h.visto_m && isoTs(h.visto_m) > (V[id]?.m || '')) V[id] = { m: isoTs(h.visto_m), at: isoTs(h.visto_at) }; if (h.hecho_m && isoTs(h.hecho_m) > (D[id] || '')) D[id] = isoTs(h.hecho_m); }
   const before = JSON.stringify([ui.msgs, ui.msgVistos, ui.msgHechos]);
@@ -7112,7 +7148,8 @@ function msgVistoHTML(id, t) {
 }
 // código compartido (2 móviles o 2 nombres): encima de cada mensaje suyo, quién lo escribe
 const msgShared = (id, t) => (ui.usage?.[id]?.ds || []).length >= 2 || new Set(t.msgs.filter(m => m.de === 'u' && m.nm).map(m => m.nm)).size > 1;
-const msgThreadBodyHTML = (id, t) => t.msgs.length ? t.msgs.map(m => msgBubble(m, m.de === 'e', m.de === 'u' && m.nm && msgShared(id, t) ? m.nm : '')).join('') + msgVistoHTML(id, t) : '<p class="text-[12px] text-mute text-center mt-6">Aún no os habéis escrito. Le llegará al momento si tiene la app abierta; si no, al abrirla, con aviso en el botón de los bocadillos (o en su móvil, si lo ha activado).</p>';
+const msgQWho = (id, t, re) => { const o = t.msgs.find(x => x.mid === re); return !o ? '' : o.de === 'e' ? 'Tú' : (o.nm && msgShared(id, t) ? o.nm : msgWhoName(id, t)).split(/\s+/)[0]; };
+const msgThreadBodyHTML = (id, t) => t.msgs.length ? t.msgs.map(m => msgBubble(m, m.de === 'e', m.de === 'u' && m.nm && msgShared(id, t) ? m.nm : '', m.re ? msgQWho(id, t, m.re) : '')).join('') + msgVistoHTML(id, t) : '<p class="text-[12px] text-mute text-center mt-6">Aún no os habéis escrito. Le llegará al momento si tiene la app abierta; si no, al abrirla, con aviso en el botón de los bocadillos (o en su móvil, si lo ha activado).</p>';
 /* 🔄 Con la bandeja o una conversación abierta, los mensajes nuevos (y los «visto») entran solos cada 15 s (más espaciado si Google va lento) */
 let msgPollT = null;
 function msgPollStart() {
@@ -7136,7 +7173,7 @@ function msgThreadModal(id, pre = '', back = null) {
       <div class="min-w-0"><h3 class="modal-title leading-tight truncate">${esc(msgShared(id, t) ? ([...new Set([...(ui.usage?.[id]?.ds || []).map(d => d.p).filter(Boolean), ...t.msgs.filter(m => m.de === 'u' && m.nm).map(m => m.nm)])].slice(0, 2).join(' + ') || msgWhoName(id, t)) : msgWhoName(id, t))}</h3><p class="text-[11px] text-mute truncate">${esc(msgWhoState(id))}${t.ct ? ` · ${esc(t.ct)}` : mail ? ` · ${esc(mail)}` : ''}</p></div>
       <button class="ml-auto w-8 h-8 rounded-full border border-line text-mute shrink-0" data-close type="button" aria-label="Cerrar">✕</button></div>
     <div id="msgBody" class="cal-body space-y-2" data-thread="${esc(id)}">${msgThreadBodyHTML(id, t)}</div>
-    <div class="cal-foot"><form id="msgForm" class="flex gap-2 items-end"><textarea id="msgInput" rows="3" class="field flex-1 resize-none max-h-[200px] py-2.5" maxlength="1500" placeholder="Tu respuesta…">${esc(pre)}</textarea><button class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button></form>
+    <div class="cal-foot">${msgReplyBar()}<form id="msgForm" class="flex gap-2 items-end"><textarea id="msgInput" rows="3" class="field flex-1 resize-none max-h-[200px] py-2.5" maxlength="1500" placeholder="Tu respuesta…">${esc(pre)}</textarea><button class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button></form>
       <div class="flex items-center justify-between gap-2 mt-1.5"><p class="text-[11px] text-mute">Le llega al momento si tiene la app abierta, o con aviso si lo ha activado.</p>${t.msgs.some(m => m.de === 'u') ? '<button class="chip chip-sm shrink-0" data-mact="ai" type="button">✨ Sugerir respuesta</button>' : ''}</div>
       ${t.pend ? '<button class="btn-ghost w-full text-[13px] mt-2 py-2" data-mact="hecho" type="button">✓ Marcar como leído (sin responder)</button>' : ''}</div>`, {
     sheetClass: 'sheet-fixed sheet-full',
@@ -7158,6 +7195,9 @@ function msgThreadModal(id, pre = '', back = null) {
   });
   const b = $('#msgBody'); if (b) b.scrollTop = b.scrollHeight;
   msgPollStart();
+  ui.msgRe = null;
+  const tNow = () => msgThreads().find(x => x.id === id) || t, byMid = mid => tNow().msgs.find(m => m.mid === mid);
+  msgGestures(b, mid => byMid(mid)?.t, mid => byMid(mid) ? (byMid(mid).de === 'e' ? 'Tú' : msgQWho(id, tNow(), mid)) : '');
   // 🗑️ toca un mensaje para borrarlo (de la hoja y de su app); dos toques para confirmar
   b?.addEventListener('click', async e => {
     const del = e.target.closest('.msg-del'), bub = e.target.closest('.msg-b[data-ts]');
@@ -7180,7 +7220,8 @@ function msgThreadModal(id, pre = '', back = null) {
   $('#msgForm').addEventListener('submit', async e => {
     e.preventDefault(); const inp = $('#msgInput'), txt = String(inp.value || '').trim(); if (!txt) return;
     const btn = e.target.querySelector('button'); btn.disabled = true;
-    try { const j = await msgAdminApi('resp', { id, t: txt }); ui.msgs = [...(ui.msgs || []), { ts: j.ts, id, mid: j.id, de: 'e', t: txt }]; state.settings.wrote = { ...(state.settings.wrote || {}), [id]: todayISO() }; persist(); msgThreadModal(id, '', back); usersBadge(); if (ui.accPage) render(); toast('✓ Enviado'); }
+    const R = ui.msgRe ? { re: ui.msgRe.id, re_t: ui.msgRe.t } : {};
+    try { const j = await msgAdminApi('resp', { id, t: txt, ...R }); ui.msgRe = null; ui.msgs = [...(ui.msgs || []), { ts: j.ts, id, mid: j.id, de: 'e', t: txt, ...R }]; state.settings.wrote = { ...(state.settings.wrote || {}), [id]: todayISO() }; persist(); msgThreadModal(id, '', back); usersBadge(); if (ui.accPage) render(); toast('✓ Enviado'); }
     catch { btn.disabled = false; toast('No se pudo enviar (¿sin conexión?). Vuelve a probar.', 'warn'); }
   });
 }
@@ -8133,6 +8174,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.21.0', ['↩️ Mensajes con Esteban: desliza un mensaje hacia la derecha para responder a ese mensaje en concreto. Al tocar la cita, te lleva al original.'], 'quiet'],
   ['5.20.8', ['🎁 Días regalados: se apuntan solos al crear un código que empieza más tarde o termina más tarde de lo que toca, y salen en la ficha y en los cobros. También puedes apuntarlos a mano desde la ficha.'], 'quiet'],
   ['5.20.7', ['🎁 Nuevo código: puedes elegir el día en que termina (para regalar días); te dice cuántos días de regalo son y el precio no cambia.'], 'quiet'],
   ['5.20.6', ['👥 DÚO desde una prueba: puedes elegir también la prueba de la segunda persona y las dos se unen a sus códigos, sin filas repetidas.'], 'quiet'],
@@ -8156,7 +8198,7 @@ const CHANGELOG = [
   ['5.18.3', ['⌨️ Teclado: las ventanas se ajustan a la parte visible de la pantalla en cualquier navegador (también en los que ponen el teclado encima sin avisar).'], 'quiet'],
   ['5.18.2', ['💬 Mensajes: las respuestas de Esteban llegaban como un número en vez del texto. Arreglado.'], 'quiet'],
   ['5.18.1', ['⌨️ Con el teclado abierto, las ventanas se suben para que veas lo que escribes.'], 'quiet'],
-  ['5.18.0', ['💬 Nuevo: escribe a Esteban dentro de la app. Toca el botón de los dos bocadillos de arriba: tu código, una duda, algo que falla o una idea. Te contesta ahí mismo y verás un número en el botón cuando lo haga.', '✈️ ¿Prefieres Telegram? Lo tienes dentro de esa misma ventana, abajo.']],
+  ['5.18.0', ['💬 Nuevo: escribe a Esteban dentro de la app. Toca el botón de los dos bocadillos de arriba: tu código, una duda, algo que falla o una idea. Te contesta ahí mismo y verás un número en el botón cuando lo haga. Para responder a un mensaje concreto, deslízalo hacia la derecha.', '✈️ ¿Prefieres Telegram? Lo tienes dentro de esa misma ventana, abajo.']],
   ['5.17.2', ['💬 El Coach IA ocupa toda la pantalla: los ejemplos se ven sin desplazarte.'], 'quiet'],
   ['5.17.1', ['💬 Coach IA: en vez de botones, ejemplos de lo que le puedes pedir.', '📥 Si te propone un bloque, también puedes añadirlo como día nuevo a uno de tus bloques (con Deshacer).'], 'quiet'],
   ['5.17.0', ['📷 Coach IA: pásale una foto de tu entreno (la pizarra o la hoja de tu clase) y, si quieres, dicta qué hacer. Lo prepara como un día nuevo de tu bloque y tú pulsas «Aplicar».'], 'quiet'],
@@ -8609,7 +8651,7 @@ const GUIDE = [
   ]],
   ['ℹ️ La app', [
     '🔄 Se <b>actualiza sola</b> al abrirla o volver a ella. Después verás una vez las novedades; puedes volver a verlas desde esta guía. Tu versión, en Ajustes → Aplicación.',
-    '💬 El botón de los dos bocadillos de arriba abre tu chat con Esteban dentro de la app: tu código, dudas, fallos o ideas. Te contesta ahí mismo y verás un número en el botón cuando lo haga. Para recibir una notificación cuando te escriba, aunque tengas la app cerrada, actívala en Ajustes → Aplicación → «🔔 Avisos de Esteban» o con el botón de dentro del chat (en iPhone, solo con la app añadida a la pantalla de inicio). Si lo prefieres, dentro tienes Telegram.',
+    '💬 El botón de los dos bocadillos de arriba abre tu chat con Esteban dentro de la app: tu código, dudas, fallos o ideas. Te contesta ahí mismo y verás un número en el botón cuando lo haga. Para responder a un mensaje concreto, deslízalo hacia la derecha. Para recibir una notificación cuando te escriba, aunque tengas la app cerrada, actívala en Ajustes → Aplicación → «🔔 Avisos de Esteban» o con el botón de dentro del chat (en iPhone, solo con la app añadida a la pantalla de inicio). Si lo prefieres, dentro tienes Telegram.',
     '📤 «Compartir la app» (Ajustes y abajo en esta guía) envía a quien quieras el enlace de la app: podrá probarla 7 días entrando con su cuenta de Google.',
     '🔒 Qué datos usa la app y dónde se guardan: <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.'
   ]]
