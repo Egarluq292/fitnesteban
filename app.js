@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.25.0';
+const APP_VERSION = '5.26.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -8195,6 +8195,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.26.0', ['🧪 Periodos de prueba también en Supabase: se pueden empezar y comprobar aunque Google no conteste.'], 'quiet'],
   ['5.25.0', ['📶 Registro de uso y dispositivos también en Supabase: la Gestión y la entrada siguen funcionando aunque Google no conteste.'], 'quiet'],
   ['5.24.1', ['🔔 Al entrar con tu PIN, la app vuelve a apuntar tu móvil para los avisos: si caducan, se recuperan solos.'], 'quiet'],
   ['5.24.0', ['🔔 Recordatorios con hora: te llega una notificación a su hora, aunque no abras la app.', '☁️ Copia cifrada de tu gestión (cobros, recordatorios, nombres…) en Supabase: no se pierde si cambias de móvil.'], 'quiet'],
@@ -10593,7 +10594,15 @@ const fecha10 = x => String(x || '').slice(0, 10);
 /* 🤝 Quién recomendó la app: lo escribe la persona al empezar la prueba (o llega en el enlace: fitnesteban.app/?de=Nombre) */
 const REF_KEY = 'fitnesteban_de';
 try { const de = new URLSearchParams(location.search).get('de'); if (de) lsSet(REF_KEY, de.replace(/[<>"]/g, '').trim().slice(0, 60)); } catch { /* sin parámetros */ }
+// 🧪 primero Supabase; si no contesta (o aún no conoce esa prueba), tu script de Google. Las altas nuevas se apuntan también en Google (para sus correos de aviso)
 async function trialCall(tk = '', ref = '') {
+  try {
+    const d = await sbCall({ op: 'prueba', d: deviceId(), l: deviceLabel(), tk, ref, h: lsGet(TRIAL_KEY)?.h || '' }, 15000);
+    if (d.ok || d.error === 'google') { if (tk && d.ok && d.allowed) trialCallGas(tk, ref).catch(() => { }); return d; }
+  } catch { /* se prueba con Google */ }
+  return trialCallGas(tk, ref);
+}
+async function trialCallGas(tk = '', ref = '') {
   if (!access.usageUrl) await fetchAcl();
   if (!access.usageUrl) throw new Error('No se puede comprobar la prueba ahora');
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000);
@@ -10885,7 +10894,7 @@ async function secretEnc(text, pin) {
 const secretDec = (e, pin) => codeDec(e, pin);
 /* Huella con la que este móvil aparece en la hoja: la de su código o, si está de prueba, la de su prueba */
 async function myHash() { const code = lsGet(ACCESS_KEY)?.code; return code ? codeHash(code) : (lsGet(TRIAL_KEY)?.h || ''); }
-const USO_IMP_KEY = 'fitnesteban_usoimp';
+const USO_IMP_KEY = 'fitnesteban_usoimp', PRU_IMP_KEY = 'fitnesteban_pruimp';
 // 📶 también a Supabase (registro de uso y dispositivos): «tr» = viene de una prueba
 const sbPing = (h, extra = {}) => sbCall({ op: 'ping', h, v: 'v' + APP_VERSION, i: installDate(), tr: lsGet(ACCESS_KEY)?.code ? 0 : 1, ...extra }).catch(() => { });
 async function usagePing() {
@@ -10936,6 +10945,13 @@ async function loadUsage() {
     ui.usageVer = +d.ver || 0; ui.usageOld16 = false;
     { const g = Array.isArray(d.msgs) ? { msgs: d.msgs, vistos: d.vistos, hechos: d.hechos } : null; sbAdminLoad().then(() => { ui.msgErr = ''; return sbImport(g); }).catch(e => { ui.msgErr = e.message === 'clave' ? 'Supabase no reconoce tu clave: revisa el secreto ADMIN_KEY (debe ser igual que READ_KEY).' : 'No se pudo conectar con los mensajes (¿sin conexión?).'; if (ui.accPage || ui.accessOpen) render(); }); }
     ui.usageErr = ''; ui.usageOld = !(d.ver >= 2); ui.usageNoMail = !(d.ver >= 8); ui.usageOld9 = !(d.ver >= 9); ui.usageOld10 = !(d.ver >= 10); ui.usageOld12 = !(d.ver >= 12); ui.usageOld13 = !(d.ver >= 14); ui.usageOld14 = !(d.ver >= 15); ui.usageOld15 = !(d.ver >= 16); ui.refs = {}; for (const x of d.refs || []) if (x.m) ui.refs[String(x.m).toLowerCase()] = { ref: String(x.ref || ''), ini: String(x.ini || '') }; ui.usageVer = +d.ver || 0;
+    // 🧪 pruebas de Supabase (las nuevas pueden estar solo ahí) y, una vez, las de tu hoja pasan a Supabase
+    const sbPr = sb.status === 'fulfilled' && Array.isArray(sb.value?.pruebas) ? sb.value.pruebas : null;
+    if (sbPr) for (const p of sbPr) { const h = String(p.h).toLowerCase(); if (p.hasta) ui.trialH[h] = p.hasta; if (p.m && p.ref && !ui.refs[String(p.m).toLowerCase()]) ui.refs[String(p.m).toLowerCase()] = { ref: String(p.ref), ini: String(p.ini || '') }; }
+    if (sbPr && g.status === 'fulfilled' && g.value?.ok && !lsGet(PRU_IMP_KEY)) {
+      const list = Object.entries(ui.trialH).map(([h, hasta]) => { const u = ui.usage[h] || {}, m = String(u.m || '').toLowerCase(); return { h, m, hasta, ini: u.first || '', ref: ui.refs[m]?.ref || '' }; }).filter(p => p.m);
+      sbCall({ op: 'importa_pruebas', key, list }, 60000).then(j => { if (j.ok) lsSet(PRU_IMP_KEY, todayISO()); }).catch(() => { });
+    }
     // nombres puestos en otro dispositivo tuyo: se copian aquí si aquí no tienes uno
     let got = 0;
     for (const x of d.rows || []) { const h = String(x.h).toLowerCase(), nm = String(x.nm || '').trim(); if (nm && nm !== 'Sin nombre' && nm !== 'Yo (admin)' && !state.accessNames[h]) { state.accessNames[h] = nm.slice(0, 24); got++; } }
