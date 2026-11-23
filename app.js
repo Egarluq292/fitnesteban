@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.22.0';
+const APP_VERSION = '5.23.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6881,6 +6881,21 @@ async function msgApi(op, extra = {}) {
 const msgTime = ts => { const d = new Date(ts); if (isNaN(d)) return ''; const day = d.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10) ? '' : `${fmtDateShort(d.toISOString().slice(0, 10))} · `; return day + d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }); };
 const msgMid = m => +m.mid || (typeof m.id === 'number' ? m.id : 0);
 const msgBubble = (m, mine, who = '', qWho = '') => `<div class="msg-b ${mine ? 'msg-me' : 'msg-you'}${m.q ? ' msg-q' : ''}"${m.q ? '' : ` data-ts="${esc(m.ts)}"`}${msgMid(m) ? ` data-mid="${msgMid(m)}"` : ''}>${who ? `<div class="msg-who">${esc(who)}</div>` : ''}${m.re_t ? `<div class="msg-cita" data-ref="${+m.re || 0}">${qWho ? `<b>${esc(qWho)}</b>` : ''}<span>${esc(m.re_t)}</span></div>` : ''}<div class="whitespace-pre-wrap break-words">${esc(m.t)}</div><div class="msg-t">${m.q ? '⏳ Se enviará al volver la conexión' : esc(msgTime(m.ts))}</div></div>`;
+/* ⚡ Respuestas rápidas (solo Esteban): frases que repites, a un toque. Se guardan en este móvil */
+const QR_DEF = ['¡Hola! Ahora mismo te paso tu código 🔑', '¿Qué tal vas con el plan? Cuéntame cómo te sientes 💪', '¡Gracias! Ya tengo apuntado el pago ✅', 'Lo miro y te digo en cuanto pueda 🙂'];
+const qrList = () => Array.isArray(state.settings.quick) ? state.settings.quick : QR_DEF;
+function qrToggle(force) {
+  const P = $('#qrPanel'); if (!P) return; const open = force ?? P.hidden; P.hidden = !open; if (!open) return;
+  const cur = ($('#msgInput')?.value || '').trim();
+  P.innerHTML = `<div class="flex flex-wrap gap-1.5">${qrList().map((q, i) => `<span class="qr-chip"><button type="button" data-qr="${i}">${esc(q)}</button><button type="button" data-qrdel="${i}" aria-label="Quitar">✕</button></span>`).join('') || '<span class="text-[12px] text-mute">Aún no tienes respuestas rápidas.</span>'}</div>
+    ${cur ? `<button type="button" class="text-[12px] text-brand underline mt-2" data-qradd>＋ Guardar lo que has escrito como respuesta rápida</button>` : '<p class="text-[11px] text-mute mt-2">Escribe algo y pulsa ⚡ para guardarlo como respuesta rápida.</p>'}`;
+  P.onclick = e => {
+    const a = e.target.closest('[data-qr]'), d = e.target.closest('[data-qrdel]');
+    if (a) { const inp = $('#msgInput'); inp.value = (inp.value.trim() ? inp.value.trimEnd() + ' ' : '') + qrList()[+a.dataset.qr]; inp.focus(); qrToggle(false); return; }
+    if (d) { const L = [...qrList()]; L.splice(+d.dataset.qrdel, 1); state.settings.quick = L; persist(); qrToggle(true); return; }
+    if (e.target.closest('[data-qradd]')) { const v = ($('#msgInput')?.value || '').trim().slice(0, 300); if (v && !qrList().includes(v)) { state.settings.quick = [...qrList(), v]; persist(); toast('⚡ Guardada como respuesta rápida'); } qrToggle(true); }
+  };
+}
 /* ↩️ Responder a un mensaje concreto: desliza la burbuja hacia la derecha (como en WhatsApp). Tocar la cita lleva al original */
 const msgPrev = t => String(t || '').replace(/\s+/g, ' ').trim().slice(0, 140);
 const msgReplyBar = () => `<div id="msgReply" class="msg-reply" hidden><div class="min-w-0 flex-1"><b>↩️ Respondiendo a</b><span id="msgReplyT"></span></div><button type="button" data-noreply aria-label="No responder a ese mensaje">✕</button></div>`;
@@ -7174,9 +7189,11 @@ function msgThreadModal(id, pre = '', back = null) {
       <button class="ml-auto w-8 h-8 rounded-full border border-line text-mute shrink-0" data-close type="button" aria-label="Cerrar">✕</button></div>
     <div id="msgBody" class="cal-body space-y-2" data-thread="${esc(id)}">${msgThreadBodyHTML(id, t)}</div>
     <div class="cal-foot">${msgReplyBar()}<form id="msgForm" class="flex gap-2 items-end"><textarea id="msgInput" rows="3" class="field flex-1 resize-none max-h-[200px] py-2.5" maxlength="1500" placeholder="Tu respuesta…">${esc(pre)}</textarea><button class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button></form>
-      <div class="flex items-center justify-between gap-2 mt-1.5"><p class="text-[11px] text-mute">Le llega al momento si tiene la app abierta, o con aviso si lo ha activado.</p>${t.msgs.some(m => m.de === 'u') ? '<button class="chip chip-sm shrink-0" data-mact="ai" type="button">✨ Sugerir respuesta</button>' : ''}</div>
+      <div id="qrPanel" class="qr-panel" hidden></div>
+      <div class="flex items-center justify-between gap-2 mt-1.5"><p class="text-[11px] text-mute">Le llega al momento si tiene la app abierta, o con aviso si lo ha activado.</p><span class="flex gap-1.5 shrink-0"><button class="chip chip-sm" data-mact="qr" type="button">⚡ Rápidas</button>${t.msgs.some(m => m.de === 'u') ? '<button class="chip chip-sm" data-mact="ai" type="button">✨ Sugerir</button>' : ''}</span></div>
       ${t.pend ? '<button class="btn-ghost w-full text-[13px] mt-2 py-2" data-mact="hecho" type="button">✓ Marcar como leído (sin responder)</button>' : ''}</div>`, {
     sheetClass: 'sheet-fixed sheet-full',
+    qr: () => qrToggle(),
     back: () => (back || msgInboxModal)(),
     hecho: async (r, b) => {
       const m = t.last.ts; b.disabled = true;
@@ -7189,7 +7206,7 @@ function msgThreadModal(id, pre = '', back = null) {
       if (!state.settings.apiKey) return toast('Necesitas tu clave de Gemini (Ajustes → IA)', 'warn');
       b.disabled = true; b.innerHTML = '<span class="spinner"></span> Pensando…';
       try { const txt = await msgSuggest(id, t); const inp = $('#msgInput'); if (inp) { inp.value = txt; inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight + 4, 200) + 'px'; inp.focus(); } b.innerHTML = '✨ Otra'; }
-      catch (e) { toast(e.message || 'No se pudo sugerir', 'warn'); b.innerHTML = '✨ Sugerir respuesta'; }
+      catch (e) { toast(e.message || 'No se pudo sugerir', 'warn'); b.innerHTML = '✨ Sugerir'; }
       b.disabled = false;
     }
   });
@@ -8174,6 +8191,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.23.0', ['⏳ Recordar: «Caducan pronto» automático con Renovar, Escribirle con precios y Hecho.', '⚡ Respuestas rápidas en el chat.', '📊 Resumen del mes en Cobros.', '⌛ Las pruebas acabadas quedan plegadas al final de «Pruebas».'], 'quiet'],
   ['5.22.0', ['🗂️ Gestión: Usuarios, Cobros, Mensajes y Recordatorios en pestañas separadas.', '💶 Cobros pendientes («Me pagará»), botón «Ya me ha pagado» y mensaje amable para recordarle el pago.', '🔔 Recordatorios con aviso en el botón 👥 y al abrir la app.'], 'quiet'],
   ['5.21.0', ['↩️ Mensajes con Esteban: desliza un mensaje hacia la derecha para responder a ese mensaje en concreto. Al tocar la cita, te lleva al original.'], 'quiet'],
   ['5.20.8', ['🎁 Días regalados: se apuntan solos al crear un código que empieza más tarde o termina más tarde de lo que toca, y salen en la ficha y en los cobros. También puedes apuntarlos a mano desde la ficha.'], 'quiet'],
@@ -10158,6 +10176,11 @@ const actions = {
   payTo: b => { if (!ui.msgs) return toast('Los mensajes aún se están cargando. Prueba en un momento.', 'warn'); msgThreadModal(b.dataset.hash); },
   msgOpen: b => msgThreadModal(b.dataset.id),
   remNew: () => remModal(),
+  trialOld: () => { ui.trialOld = !ui.trialOld; render(); },
+  expDone: b => { state.settings.expDone = { ...(state.settings.expDone || {}), [b.dataset.id]: b.dataset.hasta }; persist(); render(); usersBadge(); },
+  expMsg: b => { const e = expSoon().find(x => x.id === b.dataset.id); if (!e) return; if (!ui.msgs) return toast('Los mensajes aún se están cargando. Prueba en un momento.', 'warn');
+    const tpl = TW_TPL.find(x => x[0].startsWith('Renovar'))?.[1]; msgThreadModal(e.id, tpl ? tpl({ first: e.first, kind: e.kind, hasta: e.hasta, left: Math.max(0, e.n) }) : ''); },
+  sumMonth: () => monthSumModal(),
   remDone: b => { const r = remsOf().find(x => x.id === b.dataset.id); if (r) { r.done = true; persist(); } render(); usersBadge(); },
   remSnooze: b => { const r = remsOf().find(x => x.id === b.dataset.id); if (r) { r.d = addDays(todayISO(), 1); persist(); } render(); usersBadge(); toast('⏰ Te lo recuerdo mañana'); },
   remDel: b => { state.settings.rems = remsOf().filter(x => x.id !== b.dataset.id); persist(); render(); usersBadge(); },
@@ -10713,7 +10736,7 @@ function unlock(me) {
   if (needsOnboarding(me)) setTimeout(() => themeAsk(onboarding), 300);
   else if (!newsChecked) { newsChecked = true; themeAsk(() => { maybeShowNews(); setTimeout(maybeAskEmail, 2500); }); }
   setTimeout(emailSync, 4000); setTimeout(() => { msgCheck(true); msgPendCheck(); }, 5000);
-  setTimeout(() => { if (!access.me?.admin) return; usersBadge(); const n = remDue().length; if (n && lsGet('fitnesteban_remtoast') !== todayISO()) { lsSet('fitnesteban_remtoast', todayISO()); toast(`🔔 ${n === 1 ? 'Tienes 1 recordatorio' : `Tienes ${n} recordatorios`} para hoy. Están en 👥 → 🔔 Recordar.`); } }, 3000); setTimeout(pickLost, 900);
+  setTimeout(() => { if (!access.me?.admin) return; usersBadge(); const n = remCount(); if (n && lsGet('fitnesteban_remtoast') !== todayISO()) { lsSet('fitnesteban_remtoast', todayISO()); toast(`🔔 ${n === 1 ? 'Tienes 1 recordatorio' : `Tienes ${n} recordatorios`} para hoy. Están en 👥 → 🔔 Recordar.`); } }, 3000); setTimeout(pickLost, 900);
   try { if (new URLSearchParams(location.search).has('msg')) { history.replaceState(null, '', location.pathname); setTimeout(msgFromPush, 1200); } } catch { /* nada */ }
   // biblioteca al día al entrar: avisos de bloques nuevos e iconos
   setTimeout(() => { const before = JSON.stringify(remoteLib.map(x => x.lib)); fetchRemoteLib().then(() => { if (JSON.stringify(remoteLib.map(x => x.lib)) !== before && (ui.view === 'home' || ui.view === 'train') && !$('#modalRoot').classList.contains('open')) render(); }); }, 1500);
@@ -11408,7 +11431,7 @@ const activeN = () => ui.usage ? Object.entries(ui.usage).filter(([h, u]) => u.l
 /* 🟢 Numerito de activos hoy sobre el botón 👥 de la cabecera (solo admin; sin nombres, solo la cifra) */
 function usersBadge() {
   const ub = $('#usersBtn'); if (!ub) return;
-  { let m = ub.querySelector('.ub-m'); const k = ui.msgPend || 0, r = access.me?.admin ? remDue().length : 0, t = [k ? '💬' + k : '', r ? '🔔' + r : ''].filter(Boolean).join(' '); if (!t) m?.remove(); else { if (!m) { m = document.createElement('span'); m.className = 'ub-m'; ub.appendChild(m); } m.textContent = t; } }
+  { let m = ub.querySelector('.ub-m'); const k = ui.msgPend || 0, r = access.me?.admin ? remCount() : 0, t = [k ? '💬' + k : '', r ? '🔔' + r : ''].filter(Boolean).join(' '); if (!t) m?.remove(); else { if (!m) { m = document.createElement('span'); m.className = 'ub-m'; ub.appendChild(m); } m.textContent = t; } }
   const n = activeN(); let b = ub.querySelector('.ub-n');
   if (typeof n !== 'number' || n < 1) { b?.remove(); return; }
   if (!b) { b = document.createElement('span'); b.className = 'ub-n'; ub.appendChild(b); }
@@ -11514,8 +11537,10 @@ function refGiftModal(m, k) {
 function trialRowsHTML() {
   const T = trialRows(); if (!T.length) return '';
   const f = ui.accF || 'all', t = netToday() || todayISO(), inF = u => f === 'trial' || (f === 'all' && (!u.hasta || u.hasta >= t)) || (f === 'today' && u.last === todayISO());
-  const nShow = T.filter(inF).length, off = a => a ? '' : 'data-off="1" style="display:none"';
-  return `<div class="lbl mt-2 acc-row-h" ${off(nShow)}>🧪 En periodo de prueba · ${nShow}</div>` + T.map(u => { const show = inF(u);
+  const ended = u => u.hasta && u.hasta < t, live = T.filter(u => !ended(u)), old = T.filter(ended).sort((a, b) => String(b.hasta).localeCompare(String(a.hasta)));
+  const showOld = f === 'trial' && ui.trialOld, inF2 = u => ended(u) ? showOld : inF(u);
+  const nShow = live.filter(inF).length, off = a => a ? '' : 'data-off="1" style="display:none"';
+  const row = u => { const show = inF2(u);
     const left = u.hasta ? daysBetween(t, u.hasta) : null, ago = u.last ? daysBetween(u.last, todayISO()) : null, open = ui.accOpenH === u.h;
     const dot = ago === 0 ? 'u-today' : ago !== null && ago <= 7 ? 'u-week' : 'u-old', who = u.m || 'Sin correo';
     const pill = left === null ? '' : left < 0 ? '<span class="text-rose-300">Terminada</span>' : `<span class="${left <= 3 ? 'text-amber-300' : 'text-cyan-300'}">Prueba · ${left === 0 ? 'hoy' : left + ' d'}</span>`;
@@ -11525,8 +11550,10 @@ function trialRowsHTML() {
         <span class="text-[11px] shrink-0">${pill}</span><span class="tri shrink-0 ${open ? 'rotate-180' : ''}"></span></button>
       ${open ? `<div class="px-3 pb-2.5 pt-1 text-xs space-y-1.5">${refOf(u.m) ? `<p class="text-[12px]">🤝 Se la recomendó: <b>${esc(refOf(u.m))}</b></p>` : ''}<p class="text-[11px] text-mute">Empezó el ${esc(fmtDateShort(u.first || ''))}${u.hasta ? ` · termina el ${esc(fmtDateShort(u.hasta))}` : ''}${u.v ? ` · v${esc(u.v)}` : ''}</p>
         ${lsGet(GH_KEY) ? `<button class="btn-ghost w-full" data-act="trialCode" data-mail="${esc(String(u.m || '').toLowerCase())}" data-who="${esc(String(u.m || '').split('@')[0].slice(0, 24))}" data-from="${esc(u.hasta && u.hasta > todayISO() ? u.hasta : '')}" type="button">🔑 Darle su código personal</button>` : ''}
-        <p class="text-[11px] text-mute">Cuando le des un código, lo escribe en la pantalla de acceso y sigue con todos sus datos.</p></div>` : ''}</div>`;
-  }).join('');
+        <p class="text-[11px] text-mute">Cuando le des un código, lo escribe en la pantalla de acceso y sigue con todos sus datos.</p></div>` : ''}</div>`; };
+  // ⌛ las pruebas acabadas no ocupan sitio: van al final de «Pruebas», plegadas (y siempre se encuentran buscando)
+  return `<div class="lbl mt-2 acc-row-h" ${off(nShow)}>🧪 En periodo de prueba · ${nShow}</div>` + live.map(row).join('')
+    + (old.length ? `<button class="acc-row-h w-full text-left lbl mt-3 py-1" data-act="trialOld" type="button" ${off(f === 'trial')}>⌛ Pruebas acabadas sin código · ${old.length} <span class="text-brand">${showOld ? 'ocultar ▴' : 'ver ▾'}</span></button>` + old.map(row).join('') : '');
 }
 const PIN_TTL = 2 * 60 * 60e3, pinOk = () => !!ui.accessPin && Date.now() - (ui.pinAt || 0) < PIN_TTL;
 const accDot = h => { const u = ui.usage?.[h], ago = u ? daysBetween(u.last, todayISO()) : null; return !u ? 'u-none' : ago === 0 ? 'u-today' : ago <= 7 ? 'u-week' : 'u-old'; };
@@ -11585,7 +11612,7 @@ function accFichaModal(hash) {
   ui.fichaRedraw = () => { const sh = $('#modalRoot .modal-sheet'); if (sh?.querySelector(`[data-ficha="${hash}"]`)) sh.innerHTML = html(); };
 }
 function accTabsHTML() {
-  const pc = payRows().filter(r => payPend(r.p)).length, mp = ui.msgPend || 0, rd = remDue().length, t = ui.accTab || 'users';
+  const pc = payRows().filter(r => payPend(r.p)).length, mp = ui.msgPend || 0, rd = remCount(), t = ui.accTab || 'users';
   const T = [['users', '👥', 'Usuarios', 0], ['pays', '💶', 'Cobros', pc], ['msgs', '💬', 'Mensajes', mp], ['rems', '🔔', 'Recordar', rd]];
   return `<div class="acc-tabs mt-2" data-noswipe>${T.map(([k, i, l, n]) => `<button class="acc-tab${t === k ? ' on' : ''}" data-act="accTab" data-k="${k}" type="button"><span class="text-[17px] leading-none">${i}</span><span>${l}</span>${n ? `<i class="acc-tab-n">${n}</i>` : ''}</button>`).join('')}</div>`;
 }
@@ -11602,6 +11629,7 @@ function paysTabHTML() {
       <b class="text-[15px] shrink-0">${eur(p.eur)}</b></div>
       <div class="flex gap-1.5 mt-2 flex-wrap">${P ? `<button class="chip chip-sm chip-on" data-act="payOk" data-pid="${p.pid}" type="button">✅ Ya me ha pagado</button><button class="chip chip-sm" data-act="payAsk" data-hash="${esc(h)}" type="button">💬 Recordarle el pago</button><button class="chip chip-sm" data-act="payRem" data-pid="${p.pid}" type="button">🔔 ${rem ? 'Cambiar aviso' : 'Avísame'}</button>` : `<button class="chip chip-sm" data-act="payTo" data-hash="${esc(h)}" type="button">💬 Escribirle</button>`}<button class="chip chip-sm" data-act="payEdit" data-pid="${p.pid}" type="button">✎ Editar</button></div></div>`; };
   return `<div class="grid grid-cols-3 gap-2">${tile(eur(S.mes), 'cobrado en ' + esc(mes), 'text-brand')}${tile(eur(S.ano), 'cobrado este año')}${tile(eur(S.pend), S.pendN ? `${plural(S.pendN, 'pendiente', 'pendientes')}` : 'pendiente', S.pendN ? 'text-amber-300' : '')}</div>
+    <button class="w-full text-left text-[13px] text-brand mt-2 px-1" data-act="sumMonth" type="button">📊 Resumen del mes ›</button>
     <div class="flex gap-1.5 mt-3">${[['pend', `⏳ Pendientes${pe.length ? ' · ' + pe.length : ''}`], ['ok', '✅ Cobrados'], ['all', 'Todos']].map(([k, l]) => `<button class="chip chip-sm ${f === k ? 'chip-on' : ''}" data-act="payF" data-k="${k}" type="button">${l}</button>`).join('')}</div>
     <button class="btn-ghost w-full mt-3 text-[13px]" data-act="payNew" type="button">＋ Apuntar un cobro</button>
     <div class="space-y-2 mt-3">${L.length ? L.map(row).join('') : `<p class="text-[13px] text-mute text-center py-4">${f === 'pend' ? '🎉 Nadie te debe nada.' : 'Aún no hay cobros apuntados.'}</p>`}</div>
@@ -11622,10 +11650,34 @@ function remsTabHTML() {
       <button class="text-mute px-1 shrink-0" data-act="remDel" data-id="${r.id}" type="button" aria-label="Borrar">✕</button></div>
       ${r.done ? '' : `<div class="flex gap-1.5 mt-2 flex-wrap"><button class="chip chip-sm chip-on" data-act="remDone" data-id="${r.id}" type="button">✓ Hecho</button>${pr && payPend(pr.p) ? `<button class="chip chip-sm" data-act="payOk" data-pid="${pr.p.pid}" type="button">✅ Ya me ha pagado</button><button class="chip chip-sm" data-act="payAsk" data-hash="${esc(pr.h)}" type="button">💬 Recordarle el pago</button>` : r.h ? `<button class="chip chip-sm" data-act="payTo" data-hash="${esc(r.h)}" type="button">💬 Escribirle</button>` : ''}<button class="chip chip-sm" data-act="remSnooze" data-id="${r.id}" type="button">⏰ Mañana</button></div>`}</div>`; };
   const sec = (t, L) => L.length ? `<div class="lbl mt-3 mb-1.5">${t} · ${L.length}</div><div class="space-y-2">${L.map(row).join('')}</div>` : '';
+  const E = expSoon(), gh = !!lsGet(GH_KEY);
+  const eRow = e => `<div class="pay-row pay-pend"><div class="flex items-start gap-2"><div class="flex-1 min-w-0"><div class="text-[11px] ${e.n < 0 ? 'text-rose-300' : 'text-amber-300'}">${e.kind === 'prueba' ? '🧪 Su prueba' : '⏳ Su código'} ${e.n < 0 ? `caducó hace ${plural(-e.n, 'día', 'días')}` : e.n === 0 ? 'caduca hoy' : e.n === 1 ? 'caduca mañana' : `caduca en ${e.n} días`} (${esc(fmtDateShort(e.hasta))})</div><div class="text-[14px] font-semibold break-words">${esc(e.name)}</div></div></div>
+    <div class="flex gap-1.5 mt-2 flex-wrap">${gh ? (e.kind === 'prueba' ? `<button class="chip chip-sm chip-on" data-act="trialCode" data-mail="${esc(e.mail)}" data-who="${esc(e.mail.split('@')[0].slice(0, 24))}" data-from="${esc(e.hasta > todayISO() ? e.hasta : '')}" type="button">🔑 Darle su código</button>` : `<button class="chip chip-sm chip-on" data-act="planAccess" data-hash="${esc(e.id)}" type="button">⏳ Renovar</button>`) : ''}<button class="chip chip-sm" data-act="expMsg" data-id="${esc(e.id)}" type="button">💬 Escribirle con precios</button><button class="chip chip-sm" data-act="expDone" data-id="${esc(e.id)}" data-hasta="${esc(e.hasta)}" type="button">✓ Hecho</button></div></div>`;
   return `<button class="btn-primary w-full" data-act="remNew" type="button">＋ Nuevo recordatorio</button>
-    ${sec('Para hoy', due)}${sec('Próximos', next)}${!due.length && !next.length ? '<p class="text-[13px] text-mute text-center py-4">No tienes nada pendiente 🎉</p>' : ''}
+    ${E.length ? `<div class="lbl mt-3 mb-1.5">⏳ Caducan pronto (automático) · ${E.length}</div><div class="space-y-2">${E.map(eRow).join('')}</div>` : ''}
+    ${sec('Para hoy', due)}${sec('Próximos', next)}${!due.length && !next.length && !E.length ? '<p class="text-[13px] text-mute text-center py-4">No tienes nada pendiente 🎉</p>' : ''}
     ${done.length ? `<details class="mt-3"><summary class="text-[12px] text-mute">Hechos recientes · ${done.length}</summary><div class="space-y-2 mt-2">${done.map(row).join('')}</div></details>` : ''}
     <p class="text-[11px] text-mute mt-3 px-1">Te avisa con un número en el botón 👥 de arriba y al abrir la app. Se guardan solo en este móvil.</p>`;
+}
+/* 📊 Resumen del mes: cobrado, pendiente, altas, renovaciones, días regalados y caducados sin renovar */
+function monthSumModal(ym = todayISO().slice(0, 7)) {
+  const R = payRows(), inM = d => String(d || '').slice(0, 7) === ym, name = new Date(ym + '-15').toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+  const cob = R.filter(r => !payPend(r.p) && inM(r.p.paid || r.p.d)), pen = R.filter(r => payPend(r.p) && inM(r.p.d));
+  const first = {}; for (const r of [...R].sort((a, b) => a.p.d.localeCompare(b.p.d))) first[r.h] = first[r.h] || r.p.d;
+  const nuevos = R.filter(r => inM(r.p.d) && first[r.h] === r.p.d), renov = R.filter(r => inM(r.p.d) && first[r.h] !== r.p.d);
+  const gifts = Object.values(state.settings.gifts || {}).flat().filter(g => inM(g.at)).reduce((a, g) => a + (+g.d || 0), 0);
+  const T = netToday() || todayISO(), lost = (access.list || []).filter(x => !x.admin && x.hasta && inM(x.hasta) && x.hasta < T && !(duoMate(x) && duoMate(x).hash < x.hash));
+  const sum = A => A.reduce((a, r) => a + (+r.p.eur || 0), 0), N = A => new Set(A.map(r => r.h)).size;
+  const lines = [`📊 FITNESTEBAN · ${name}`, `💶 Cobrado: ${eur(sum(cob))} (${plural(cob.length, 'cobro', 'cobros')})`, `⏳ Pendiente de cobrar: ${eur(sum(pen))}${pen.length ? ` (${pen.map(r => payWho(r.h)).join(', ')})` : ''}`, `🆕 Altas: ${N(nuevos)}`, `🔁 Renovaciones: ${N(renov)}`, `🎁 Días regalados: ${gifts}`, `⛔ Caducados sin renovar: ${lost.length}${lost.length ? ` (${lost.map(x => payWho(x.hash)).join(', ')})` : ''}`];
+  const prev = new Date(ym + '-15'); prev.setMonth(prev.getMonth() - 1); const next = new Date(ym + '-15'); next.setMonth(next.getMonth() + 1);
+  const iso = d => d.toISOString().slice(0, 7), canNext = iso(next) <= todayISO().slice(0, 7);
+  openModal(`<div class="flex items-center gap-2"><button class="w-8 h-8 rounded-full border border-line shrink-0" data-mact="go" data-m="${iso(prev)}" type="button" aria-label="Mes anterior">‹</button><h3 class="modal-title flex-1 text-center">📊 ${esc(name.charAt(0).toUpperCase() + name.slice(1))}</h3><button class="w-8 h-8 rounded-full border border-line shrink-0 ${canNext ? '' : 'opacity-30'}" data-mact="go" data-m="${iso(next)}" type="button" aria-label="Mes siguiente" ${canNext ? '' : 'disabled'}>›</button></div>
+    <div class="space-y-1.5 text-[14px]">${lines.slice(1).map(l => `<div class="pay-row !py-2">${esc(l)}</div>`).join('')}</div>
+    <p class="text-[11px] text-mute">Con los cobros apuntados en este móvil. «Altas» es quien tiene su primer cobro este mes.</p>
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-close type="button">Cerrar</button><button class="btn-primary" data-mact="copy" type="button">📋 Copiar</button></div>`, {
+    go: (r, b) => monthSumModal(b.dataset.m),
+    copy: () => { navigator.clipboard?.writeText(lines.join('\n')).then(() => toast('📋 Resumen copiado'), () => toast('No se pudo copiar', 'warn')); }
+  });
 }
 /* ✎ Apuntar o editar un cobro */
 function payEditModal(pid = '') {
@@ -11782,6 +11834,14 @@ function payRows() { let fix = false; const R = Object.entries(state.accessPays 
 const payFind = pid => payRows().find(r => r.p.pid === pid);
 const remsOf = () => (state.settings.rems = state.settings.rems || []);
 const remDue = () => remsOf().filter(r => !r.done && r.d <= todayISO());
+/* ⏳ Caducan pronto (automático): códigos que acaban en 3 días o acabaron hace menos de 4, y pruebas que acaban en 2 días. «✓ Hecho» lo quita hasta que cambie su fecha */
+function expSoon() {
+  const T = netToday() || todayISO(), D = state.settings.expDone || {}, out = [];
+  for (const x of access.list || []) { if (x.admin || !x.hasta || trialConv().has(x.hash)) continue; const m = duoMate(x); if (m && m.hash < x.hash) continue; const n = daysBetween(T, x.hasta); if (n > 3 || n < -3 || D[x.hash] === x.hasta) continue; out.push({ id: x.hash, kind: 'código', name: payWho(x.hash), first: String(accessWho(x) || '').split(/\s+/)[0], hasta: x.hasta, n }); }
+  for (const u of trialRows()) { const h = String(u.h).toLowerCase(), hasta = ui.trialH?.[h] || u.hasta; if (!hasta) continue; const n = daysBetween(T, hasta); if (n > 2 || n < 0 || D[h] === hasta) continue; out.push({ id: h, kind: 'prueba', name: u.m || 'Prueba', first: '', mail: String(u.m || '').toLowerCase(), hasta, n }); }
+  return out.sort((a, b) => a.n - b.n);
+}
+const remCount = () => remDue().length + (access.me?.admin ? expSoon().length : 0);
 function remAdd(d, t, h = '', pay = '') { remsOf().push({ id: payNewId(), d, t: String(t).slice(0, 160), h, pay }); persist(); }
 function payMarkPaid(pid) { const r = payFind(pid); if (!r) return; delete r.p.st; r.p.paid = todayISO(); for (const x of remsOf()) if (x.pay === pid) x.done = true; persist(); }
 const dayWord = d => { const n = daysBetween(todayISO(), d); return n === 0 ? 'hoy' : n === 1 ? 'mañana' : n === -1 ? 'ayer' : n < 0 ? `hace ${-n} días` : `el ${fmtDateShort(d)}`; };
