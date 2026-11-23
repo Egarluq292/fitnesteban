@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.23.0';
+const APP_VERSION = '5.24.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -750,6 +750,7 @@ function persist() {
     else if (sig !== state._sig) { state._sig = sig; state.dataAt = Date.now(); }
   } catch { /* no es grave */ }
   const raw = JSON.stringify(state);
+  if (typeof gestSoon === 'function') gestSoon();
   try { localStorage.setItem(STORE_KEY, raw); return true; }
   catch (e) {
     // sin espacio: primero se sacrifica la copia de «antes de actualizar» (los datos de hoy valen más) y se reintenta
@@ -7070,6 +7071,7 @@ async function sbAdminLoad() {
   const key = await secretDec(lsGet(USE_KEY), ui.accessPin);
   const d = await sbCall({ op: 'lista', key }); if (!d.ok) throw new Error(d.error === 'clave' ? 'clave' : 'fallo');
   if (d.topic && d.topic !== lsGet(ADM_TOPIC_KEY)) lsSet(ADM_TOPIC_KEY, d.topic);
+  gestPull(key).catch(() => { });
   if (d.topic) rtSub(d.topic, msgAdminEvent);
   const H = {}; for (const h of d.hilos || []) H[h.tk] = h;
   const idOf = tk => H[tk]?.h || String(tk).replace(/^old:/, '');
@@ -8191,6 +8193,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.24.0', ['🔔 Recordatorios con hora: te llega una notificación a su hora, aunque no abras la app.', '☁️ Copia cifrada de tu gestión (cobros, recordatorios, nombres…) en Supabase: no se pierde si cambias de móvil.'], 'quiet'],
   ['5.23.0', ['⏳ Recordar: «Caducan pronto» automático con Renovar, Escribirle con precios y Hecho.', '⚡ Respuestas rápidas en el chat.', '📊 Resumen del mes en Cobros.', '⌛ Las pruebas acabadas quedan plegadas al final de «Pruebas».'], 'quiet'],
   ['5.22.0', ['🗂️ Gestión: Usuarios, Cobros, Mensajes y Recordatorios en pestañas separadas.', '💶 Cobros pendientes («Me pagará»), botón «Ya me ha pagado» y mensaje amable para recordarle el pago.', '🔔 Recordatorios con aviso en el botón 👥 y al abrir la app.'], 'quiet'],
   ['5.21.0', ['↩️ Mensajes con Esteban: desliza un mensaje hacia la derecha para responder a ese mensaje en concreto. Al tocar la cita, te lleva al original.'], 'quiet'],
@@ -10182,7 +10185,7 @@ const actions = {
     const tpl = TW_TPL.find(x => x[0].startsWith('Renovar'))?.[1]; msgThreadModal(e.id, tpl ? tpl({ first: e.first, kind: e.kind, hasta: e.hasta, left: Math.max(0, e.n) }) : ''); },
   sumMonth: () => monthSumModal(),
   remDone: b => { const r = remsOf().find(x => x.id === b.dataset.id); if (r) { r.done = true; persist(); } render(); usersBadge(); },
-  remSnooze: b => { const r = remsOf().find(x => x.id === b.dataset.id); if (r) { r.d = addDays(todayISO(), 1); persist(); } render(); usersBadge(); toast('⏰ Te lo recuerdo mañana'); },
+  remSnooze: b => { const r = remsOf().find(x => x.id === b.dataset.id); if (r) { r.d = addDays(todayISO(), 1); r.at = remAt(r.d, r.hr); persist(); } render(); usersBadge(); toast('⏰ Te lo recuerdo mañana'); },
   remDel: b => { state.settings.rems = remsOf().filter(x => x.id !== b.dataset.id); persist(); render(); usersBadge(); },
   delAccess: b => delAccess(b.dataset.hash),
   ghConnect: () => ghConnectModal(),
@@ -11633,7 +11636,7 @@ function paysTabHTML() {
     <div class="flex gap-1.5 mt-3">${[['pend', `⏳ Pendientes${pe.length ? ' · ' + pe.length : ''}`], ['ok', '✅ Cobrados'], ['all', 'Todos']].map(([k, l]) => `<button class="chip chip-sm ${f === k ? 'chip-on' : ''}" data-act="payF" data-k="${k}" type="button">${l}</button>`).join('')}</div>
     <button class="btn-ghost w-full mt-3 text-[13px]" data-act="payNew" type="button">＋ Apuntar un cobro</button>
     <div class="space-y-2 mt-3">${L.length ? L.map(row).join('') : `<p class="text-[13px] text-mute text-center py-4">${f === 'pend' ? '🎉 Nadie te debe nada.' : 'Aún no hay cobros apuntados.'}</p>`}</div>
-    <p class="text-[11px] text-mute mt-3 px-1">Solo se guardan en este móvil (y en tu copia de Drive). Al crear o renovar un código, elige «⏳ Me pagará» si aún no te ha pagado.</p>
+    <p class="text-[11px] text-mute mt-3 px-1">Se guardan en este móvil y en tu copia cifrada de Supabase (solo tú la lees). Al crear o renovar un código, elige «⏳ Me pagará» si aún no te ha pagado.</p>
     <div class="mt-3">${refSummaryHTML()}</div>`;
 }
 /* 💬 Mensajes y «Para escribir» */
@@ -11646,7 +11649,7 @@ function msgsTabHTML() {
 function remsTabHTML() {
   const T = todayISO(), A = remsOf(), due = A.filter(r => !r.done && r.d <= T).sort((a, b) => a.d.localeCompare(b.d)), next = A.filter(r => !r.done && r.d > T).sort((a, b) => a.d.localeCompare(b.d)), done = A.filter(r => r.done).slice(-10).reverse();
   const row = r => { const pr = r.pay ? payFind(r.pay) : null;
-    return `<div class="pay-row${!r.done && r.d <= T ? ' pay-pend' : ''}${r.done ? ' opacity-60' : ''}"><div class="flex items-start gap-2"><div class="flex-1 min-w-0"><div class="text-[11px] ${!r.done && r.d < T ? 'text-rose-300' : !r.done && r.d === T ? 'text-amber-300' : 'text-mute'}">${r.done ? '✓ Hecho' : '🔔 ' + esc(dayWord(r.d).replace(/^el /, ''))}</div><div class="text-[14px] break-words ${r.done ? 'line-through' : ''}">${esc(r.t)}</div></div>
+    return `<div class="pay-row${!r.done && r.d <= T ? ' pay-pend' : ''}${r.done ? ' opacity-60' : ''}"><div class="flex items-start gap-2"><div class="flex-1 min-w-0"><div class="text-[11px] ${!r.done && r.d < T ? 'text-rose-300' : !r.done && r.d === T ? 'text-amber-300' : 'text-mute'}">${r.done ? '✓ Hecho' : '🔔 ' + esc(dayWord(r.d).replace(/^el /, '')) + (r.hr ? ` · ${esc(r.hr)}` : '')}</div><div class="text-[14px] break-words ${r.done ? 'line-through' : ''}">${esc(r.t)}</div></div>
       <button class="text-mute px-1 shrink-0" data-act="remDel" data-id="${r.id}" type="button" aria-label="Borrar">✕</button></div>
       ${r.done ? '' : `<div class="flex gap-1.5 mt-2 flex-wrap"><button class="chip chip-sm chip-on" data-act="remDone" data-id="${r.id}" type="button">✓ Hecho</button>${pr && payPend(pr.p) ? `<button class="chip chip-sm" data-act="payOk" data-pid="${pr.p.pid}" type="button">✅ Ya me ha pagado</button><button class="chip chip-sm" data-act="payAsk" data-hash="${esc(pr.h)}" type="button">💬 Recordarle el pago</button>` : r.h ? `<button class="chip chip-sm" data-act="payTo" data-hash="${esc(r.h)}" type="button">💬 Escribirle</button>` : ''}<button class="chip chip-sm" data-act="remSnooze" data-id="${r.id}" type="button">⏰ Mañana</button></div>`}</div>`; };
   const sec = (t, L) => L.length ? `<div class="lbl mt-3 mb-1.5">${t} · ${L.length}</div><div class="space-y-2">${L.map(row).join('')}</div>` : '';
@@ -11657,7 +11660,7 @@ function remsTabHTML() {
     ${E.length ? `<div class="lbl mt-3 mb-1.5">⏳ Caducan pronto (automático) · ${E.length}</div><div class="space-y-2">${E.map(eRow).join('')}</div>` : ''}
     ${sec('Para hoy', due)}${sec('Próximos', next)}${!due.length && !next.length && !E.length ? '<p class="text-[13px] text-mute text-center py-4">No tienes nada pendiente 🎉</p>' : ''}
     ${done.length ? `<details class="mt-3"><summary class="text-[12px] text-mute">Hechos recientes · ${done.length}</summary><div class="space-y-2 mt-2">${done.map(row).join('')}</div></details>` : ''}
-    <p class="text-[11px] text-mute mt-3 px-1">Te avisa con un número en el botón 👥 de arriba y al abrir la app. Se guardan solo en este móvil.</p>`;
+    <p class="text-[11px] text-mute mt-3 px-1">Te llega una notificación a la hora elegida (si tienes activados los avisos en 💬 Mensajes) y un número en el botón 👥. Se guardan en este móvil y en tu copia cifrada de Supabase.</p>`;
 }
 /* 📊 Resumen del mes: cobrado, pendiente, altas, renovaciones, días regalados y caducados sin renovar */
 function monthSumModal(ym = todayISO().slice(0, 7)) {
@@ -11707,7 +11710,7 @@ function payEditModal(pid = '') {
       if (pend) { q.st = 'pend'; delete q.paid; } else if (payPend(q) || !r) { delete q.st; if (r) q.paid = todayISO(); }
       if (!r) (state.accessPays[h] = state.accessPays[h] || []).push(q);
       const R2 = remsOf().find(x => x.pay === q.pid && !x.done);
-      if (pend && rd) { if (R2) R2.d = rd; else remAdd(rd, `Cobrar a ${payWho(h)}: ${eur(q.eur)} (${planName(k)}${m === 'duo' ? ' DÚO' : ''})`, h, q.pid); }
+      if (pend && rd) { if (R2) { R2.d = rd; R2.at = remAt(rd, R2.hr); } else remAdd(rd, `Cobrar a ${payWho(h)}: ${eur(q.eur)} (${planName(k)}${m === 'duo' ? ' DÚO' : ''})`, h, q.pid); }
       if (!pend && R2) R2.done = true;
       persist(); closeModal(); render(); toast('✓ Cobro guardado');
     }
@@ -11719,15 +11722,16 @@ function remModal(pid = '') {
   const pr = pid ? payFind(pid) : null, old = pr ? remsOf().find(x => x.pay === pid && !x.done) : null;
   const people = (access.list || []).filter(x => !x.admin).map(x => ({ h: x.hash, n: payWho(x.hash) })).sort((a, b) => a.n.localeCompare(b.n, 'es'));
   openModal(`<h3 class="modal-title">🔔 ${pr ? 'Avísame para cobrar' : 'Nuevo recordatorio'}</h3>
-    <label class="lbl">¿Cuándo?<input class="field mt-1" name="rd" type="date" value="${esc(old?.d || addDays(todayISO(), pr ? 3 : 1))}" /></label>
+    <div class="grid grid-cols-[1fr_auto] gap-2"><label class="lbl">¿Qué día?<input class="field mt-1" name="rd" type="date" value="${esc(old?.d || addDays(todayISO(), pr ? 3 : 1))}" /></label><label class="lbl">¿A qué hora?<input class="field mt-1" name="rhr" type="time" value="${esc(old?.hr || '09:00')}" /></label></div>
     <div class="flex gap-1.5 flex-wrap -mt-1">${[[1, 'Mañana'], [3, 'En 3 días'], [7, 'En una semana']].map(([n, l]) => `<button class="chip chip-sm" data-mact="q" data-n="${n}" type="button">${l}</button>`).join('')}</div>
     <label class="lbl">¿Qué?<input class="field mt-1" name="rt" maxlength="160" placeholder="Ej: Llamar a Ana para renovar" value="${esc(old?.t || (pr ? `Cobrar a ${payWho(pr.h)}: ${eur(pr.p.eur)} (${planName(pr.p.k)}${pr.p.mod === 'duo' ? ' DÚO' : ''})` : ''))}" /></label>
     ${pr ? '' : `<label class="lbl">Persona <span class="text-mute font-normal">(opcional)</span><select class="field mt-1" name="rh"><option value="">—</option>${people.map(x => `<option value="${esc(x.h)}">${esc(x.n)}</option>`).join('')}</select></label>`}
     <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-close type="button">Cancelar</button><button class="btn-primary" data-mact="ok" type="button">Guardar</button></div>`, {
     q: (root, b) => { root.querySelector('[name=rd]').value = addDays(todayISO(), +b.dataset.n); },
     ok: root => { const d = mval(root, 'rd'), t = mval(root, 'rt').trim(); if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || !t) return toast('Pon la fecha y qué tienes que hacer', 'warn');
-      if (old) { old.d = d; old.t = t; persist(); } else remAdd(d, t, pr ? pr.h : mval(root, 'rh') || '', pid);
-      closeModal(); render(); usersBadge(); toast(`🔔 Te lo recordaré ${dayWord(d)}`); }
+      const hr = mval(root, 'rhr') || '09:00';
+      if (old) { old.d = d; old.hr = hr; old.at = remAt(d, hr); old.t = t; persist(); } else remAdd(d, t, pr ? pr.h : mval(root, 'rh') || '', pid, hr);
+      closeModal(); render(); usersBadge(); toast(`🔔 Te lo recordaré ${dayWord(d)} a las ${hr}`); }
   });
 }
 function usersPageHTML() {
@@ -11832,7 +11836,7 @@ const payPend = p => p?.st === 'pend';
 const payWho = h => { const x = (access.list || []).find(y => y.hash === h), m = x ? duoMate(x) : null; return x ? (m ? `${accessWho(x) || 'Sin nombre'} + ${accessWho(m) || 'Sin nombre'}` : accessWho(x) || 'Sin nombre') : state.accessNames?.[h] || `Código …${String(h).slice(-4)}`; };
 function payRows() { let fix = false; const R = Object.entries(state.accessPays || {}).flatMap(([h, arr]) => arr.map((p, i) => { if (!p.pid) { p.pid = payNewId(); fix = true; } return { h, i, p }; })); if (fix) persist(); return R; }
 const payFind = pid => payRows().find(r => r.p.pid === pid);
-const remsOf = () => (state.settings.rems = state.settings.rems || []);
+const remsOf = () => { const A = (state.settings.rems = state.settings.rems || []); for (const r of A) if (!r.at && r.d) r.at = remAt(r.d, r.hr); return A; };
 const remDue = () => remsOf().filter(r => !r.done && r.d <= todayISO());
 /* ⏳ Caducan pronto (automático): códigos que acaban en 3 días o acabaron hace menos de 4, y pruebas que acaban en 2 días. «✓ Hecho» lo quita hasta que cambie su fecha */
 function expSoon() {
@@ -11842,7 +11846,40 @@ function expSoon() {
   return out.sort((a, b) => a.n - b.n);
 }
 const remCount = () => remDue().length + (access.me?.admin ? expSoon().length : 0);
-function remAdd(d, t, h = '', pay = '') { remsOf().push({ id: payNewId(), d, t: String(t).slice(0, 160), h, pay }); persist(); }
+const remAt = (d, hr = '09:00') => { const x = new Date(`${d}T${/^\d{2}:\d{2}$/.test(hr) ? hr : '09:00'}:00`); return isNaN(x) ? '' : x.toISOString(); };
+function remAdd(d, t, h = '', pay = '', hr = '09:00') { remsOf().push({ id: payNewId(), d, hr, at: remAt(d, hr), t: String(t).slice(0, 160), h, pay }); persist(); }
+/* ☁️ Copia CIFRADA de tu gestión en Supabase (cobros, recordatorios, nombres, días regalados, respuestas rápidas): no se pierde si cambias de móvil
+   y la ves en otro dispositivo tuyo. Se cifra aquí con tu clave: Supabase solo guarda un bloque ilegible y, aparte, las horas de los avisos (sin texto) */
+const GEST_SIG = 'fitnesteban_gestsig', GEST_AT = 'fitnesteban_gestat', GEST_DIRTY = 'fitnesteban_gestdirty';
+const gestDoc = () => { const S = state.settings; return { pays: state.accessPays || {}, names: state.accessNames || {}, rems: S.rems || [], gifts: S.gifts || {}, quick: S.quick || null, expDone: S.expDone || {}, trialOf: S.trialOf || {} }; };
+const gestSigOf = d => String(hashStr(JSON.stringify(d)));
+let gestT = null, gestPullAt = 0;
+function gestSoon() { try { if (!access?.me?.admin) return; } catch { return; } clearTimeout(gestT); gestT = setTimeout(() => { if (gestSigOf(gestDoc()) === lsGet(GEST_SIG)) return; lsSet(GEST_DIRTY, 1); gestPush(); }, 2500); }
+async function gestPush() {
+  if (!access.me?.admin || !ui.accessPin || !navigator.onLine || !lsGet(USE_KEY)) return; // sin PIN se queda marcado y sube al abrir Gestión
+  try { const key = await secretDec(lsGet(USE_KEY), ui.accessPin), doc = gestDoc();
+    const avisos = (doc.rems || []).filter(r => !r.done && r.at && r.at > new Date(Date.now() - 2 * 86400e3).toISOString()).map(r => ({ id: r.id, at: r.at }));
+    const j = await sbCall({ op: 'gest_put', key, doc: { v: 1, enc: await secretEnc(JSON.stringify(doc), key), avisos } }, 30000);
+    if (j.ok) { lsSet(GEST_SIG, gestSigOf(doc)); lsSet(GEST_AT, j.at); lsSet(GEST_DIRTY, 0); } } catch { /* se reintenta */ }
+}
+function gestApply(D, merge) {
+  const S = state.settings, byId = (A, B, k) => { const m = new Map(); for (const x of B || []) m.set(x[k], x); for (const x of A || []) m.set(x[k], x); return [...m.values()]; };
+  if (!merge) { state.accessPays = D.pays || {}; S.rems = D.rems || []; S.gifts = D.gifts || {}; if (D.quick) S.quick = D.quick; S.expDone = D.expDone || {}; }
+  else {
+    const P = { ...(D.pays || {}) }; for (const [h, arr] of Object.entries(state.accessPays || {})) P[h] = byId(arr, P[h], 'pid'); state.accessPays = P;
+    S.rems = byId(S.rems, D.rems, 'id'); S.expDone = { ...(D.expDone || {}), ...(S.expDone || {}) }; if (!S.quick && D.quick) S.quick = D.quick;
+    const G = { ...(D.gifts || {}) }; for (const [h, arr] of Object.entries(S.gifts || {})) G[h] = [...(G[h] || []).filter(g => !arr.some(x => x.at === g.at && x.d === g.d)), ...arr]; S.gifts = G;
+  }
+  state.accessNames = { ...(D.names || {}), ...(state.accessNames || {}) }; S.trialOf = { ...(D.trialOf || {}), ...(S.trialOf || {}) };
+}
+async function gestPull(key) {
+  if (Date.now() - gestPullAt < 5 * 60e3) { if (+lsGet(GEST_DIRTY)) gestPush(); return; } gestPullAt = Date.now();
+  const j = await sbCall({ op: 'gest_get', key }); if (!j.ok) return;
+  if (j.doc?.enc) { try { j.doc = JSON.parse(await secretDec(j.doc.enc, key)); } catch { return; } } else if (j.doc && !j.doc.pays && !j.doc.rems) j.doc = null;
+  const dirty = !!+lsGet(GEST_DIRTY) || !lsGet(GEST_AT);
+  if (j.doc && j.at && j.at > (lsGet(GEST_AT) || '')) { gestApply(j.doc, dirty); lsSet(GEST_AT, j.at); lsSet(GEST_SIG, gestSigOf(gestDoc())); persist(); if (dirty) { lsSet(GEST_DIRTY, 1); gestPush(); } render(); usersBadge(); }
+  else if (dirty || !j.doc) { lsSet(GEST_DIRTY, 1); gestPush(); }
+}
 function payMarkPaid(pid) { const r = payFind(pid); if (!r) return; delete r.p.st; r.p.paid = todayISO(); for (const x of remsOf()) if (x.pay === pid) x.done = true; persist(); }
 const dayWord = d => { const n = daysBetween(todayISO(), d); return n === 0 ? 'hoy' : n === 1 ? 'mañana' : n === -1 ? 'ayer' : n < 0 ? `hace ${-n} días` : `el ${fmtDateShort(d)}`; };
 const payAskText = h => { const x = (access.list || []).find(y => y.hash === h), r = payRows().filter(z => z.h === h && payPend(z.p)).pop(), first = String(accessWho(x) || '').split(/\s+/)[0];
