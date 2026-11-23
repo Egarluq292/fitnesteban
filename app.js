@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.21.0';
+const APP_VERSION = '5.22.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -8174,6 +8174,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.22.0', ['🗂️ Gestión: Usuarios, Cobros, Mensajes y Recordatorios en pestañas separadas.', '💶 Cobros pendientes («Me pagará»), botón «Ya me ha pagado» y mensaje amable para recordarle el pago.', '🔔 Recordatorios con aviso en el botón 👥 y al abrir la app.'], 'quiet'],
   ['5.21.0', ['↩️ Mensajes con Esteban: desliza un mensaje hacia la derecha para responder a ese mensaje en concreto. Al tocar la cita, te lleva al original.'], 'quiet'],
   ['5.20.8', ['🎁 Días regalados: se apuntan solos al crear un código que empieza más tarde o termina más tarde de lo que toca, y salen en la ficha y en los cobros. También puedes apuntarlos a mano desde la ficha.'], 'quiet'],
   ['5.20.7', ['🎁 Nuevo código: puedes elegir el día en que termina (para regalar días); te dice cuántos días de regalo son y el precio no cambia.'], 'quiet'],
@@ -10147,6 +10148,19 @@ const actions = {
   libNewHide: () => { libMarkSeen(); render(); },
   accRow: b => { ui.accOpenH = ui.accOpenH === b.dataset.hash ? null : b.dataset.hash; render(); accFilterDom(); },
   accF: b => accGo(b.dataset.k),
+  accTab: b => { ui.accTab = b.dataset.k; render(); window.scrollTo({ top: 0 }); },
+  payF: b => { ui.payF = b.dataset.k; render(); },
+  payNew: () => payEditModal(),
+  payEdit: b => payEditModal(b.dataset.pid),
+  payOk: b => { payMarkPaid(b.dataset.pid); render(); usersBadge(); toast('✅ Apuntado como cobrado'); },
+  payRem: b => remModal(b.dataset.pid),
+  payAsk: b => { if (!ui.msgs) return toast('Los mensajes aún se están cargando. Prueba en un momento.', 'warn'); msgThreadModal(b.dataset.hash, payAskText(b.dataset.hash)); },
+  payTo: b => { if (!ui.msgs) return toast('Los mensajes aún se están cargando. Prueba en un momento.', 'warn'); msgThreadModal(b.dataset.hash); },
+  msgOpen: b => msgThreadModal(b.dataset.id),
+  remNew: () => remModal(),
+  remDone: b => { const r = remsOf().find(x => x.id === b.dataset.id); if (r) { r.done = true; persist(); } render(); usersBadge(); },
+  remSnooze: b => { const r = remsOf().find(x => x.id === b.dataset.id); if (r) { r.d = addDays(todayISO(), 1); persist(); } render(); usersBadge(); toast('⏰ Te lo recuerdo mañana'); },
+  remDel: b => { state.settings.rems = remsOf().filter(x => x.id !== b.dataset.id); persist(); render(); usersBadge(); },
   delAccess: b => delAccess(b.dataset.hash),
   ghConnect: () => ghConnectModal(),
   ghDisconnect: () => { if (!confirm('¿Desconectar GitHub? Se borra la llave guardada en este móvil.')) return; try { localStorage.removeItem(GH_KEY); } catch { /* nada */ } render(); toast('GitHub desconectado'); },
@@ -10698,7 +10712,8 @@ function unlock(me) {
   if (ui.view === 'settings') render();
   if (needsOnboarding(me)) setTimeout(() => themeAsk(onboarding), 300);
   else if (!newsChecked) { newsChecked = true; themeAsk(() => { maybeShowNews(); setTimeout(maybeAskEmail, 2500); }); }
-  setTimeout(emailSync, 4000); setTimeout(() => { msgCheck(true); msgPendCheck(); }, 5000); setTimeout(pickLost, 900);
+  setTimeout(emailSync, 4000); setTimeout(() => { msgCheck(true); msgPendCheck(); }, 5000);
+  setTimeout(() => { if (!access.me?.admin) return; usersBadge(); const n = remDue().length; if (n && lsGet('fitnesteban_remtoast') !== todayISO()) { lsSet('fitnesteban_remtoast', todayISO()); toast(`🔔 ${n === 1 ? 'Tienes 1 recordatorio' : `Tienes ${n} recordatorios`} para hoy. Están en 👥 → 🔔 Recordar.`); } }, 3000); setTimeout(pickLost, 900);
   try { if (new URLSearchParams(location.search).has('msg')) { history.replaceState(null, '', location.pathname); setTimeout(msgFromPush, 1200); } } catch { /* nada */ }
   // biblioteca al día al entrar: avisos de bloques nuevos e iconos
   setTimeout(() => { const before = JSON.stringify(remoteLib.map(x => x.lib)); fetchRemoteLib().then(() => { if (JSON.stringify(remoteLib.map(x => x.lib)) !== before && (ui.view === 'home' || ui.view === 'train') && !$('#modalRoot').classList.contains('open')) render(); }); }, 1500);
@@ -11393,7 +11408,7 @@ const activeN = () => ui.usage ? Object.entries(ui.usage).filter(([h, u]) => u.l
 /* 🟢 Numerito de activos hoy sobre el botón 👥 de la cabecera (solo admin; sin nombres, solo la cifra) */
 function usersBadge() {
   const ub = $('#usersBtn'); if (!ub) return;
-  { let m = ub.querySelector('.ub-m'); const k = ui.msgPend || 0; if (!k) m?.remove(); else { if (!m) { m = document.createElement('span'); m.className = 'ub-m'; ub.appendChild(m); } m.textContent = '💬' + k; } }
+  { let m = ub.querySelector('.ub-m'); const k = ui.msgPend || 0, r = access.me?.admin ? remDue().length : 0, t = [k ? '💬' + k : '', r ? '🔔' + r : ''].filter(Boolean).join(' '); if (!t) m?.remove(); else { if (!m) { m = document.createElement('span'); m.className = 'ub-m'; ub.appendChild(m); } m.textContent = t; } }
   const n = activeN(); let b = ub.querySelector('.ub-n');
   if (typeof n !== 'number' || n < 1) { b?.remove(); return; }
   if (!b) { b = document.createElement('span'); b.className = 'ub-n'; ub.appendChild(b); }
@@ -11445,7 +11460,7 @@ function refPeople() { // cada persona recomendada, con su estado
   return Object.entries(R).map(([m, x]) => {
     const us = rows.filter(r => String(r.m || '').toLowerCase() === m), days = us.reduce((a, r) => a + (+r.days || 0), 0);
     const cv = trialConv(), code = (access.list || []).find(y => !y.admin && us.some(r => { const h = String(r.h).toLowerCase(); return h === y.hash || cv.get(h) === y.hash; }));
-    const pay1 = code ? (state.accessPays?.[code.hash] || []).find(x => isPaidPlan(x.k)) : null, paid = !!pay1; // su primer pago anotado
+    const pay1 = code ? (state.accessPays?.[code.hash] || []).find(x => isPaidPlan(x.k) && !payPend(x)) : null, paid = !!pay1; // su primer pago anotado
     const trialH = us.find(r => (ui.trialH || {})[String(r.h).toLowerCase()]), tEnd = trialH ? ui.trialH[String(trialH.h).toLowerCase()] : '';
     const st = paid ? 'paid' : code ? 'code' : tEnd && tEnd >= t ? 'trial' : 'ended';
     return { m, ref: x.ref, refK: normTxt(x.ref), who: (code && accessWho(code)) || m.split('@')[0], days, st, gift: G[m] || null, gd: pay1 ? refGiftDays(pay1.k) : 0, pk: pay1?.k || '' };
@@ -11569,6 +11584,100 @@ function accFichaModal(hash) {
   openModal(html());
   ui.fichaRedraw = () => { const sh = $('#modalRoot .modal-sheet'); if (sh?.querySelector(`[data-ficha="${hash}"]`)) sh.innerHTML = html(); };
 }
+function accTabsHTML() {
+  const pc = payRows().filter(r => payPend(r.p)).length, mp = ui.msgPend || 0, rd = remDue().length, t = ui.accTab || 'users';
+  const T = [['users', '👥', 'Usuarios', 0], ['pays', '💶', 'Cobros', pc], ['msgs', '💬', 'Mensajes', mp], ['rems', '🔔', 'Recordar', rd]];
+  return `<div class="acc-tabs mt-2" data-noswipe>${T.map(([k, i, l, n]) => `<button class="acc-tab${t === k ? ' on' : ''}" data-act="accTab" data-k="${k}" type="button"><span class="text-[17px] leading-none">${i}</span><span>${l}</span>${n ? `<i class="acc-tab-n">${n}</i>` : ''}</button>`).join('')}</div>`;
+}
+/* 💶 Cobros: lo cobrado y lo que te deben, con sus botones */
+function paysTabHTML() {
+  const R = payRows(), S = paysSummary(), pe = R.filter(r => payPend(r.p)), ok = R.filter(r => !payPend(r.p));
+  const f = ['pend', 'ok', 'all'].includes(ui.payF) ? ui.payF : pe.length ? 'pend' : 'all', mes = new Date().toLocaleDateString('es-ES', { month: 'long' });
+  const L = (f === 'pend' ? pe : f === 'ok' ? ok : R).sort((a, b) => f === 'pend' ? a.p.d.localeCompare(b.p.d) : (b.p.paid || b.p.d).localeCompare(a.p.paid || a.p.d));
+  const tile = (v, l, c = '') => `<div class="pay-tile"><b class="${c}">${v}</b><span>${l}</span></div>`;
+  const row = ({ h, p }) => { const P = payPend(p), rem = remsOf().find(x => x.pay === p.pid && !x.done);
+    return `<div class="pay-row${P ? ' pay-pend' : ''}"><div class="flex items-start gap-2"><div class="flex-1 min-w-0"><b class="text-[14px] break-words">${esc(payWho(h))}</b>
+      <div class="text-[11px] text-mute">${esc(planName(p.k))}${p.mod === 'duo' ? ' DÚO' : ''}${p.gift ? ` · <span class="text-emerald-300">🎁 +${plural(p.gift, 'día', 'días')}</span>` : ''} · apuntado el ${esc(fmtDateShort(p.d))}</div>
+      <div class="text-[12px] mt-0.5 ${P ? 'text-amber-300' : 'text-emerald-300'}">${P ? `⏳ Pendiente${daysBetween(p.d, todayISO()) > 0 ? ` desde hace ${plural(daysBetween(p.d, todayISO()), 'día', 'días')}` : ' desde hoy'}${rem ? ` · 🔔 ${esc(dayWord(rem.d))}` : ''}` : `✅ Cobrado${p.paid && p.paid !== p.d ? ` el ${esc(fmtDateShort(p.paid))}` : ''}`}</div></div>
+      <b class="text-[15px] shrink-0">${eur(p.eur)}</b></div>
+      <div class="flex gap-1.5 mt-2 flex-wrap">${P ? `<button class="chip chip-sm chip-on" data-act="payOk" data-pid="${p.pid}" type="button">✅ Ya me ha pagado</button><button class="chip chip-sm" data-act="payAsk" data-hash="${esc(h)}" type="button">💬 Recordarle el pago</button><button class="chip chip-sm" data-act="payRem" data-pid="${p.pid}" type="button">🔔 ${rem ? 'Cambiar aviso' : 'Avísame'}</button>` : `<button class="chip chip-sm" data-act="payTo" data-hash="${esc(h)}" type="button">💬 Escribirle</button>`}<button class="chip chip-sm" data-act="payEdit" data-pid="${p.pid}" type="button">✎ Editar</button></div></div>`; };
+  return `<div class="grid grid-cols-3 gap-2">${tile(eur(S.mes), 'cobrado en ' + esc(mes), 'text-brand')}${tile(eur(S.ano), 'cobrado este año')}${tile(eur(S.pend), S.pendN ? `${plural(S.pendN, 'pendiente', 'pendientes')}` : 'pendiente', S.pendN ? 'text-amber-300' : '')}</div>
+    <div class="flex gap-1.5 mt-3">${[['pend', `⏳ Pendientes${pe.length ? ' · ' + pe.length : ''}`], ['ok', '✅ Cobrados'], ['all', 'Todos']].map(([k, l]) => `<button class="chip chip-sm ${f === k ? 'chip-on' : ''}" data-act="payF" data-k="${k}" type="button">${l}</button>`).join('')}</div>
+    <button class="btn-ghost w-full mt-3 text-[13px]" data-act="payNew" type="button">＋ Apuntar un cobro</button>
+    <div class="space-y-2 mt-3">${L.length ? L.map(row).join('') : `<p class="text-[13px] text-mute text-center py-4">${f === 'pend' ? '🎉 Nadie te debe nada.' : 'Aún no hay cobros apuntados.'}</p>`}</div>
+    <p class="text-[11px] text-mute mt-3 px-1">Solo se guardan en este móvil (y en tu copia de Drive). Al crear o renovar un código, elige «⏳ Me pagará» si aún no te ha pagado.</p>
+    <div class="mt-3">${refSummaryHTML()}</div>`;
+}
+/* 💬 Mensajes y «Para escribir» */
+function msgsTabHTML() {
+  const th = ui.msgs ? msgThreads() : [];
+  return `${msgAdminCardHTML() || `<p class="text-[13px] text-mute">${esc(ui.msgErr || 'Cargando los mensajes…')}</p>`}
+    ${th.length ? `<div class="space-y-1.5 mt-3">${th.slice(0, 30).map(t => `<button class="msg-row${t.pend ? ' msg-row-on' : ''}" data-act="msgOpen" data-id="${esc(t.id)}" type="button"><span class="flex items-center justify-between gap-2"><b class="truncate">${t.pend ? '🟠 ' : ''}${esc(msgWhoName(t.id, t))}</b><span class="text-[11px] text-mute shrink-0">${esc(msgTime(t.last.ts))}</span></span><span class="block text-[12px] text-mute truncate">${t.last.de === 'e' ? 'Tú: ' : ''}${esc(t.last.t)}</span></button>`).join('')}</div>` : ''}`;
+}
+/* 🔔 Recordatorios: los que te pones tú y los de cobros pendientes */
+function remsTabHTML() {
+  const T = todayISO(), A = remsOf(), due = A.filter(r => !r.done && r.d <= T).sort((a, b) => a.d.localeCompare(b.d)), next = A.filter(r => !r.done && r.d > T).sort((a, b) => a.d.localeCompare(b.d)), done = A.filter(r => r.done).slice(-10).reverse();
+  const row = r => { const pr = r.pay ? payFind(r.pay) : null;
+    return `<div class="pay-row${!r.done && r.d <= T ? ' pay-pend' : ''}${r.done ? ' opacity-60' : ''}"><div class="flex items-start gap-2"><div class="flex-1 min-w-0"><div class="text-[11px] ${!r.done && r.d < T ? 'text-rose-300' : !r.done && r.d === T ? 'text-amber-300' : 'text-mute'}">${r.done ? '✓ Hecho' : '🔔 ' + esc(dayWord(r.d).replace(/^el /, ''))}</div><div class="text-[14px] break-words ${r.done ? 'line-through' : ''}">${esc(r.t)}</div></div>
+      <button class="text-mute px-1 shrink-0" data-act="remDel" data-id="${r.id}" type="button" aria-label="Borrar">✕</button></div>
+      ${r.done ? '' : `<div class="flex gap-1.5 mt-2 flex-wrap"><button class="chip chip-sm chip-on" data-act="remDone" data-id="${r.id}" type="button">✓ Hecho</button>${pr && payPend(pr.p) ? `<button class="chip chip-sm" data-act="payOk" data-pid="${pr.p.pid}" type="button">✅ Ya me ha pagado</button><button class="chip chip-sm" data-act="payAsk" data-hash="${esc(pr.h)}" type="button">💬 Recordarle el pago</button>` : r.h ? `<button class="chip chip-sm" data-act="payTo" data-hash="${esc(r.h)}" type="button">💬 Escribirle</button>` : ''}<button class="chip chip-sm" data-act="remSnooze" data-id="${r.id}" type="button">⏰ Mañana</button></div>`}</div>`; };
+  const sec = (t, L) => L.length ? `<div class="lbl mt-3 mb-1.5">${t} · ${L.length}</div><div class="space-y-2">${L.map(row).join('')}</div>` : '';
+  return `<button class="btn-primary w-full" data-act="remNew" type="button">＋ Nuevo recordatorio</button>
+    ${sec('Para hoy', due)}${sec('Próximos', next)}${!due.length && !next.length ? '<p class="text-[13px] text-mute text-center py-4">No tienes nada pendiente 🎉</p>' : ''}
+    ${done.length ? `<details class="mt-3"><summary class="text-[12px] text-mute">Hechos recientes · ${done.length}</summary><div class="space-y-2 mt-2">${done.map(row).join('')}</div></details>` : ''}
+    <p class="text-[11px] text-mute mt-3 px-1">Te avisa con un número en el botón 👥 de arriba y al abrir la app. Se guardan solo en este móvil.</p>`;
+}
+/* ✎ Apuntar o editar un cobro */
+function payEditModal(pid = '') {
+  const r = pid ? payFind(pid) : null, p = r?.p || { k: '3m', mod: 'ind', eur: PRICES.ind['3m'], d: todayISO() };
+  let pend = payPend(p), del = false;
+  const rem = r ? remsOf().find(x => x.pay === p.pid && !x.done) : null;
+  const people = () => (access.list || []).filter(x => !x.admin).map(x => ({ h: x.hash, n: payWho(x.hash) })).sort((a, b) => a.n.localeCompare(b.n, 'es'));
+  const html = () => `<h3 class="modal-title">${r ? '✎ Cobro · ' + esc(payWho(r.h)) : '＋ Apuntar un cobro'}</h3>
+    ${r ? '' : `<label class="lbl">Persona<select class="field mt-1" name="pw">${people().map(x => `<option value="${esc(x.h)}">${esc(x.n)}</option>`).join('')}</select></label>`}
+    <div class="grid grid-cols-2 gap-2"><label class="lbl">Plan<select class="field mt-1" name="pk">${['1m', '3m', '6m'].map(k => `<option value="${k}" ${p.k === k ? 'selected' : ''}>${esc(planName(k))}</option>`).join('')}</select></label>
+      <label class="lbl">Modalidad<select class="field mt-1" name="pm"><option value="ind" ${p.mod !== 'duo' ? 'selected' : ''}>Individual</option><option value="duo" ${p.mod === 'duo' ? 'selected' : ''}>DÚO</option></select></label></div>
+    <div class="grid grid-cols-2 gap-2"><label class="lbl">Importe (€)<input class="field mt-1" name="pe" inputmode="decimal" value="${(+p.eur).toFixed(2).replace('.', ',')}" /></label><label class="lbl">Fecha<input class="field mt-1" name="pd" type="date" value="${esc(p.d)}" /></label></div>
+    ${payStHTML(pend, rem?.d || addDays(todayISO(), 3))}
+    <button class="btn-primary w-full" data-mact="save" type="button">Guardar</button>
+    ${r ? `<button class="w-full text-[13px] ${del ? 'text-rose-300 font-bold' : 'text-mute underline'}" data-mact="del" type="button">${del ? '¿Seguro? Toca otra vez para borrar este cobro' : '🗑️ Borrar este cobro'}</button>` : ''}`;
+  const redraw = root => { const v = {}; root.querySelectorAll('[name]').forEach(e => v[e.name] = e.value); root.querySelector('.modal-sheet').innerHTML = html(); root.querySelectorAll('[name]').forEach(e => { if (v[e.name] != null) e.value = v[e.name]; }); hook(root); };
+  const hook = root => ['pk', 'pm'].forEach(n => root.querySelector(`[name=${n}]`)?.addEventListener('change', () => { const k = mval(root, 'pk'), m = mval(root, 'pm'), i = root.querySelector('[name=pe]'); if (i && PRICES[m]?.[k] != null) i.value = PRICES[m][k].toFixed(2).replace('.', ','); }));
+  openModal(html(), {
+    payst: (root, b) => { pend = b.dataset.v === 'pend'; redraw(root); },
+    del: root => { if (!del) { del = true; return redraw(root); } const arr = state.accessPays[r.h]; arr.splice(arr.indexOf(r.p), 1); if (!arr.length) delete state.accessPays[r.h]; state.settings.rems = remsOf().filter(x => x.pay !== r.p.pid); persist(); closeModal(); render(); toast('🗑️ Cobro borrado'); },
+    save: root => {
+      const e = parseFloat(String(mval(root, 'pe')).replace(',', '.')), d = mval(root, 'pd'), k = mval(root, 'pk'), m = mval(root, 'pm'), rd = mval(root, 'remd');
+      if (!(e >= 0) || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return toast('Revisa el importe y la fecha', 'warn');
+      const h = r ? r.h : mval(root, 'pw'); if (!h) return toast('Elige a la persona', 'warn');
+      const q = r ? r.p : { pid: payNewId() };
+      Object.assign(q, { k, mod: m, eur: Math.round(e * 100) / 100, d });
+      if (pend) { q.st = 'pend'; delete q.paid; } else if (payPend(q) || !r) { delete q.st; if (r) q.paid = todayISO(); }
+      if (!r) (state.accessPays[h] = state.accessPays[h] || []).push(q);
+      const R2 = remsOf().find(x => x.pay === q.pid && !x.done);
+      if (pend && rd) { if (R2) R2.d = rd; else remAdd(rd, `Cobrar a ${payWho(h)}: ${eur(q.eur)} (${planName(k)}${m === 'duo' ? ' DÚO' : ''})`, h, q.pid); }
+      if (!pend && R2) R2.done = true;
+      persist(); closeModal(); render(); toast('✓ Cobro guardado');
+    }
+  });
+  hook($('#modalRoot'));
+}
+/* ＋ Recordatorio (o cambiar el aviso de un cobro) */
+function remModal(pid = '') {
+  const pr = pid ? payFind(pid) : null, old = pr ? remsOf().find(x => x.pay === pid && !x.done) : null;
+  const people = (access.list || []).filter(x => !x.admin).map(x => ({ h: x.hash, n: payWho(x.hash) })).sort((a, b) => a.n.localeCompare(b.n, 'es'));
+  openModal(`<h3 class="modal-title">🔔 ${pr ? 'Avísame para cobrar' : 'Nuevo recordatorio'}</h3>
+    <label class="lbl">¿Cuándo?<input class="field mt-1" name="rd" type="date" value="${esc(old?.d || addDays(todayISO(), pr ? 3 : 1))}" /></label>
+    <div class="flex gap-1.5 flex-wrap -mt-1">${[[1, 'Mañana'], [3, 'En 3 días'], [7, 'En una semana']].map(([n, l]) => `<button class="chip chip-sm" data-mact="q" data-n="${n}" type="button">${l}</button>`).join('')}</div>
+    <label class="lbl">¿Qué?<input class="field mt-1" name="rt" maxlength="160" placeholder="Ej: Llamar a Ana para renovar" value="${esc(old?.t || (pr ? `Cobrar a ${payWho(pr.h)}: ${eur(pr.p.eur)} (${planName(pr.p.k)}${pr.p.mod === 'duo' ? ' DÚO' : ''})` : ''))}" /></label>
+    ${pr ? '' : `<label class="lbl">Persona <span class="text-mute font-normal">(opcional)</span><select class="field mt-1" name="rh"><option value="">—</option>${people.map(x => `<option value="${esc(x.h)}">${esc(x.n)}</option>`).join('')}</select></label>`}
+    <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-close type="button">Cancelar</button><button class="btn-primary" data-mact="ok" type="button">Guardar</button></div>`, {
+    q: (root, b) => { root.querySelector('[name=rd]').value = addDays(todayISO(), +b.dataset.n); },
+    ok: root => { const d = mval(root, 'rd'), t = mval(root, 'rt').trim(); if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || !t) return toast('Pon la fecha y qué tienes que hacer', 'warn');
+      if (old) { old.d = d; old.t = t; persist(); } else remAdd(d, t, pr ? pr.h : mval(root, 'rh') || '', pid);
+      closeModal(); render(); usersBadge(); toast(`🔔 Te lo recordaré ${dayWord(d)}`); }
+  });
+}
 function usersPageHTML() {
   const list = access.list || [], gh = !!lsGet(GH_KEY), p = paysSummary(), mes = new Date().toLocaleDateString('es-ES', { month: 'long' });
   const f = ACC_FS.includes(ui.accF || 'all') ? ui.accF || 'all' : 'all', G = accGroups(list), T = netToday() || todayISO();
@@ -11586,15 +11695,21 @@ function usersPageHTML() {
     body = S.map(g => row(g, inF(g))).join('');
   }
   const attnBtn = f === 'all' && attnN ? `<button class="acc-attn" data-act="accF" data-k="attn" type="button">⚠️ ${attnN === 1 ? '1 persona requiere' : `${attnN} personas requieren`} atención ›</button>` : '';
+  const tab = ui.accTab || 'users';
+  if (tab !== 'users') return `<div class="users-top">
+    <div class="flex items-center justify-between gap-2"><button class="flex items-center gap-1.5 text-[13px] text-brand" data-act="accPageClose" type="button"><span class="tri rotate-90"></span> Ajustes</button>
+      ${gh ? '<button class="chip chip-sm chip-on" data-act="newAccess" type="button">＋ Nuevo código</button>' : ''}</div>
+    <h2 class="text-xl font-black mt-1 flex items-center gap-2.5 flex-wrap">🗂️ Gestión ${activeChip()}</h2>
+    ${accTabsHTML()}</div>
+    <div class="mt-3">${tab === 'pays' ? paysTabHTML() : tab === 'msgs' ? msgsTabHTML() : remsTabHTML()}</div>`;
   return `<div class="users-top">
     <div class="flex items-center justify-between gap-2"><button class="flex items-center gap-1.5 text-[13px] text-brand" data-act="accPageClose" type="button"><span class="tri rotate-90"></span> Ajustes</button>
       ${gh ? '<button class="chip chip-sm chip-on" data-act="newAccess" type="button">＋ Nuevo código</button>' : ''}</div>
-    <h2 class="text-xl font-black mt-1 flex items-center gap-2.5 flex-wrap">👥 Usuarios ${activeChip()}</h2>
+    <h2 class="text-xl font-black mt-1 flex items-center gap-2.5 flex-wrap">🗂️ Gestión ${activeChip()}</h2>
+    ${accTabsHTML()}
     ${ui.usageErr ? `<div class="mt-2 rounded-xl px-3 py-2 text-[12px] flex items-start gap-2" style="border:1px solid rgba(251,113,133,.5);background:rgba(244,63,94,.1);color:#fecdd3"><span class="flex-1">⚠️ No se pudo leer el registro: ${esc(ui.usageErr)}</span><button class="underline shrink-0" data-act="usageRefresh" type="button">Reintentar</button></div>` : !ui.usage && ui.usageLoading ? '<div class="mt-2 text-[12px] text-mute"><span class="spinner"></span> Consultando el registro…</div>' : ''}
     ${accFilterHTML(list)}
   </div>
-  <button class="w-full text-left text-[13px] mt-2 px-1" data-act="pays" type="button">💶 ${esc(mes.charAt(0).toUpperCase() + mes.slice(1))}: <b>${eur(p.mes)}</b> · Este año: <b>${eur(p.ano)}</b> <span class="text-mute">(solo en este móvil) ›</span></button>
-  ${f === 'all' && !ui.accQ ? msgAdminCardHTML() + refSummaryHTML() : ''}
   ${attnBtn}
   <div id="accRows" class="mt-2 space-y-1.5">${body}${trialRowsHTML()}</div>
   <p class="text-[12px] text-mute text-center hidden mt-3" id="accNone">Nadie coincide con la búsqueda.</p>
@@ -11652,7 +11767,28 @@ const PRICES = { ind: { '1m': 14.90, '3m': 37.90, '6m': 59.90 }, duo: { '1m': 23
 const eur = n => `${(Math.round(n * 100) / 100).toFixed(2).replace('.', ',')} €`;
 const isPaidPlan = k => !!PRICES.ind[k];
 const duoMate = x => x?.duo ? (access.list || []).find(y => y.duo === x.duo && y.hash !== x.hash) : null;
-function addPay(hash, k, mod, price, gift = 0) { state.accessPays = state.accessPays || {}; (state.accessPays[hash] = state.accessPays[hash] || []).push({ d: todayISO(), k, mod, eur: price, ...(gift > 0 ? { gift } : {}) }); persist(); }
+function addPay(hash, k, mod, price, gift = 0, pend = false, remD = '') {
+  state.accessPays = state.accessPays || {};
+  const p = { pid: payNewId(), d: todayISO(), k, mod, eur: price, ...(gift > 0 ? { gift } : {}), ...(pend ? { st: 'pend' } : {}) };
+  (state.accessPays[hash] = state.accessPays[hash] || []).push(p);
+  if (pend && remD) remAdd(remD, `Cobrar a ${payWho(hash)}: ${eur(price)} (${planName(k)}${mod === 'duo' ? ' DÚO' : ''})`, hash, p.pid);
+  persist();
+}
+/* 💶🔔 GESTIÓN: cobros (hechos o pendientes) y recordatorios. Todo se guarda solo en este móvil (y en tu copia de Drive) */
+const payNewId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const payPend = p => p?.st === 'pend';
+const payWho = h => { const x = (access.list || []).find(y => y.hash === h), m = x ? duoMate(x) : null; return x ? (m ? `${accessWho(x) || 'Sin nombre'} + ${accessWho(m) || 'Sin nombre'}` : accessWho(x) || 'Sin nombre') : state.accessNames?.[h] || `Código …${String(h).slice(-4)}`; };
+function payRows() { let fix = false; const R = Object.entries(state.accessPays || {}).flatMap(([h, arr]) => arr.map((p, i) => { if (!p.pid) { p.pid = payNewId(); fix = true; } return { h, i, p }; })); if (fix) persist(); return R; }
+const payFind = pid => payRows().find(r => r.p.pid === pid);
+const remsOf = () => (state.settings.rems = state.settings.rems || []);
+const remDue = () => remsOf().filter(r => !r.done && r.d <= todayISO());
+function remAdd(d, t, h = '', pay = '') { remsOf().push({ id: payNewId(), d, t: String(t).slice(0, 160), h, pay }); persist(); }
+function payMarkPaid(pid) { const r = payFind(pid); if (!r) return; delete r.p.st; r.p.paid = todayISO(); for (const x of remsOf()) if (x.pay === pid) x.done = true; persist(); }
+const dayWord = d => { const n = daysBetween(todayISO(), d); return n === 0 ? 'hoy' : n === 1 ? 'mañana' : n === -1 ? 'ayer' : n < 0 ? `hace ${-n} días` : `el ${fmtDateShort(d)}`; };
+const payAskText = h => { const x = (access.list || []).find(y => y.hash === h), r = payRows().filter(z => z.h === h && payPend(z.p)).pop(), first = String(accessWho(x) || '').split(/\s+/)[0];
+  return `¡Hola${first ? ', ' + first : ''}! 😊 Ya tienes FITNESTEBAN${x?.hasta ? ` hasta el ${fmtDateShort(x.hasta)}` : ''}, así que puedes seguir entrenando sin cortes y con todo lo que tenías guardado.\n\nTe recuerdo que está pendiente el pago${r ? `: ${eur(r.p.eur)} (${planName(r.p.k)}${r.p.mod === 'duo' ? ' DÚO' : ''})` : ''}. Cuando te venga bien, me dices y lo dejamos hecho.\n\n¡Gracias por seguir confiando en mí! 💪`; };
+// ¿Te ha pagado ya? (al crear o renovar un código)
+const payStHTML = (pend, remD) => `<div><div class="lbl mb-1.5">¿Te ha pagado ya?</div><div class="grid grid-cols-2 gap-1.5"><button class="chip justify-center py-2 ${pend ? '' : 'chip-on'}" data-mact="payst" data-v="ok" type="button">✅ Ya me ha pagado</button><button class="chip justify-center py-2 ${pend ? 'chip-on' : ''}" data-mact="payst" data-v="pend" type="button">⏳ Me pagará</button></div>${pend ? `<label class="lbl mt-2">Recuérdame cobrarle el <span class="text-mute font-normal">(sale en 🔔 Recordatorios)</span><input class="field mt-1" name="remd" type="date" value="${esc(remD)}" /></label>` : ''}</div>`;
 /* 🎁 Días regalados: se apuntan con la persona (y con su pareja de DÚO) para verlos en su ficha y en los cobros. Solo en tu móvil */
 function giftAdd(hashes, d, note = '') { if (!(d > 0)) return; const G = state.settings.gifts = state.settings.gifts || {}; for (const h of hashes) (G[h] = G[h] || []).push({ d: Math.round(d), note: String(note).slice(0, 80), at: todayISO() }); persist(); }
 function giftHTML(h, gh) {
@@ -11663,8 +11799,9 @@ function giftHTML(h, gh) {
 function lastPay(hash) { const a = state.accessPays?.[hash] || []; return a[a.length - 1] || null; }
 function paysSummary() {
   const T = todayISO(), m = T.slice(0, 7), y = T.slice(0, 4); let mes = 0, ano = 0;
-  for (const arr of Object.values(state.accessPays || {})) for (const p of arr) { if (p.d.slice(0, 4) === y) ano += p.eur; if (p.d.slice(0, 7) === m) mes += p.eur; }
-  return { mes, ano };
+  let pend = 0, pendN = 0;
+  for (const arr of Object.values(state.accessPays || {})) for (const p of arr) { if (payPend(p)) { pend += +p.eur || 0; pendN++; continue; } const d = p.paid || p.d; if (d.slice(0, 4) === y) ano += p.eur; if (d.slice(0, 7) === m) mes += p.eur; }
+  return { mes, ano, pend, pendN };
 }
 const modChips = mod => `<div class="grid grid-cols-2 gap-1.5">${[['ind', '👤 Individual'], ['duo', '👥 DÚO']].map(([v, l]) => `<button class="chip justify-center py-2 ${mod === v ? 'chip-on' : ''}" data-mact="mod" data-v="${v}" type="button">${l}</button>`).join('')}</div>`;
 const priceLine = (k, mod) => isPaidPlan(k) ? `<div class="flex items-center justify-between rounded-xl px-3 py-2 bg-white/5 text-[13px]"><span class="text-mute">${mod === 'duo' ? 'DÚO · 2 cuentas' : 'Individual'} · ${esc(planName(k))}</span><b class="text-brand">${eur(PRICES[mod][k])}</b></div>` : '';
@@ -11742,7 +11879,7 @@ function payInfoHTML(x, inPair = false) { // en la ficha: modalidad, último pag
   const mate = duoMate(x), lp = lastPay(x.hash) || (mate ? lastPay(mate.hash) : null), T = netToday() || todayISO();
   const near = x.hasta && daysBetween(T, x.hasta) <= 7;
   return `${mate && !inPair ? `<div class="text-[11px] text-cyan-300">👥 DÚO con ${esc(state.accessNames[mate.hash] || 'sin nombre')}</div>` : ''}
-    ${lp ? `<div class="text-[11px] text-mute">💶 Último pago: ${eur(lp.eur)} · ${esc(planName(lp.k))}${lp.mod === 'duo' ? ' DÚO' : ''}${lp.gift ? ` <span class="text-emerald-300">🎁 +${plural(lp.gift, 'día', 'días')}</span>` : ''} · ${esc(fmtDateShort(lp.d))} · <button class="underline text-brand" data-act="pays" data-hash="${esc(mate && !(state.accessPays?.[x.hash] || []).length ? mate.hash : x.hash)}" type="button">editar</button></div>` : ''}
+    ${lp ? `<div class="text-[11px] text-mute">💶 Último ${payPend(lp) ? '<span class="text-amber-300">cobro pendiente</span>' : 'pago'}: ${eur(lp.eur)} · ${esc(planName(lp.k))}${lp.mod === 'duo' ? ' DÚO' : ''}${lp.gift ? ` <span class="text-emerald-300">🎁 +${plural(lp.gift, 'día', 'días')}</span>` : ''} · ${esc(fmtDateShort(lp.d))} · <button class="underline text-brand" data-act="pays" data-hash="${esc(mate && !(state.accessPays?.[x.hash] || []).length ? mate.hash : x.hash)}" type="button">editar</button></div>` : ''}
     ${x.hasta && !inPair ? `<button class="text-[12px] underline ${near ? 'text-amber-300' : 'text-brand'}" data-act="renewMsg" data-hash="${esc(x.hash)}" type="button">💬 Recordar renovación</button>` : ''}
     ${gh && mate ? `<button class="block text-[12px] underline text-mute" data-act="duoSplit" data-hash="${esc(x.hash)}" type="button">Separar el DÚO</button>` : gh && x.hasta && isPaidPlan(x.plan || '') ? `<button class="block text-[12px] underline text-cyan-300" data-act="duoJoin" data-hash="${esc(x.hash)}" type="button">👥 Unir en DÚO con otra persona</button>` : ''}`;
 }
@@ -11787,7 +11924,7 @@ function planModal(hash) {
   if (k === 'prueba') k = '1m';
   if (!PLANS[k]) { nd = planDaysOf(k) || 15; k = 'custom'; }
   const mod = mate ? 'duo' : 'ind', T = netToday() || todayISO(), alive = x.hasta && x.hasta >= T;
-  let fix = false, fixD = x.hasta || T;
+  let fix = false, fixD = x.hasta || T, pend = false, remD = addDays(T, 3);
   const html = () => {
     if (fix) return `<h3 class="modal-title">📅 Corregir la fecha · ${esc(who)}</h3>
     ${mate ? `<p class="text-[12px] text-cyan-300 -mt-1">👥 Se cambia también a ${esc(whoM)}.</p>` : ''}
@@ -11801,6 +11938,7 @@ function planModal(hash) {
     <p class="text-xs">Ahora: ${planLabel(x)}</p>
     ${planChips(k)}${planCustomHTML(k, nd)}
     ${priceLine(k, mod)}
+    ${isPaidPlan(k) ? payStHTML(pend, remD) : ''}
     ${alive && planDaysOf(kk) ? `<label class="flex items-center gap-2 text-[13px]"><input type="checkbox" data-mact="sum" ${sum ? 'checked' : ''}/> Sumar a los días que le quedan</label>` : ''}
     <p class="text-[11px] text-mute">${k === 'free' ? '«Free» no caduca.' : end ? `Nueva fecha de fin: <b class="text-white">${esc(fmtDateShort(end))}</b>.` : 'Cuenta desde hoy.'} Si estaba caducado, vuelve a entrar solo al abrir la app.</p>
     <button class="btn-primary w-full" data-mact="go" type="button">${isPaidPlan(k) ? `Renovar · ${eur(PRICES[mod][k])}` : 'Guardar plan'}</button>
@@ -11808,6 +11946,7 @@ function planModal(hash) {
   openModal(html(), {
     plan: (root, b) => { if (k === 'custom') nd = +mval(root, 'pdays') || nd; k = b.dataset.k; root.querySelector('.modal-sheet').innerHTML = html(); },
     sum: (root, b) => { sum = b.checked; root.querySelector('.modal-sheet').innerHTML = html(); },
+    payst: (root, b) => { remD = mval(root, 'remd') || remD; pend = b.dataset.v === 'pend'; root.querySelector('.modal-sheet').innerHTML = html(); },
     fixon: root => { fix = true; root.querySelector('.modal-sheet').innerHTML = html(); },
     fixoff: root => { fixD = mval(root, 'fixd') || fixD; fix = false; root.querySelector('.modal-sheet').innerHTML = html(); },
     fixgo: root => { const d = mval(root, 'fixd'); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return toast('Elige una fecha', 'warn'); const hs = [hash, ...(mate ? [mate.hash] : [])];
@@ -11815,16 +11954,16 @@ function planModal(hash) {
         await ghEditAcl(pin, lines => lines.map(l => hs.some(h => l.trim().toLowerCase().startsWith(h)) ? [...l.trim().split(/\s+/).filter(t => !/^hasta=/i.test(t)), 'hasta=' + d].join(' ') : l), 'Acceso: fecha corregida');
         ui.accessPin = pin; closeModal(); render(); toast(`Fecha corregida: hasta el ${fmtDateShort(d)} ✓`);
       } }); },
-    go: root => { const k2 = planResolve(k, root), toks = planTokens(k2, sum && alive ? x.hasta : ''), hs = [hash, ...(mate ? [mate.hash] : [])];
+    go: root => { remD = mval(root, 'remd') || remD; const k2 = planResolve(k, root), toks = planTokens(k2, sum && alive ? x.hasta : ''), hs = [hash, ...(mate ? [mate.hash] : [])];
       askPin({ title: `${esc(who)}${mate ? ` y ${esc(whoM)}` : ''}: ${esc(planName(k2))}`, text: 'Tu PIN abre la llave de GitHub para guardar el plan.', onPin: async pin => {
         await ghEditAcl(pin, lines => lines.map(l => hs.some(h => l.trim().toLowerCase().startsWith(h)) ? [l.trim().split(/\s+/)[0], ...l.trim().split(/\s+/).slice(1).filter(t => !/^(plan|hasta)=/i.test(t)), ...toks].join(' ') : l), 'Acceso: plan ' + k2);
-        if (isPaidPlan(k2)) addPay(hash, k2, mod, PRICES[mod][k2]);
+        if (isPaidPlan(k2)) addPay(hash, k2, mod, PRICES[mod][k2], 0, pend, pend ? remD : '');
         ui.accessPin = pin; closeModal(); render(); toast(`Plan guardado: ${planName(k2)} ✓`);
       } }); }
   });
 }
 function newAccessModal(who = '', plan = '1m', from0 = '', mail = '') {
-  let k = plan, who0 = who, who2 = '', nd = 15, mod = 'ind', from = from0, mail2 = '', endSel = '', endAuto = '';
+  let k = plan, who0 = who, who2 = '', nd = 15, mod = 'ind', from = from0, mail2 = '', endSel = '', endAuto = '', pend = false, remD = addDays(todayISO(), 3);
   // 🎁 fecha de fin a mano (para regalar días): por defecto la que sale del plan; si la cambias, manda la tuya (el precio no cambia)
   const endCalc = () => isPaidPlan(k) && PLANS[k]?.[1] ? planTokens(k, from)[1].slice(6) : '';
   // 🧪 en un DÚO, la segunda persona también puede venir de su prueba: se elige aquí y se une a su código (sin filas duplicadas)
@@ -11836,15 +11975,17 @@ function newAccessModal(who = '', plan = '1m', from0 = '', mail = '') {
     ${mod === 'duo' && isPaidPlan(k) && trials2().length ? `<label class="lbl">¿La segunda persona está de prueba? <span class="text-mute font-normal">(se une a su código y no sale repetida)</span><select class="field mt-1" name="mail2"><option value="">No, es nueva</option>${trials2().map(u => `<option value="${esc(String(u.m).toLowerCase())}" ${String(u.m).toLowerCase() === mail2 ? 'selected' : ''}>${esc(String(u.m))}${u.hasta ? ` · prueba hasta el ${esc(fmtDateShort(u.hasta))}` : ''}</option>`).join('')}</select></label>` : ''}
     ${mod === 'duo' && isPaidPlan(k) ? `<label class="lbl">Segunda persona<input class="field mt-1" name="who2" maxlength="24" placeholder="Ej: Luis" value="${esc(who2)}" /></label>` : ''}
     ${priceLine(k, isPaidPlan(k) ? mod : 'ind')}
+    ${isPaidPlan(k) ? payStHTML(pend, remD) : ''}
     ${isPaidPlan(k) ? `<label class="lbl">Empieza a contar <span class="text-mute font-normal">(si aún está de prueba, pon el día que le acaba)</span><input class="field mt-1" name="from" type="date" value="${esc(from || todayISO())}" /></label>` : ''}
     ${endCalc() ? `<label class="lbl">Termina el <span class="text-mute font-normal">(cámbialo si quieres regalarle días)</span><input class="field mt-1" name="end" type="date" value="${esc((endAuto = endCalc(), endSel || endAuto))}" /></label>${endSel && endSel !== endAuto ? `<p class="text-[11px] text-emerald-300 -mt-1">🎁 ${endSel > endAuto ? `${daysBetween(endAuto, endSel)} días de regalo` : `${daysBetween(endSel, endAuto)} días menos`} sobre lo que le toca (${esc(fmtDateShort(endAuto))}).</p>` : ''}` : ''}
     <p class="text-[11px] text-mute">${k === 'custom' ? 'Cuenta desde hoy (fecha de la red). Podrás cambiarlo con ⏳.' : PLANS[k][1] ? `Caducará el ${esc(fmtDateShort(endCalc() ? endSel || endCalc() : planTokens(k, isPaidPlan(k) ? from : '')[1].slice(6)))}. Podrás renovarlo con ⏳.` : 'Sin caducidad.'}${mod === 'duo' && isPaidPlan(k) ? ' Son dos códigos independientes que caducan y se renuevan juntos.' : ''}</p>
     <button class="btn-primary w-full" data-mact="next" type="button">Continuar</button>`;
-  const keep = root => { if (root.querySelector('[name=end]')) { const v = mval(root, 'end'); endSel = v && v !== endAuto ? v : ''; } if (root.querySelector('[name=mail2]')) mail2 = mval(root, 'mail2') || ''; if (root.querySelector('[name=from]')) from = mval(root, 'from') || ''; who0 = mval(root, 'who'); who2 = root.querySelector('[name=who2]') ? mval(root, 'who2') : who2; if (k === 'custom') nd = +mval(root, 'pdays') || nd; };
+  const keep = root => { if (root.querySelector('[name=remd]')) remD = mval(root, 'remd') || remD; if (root.querySelector('[name=end]')) { const v = mval(root, 'end'); endSel = v && v !== endAuto ? v : ''; } if (root.querySelector('[name=mail2]')) mail2 = mval(root, 'mail2') || ''; if (root.querySelector('[name=from]')) from = mval(root, 'from') || ''; who0 = mval(root, 'who'); who2 = root.querySelector('[name=who2]') ? mval(root, 'who2') : who2; if (k === 'custom') nd = +mval(root, 'pdays') || nd; };
   openModal(html(), {
     autofocus: true,
     plan: (root, b) => { keep(root); k = b.dataset.k; endSel = ''; root.querySelector('.modal-sheet').innerHTML = html(); },
     mod: (root, b) => { keep(root); mod = b.dataset.v; root.querySelector('.modal-sheet').innerHTML = html(); },
+    payst: (root, b) => { keep(root); pend = b.dataset.v === 'pend'; root.querySelector('.modal-sheet').innerHTML = html(); },
     m2: root => { const old = mail2; keep(root); if (mail2 && (!who2 || who2 === old.split('@')[0].slice(0, 24))) who2 = mail2.split('@')[0].slice(0, 24); if (!mail2 && who2 === old.split('@')[0].slice(0, 24)) who2 = ''; root.querySelector('.modal-sheet').innerHTML = html(); },
     next: root => {
       keep(root);
@@ -11864,7 +12005,7 @@ function newAccessModal(who = '', plan = '1m', from0 = '', mail = '') {
         const base = from0 && from0 > todayISO() ? from0 : todayISO(), gS = isPaidPlan(kk) && from > base ? daysBetween(base, from) : 0, gE = endSel && endSel > endAuto && kk === k ? daysBetween(endAuto, endSel) : 0;
         const gNote = [gS ? `del ${fmtDateShort(base)} al ${fmtDateShort(addDays(from, -1))}` : '', gE ? `hasta el ${fmtDateShort(endSel)} en vez del ${fmtDateShort(endAuto)}` : ''].filter(Boolean).join(' y ');
         giftAdd(made.map(m => m.hash), gS + gE, gNote);
-        if (isPaidPlan(kk)) addPay(made[0].hash, kk, duo ? 'duo' : 'ind', PRICES[duo ? 'duo' : 'ind'][kk], gS + gE);
+        if (isPaidPlan(kk)) addPay(made[0].hash, kk, duo ? 'duo' : 'ind', PRICES[duo ? 'duo' : 'ind'][kk], gS + gE, pend, pend ? remD : '');
         ui.accessPin = pin; persist(); render(); syncUsageNames();
         if (duo) duoShareModal(made); else codeShareModal(`Código para ${esc(w1)}`, w1, made[0].code);
       } });
