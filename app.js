@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.24.0';
+const APP_VERSION = '5.24.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7072,6 +7072,8 @@ async function sbAdminLoad() {
   const d = await sbCall({ op: 'lista', key }); if (!d.ok) throw new Error(d.error === 'clave' ? 'clave' : 'fallo');
   if (d.topic && d.topic !== lsGet(ADM_TOPIC_KEY)) lsSet(ADM_TOPIC_KEY, d.topic);
   gestPull(key).catch(() => { });
+  // 🔔 una vez por sesión, con tu PIN, se vuelve a dejar apuntado este móvil para los avisos (si el servicio de avisos lo dio por caducado, se recupera solo)
+  if (!ui.pushAdmOk && lsGet(PUSH_KEY)?.on === 'adm' && pushCan() && Notification.permission === 'granted') { ui.pushAdmOk = true; pushOn(true, false).catch(() => { ui.pushAdmOk = false; }); }
   if (d.topic) rtSub(d.topic, msgAdminEvent);
   const H = {}; for (const h of d.hilos || []) H[h.tk] = h;
   const idOf = tk => H[tk]?.h || String(tk).replace(/^old:/, '');
@@ -8193,6 +8195,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.24.1', ['🔔 Al entrar con tu PIN, la app vuelve a apuntar tu móvil para los avisos: si caducan, se recuperan solos.'], 'quiet'],
   ['5.24.0', ['🔔 Recordatorios con hora: te llega una notificación a su hora, aunque no abras la app.', '☁️ Copia cifrada de tu gestión (cobros, recordatorios, nombres…) en Supabase: no se pierde si cambias de móvil.'], 'quiet'],
   ['5.23.0', ['⏳ Recordar: «Caducan pronto» automático con Renovar, Escribirle con precios y Hecho.', '⚡ Respuestas rápidas en el chat.', '📊 Resumen del mes en Cobros.', '⌛ Las pruebas acabadas quedan plegadas al final de «Pruebas».'], 'quiet'],
   ['5.22.0', ['🗂️ Gestión: Usuarios, Cobros, Mensajes y Recordatorios en pestañas separadas.', '💶 Cobros pendientes («Me pagará»), botón «Ya me ha pagado» y mensaje amable para recordarle el pago.', '🔔 Recordatorios con aviso en el botón 👥 y al abrir la app.'], 'quiet'],
