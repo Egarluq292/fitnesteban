@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.26.0';
+const APP_VERSION = '5.26.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -6888,11 +6888,13 @@ const qrList = () => Array.isArray(state.settings.quick) ? state.settings.quick 
 function qrToggle(force) {
   const P = $('#qrPanel'); if (!P) return; const open = force ?? P.hidden; P.hidden = !open; if (!open) return;
   const cur = ($('#msgInput')?.value || '').trim();
-  P.innerHTML = `<div class="flex flex-wrap gap-1.5">${qrList().map((q, i) => `<span class="qr-chip"><button type="button" data-qr="${i}">${esc(q)}</button><button type="button" data-qrdel="${i}" aria-label="Quitar">✕</button></span>`).join('') || '<span class="text-[12px] text-mute">Aún no tienes respuestas rápidas.</span>'}</div>
+  P.innerHTML = `<div class="flex flex-wrap gap-1.5"><span class="qr-chip"><button type="button" data-qrp>💶 Precios para renovar</button></span>${qrList().map((q, i) => `<span class="qr-chip"><button type="button" data-qr="${i}">${esc(q)}</button><button type="button" data-qrdel="${i}" aria-label="Quitar">✕</button></span>`).join('') || '<span class="text-[12px] text-mute">Aún no tienes respuestas rápidas.</span>'}</div>
     ${cur ? `<button type="button" class="text-[12px] text-brand underline mt-2" data-qradd>＋ Guardar lo que has escrito como respuesta rápida</button>` : '<p class="text-[11px] text-mute mt-2">Escribe algo y pulsa ⚡ para guardarlo como respuesta rápida.</p>'}`;
   P.onclick = e => {
     const a = e.target.closest('[data-qr]'), d = e.target.closest('[data-qrdel]');
-    if (a) { const inp = $('#msgInput'); inp.value = (inp.value.trim() ? inp.value.trimEnd() + ' ' : '') + qrList()[+a.dataset.qr]; inp.focus(); qrToggle(false); return; }
+    const pp = e.target.closest('[data-qrp]');
+    if (pp) { const inp = $('#msgInput'); inp.value = (inp.value.trim() ? inp.value.trimEnd() + '\n\n' : '') + `Para renovarlo:\n\n${priceBlock()}\n\nDime cuál prefieres y lo renuevo sin perder nada de lo que tienes guardado 🚀`; inp.focus(); inp.dispatchEvent(new Event('input')); qrToggle(false); return; }
+    if (a) { const inp = $('#msgInput'); inp.value = (inp.value.trim() ? inp.value.trimEnd() + ' ' : '') + qrList()[+a.dataset.qr].replace(/\{precios\}/gi, priceBlock()); inp.focus(); qrToggle(false); return; }
     if (d) { const L = [...qrList()]; L.splice(+d.dataset.qrdel, 1); state.settings.quick = L; persist(); qrToggle(true); return; }
     if (e.target.closest('[data-qradd]')) { const v = ($('#msgInput')?.value || '').trim().slice(0, 300); if (v && !qrList().includes(v)) { state.settings.quick = [...qrList(), v]; persist(); toast('⚡ Guardada como respuesta rápida'); } qrToggle(true); }
   };
@@ -7192,7 +7194,7 @@ function msgThreadModal(id, pre = '', back = null) {
       <div class="min-w-0"><h3 class="modal-title leading-tight truncate">${esc(msgShared(id, t) ? ([...new Set([...(ui.usage?.[id]?.ds || []).map(d => d.p).filter(Boolean), ...t.msgs.filter(m => m.de === 'u' && m.nm).map(m => m.nm)])].slice(0, 2).join(' + ') || msgWhoName(id, t)) : msgWhoName(id, t))}</h3><p class="text-[11px] text-mute truncate">${esc(msgWhoState(id))}${t.ct ? ` · ${esc(t.ct)}` : mail ? ` · ${esc(mail)}` : ''}</p></div>
       <button class="ml-auto w-8 h-8 rounded-full border border-line text-mute shrink-0" data-close type="button" aria-label="Cerrar">✕</button></div>
     <div id="msgBody" class="cal-body space-y-2" data-thread="${esc(id)}">${msgThreadBodyHTML(id, t)}</div>
-    <div class="cal-foot">${msgReplyBar()}<form id="msgForm" class="flex gap-2 items-end"><textarea id="msgInput" rows="3" class="field flex-1 resize-none max-h-[200px] py-2.5" maxlength="1500" placeholder="Tu respuesta…">${esc(pre)}</textarea><button class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button></form>
+    <div class="cal-foot">${msgReplyBar()}<form id="msgForm" class="flex gap-2 items-end"><textarea id="msgInput" rows="3" class="field flex-1 resize-none py-2.5" style="max-height:45vh" maxlength="1500" placeholder="Tu respuesta…">${esc(pre)}</textarea><button class="btn-primary px-4 py-2.5 shrink-0" type="submit" aria-label="Enviar">➤</button></form>
       <div id="qrPanel" class="qr-panel" hidden></div>
       <div class="flex items-center justify-between gap-2 mt-1.5"><p class="text-[11px] text-mute">Le llega al momento si tiene la app abierta, o con aviso si lo ha activado.</p><span class="flex gap-1.5 shrink-0"><button class="chip chip-sm" data-mact="qr" type="button">⚡ Rápidas</button>${t.msgs.some(m => m.de === 'u') ? '<button class="chip chip-sm" data-mact="ai" type="button">✨ Sugerir</button>' : ''}</span></div>
       ${t.pend ? '<button class="btn-ghost w-full text-[13px] mt-2 py-2" data-mact="hecho" type="button">✓ Marcar como leído (sin responder)</button>' : ''}</div>`, {
@@ -7217,6 +7219,7 @@ function msgThreadModal(id, pre = '', back = null) {
   const b = $('#msgBody'); if (b) b.scrollTop = b.scrollHeight;
   msgPollStart();
   ui.msgRe = null;
+  { const inp = $('#msgInput'); if (inp) { const fit = () => { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight + 2, innerHeight * 0.45) + 'px'; }; inp.addEventListener('input', fit); fit(); } } // crece con el texto: los precios se ven enteros antes de enviar
   const tNow = () => msgThreads().find(x => x.id === id) || t, byMid = mid => tNow().msgs.find(m => m.mid === mid);
   msgGestures(b, mid => byMid(mid)?.t, mid => byMid(mid) ? (byMid(mid).de === 'e' ? 'Tú' : msgQWho(id, tNow(), mid)) : '');
   // 🗑️ toca un mensaje para borrarlo (de la hoja y de su app); dos toques para confirmar
@@ -7255,7 +7258,9 @@ async function msgSuggest(id, t) {
   const prompt = `Eres el ayudante de Esteban, que hace y lleva la app de entrenamiento y nutrición FITNESTEBAN. Redacta la PRÓXIMA respuesta de Esteban a este usuario.
 Cómo escribe Esteban: español de España, tuteo, cercano y directo, como un amigo que sabe del tema. Breve: 1 a 3 frases. Sin firma, sin saludos largos, como mucho un emoji. Ortografía perfecta.
 Lo que sabes de la app (no inventes nada más; si no lo sabes, que Esteban diga que lo mira y le contesta):
-- Se empieza con un periodo de prueba de 7 días entrando con Google. Después hace falta un código personal que da Esteban (planes de 1, 3 o 6 meses; DÚO para dos personas). Nunca digas precios ni cifras de dinero: si los pide, escribe exactamente [PRECIO] para que Esteban lo complete.
+- Se empieza con un periodo de prueba de 7 días entrando con Google. Después hace falta un código personal que da Esteban (planes de 1, 3 o 6 meses; DÚO para dos personas). Precios (los únicos que hay; no inventes otros, ni descuentos, ni ofertas):
+${priceBlock()}
+Si la conversación va de renovar, de seguir después de la prueba o de cuánto cuesta, incluye esa lista de precios tal cual, en líneas separadas, y termina invitándole a decir cuál prefiere (por ejemplo: «Dime cuál prefieres y lo renuevo sin perder nada de lo que tienes guardado 🚀»); en ese caso puede ser más larga de 3 frases.
 - Un código vale para un solo dispositivo. Si cambia de móvil, Esteban libera el antiguo y entra con el mismo código.
 - Los datos se guardan solo en su móvil; la copia de seguridad va a su Google Drive (Ajustes).
 - El Coach IA usa una clave gratuita de Gemini que pone cada uno en Ajustes → IA; la guía (botón ?) explica cómo sacarla.
@@ -7284,10 +7289,13 @@ function toWriteList() {
   for (const u of trialRows()) { const h = String(u.h).toLowerCase(); ok(h, ui.trialH?.[h], { name: u.m || 'Prueba', kind: 'prueba' }); }
   return out.sort((a, b) => a.left - b.left);
 }
+// 💶 los precios configurados, escritos como en tus mensajes de renovación (salen de la misma tabla que los cobros)
+const priceLines = m => ['1m', '3m', '6m'].map(k => `· ${k[0]} ${k === '1m' ? 'mes' : 'meses'}: ${eur(PRICES[m][k])}`).join('\n');
+const priceBlock = () => `Individual (1 cuenta):\n${priceLines('ind')}\n\nDÚO (2 cuentas, por ejemplo con tu pareja o un compañero de entreno):\n${priceLines('duo')}`;
 const TW_TPL = [
   ['Preguntar qué falla', (p) => `¡Hola${p.first ? ', ' + p.first : ''}! Te escribe Esteban, el de FITNESTEBAN 💪 He visto que estos días casi no has entrado y quería preguntarte, sin compromiso: ¿hay algo que no te convence o que no entiendes? Me ayuda muchísimo saberlo para mejorarla. Y si es falta de tiempo, también vale 😄`],
   ['Ofrecer ayuda', (p) => `¡Hola${p.first ? ', ' + p.first : ''}! Soy Esteban, de FITNESTEBAN. ${p.kind === 'prueba' ? 'Te' : 'A tu código le'} ${p.left === 0 ? 'queda menos de un día' : p.left === 1 ? 'queda 1 día' : `quedan ${p.left} días`} y he visto que no te ha dado tiempo a sacarle mucho partido. Si quieres, te dejo montado tu entreno según los días que vas al gimnasio, o te enseño en 5 minutos a apuntar la comida con una foto. Dime y lo hacemos 👍`],
-  ['Renovar (con precios)', (p) => { const L = m => ['1m', '3m', '6m'].map(k => `· ${k[0]} ${k === '1m' ? 'mes' : 'meses'}: ${eur(PRICES[m][k])}`).join('\n'); return `¡Hola${p.first ? ', ' + p.first : ''}! Soy Esteban. ${p.kind === 'prueba' ? 'Tu periodo de prueba' : 'Tu acceso'} de FITNESTEBAN termina el ${fmtDateShort(p.hasta)}${p.left === 0 ? ' (hoy)' : p.left === 1 ? ' (mañana)' : ''}.\n\nPara ${p.kind === 'prueba' ? 'seguir usándola' : 'renovarlo'}:\n\nIndividual (1 cuenta):\n${L('ind')}\n\nDÚO (2 cuentas, por ejemplo con tu pareja o un compañero de entreno):\n${L('duo')}\n\nDime cuál prefieres y ${p.kind === 'prueba' ? 'te paso tu código' : 'lo renuevo'} sin perder nada de lo que tienes guardado 🚀.`; }]
+  ['Renovar (con precios)', (p) => { const L = priceLines; return `¡Hola${p.first ? ', ' + p.first : ''}! Soy Esteban. ${p.kind === 'prueba' ? 'Tu periodo de prueba' : 'Tu acceso'} de FITNESTEBAN termina el ${fmtDateShort(p.hasta)}${p.left === 0 ? ' (hoy)' : p.left === 1 ? ' (mañana)' : ''}.\n\nPara ${p.kind === 'prueba' ? 'seguir usándola' : 'renovarlo'}:\n\nIndividual (1 cuenta):\n${L('ind')}\n\nDÚO (2 cuentas, por ejemplo con tu pareja o un compañero de entreno):\n${L('duo')}\n\nDime cuál prefieres y ${p.kind === 'prueba' ? 'te paso tu código' : 'lo renuevo'} sin perder nada de lo que tienes guardado 🚀.`; }]
 ];
 function toWriteModal() {
   const W = toWriteList();
@@ -8195,6 +8203,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.26.1', ['💶 Chat: «Precios para renovar» en Rápidas, y las respuestas sugeridas incluyen los precios cuando se habla de renovar.'], 'quiet'],
   ['5.26.0', ['🧪 Periodos de prueba también en Supabase: se pueden empezar y comprobar aunque Google no conteste.'], 'quiet'],
   ['5.25.0', ['📶 Registro de uso y dispositivos también en Supabase: la Gestión y la entrada siguen funcionando aunque Google no conteste.'], 'quiet'],
   ['5.24.1', ['🔔 Al entrar con tu PIN, la app vuelve a apuntar tu móvil para los avisos: si caducan, se recuperan solos.'], 'quiet'],
