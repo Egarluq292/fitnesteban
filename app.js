@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.27.0';
+const APP_VERSION = '5.28.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -5185,7 +5185,7 @@ async function geminiOnce(model, body, timeout) {
     throw e;
   } finally { clearTimeout(tm); }
 }
-async function callGemini(parts, { json = true, timeout = 45000, contents = null, system = null, temperature = 0.2, only = null, budget = 0 } = {}) {
+async function callGemini(parts, { json = true, timeout = 45000, contents = null, system = null, temperature = 0.2, only = null, budget = 0, relay = null } = {}) {
   const t0 = Date.now(); // budget: tiempo máximo en total (probando modelos de reserva incluidos); si se pasa, se rinde y avisa
   const s = state.settings;
   if (!s.apiKey) throw new Error('Falta la clave de Gemini (Ajustes).');
@@ -5193,8 +5193,15 @@ async function callGemini(parts, { json = true, timeout = 45000, contents = null
   const body = JSON.stringify({ contents: contents || [{ parts }], ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), generationConfig: json ? { responseMimeType: 'application/json', temperature } : { temperature } });
   const main = s.model || DEFAULT_MODEL;
   const models = only || [...new Set([main, DEFAULT_MODEL, ...GEMINI_FALLBACKS])];
-  let last = null, useful = null, mainGone = false; // useful: el primer error que no sea «modelo no disponible» (p. ej. cuota), que explica mejor qué pasa
+  // useful (en geminiRun): el primer error que no sea «modelo no disponible» (p. ej. cuota), que explica mejor qué pasa
   if (!only && s.modelFound && !models.includes(s.modelFound)) models.splice(1, 0, s.modelFound);
+  if (!relay) return geminiRun(body, models, s, only, timeout, budget, t0);
+  const job = iaJobStart(relay, models, body); // 🛰️ si sales de la app mientras piensa, la termina el servidor
+  try { const text = await geminiRun(body, models, s, only, timeout, budget, t0); iaJobEnd(job, true); return text; }
+  catch (e) { const t = await iaJobWait(job); if (t != null) return t; throw e; }
+}
+async function geminiRun(body, models, s, only, timeout, budget, t0) {
+  let last = null, useful = null, mainGone = false;
   for (let mi = 0; mi < models.length; mi++) {
     const tries = mi === 0 ? 2 : 1;
     for (let attempt = 0; attempt < tries; attempt++) {
@@ -5246,8 +5253,85 @@ async function geminiDiscover(skip) { // el modelo Flash más nuevo que la clave
   return ok[0] || null;
 }
 
+/* 🛰️ Coach y estimación de comidas: si sales de la app mientras la IA piensa, la consulta se manda al servidor privado de FITNESTEBAN,
+   que la termina y te manda la notificación aunque el móvil cierre la app. Al volver, la respuesta se recoge y se borra del servidor.
+   Si la app la termina antes (no la ha cerrado el móvil), se cancela allí */
+const IAJOB_KEY = 'fitnesteban_iajob';
+const iaRun = { cur: null };
+const iaHex = () => [...crypto.getRandomValues(new Uint8Array(16))].map(x => x.toString(16).padStart(2, '0')).join('');
+function iaJobStart(relay, models, body) {
+  const job = { id: iaHex(), ...relay, models: models.slice(0, 4), body, sent: false, at: Date.now() };
+  iaRun.cur = job;
+  if (document.visibilityState === 'hidden') iaJobSend(job);
+  return job;
+}
+async function iaJobSend(job) {
+  if (job.sent || iaRun.cur !== job || !state.settings.apiKey || job.body.length > 4e6) return; // con varias fotos muy grandes no se manda: queda el aviso sencillo
+  job.sent = true; job.sentAt = Date.now();
+  lsSet(IAJOB_KEY, { id: job.id, kind: job.kind, ctx: job.ctx, at: job.sentAt });
+  let sub = null; try { if (pushCan() && Notification.permission === 'granted') sub = (await (await navigator.serviceWorker.ready).pushManager.getSubscription())?.toJSON() || null; } catch { /* sin avisos: se recoge al volver */ }
+  const payload = JSON.stringify({ op: 'ia_pedir', id: job.id, gk: state.settings.apiKey, models: job.models, body: job.body, sub, title: job.title, cuerpo: job.cuerpo || '', conTexto: !!job.conTexto });
+  try { const r = await fetch(SB_IA, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SB_KEY }, body: payload, keepalive: payload.length < 60000 }); if (!(await r.json()).ok) throw new Error('no'); }
+  catch { job.sent = false; lsSet(IAJOB_KEY, null); } // el servidor no la aceptó: queda el aviso sencillo
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && iaRun.cur) iaJobSend(iaRun.cur); });
+function iaJobEnd(job, ok) {
+  if (iaRun.cur === job) iaRun.cur = null;
+  if (job.sent) { lsSet(IAJOB_KEY, null); if (ok) sbCall({ op: 'ia_cancel', id: job.id }, 20000, SB_IA).catch(() => null); }
+}
+// la app no consiguió terminar (p. ej. el móvil cortó la conexión en segundo plano): se espera a la del servidor
+async function iaJobWait(job) {
+  if (iaRun.cur === job) iaRun.cur = null;
+  if (!job.sent) return null;
+  while (Date.now() - job.sentAt < 170000) {
+    try {
+      const j = await sbCall({ op: 'ia_res', id: job.id }, 20000, SB_IA);
+      if (j.estado === 'ok') { lsSet(IAJOB_KEY, null); return j.res; }
+      if (j.estado !== 'pend') { lsSet(IAJOB_KEY, null); if (j.estado === 'err' && j.res) throw new Error(j.res); return null; }
+    } catch (e) { if (e.message !== 'net' && e.message !== 'fallo') throw e; }
+    await geminiWait(5000);
+  }
+  return null;
+}
+// 📥 Al abrir o volver a la app: si el móvil la cerró mientras la IA pensaba, se recoge la respuesta del servidor
+const IA_DONE = {};
+async function iaRecover() {
+  const j = lsGet(IAJOB_KEY);
+  if (!j?.id || iaRun.cur || iaRecover.busy || !access.ok) return;
+  if (Date.now() - j.at > 86400000) return lsSet(IAJOB_KEY, null);
+  iaRecover.busy = true;
+  try {
+    const r = await sbCall({ op: 'ia_res', id: j.id }, 20000, SB_IA);
+    if (r.estado === 'pend') { if (Date.now() - j.at < 200000) setTimeout(iaRecover, 5000); else { lsSet(IAJOB_KEY, null); iaRetry(j); } return; }
+    lsSet(IAJOB_KEY, null);
+    if (r.estado === 'none' || r.estado == null) return iaRetry(j); // no llegó al servidor (el móvil cerró la app justo al mandarla) o el servidor no pudo terminarla
+    if (r.estado === 'ok' && r.res) IA_DONE[j.kind]?.(r.res, j.ctx || {});
+    else if (r.estado === 'err') toast('IA: ' + (r.res || 'no ha podido responder'), 'error');
+  } catch { if (Date.now() - j.at > 600000) { lsSet(IAJOB_KEY, null); iaRetry(j); } else setTimeout(iaRecover, 8000); } finally { iaRecover.busy = false; }
+}
+// 🔁 Se perdió por el camino: se repite sola en la app (sin foto); si llevaba foto, se pide repetirla
+function iaRetry(j) {
+  const c = j.ctx || {};
+  if (Date.now() - j.at > 6 * 3600000 || !state.settings.apiKey) return;
+  if (j.kind === 'coach') {
+    const last = (c.msgs || []).at(-1);
+    if (!last || last.role !== 'user') return;
+    if (last.photo) return toast('Tu última pregunta al Coach (con foto) no llegó a terminar. Vuelve a mandarla.', 'warn');
+    const abre = (n = 0) => { if (!$('#modalRoot').classList.contains('open')) { ui.chat = { id: c.id, msgs: c.msgs.slice(0, -1), busy: false }; openChat(true); chatSend(last.text); } else if (n < 60) setTimeout(() => abre(n + 1), 1500); };
+    return abre();
+  }
+  if (j.kind === 'meal') {
+    if (c.img || !c.desc) { ui.view = 'diet'; render(); return toast('El cálculo de tu última foto no llegó a terminar. Vuelve a hacerla.', 'warn'); }
+    if (ui.aiResult || ui.aiBusy) return;
+    ui.mealDesc = c.desc; ui.img = null; if (c.type) ui.mealType = c.type; ui.addOpen = true; ui.view = 'diet'; render();
+    toast('Termino de calcular tu última comida…'); analyzeMeal();
+  }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(iaRecover, 1200); });
+setTimeout(iaRecover, 3500);
+
 /* 🤖 Si la IA termina mientras estás fuera de la app (por ejemplo, te has ido a WhatsApp mientras pensaba), te avisa con una notificación.
-   Solo si ya diste permiso de notificaciones (Avisos de Esteban). Funciona mientras el móvil no cierre la app por detrás */
+   Solo si ya diste permiso de notificaciones (🔔 Notificaciones). Funciona mientras el móvil no cierre la app por detrás */
 // 🔔 En la espera de la IA: «¿Te aviso cuando termine?» (solo si aún no tiene las notificaciones; un toque y quedan activadas hasta que las quite)
 const iaAskHTML = () => { try { return pushCan() && Notification.permission !== 'denied' && !(Notification.permission === 'granted' && lsGet(PUSH_KEY)?.on) ? '<div class="ia-ask"><span>Puedes salir de la app mientras piensa.</span><button class="chip chip-sm chip-on" data-act="iaPush" type="button">🔔 Avísame cuando termine</button></div>' : '<p class="ia-ask-ok">Puedes salir de la app: te aviso cuando termine 🔔</p>'; } catch { return ''; } };
 function iaNotify(title, body, view = '') {
@@ -5278,7 +5362,21 @@ Responde SOLO con JSON válido:
 Descripción del usuario: ${desc ? JSON.stringify(desc) : '(sin descripción, usa solo la foto)'}`;
     const parts = [{ text: prompt }];
     if (ui.img) parts.push({ inlineData: { mimeType: 'image/jpeg', data: ui.img.split(',')[1] } });
-    const res = parseJSONLoose(await callGemini(parts));
+    mealApply(await callGemini(parts, { relay: { kind: 'meal', ctx: { desc, type: ui.mealType, img: !!ui.img }, title: '🍽️ Ya tienes los macros de tu comida', cuerpo: `${(desc || 'Tu foto').slice(0, 60)}: ábrela para revisarlos y registrarla.` } }), desc);
+    if (ui.aiPending) { const was = ui.aiPending.auto; ui.aiPending = null; aiPendSave(); if (was) toast(`✅ Ya tengo los macros de «${(desc || 'tu foto').slice(0, 40)}». Revísalos y pulsa Registrar.`); }
+  } catch (e) {
+    if (e.net) { // sin conexión con Google: no se pierde nada, se calcula solo al volver
+      ui.aiPending = { desc, img: ui.img || null, type: ui.mealType, at: Date.now() }; aiPendSave();
+      const ws = desc.split(/\s+/).filter(Boolean), w = ws.length <= 4 ? ws : ws.filter(x => normTxt(x).replace(/[^a-z0-9ñ]/g, '').length >= 4 && !/^(para|unos|unas|poco|media|medio)$/i.test(normTxt(x))).slice(0, 2);
+      if (w.length && !ui.img) ui.mealSearch = w.join(' '); // tus habituales que encajan, con lo que escribiste (tildes incluidas)
+    } else toast('IA: ' + e.message, 'error');
+  } finally {
+    ui.aiBusy = false; render();
+  }
+}
+// 🍽️ La respuesta de la IA (en la app o recogida del servidor) → alimentos con sus raciones, listos para revisar y registrar
+function mealApply(raw, desc) {
+    const res = parseJSONLoose(raw);
     const items = (Array.isArray(res.items) ? res.items : []).map(it => {
       const per = it.per100 || {};
       const m = num(it.medium_g) || num(it.grams) || 100;
@@ -5299,17 +5397,17 @@ Descripción del usuario: ${desc ? JSON.stringify(desc) : '(sin descripción, us
     recalcFromItems(ui.aiResult);
     iaNotify('🍽️ Ya tienes los macros de tu comida', `${ui.aiResult.desc || 'Comida'}: ${Math.round(ui.aiResult.kcal)} kcal · P ${Math.round(ui.aiResult.prot)} g. Ábrela para revisarlos y registrarla.`, 'diet');
     if (ui.aiResult.kcal > 2500) toast('Revisa las cantidades: sale una comida de más de 2.500 kcal.', 'warn');
-    if (ui.aiPending) { const was = ui.aiPending.auto; ui.aiPending = null; aiPendSave(); if (was) toast(`✅ Ya tengo los macros de «${(desc || 'tu foto').slice(0, 40)}». Revísalos y pulsa Registrar.`); }
-  } catch (e) {
-    if (e.net) { // sin conexión con Google: no se pierde nada, se calcula solo al volver
-      ui.aiPending = { desc, img: ui.img || null, type: ui.mealType, at: Date.now() }; aiPendSave();
-      const ws = desc.split(/\s+/).filter(Boolean), w = ws.length <= 4 ? ws : ws.filter(x => normTxt(x).replace(/[^a-z0-9ñ]/g, '').length >= 4 && !/^(para|unos|unas|poco|media|medio)$/i.test(normTxt(x))).slice(0, 2);
-      if (w.length && !ui.img) ui.mealSearch = w.join(' '); // tus habituales que encajan, con lo que escribiste (tildes incluidas)
-    } else toast('IA: ' + e.message, 'error');
-  } finally {
-    ui.aiBusy = false; render();
-  }
 }
+IA_DONE.meal = (raw, ctx) => {
+  try {
+    if (ui.aiResult || ui.aiBusy) { ui.view = 'diet'; render(); return toast('La IA terminó otra comida mientras estabas fuera, pero estás con otra: vuelve a pedirla cuando acabes.', 'warn'); }
+    ui.mealDesc = ctx.desc || ''; ui.img = null; if (ctx.type) ui.mealType = ctx.type; ui.addOpen = true;
+    mealApply(raw, ctx.desc || '');
+    ui.view = 'diet'; render();
+    toast(`✅ Ya tienes los macros de «${(ctx.desc || 'tu foto').slice(0, 40)}». Revísalos y pulsa Registrar.`);
+    setTimeout(() => $('#mealCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  } catch { toast('No he podido leer la respuesta de la IA. Vuelve a probar.', 'warn'); }
+};
 /* 📶 Estimación pendiente por falta de conexión con Google: se guarda (sin la foto) y se calcula sola cuando vuelve la conexión */
 const AIPEND_KEY = 'fitnesteban_aipend';
 function aiPendSave() { lsSet(AIPEND_KEY, ui.aiPending ? { desc: ui.aiPending.desc, type: ui.aiPending.type, at: ui.aiPending.at } : null); }
@@ -6817,7 +6915,7 @@ const EMAIL_NOTICE = `FITNESTEBAN guardará tu correo para enviarte la guía de 
    Usuario: escribe y lee sus respuestas aquí. Esteban: los ve en 👥 Usuarios → 💬 Mensajes.
    Llegan al instante (canal en tiempo real) y, si se activa, con notificación en el móvil.
    ========================================================================= */
-const SB_URL = 'https://qzbbbctyxgfaryqncrpe.supabase.co', SB_KEY = 'sb_publishable_X9Md3p_37UNuq9F52ojRjA_0C4E_MXw', SB_FN = SB_URL + '/functions/v1/mensajes';
+const SB_URL = 'https://qzbbbctyxgfaryqncrpe.supabase.co', SB_KEY = 'sb_publishable_X9Md3p_37UNuq9F52ojRjA_0C4E_MXw', SB_FN = SB_URL + '/functions/v1/mensajes', SB_IA = SB_URL + '/functions/v1/ia';
 const VAPID_PUB = 'BBnHY9mp3SFKsoBQ1GXjq1AHyLnDrpKvGKvDtNYNsGQDP82DD-PJWDoOJ8IZVK8DgFCmatx8s8I7eOd4CEc66XE';
 const MSG_TK_KEY = 'fitnesteban_msgtk', ADM_TOPIC_KEY = 'fitnesteban_admtopic', PUSH_KEY = 'fitnesteban_push', SB_IMP_KEY = 'fitnesteban_sbimp';
 // 🔑 la llave secreta de la conversación de este móvil (aleatoria; solo la conoce esta app)
@@ -6827,9 +6925,9 @@ function msgTk() {
   return t;
 }
 const isoTs = v => { const d = new Date(v); return isNaN(d) ? String(v || '') : d.toISOString(); };
-async function sbCall(body, ms = 20000) {
+async function sbCall(body, ms = 20000, url = SB_FN) {
   const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), ms);
-  let r; try { r = await fetch(SB_FN, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SB_KEY }, body: JSON.stringify(body), cache: 'no-store', signal: ctl.signal }); } catch { throw new Error('net'); } finally { clearTimeout(tm); }
+  let r; try { r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SB_KEY }, body: JSON.stringify(body), cache: 'no-store', signal: ctl.signal }); } catch { throw new Error('net'); } finally { clearTimeout(tm); }
   try { return await r.json(); } catch { throw new Error('fallo'); }
 }
 /* ⚡ Tiempo real: un canal abierto con Supabase; cuando Esteban (o el usuario) escribe, llega el aviso al momento */
@@ -7964,7 +8062,9 @@ async function chatSend(text, img = null) {
   try {
     // la foto solo viaja mientras la conversación está abierta (no se guarda en el historial)
     const contents = c.msgs.slice(-12).map(m => ({ role: m.role, parts: [{ text: m.text + (m.img ? CHAT_PHOTO_NOTE : '') }, ...(m.img ? [{ inlineData: { mimeType: 'image/jpeg', data: m.img.split(',')[1] } }] : [])] }));
-    const reply = await callGemini(null, { json: false, contents, system: chatSystem(), temperature: 0.4, timeout: 60000 });
+    if (!c.id) c.id = uid('c_');
+    const ctx = { id: c.id, msgs: c.msgs.filter(m => !m.error).slice(-30).map(({ img, ...m }) => m) };
+    const reply = await callGemini(null, { json: false, contents, system: chatSystem(), temperature: 0.4, timeout: 60000, relay: { kind: 'coach', ctx, title: '🤖 El Coach ya te ha respondido', conTexto: true } });
     const { text: clean, meals, blocks, edits } = chatMeals(reply);
     c.msgs.push({ role: 'model', text: clean, ...(meals.length ? { meals } : {}), ...(blocks.length ? { blocks } : {}), ...(edits.length ? { edits } : {}) });
     saveChatConv(c);
@@ -7973,6 +8073,18 @@ async function chatSend(text, img = null) {
     c.msgs.push({ role: 'model', text: 'No he podido responder: ' + e.message, error: true });
   } finally { c.busy = false; refreshChat(); }
 }
+// 📥 Respuesta del Coach recogida del servidor (el móvil cerró la app mientras pensaba): se guarda en tu historial y se abre la conversación
+IA_DONE.coach = (reply, ctx) => {
+  const { text: clean, meals, blocks, edits } = chatMeals(reply);
+  const c = { id: ctx.id, msgs: [...(ctx.msgs || []), { role: 'model', text: clean, ...(meals.length ? { meals } : {}), ...(blocks.length ? { blocks } : {}), ...(edits.length ? { edits } : {}) }], busy: false };
+  saveChatConv(c);
+  const abre = (n = 0) => { // si hay otra ventana abierta (novedades, aviso…), se abre en cuanto la cierres
+    if (!$('#modalRoot').classList.contains('open')) { ui.chat = c; openChat(true); }
+    else if (n < 60) setTimeout(() => abre(n + 1), 1500);
+    else toast('🤖 El Coach te ha respondido: lo tienes en su historial.');
+  };
+  abre();
+};
 /* 🔍 Sin zoom: ni pellizco ni doble toque (iPhone ignora user-scalable=no, por eso también aquí) */
 ['gesturestart', 'gesturechange'].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
 document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
@@ -8219,6 +8331,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.28.0', ['🔔 Coach y cálculo de comidas: si sales de la app mientras la IA piensa, ahora te avisa aunque el móvil cierre la app. Al volver, tienes la respuesta esperándote.'], 'quiet'],
   ['5.27.0', ['🔔 Mientras la IA piensa (Coach, foto o descripción de comida, ¿Qué como?) puedes salir de la app: con «🔔 Avísame cuando termine» te llega una notificación al acabar.', '⚙️ El ajuste ahora se llama «🔔 Notificaciones» (Ajustes → Aplicación): sirve para los mensajes del chat y para la IA.']],
   ['5.26.2', ['🥗 Añadir ingrediente: se ve que está calculando y, si la IA de Google no contesta en 25 segundos, se abre directamente para apuntarlo a mano.'], 'quiet'],
   ['5.26.1', ['💶 Chat: «Precios para renovar» en Rápidas, y las respuestas sugeridas incluyen los precios cuando se habla de renovar.'], 'quiet'],
@@ -10536,11 +10649,11 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (refreshing || !hadController) return;
     // con el descanso en marcha NUNCA se recarga (ni con la app en segundo plano): recargar borraría los pitidos programados
-    const canNow = () => !timer.endAt && !picking() && (document.visibilityState === 'hidden' || !busy());
+    const canNow = () => !timer.endAt && !picking() && !iaRun.cur && (document.visibilityState === 'hidden' || !busy());
     if (canNow()) return reloadNow();
     $('#topBanner').innerHTML = '';
     const tryLater = () => { if (canNow()) reloadNow(); else setTimeout(tryLater, 5000); };
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && !timer.endAt && !picking()) reloadNow(); });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && !timer.endAt && !picking() && !iaRun.cur) reloadNow(); });
     setTimeout(tryLater, 5000);
   });
   // comprobar si hay versión nueva cada vez que vuelves a la app

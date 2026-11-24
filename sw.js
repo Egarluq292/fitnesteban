@@ -1,6 +1,6 @@
 /* FITNESTEBAN service worker: funciona sin conexión.
    Al cambiar cualquier archivo de la app, sube el número de CACHE para que el móvil descargue la versión nueva. */
-const CACHE = 'fitnesteban-5.27.0';
+const CACHE = 'fitnesteban-5.28.0';
 const ASSETS = [
   './',
   './index.html',
@@ -86,7 +86,7 @@ self.addEventListener('fetch', event => {
 // 🔔 Mensajes de Esteban (o, en su móvil, de los usuarios): notificación aunque la app esté cerrada
 self.addEventListener('push', event => {
   let d = {}; try { d = event.data ? event.data.json() : {}; } catch (e) { d = { body: event.data ? event.data.text() : '' }; }
-  event.waitUntil(self.registration.showNotification(d.title || 'FITNESTEBAN', { body: d.body || '', tag: d.tag || 'msg', renotify: true, icon: './icons/icon-192.png', badge: './icons/favicon-48.png', data: { url: './?msg=1' } }));
+  event.waitUntil(self.registration.showNotification(d.title || 'FITNESTEBAN', { body: d.body || '', tag: d.tag || 'msg', renotify: true, icon: './icons/icon-192.png', badge: './icons/favicon-48.png', data: d.ia ? { url: './', ia: 1 } : { url: './?msg=1' } }));
 });
 self.addEventListener('notificationclick', event => {
   event.notification.close();
