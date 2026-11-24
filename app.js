@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.28.0';
+const APP_VERSION = '5.29.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -8331,6 +8331,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.29.0', ['🔐 Caja fuerte de administrador: la clave de lectura, el token de GitHub y el enlace de tu hoja se guardan cifrados con tu PIN y tu código, y vuelven solos a un móvil nuevo al meter tu PIN.'], 'admin'],
   ['5.28.0', ['🔔 Coach y cálculo de comidas: si sales de la app mientras la IA piensa, ahora te avisa aunque el móvil cierre la app. Al volver, tienes la respuesta esperándote.'], 'quiet'],
   ['5.27.0', ['🔔 Mientras la IA piensa (Coach, foto o descripción de comida, ¿Qué como?) puedes salir de la app: con «🔔 Avísame cuando termine» te llega una notificación al acabar.', '⚙️ El ajuste ahora se llama «🔔 Notificaciones» (Ajustes → Aplicación): sirve para los mensajes del chat y para la IA.']],
   ['5.26.2', ['🥗 Añadir ingrediente: se ve que está calculando y, si la IA de Google no contesta en 25 segundos, se abre directamente para apuntarlo a mano.'], 'quiet'],
@@ -10228,7 +10229,7 @@ const actions = {
   openAccess: then => {
     if (typeof then !== 'function') then = null;
     // el PIN vale para toda la sesión: hasta cerrar la app o 2 horas sin tocar nada de Acceso
-    const done = pin => { ui.accessOpen = true; if (pin) { ui.accessPin = pin; ui.pinAt = Date.now(); } ui.accessReveal = ui.accessReveal || {}; ui.usageErr = ''; if (then) then(); else render(); loadUsage(); };
+    const done = pin => { ui.accessOpen = true; if (pin) { ui.accessPin = pin; ui.pinAt = Date.now(); } ui.accessReveal = ui.accessReveal || {}; ui.usageErr = ''; if (then) then(); else render(); (pin ? vaultSoon(pin) : Promise.resolve()).then(() => loadUsage()); };
     if (pinOk()) return done(ui.accessPin);
     if (state.settings.pinHash) return askPinOnly('🔑 Acceso', 'Escribe tu PIN para abrir esta sección.', pin => done(pin));
     let fails = 0;
@@ -10280,7 +10281,7 @@ const actions = {
     const v = ($('#sheetUrl')?.value || '').trim();
     if (v && !/^https:\/\/docs\.google\.com\/spreadsheets\//.test(v)) return toast('Pega el enlace de la hoja (empieza por https://docs.google.com/spreadsheets/)', 'warn');
     if (v) lsSet(SHEET_KEY, v.split('#')[0]); else { try { localStorage.removeItem(SHEET_KEY); } catch { /* nada */ } }
-    ui.sheetEdit = false; render(); toast(v ? 'Enlace guardado ✓' : 'Enlace quitado');
+    ui.sheetEdit = false; render(); toast(v ? 'Enlace guardado ✓' : 'Enlace quitado'); if (v && ui.accessPin) vaultSoon(ui.accessPin);
   },
   devCheck: async () => { deviceDiag = 'comprobando…'; render(); deviceChecked = false; await deviceGuard(); render(); },
   relDev: async b => {
@@ -11023,6 +11024,36 @@ async function reencryptSecrets(oldPin, newPin) {
   for (const [h, e] of Object.entries(state.accessCodes || {})) { try { state.accessCodes[h] = await codeEnc(await codeDec(e, oldPin), newPin); } catch { /* guardado con otro PIN: se queda como estaba */ } }
   try { if (lsGet(GH_KEY)) await ghSaveToken(await ghToken(oldPin), newPin); } catch { /* nada */ }
   try { const u = lsGet(USE_KEY); if (u) lsSet(USE_KEY, await secretEnc(await secretDec(u, oldPin), newPin)); } catch { /* nada */ }
+  vaultSoon(newPin); // la caja fuerte pasa a tu PIN nuevo
+}
+/* 🔐 Caja fuerte del administrador: la clave de lectura, el token de GitHub y el enlace de tu hoja se guardan en Supabase cifrados
+   aquí con tu PIN y tu código de administrador juntos (Supabase nunca puede leerlos). En un móvil nuevo vuelven solos al meter tu PIN.
+   El servidor solo la entrega a quien escribe el código de administrador completo. Lo que tenga este móvil manda sobre lo guardado */
+let vaultRun = null, vaultAgain = null;
+const vaultPass = pin => 'caja|' + pin + '|' + normCode(lsGet(ACCESS_KEY)?.code);
+function vaultSoon(pin) {
+  if (!access.me?.admin || !pin || !navigator.onLine || !lsGet(ACCESS_KEY)?.code) return Promise.resolve();
+  if (vaultRun) { vaultAgain = pin; return vaultRun; }
+  vaultRun = vaultSync(pin).catch(() => null).finally(() => { vaultRun = null; if (vaultAgain) { const p = vaultAgain; vaultAgain = null; vaultSoon(p); } });
+  return vaultRun;
+}
+async function vaultSync(pin) {
+  const code = lsGet(ACCESS_KEY).code, loc = {};
+  try { const u = lsGet(USE_KEY); if (u) loc.u = await secretDec(u, pin); } catch { /* cifrada con otro PIN */ }
+  try { if (lsGet(GH_KEY)) loc.g = await ghToken(pin); } catch { /* nada */ }
+  if (lsGet(SHEET_KEY)) loc.s = lsGet(SHEET_KEY);
+  const j = await sbCall({ op: 'caja_get', code }, 15000);
+  if (!j.ok) return;
+  let rem = {}, got = false;
+  if (j.doc) try { rem = JSON.parse(await secretDec(j.doc, vaultPass(pin))); got = true; } catch { /* guardada con otro PIN: se reescribe con este */ }
+  const vuelve = [];
+  if (!loc.u && rem.u) { lsSet(USE_KEY, await secretEnc(rem.u, pin)); loc.u = rem.u; vuelve.push('la clave de lectura'); }
+  if (!loc.g && rem.g) { await ghSaveToken(rem.g, pin); loc.g = rem.g; vuelve.push('el token de GitHub'); }
+  if (!loc.s && rem.s) { lsSet(SHEET_KEY, rem.s); loc.s = rem.s; vuelve.push('el enlace de tu hoja'); }
+  if (vuelve.length) { toast('🔐 Recuperado en este móvil: ' + vuelve.join(', ').replace(/, ([^,]*)$/, ' y $1') + ' ✓'); render(); }
+  const all = { ...rem, ...loc }, ord = o => JSON.stringify(['u', 'g', 's'].map(k => o[k] || ''));
+  if (!all.u || (got && ord(all) === ord(rem))) return; // sin cambios (o sin clave de lectura, que el servidor pide para guardar)
+  await sbCall({ op: 'caja_put', code, key: all.u, doc: await secretEnc(JSON.stringify(all), vaultPass(pin)) }, 15000);
 }
 /* ---------- Registro de uso: día de último uso y versión (una vez al día por móvil) ----------
    Va a una hoja de Google del administrador mediante un Apps Script. Solo se envía la huella del código y la versión. */
@@ -11414,7 +11445,7 @@ function usageHereModal() {
         const d = await (await fetch(`${access.usageUrl}?key=${encodeURIComponent(key)}&t=${Date.now()}`, { cache: 'no-store' })).json();
         if (!d.ok) throw new Error(d.error === 'clave' ? 'Esa clave no coincide con la del script' : 'El registro no respondió bien');
       } catch (e) { btn.disabled = false; btn.textContent = 'Comprobar y guardar'; return toast(e.message === 'Failed to fetch' ? 'No se pudo conectar con el script' : e.message, 'error'); }
-      const save = async pin => { lsSet(USE_KEY, await secretEnc(key, pin)); ui.accessPin = pin; closeModal(); render(); toast('Listo: ya ves el uso en este dispositivo ✓'); ui.usage = null; loadUsage(); };
+      const save = async pin => { lsSet(USE_KEY, await secretEnc(key, pin)); ui.accessPin = pin; closeModal(); render(); toast('Listo: ya ves el uso en este dispositivo ✓'); ui.usage = null; loadUsage(); vaultSoon(pin); };
       if (ui.accessPin) save(ui.accessPin);
       else askPin({ title: 'Guardar la clave', text: 'Tu PIN cifra la clave en este dispositivo.', onPin: save });
     }
@@ -11453,7 +11484,7 @@ async function usageSetupModal() {
       askPin({ title: '📶 Activar el registro de uso', text: 'Tu PIN guarda la clave de lectura cifrada y añade la dirección a la lista de acceso.', onPin: async pin => {
         await ghEditAcl(pin, lines => [...lines.filter(l => l.trim() && !/^#\s*uso\b/i.test(l.trim())), '#uso ' + url], 'Acceso: registro de uso');
         lsSet(USE_KEY, await secretEnc(key, pin)); lsSet(PING_KEY, ''); try { localStorage.removeItem('fitnesteban_usekey_pending'); } catch { /* nada */ }
-        ui.accessPin = pin; closeModal(); render(); toast('Registro de uso activado ✓');
+        ui.accessPin = pin; closeModal(); render(); toast('Registro de uso activado ✓'); vaultSoon(pin);
         usagePing(); setTimeout(loadUsage, 2500);
       } });
     }
@@ -12000,7 +12031,7 @@ function ghConnectModal() {
       if (!tok) return toast('Pega el token', 'warn');
       if (!pin || await hashPin(pin) !== state.settings.pinHash) return toast('PIN incorrecto', 'error');
       const btn = root.querySelector('[data-mact=ok]'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Comprobando…';
-      try { await ghApi(tok); await ghSaveToken(tok, pin); closeModal(); render(); toast('GitHub conectado ✓'); }
+      try { await ghApi(tok); await ghSaveToken(tok, pin); closeModal(); render(); toast('GitHub conectado ✓'); vaultSoon(pin); }
       catch (e) { toast(e.message, 'error'); btn.disabled = false; btn.textContent = 'Comprobar y guardar'; }
     }
   });
