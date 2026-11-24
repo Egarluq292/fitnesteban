@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.26.1';
+const APP_VERSION = '5.26.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4802,7 +4802,7 @@ function addIngHTML() {
   return `<div class="flex gap-2 items-center">
       <input class="field flex-1 text-sm py-2.5" id="addIng" autocomplete="off" value="${esc(ui.addIng || '')}" placeholder="＋ Ingrediente (ej. 30 g de queso)" ${ui.addIngBusy ? 'disabled' : ''} />
       ${ui.addIngBusy ? '' : micBtn('#addIng')}
-      <button class="btn-ghost px-3 py-2.5 shrink-0" data-act="addIng" type="button" ${ui.addIngBusy ? 'disabled' : ''}>${ui.addIngBusy ? '<span class="spinner"></span>' : 'Añadir'}</button>
+      <button class="btn-ghost px-3 py-2.5 shrink-0" data-act="addIng" type="button" ${ui.addIngBusy ? 'disabled' : ''}>${ui.addIngBusy ? '<span class="spinner"></span> Calculando…' : 'Añadir'}</button>
     </div>
     <div class="flex flex-wrap gap-x-4 gap-y-1 text-[11px]"><button class="text-brand underline" data-act="scanBar" type="button">🏷️ Escanear un envase</button><button class="text-mute underline" data-act="addIngManual" type="button">o añadir a mano</button></div>`;
 }
@@ -4832,12 +4832,12 @@ async function addIngredient() {
 Si da cantidad, úsala ("from_description": true). Si no, estima una ración habitual en España ("from_description": false).
 Valores por 100 g del alimento tal como se come. Responde SOLO con JSON válido:
 {"name": "nombre corto", "from_description": true|false, "grams": número, "small_g": número, "medium_g": número, "large_g": número, "per100": {"kcal": número, "protein": número, "carbs": número, "fat": número}}`;
-    const r = parseJSONLoose(await callGemini([{ text: prompt }], { timeout: 30000 }));
+    const r = parseJSONLoose(await callGemini([{ text: prompt }], { timeout: 20000, budget: 25000 }));
     const it = ingFromAI(Array.isArray(r.items) ? r.items[0] : r);
     if (!(it.per100.kcal > 0 || it.per100.prot > 0)) throw new Error('no he podido estimar ese ingrediente');
     pushIng(it); ui.addIng = ''; toast(`Añadido: ${it.name}`);
-  } catch (e) { toast('IA: ' + e.message + '. Puedes añadirlo a mano.', 'error'); }
-  finally { ui.addIngBusy = false; render(); }
+  } catch (e) { ui.addIngBusy = false; render(); toast(e.message || 'La IA no ha respondido. Apúntalo a mano.', 'warn'); return addIngManual(txt); }
+  finally { if (ui.addIngBusy) { ui.addIngBusy = false; render(); } }
 }
 function addIngManual(pre = '') {
   openModal(`<h3 class="modal-title">Añadir ingrediente a mano</h3>
@@ -5183,7 +5183,8 @@ async function geminiOnce(model, body, timeout) {
     throw e;
   } finally { clearTimeout(tm); }
 }
-async function callGemini(parts, { json = true, timeout = 45000, contents = null, system = null, temperature = 0.2, only = null } = {}) {
+async function callGemini(parts, { json = true, timeout = 45000, contents = null, system = null, temperature = 0.2, only = null, budget = 0 } = {}) {
+  const t0 = Date.now(); // budget: tiempo máximo en total (probando modelos de reserva incluidos); si se pasa, se rinde y avisa
   const s = state.settings;
   if (!s.apiKey) throw new Error('Falta la clave de Gemini (Ajustes).');
   if (!navigator.onLine) { const e = new Error('Sin conexión a internet.'); e.net = true; e.off = true; throw e; }
@@ -5195,8 +5196,9 @@ async function callGemini(parts, { json = true, timeout = 45000, contents = null
   for (let mi = 0; mi < models.length; mi++) {
     const tries = mi === 0 ? 2 : 1;
     for (let attempt = 0; attempt < tries; attempt++) {
+      if (budget && Date.now() - t0 > budget) { const e = new Error('La IA de Google va muy lenta ahora mismo. Prueba en unos minutos o apúntalo a mano.'); e.busy = true; throw e; }
       try {
-        const text = await geminiOnce(models[mi], body, timeout);
+        const text = await geminiOnce(models[mi], body, budget ? Math.min(timeout, Math.max(5000, budget - (Date.now() - t0))) : timeout);
         if (mi > 0 && !only && mainGone && s.model !== models[mi]) { s.model = models[mi]; persist(); } // el modelo guardado ya no existe: se queda el que funciona
         else if (mi > 0) toast('Ha respondido la IA de reserva. La principal está ocupada ahora mismo, volverá sola en un rato. Tú no tienes que hacer nada.'); // aviso tranquilo: ha salido bien
         return text;
@@ -8203,6 +8205,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.26.2', ['🥗 Añadir ingrediente: se ve que está calculando y, si la IA de Google no contesta en 25 segundos, se abre directamente para apuntarlo a mano.'], 'quiet'],
   ['5.26.1', ['💶 Chat: «Precios para renovar» en Rápidas, y las respuestas sugeridas incluyen los precios cuando se habla de renovar.'], 'quiet'],
   ['5.26.0', ['🧪 Periodos de prueba también en Supabase: se pueden empezar y comprobar aunque Google no conteste.'], 'quiet'],
   ['5.25.0', ['📶 Registro de uso y dispositivos también en Supabase: la Gestión y la entrada siguen funcionando aunque Google no conteste.'], 'quiet'],
