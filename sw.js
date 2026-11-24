@@ -1,6 +1,6 @@
 /* FITNESTEBAN service worker: funciona sin conexión.
    Al cambiar cualquier archivo de la app, sube el número de CACHE para que el móvil descargue la versión nueva. */
-const CACHE = 'fitnesteban-5.26.2';
+const CACHE = 'fitnesteban-5.27.0';
 const ASSETS = [
   './',
   './index.html',
@@ -91,7 +91,8 @@ self.addEventListener('push', event => {
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(cs => {
-    for (const c of cs) if ('focus' in c) { c.postMessage({ msg: 1 }); return c.focus(); }
-    return self.clients.openWindow('./?msg=1');
+    const ia = event.notification.data && event.notification.data.ia; // aviso de la IA: solo volver a la app, donde está la respuesta
+    for (const c of cs) if ('focus' in c) { if (!ia) c.postMessage({ msg: 1 }); return c.focus(); }
+    return self.clients.openWindow(ia ? './' : './?msg=1');
   }));
 });

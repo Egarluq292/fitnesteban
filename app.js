@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.26.2';
+const APP_VERSION = '5.27.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4437,7 +4437,7 @@ function qcRecent(tp) { // platos de esa comida de los últimos 10 días, para n
 }
 async function qcAsk(cx) {
   const { B, rest, tp, have = '', img = null, prev = [] } = cx, on = qcStyleOn(tp, B), sty = on ? (cx.sty || 'var') : '', fast = on && !!cx.fast, recent = qcRecent(tp);
-  openModal(`<div class="text-center py-6"><span class="spinner" style="width:34px;height:34px;border-width:3px;border-color:rgba(34,211,238,.25);border-top-color:#22d3ee"></span><h3 class="modal-title mt-3">${img ? 'Mirando lo que tienes…' : 'Pensando en tu comida…'}</h3><p class="text-sm text-mute">Unos segundos.</p></div>`);
+  openModal(`<div class="text-center py-6"><span class="spinner" style="width:34px;height:34px;border-width:3px;border-color:rgba(34,211,238,.25);border-top-color:#22d3ee"></span><h3 class="modal-title mt-3">${img ? 'Mirando lo que tienes…' : 'Pensando en tu comida…'}</h3><p class="text-sm text-mute">Unos segundos.</p><div class="mt-4">${iaAskHTML()}</div></div>`);
   const prompt = `Eres un dietista práctico de España. Propón ideas para ${qcDe(tp).toUpperCase()} de hoy.
 Para esta comida le corresponden unas ${B.kcal} kcal (±15 %), ${B.prot} g de proteína, ${B.carbs} g de hidratos y ${B.fat} g de grasa.${B.protDone ? ' Ya tiene cubierta la proteína del día: esos gramos son una ración normal y moderada, no un máximo; no hace falta más.' : ''}${rest.length ? ` Después todavía tiene ${rest.map(x => `${qcDe(x.tp)} (~${x.kcal} kcal)`).join(' y ')}, así que no gastes en esta comida lo que es para luego.` : ' Es su última comida del día.'}
 ${img ? 'En la foto se ve su nevera o despensa: usa SOLO lo que se ve con claridad (más sal, aceite, especias y agua). Si algo no se distingue bien, no lo uses y ponlo en "dudas".' : have ? `Tiene en casa: ${have}. Usa SOLO eso (más sal, aceite, especias y agua).` : 'Usa ingredientes corrientes de supermercado español.'}
@@ -4462,6 +4462,7 @@ Responde SOLO con JSON: {"opciones":[{"nombre":"…","olla":1,"items":[{"nombre"
   }).filter(o => o.items.length);
   const ops = raw.map(o => qcFix(o, B)).filter(Boolean), dropped = raw.length - ops.length;
   const veo = img ? list(r?.veo) : [], dudas = img ? list(r?.dudas) : [];
+  if (ops.length) iaNotify('🍽️ Ya tienes tus ideas de ¿Qué como?', ops.map(o => o.nombre).join(' · '), 'qc');
   qcShow({ ...cx, veo: veo.length ? veo : cx.veo, dudas, dropped: ops.length ? dropped : 0, prev: [...prev, ...raw.map(o => o.nombre)] }, ops, String(r?.nota || '').slice(0, 600), true);
 }
 /* ✔️ Revisión de cada idea antes de enseñarla (de la IA o sin IA), en el móvil y sin gastar otra consulta:
@@ -4619,6 +4620,7 @@ function renderDiet() {
     <button class="btn-primary w-full" data-act="analyze" type="button" ${ui.aiBusy ? 'disabled' : ''}>
       ${ui.aiBusy ? '<span class="spinner"></span> Analizando…' : ui.aiPending ? '🔄 Probar ahora' : '⚡ Estimar macros con IA'}
     </button>
+    ${ui.aiBusy ? iaAskHTML() : ''}
     ${!ai ? `<p class="text-center"><button class="text-xs text-mute underline" data-act="manualMeal" type="button">o introduce los macros a mano</button></p>` : ''}
     ${!state.settings.apiKey ? `<p class="text-[11px] text-amber-300">Para usar la IA, pega tu clave de Gemini en <button class="underline" data-act="goSettings" type="button">Ajustes</button>.</p>` : ''}`}
     ${ai ? renderMealResult(ai) : ''}
@@ -5244,6 +5246,16 @@ async function geminiDiscover(skip) { // el modelo Flash más nuevo que la clave
   return ok[0] || null;
 }
 
+/* 🤖 Si la IA termina mientras estás fuera de la app (por ejemplo, te has ido a WhatsApp mientras pensaba), te avisa con una notificación.
+   Solo si ya diste permiso de notificaciones (Avisos de Esteban). Funciona mientras el móvil no cierre la app por detrás */
+// 🔔 En la espera de la IA: «¿Te aviso cuando termine?» (solo si aún no tiene las notificaciones; un toque y quedan activadas hasta que las quite)
+const iaAskHTML = () => { try { return pushCan() && Notification.permission !== 'denied' && !(Notification.permission === 'granted' && lsGet(PUSH_KEY)?.on) ? '<div class="ia-ask"><span>Puedes salir de la app mientras piensa.</span><button class="chip chip-sm chip-on" data-act="iaPush" type="button">🔔 Avísame cuando termine</button></div>' : '<p class="ia-ask-ok">Puedes salir de la app: te aviso cuando termine 🔔</p>'; } catch { return ''; } };
+function iaNotify(title, body, view = '') {
+  try {
+    if (document.visibilityState !== 'hidden' || !pushCan() || Notification.permission !== 'granted') return;
+    navigator.serviceWorker.ready.then(reg => reg.showNotification(title, { body: String(body || '').replace(/\s+/g, ' ').slice(0, 140), tag: 'ia', renotify: true, icon: './icons/icon-192.png', badge: './icons/favicon-48.png', data: { url: './', ia: view || 1 } })).catch(() => { });
+  } catch { /* nada */ }
+}
 async function analyzeMeal() {
   const desc = ui.mealDesc.trim();
   if (!desc && !ui.img) return toast('Describe la comida o haz una foto', 'warn');
@@ -5285,6 +5297,7 @@ Descripción del usuario: ${desc ? JSON.stringify(desc) : '(sin descripción, us
     };
     if (res.alerta && algAny()) toast(`⚠️ ${String(res.alerta).slice(0, 140)}`, 'warn');
     recalcFromItems(ui.aiResult);
+    iaNotify('🍽️ Ya tienes los macros de tu comida', `${ui.aiResult.desc || 'Comida'}: ${Math.round(ui.aiResult.kcal)} kcal · P ${Math.round(ui.aiResult.prot)} g. Ábrela para revisarlos y registrarla.`, 'diet');
     if (ui.aiResult.kcal > 2500) toast('Revisa las cantidades: sale una comida de más de 2.500 kcal.', 'warn');
     if (ui.aiPending) { const was = ui.aiPending.auto; ui.aiPending = null; aiPendSave(); if (was) toast(`✅ Ya tengo los macros de «${(desc || 'tu foto').slice(0, 40)}». Revísalos y pulsa Registrar.`); }
   } catch (e) {
@@ -6866,8 +6879,8 @@ const pushUserOn = () => lsGet(PUSH_KEY)?.on === 'u' && pushCan() && Notificatio
 // ⚙️ Ajustes → Aplicación: activar o quitar los avisos de Esteban
 function pushSetHTML() {
   const on = pushUserOn();
-  const why = !pushCan() ? (isIOS() ? 'En iPhone, primero añade la app a la pantalla de inicio (Compartir → «Añadir a pantalla de inicio») y ábrela desde ahí.' : 'Este navegador no permite notificaciones.') : Notification.permission === 'denied' ? 'Las tienes bloqueadas: actívalas para esta app en los ajustes de notificaciones del móvil.' : on ? 'Te llega una notificación cuando Esteban te escribe, aunque tengas la app cerrada.' : 'Actívalos para enterarte cuando Esteban te escriba, aunque tengas la app cerrada.';
-  return `<div><div class="flex items-center justify-between gap-2"><span class="lbl">🔔 Avisos de Esteban</span>${pushCan() && Notification.permission !== 'denied' ? `<button class="chip chip-sm ${on ? '' : 'chip-on'}" data-act="pushToggle" type="button">${on ? 'Quitar' : 'Activar'}</button>` : ''}</div><p class="text-[11px] text-mute mt-1">${on ? '<span class="text-emerald-300">Activados ✓</span> · ' : ''}${why}</p></div>`;
+  const why = !pushCan() ? (isIOS() ? 'En iPhone, primero añade la app a la pantalla de inicio (Compartir → «Añadir a pantalla de inicio») y ábrela desde ahí.' : 'Este navegador no permite notificaciones.') : Notification.permission === 'denied' ? 'Las tienes bloqueadas: actívalas para esta app en los ajustes de notificaciones del móvil.' : on ? 'Te avisa cuando te respondan en el chat y cuando la IA termine mientras estás fuera de la app.' : 'Actívalas para enterarte cuando te respondan en el chat y cuando la IA termine mientras haces otra cosa.';
+  return `<div><div class="flex items-center justify-between gap-2"><span class="lbl">🔔 Notificaciones</span>${pushCan() && Notification.permission !== 'denied' ? `<button class="chip chip-sm ${on ? '' : 'chip-on'}" data-act="pushToggle" type="button">${on ? 'Quitar' : 'Activar'}</button>` : ''}</div><p class="text-[11px] text-mute mt-1">${on ? '<span class="text-emerald-300">Activadas ✓</span> · ' : ''}${why}</p></div>`;
 }
 // 💬 la primera vez que Esteban te escribe: ¿quieres que te avise? (se pregunta una sola vez)
 const pushAskNow = () => !access.me?.admin && pushCan() && Notification.permission !== 'denied' && !pushUserOn() && !lsGet(PUSH_ASK_KEY) && (ui.msgThread || []).some(m => m.de === 'e');
@@ -7897,7 +7910,7 @@ function chatBodyHTML() {
       <ul class="text-[13px] leading-snug space-y-1 mt-1.5">${ed.lines.map(l => `<li>${l}</li>`).join('')}</ul>
       ${ed.ops.length ? (ed.applied ? `<div class="grid grid-cols-2 gap-2 mt-2.5"><button class="chat-meal items-center justify-center text-center" data-mact="editGo" data-m="${i}" data-o="${j}" type="button"><span>✓ Ver bloque</span></button><button class="chat-meal items-center justify-center text-center !bg-transparent" data-mact="editUndo" data-m="${i}" data-o="${j}" type="button"><span>↩️ Deshacer</span></button></div>`
         : `<button class="chat-meal items-center justify-center text-center w-full mt-2.5" data-mact="editApply" data-m="${i}" data-o="${j}" type="button"><span>Aplicar cambios</span></button>`) : ''}</div>`).join('')}</div>`).join('')
-    + (c.busy ? '<div class="chat-ai chat-typing"><span></span><span></span><span></span></div>' : '');
+    + (c.busy ? '<div class="chat-ai chat-typing"><span></span><span></span><span></span></div>' + iaAskHTML() : '');
 }
 /* Historial: conversaciones de los últimos 7 días (máx. 20). Solo la conversación abierta se envía a Gemini. */
 const CHAT_DAYS = 7, CHAT_MAX = 20;
@@ -7955,6 +7968,7 @@ async function chatSend(text, img = null) {
     const { text: clean, meals, blocks, edits } = chatMeals(reply);
     c.msgs.push({ role: 'model', text: clean, ...(meals.length ? { meals } : {}), ...(blocks.length ? { blocks } : {}), ...(edits.length ? { edits } : {}) });
     saveChatConv(c);
+    iaNotify('🤖 El Coach ya te ha respondido', clean, 'coach');
   } catch (e) {
     c.msgs.push({ role: 'model', text: 'No he podido responder: ' + e.message, error: true });
   } finally { c.busy = false; refreshChat(); }
@@ -8205,6 +8219,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.27.0', ['🔔 Mientras la IA piensa (Coach, foto o descripción de comida, ¿Qué como?) puedes salir de la app: con «🔔 Avísame cuando termine» te llega una notificación al acabar.', '⚙️ El ajuste ahora se llama «🔔 Notificaciones» (Ajustes → Aplicación): sirve para los mensajes del chat y para la IA.']],
   ['5.26.2', ['🥗 Añadir ingrediente: se ve que está calculando y, si la IA de Google no contesta en 25 segundos, se abre directamente para apuntarlo a mano.'], 'quiet'],
   ['5.26.1', ['💶 Chat: «Precios para renovar» en Rápidas, y las respuestas sugeridas incluyen los precios cuando se habla de renovar.'], 'quiet'],
   ['5.26.0', ['🧪 Periodos de prueba también en Supabase: se pueden empezar y comprobar aunque Google no conteste.'], 'quiet'],
@@ -8690,7 +8705,7 @@ const GUIDE = [
   ]],
   ['ℹ️ La app', [
     '🔄 Se <b>actualiza sola</b> al abrirla o volver a ella. Después verás una vez las novedades; puedes volver a verlas desde esta guía. Tu versión, en Ajustes → Aplicación.',
-    '💬 El botón de los dos bocadillos de arriba abre tu chat con Esteban dentro de la app: tu código, dudas, fallos o ideas. Te contesta ahí mismo y verás un número en el botón cuando lo haga. Para responder a un mensaje concreto, deslízalo hacia la derecha. Para recibir una notificación cuando te escriba, aunque tengas la app cerrada, actívala en Ajustes → Aplicación → «🔔 Avisos de Esteban» o con el botón de dentro del chat (en iPhone, solo con la app añadida a la pantalla de inicio). Si lo prefieres, dentro tienes Telegram.',
+    '💬 El botón de los dos bocadillos de arriba abre tu chat con Esteban dentro de la app: tu código, dudas, fallos o ideas. Te contesta ahí mismo y verás un número en el botón cuando lo haga. Para responder a un mensaje concreto, deslízalo hacia la derecha. Para recibir una notificación cuando te escriba, aunque tengas la app cerrada, actívala en Ajustes → Aplicación → «🔔 Notificaciones» o con el botón de dentro del chat (en iPhone, solo con la app añadida a la pantalla de inicio). Si lo prefieres, dentro tienes Telegram.',
     '📤 «Compartir la app» (Ajustes y abajo en esta guía) envía a quien quieras el enlace de la app: podrá probarla 7 días entrando con su cuenta de Google.',
     '🔒 Qué datos usa la app y dónde se guardan: <a class="text-brand underline" href="privacidad.html" target="_blank" rel="noopener">política de privacidad</a>.'
   ]]
@@ -10179,7 +10194,8 @@ const actions = {
   v5Open: () => profileModal(),
   v5Close: () => { state.settings.v5x = true; persist(); render(); },
   pays: b => paysModal(b.dataset.hash || ''),
-  pushToggle: async b => { b.disabled = true; try { if (pushUserOn()) { await pushOff(); toast('Avisos de Esteban desactivados'); } else { await pushOn(false); lsSet(PUSH_ASK_KEY, 1); toast('🔔 Listo: te avisaré cuando Esteban te escriba'); } } catch (e) { toast(pushMsg(e), 'warn'); } render(); },
+  pushToggle: async b => { b.disabled = true; try { if (pushUserOn()) { await pushOff(); toast('Notificaciones desactivadas'); } else { await pushOn(false); lsSet(PUSH_ASK_KEY, 1); toast('🔔 Notificaciones activadas'); } } catch (e) { toast(pushMsg(e), 'warn'); } render(); },
+  iaPush: async b => { b.disabled = true; try { await pushOn(!!access.me?.admin && !!ui.accessPin); lsSet(PUSH_ASK_KEY, 1); toast('🔔 Listo: puedes salir de la app, te aviso cuando termine'); b.closest('.ia-ask')?.remove(); } catch (e) { b.disabled = false; toast(pushMsg(e), 'warn'); } },
   setTheme: b => { try { localStorage.setItem(THEME_KEY, b.dataset.k); } catch { /* nada */ } applyTheme(); render(); },
   retoCard: b => openRetoCard(b.dataset.reto, b.dataset.at),
   libNewSee: () => { libMarkSeen(); go('train'); ui.trainHome = true; render(); },
