@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.29.0';
+const APP_VERSION = '5.30.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -5195,10 +5195,8 @@ async function callGemini(parts, { json = true, timeout = 45000, contents = null
   const models = only || [...new Set([main, DEFAULT_MODEL, ...GEMINI_FALLBACKS])];
   // useful (en geminiRun): el primer error que no sea «modelo no disponible» (p. ej. cuota), que explica mejor qué pasa
   if (!only && s.modelFound && !models.includes(s.modelFound)) models.splice(1, 0, s.modelFound);
-  if (!relay) return geminiRun(body, models, s, only, timeout, budget, t0);
-  const job = iaJobStart(relay, models, body); // 🛰️ si sales de la app mientras piensa, la termina el servidor
-  try { const text = await geminiRun(body, models, s, only, timeout, budget, t0); iaJobEnd(job, true); return text; }
-  catch (e) { const t = await iaJobWait(job); if (t != null) return t; throw e; }
+  const local = () => geminiRun(body, models, s, only, timeout, budget, t0);
+  return relay ? iaViaServer(relay, models, body, local) : local(); // 🛰️ Coach y comidas: a través del servidor, para poder avisarte
 }
 async function geminiRun(body, models, s, only, timeout, budget, t0) {
   let last = null, useful = null, mainGone = false;
@@ -5253,43 +5251,43 @@ async function geminiDiscover(skip) { // el modelo Flash más nuevo que la clave
   return ok[0] || null;
 }
 
-/* 🛰️ Coach y estimación de comidas: si sales de la app mientras la IA piensa, la consulta se manda al servidor privado de FITNESTEBAN,
-   que la termina y te manda la notificación aunque el móvil cierre la app. Al volver, la respuesta se recoge y se borra del servidor.
-   Si la app la termina antes (no la ha cerrado el móvil), se cancela allí */
+/* 🛰️ Coach y estimación de comidas: la consulta va desde el principio al servidor privado de FITNESTEBAN, que pregunta a Gemini
+   y te devuelve la respuesta. Si mientras tanto sales, quitas la app de recientes o el móvil la cierra, el servidor la termina igual,
+   te manda la notificación y al volver la tienes esperando. No se guarda: la respuesta se borra al recogerla (o al día).
+   Si el servidor no está disponible, la app pregunta directamente a Google, como siempre (solo se pierde el aviso) */
 const IAJOB_KEY = 'fitnesteban_iajob';
 const iaRun = { cur: null };
 const iaHex = () => [...crypto.getRandomValues(new Uint8Array(16))].map(x => x.toString(16).padStart(2, '0')).join('');
-function iaJobStart(relay, models, body) {
-  const job = { id: iaHex(), ...relay, models: models.slice(0, 4), body, sent: false, at: Date.now() };
+async function iaViaServer(relay, models, body, local) {
+  if (!state.settings.apiKey || body.length > 4e6 || !navigator.onLine) return local();
+  const job = { id: iaHex(), ...relay, at: Date.now() };
   iaRun.cur = job;
-  if (document.visibilityState === 'hidden') iaJobSend(job);
-  return job;
+  lsSet(IAJOB_KEY, { id: job.id, kind: job.kind, ctx: job.ctx, at: job.at }); // se apunta al pulsar: si el móvil cierra la app, al volver se recoge
+  const fin = () => { lsSet(IAJOB_KEY, null); sbCall({ op: 'ia_cancel', id: job.id }, 20000, SB_IA).catch(() => null); }; // recibida: el servidor ya no avisa
+  try {
+    let sub = null; try { if (pushCan() && Notification.permission === 'granted') sub = (await (await navigator.serviceWorker.ready).pushManager.getSubscription())?.toJSON() || null; } catch { /* sin avisos */ }
+    let j = null;
+    try { j = await sbCall({ op: 'ia_pedir', espera: 1, id: job.id, gk: state.settings.apiKey, models: models.slice(0, 4), body, sub, title: job.title, cuerpo: job.cuerpo || '', conTexto: !!job.conTexto }, 135000, SB_IA); } catch { j = null; }
+    if (j?.estado === 'ok' && j.res) { fin(); return j.res; }
+    if (j?.estado === 'err') { fin(); if (j.nf) return local(); throw new Error(j.res || 'La IA no ha podido responder. Vuelve a probar.'); } // nf: ningún modelo existe → la app busca otro
+    if (j && j.ok === false && !j.estado) { lsSet(IAJOB_KEY, null); return local(); } // el servidor no la aceptó
+    // se cortó la conexión (p. ej. en segundo plano): si el servidor la tiene, se espera su respuesta; si no, la hace la app
+    const t = await iaWaitServer(job);
+    if (t != null) { lsSet(IAJOB_KEY, null); return t; }
+    lsSet(IAJOB_KEY, null); return local();
+  } finally { if (iaRun.cur === job) iaRun.cur = null; }
 }
-async function iaJobSend(job) {
-  if (job.sent || iaRun.cur !== job || !state.settings.apiKey || job.body.length > 4e6) return; // con varias fotos muy grandes no se manda: queda el aviso sencillo
-  job.sent = true; job.sentAt = Date.now();
-  lsSet(IAJOB_KEY, { id: job.id, kind: job.kind, ctx: job.ctx, at: job.sentAt });
-  let sub = null; try { if (pushCan() && Notification.permission === 'granted') sub = (await (await navigator.serviceWorker.ready).pushManager.getSubscription())?.toJSON() || null; } catch { /* sin avisos: se recoge al volver */ }
-  const payload = JSON.stringify({ op: 'ia_pedir', id: job.id, gk: state.settings.apiKey, models: job.models, body: job.body, sub, title: job.title, cuerpo: job.cuerpo || '', conTexto: !!job.conTexto });
-  try { const r = await fetch(SB_IA, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SB_KEY }, body: payload, keepalive: payload.length < 60000 }); if (!(await r.json()).ok) throw new Error('no'); }
-  catch { job.sent = false; lsSet(IAJOB_KEY, null); } // el servidor no la aceptó: queda el aviso sencillo
-}
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && iaRun.cur) iaJobSend(iaRun.cur); });
-function iaJobEnd(job, ok) {
-  if (iaRun.cur === job) iaRun.cur = null;
-  if (job.sent) { lsSet(IAJOB_KEY, null); if (ok) sbCall({ op: 'ia_cancel', id: job.id }, 20000, SB_IA).catch(() => null); }
-}
-// la app no consiguió terminar (p. ej. el móvil cortó la conexión en segundo plano): se espera a la del servidor
-async function iaJobWait(job) {
-  if (iaRun.cur === job) iaRun.cur = null;
-  if (!job.sent) return null;
-  while (Date.now() - job.sentAt < 170000) {
+async function iaWaitServer(job) {
+  let caido = 0;
+  while (Date.now() - job.at < 170000) {
     try {
       const j = await sbCall({ op: 'ia_res', id: job.id }, 20000, SB_IA);
-      if (j.estado === 'ok') { lsSet(IAJOB_KEY, null); return j.res; }
-      if (j.estado !== 'pend') { lsSet(IAJOB_KEY, null); if (j.estado === 'err' && j.res) throw new Error(j.res); return null; }
-    } catch (e) { if (e.message !== 'net' && e.message !== 'fallo') throw e; }
-    await geminiWait(5000);
+      if (j.estado === 'ok') return j.res;
+      if (j.estado === 'err') { if (j.nf) return null; throw Object.assign(new Error(j.res || 'La IA no ha podido responder.'), { srv: 1 }); }
+      if (j.estado !== 'pend') return null;
+      caido = 0;
+    } catch (e) { if (e.srv) throw e; if (document.visibilityState === 'visible' && navigator.onLine && ++caido >= 2) return null; } // el servidor no contesta y tú estás en la app: la hace la app
+    await geminiWait(3000);
   }
   return null;
 }
@@ -8331,6 +8329,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.30.0', ['🔔 Coach y cálculo de comidas: ahora te avisa cuando la IA termina aunque quites la app de recientes o el móvil la cierre. Al volver, tienes la respuesta esperándote.'], 'quiet'],
   ['5.29.0', ['🔐 Caja fuerte de administrador: la clave de lectura, el token de GitHub y el enlace de tu hoja se guardan cifrados con tu PIN y tu código, y vuelven solos a un móvil nuevo al meter tu PIN.'], 'admin'],
   ['5.28.0', ['🔔 Coach y cálculo de comidas: si sales de la app mientras la IA piensa, ahora te avisa aunque el móvil cierre la app. Al volver, tienes la respuesta esperándote.'], 'quiet'],
   ['5.27.0', ['🔔 Mientras la IA piensa (Coach, foto o descripción de comida, ¿Qué como?) puedes salir de la app: con «🔔 Avísame cuando termine» te llega una notificación al acabar.', '⚙️ El ajuste ahora se llama «🔔 Notificaciones» (Ajustes → Aplicación): sirve para los mensajes del chat y para la IA.']],
