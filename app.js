@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.30.1';
+const APP_VERSION = '5.30.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -5315,13 +5315,29 @@ async function iaRecover() {
     j = await iaPendGet();
     if (!j?.id || iaRun.cur) return;
     if (Date.now() - j.at > 86400000) return iaPendSet(null);
+    iaShow(j); // al instante, sin esperar al servidor: ya estás en el sitio donde aparecerá
     const r = await sbCall({ op: 'ia_res', id: j.id }, 20000, SB_IA);
-    if (r.estado === 'pend') { if (Date.now() - j.at < 200000) setTimeout(iaRecover, 5000); else { iaPendSet(null); iaRetry(j); } return; }
-    iaPendSet(null);
+    if (r.estado === 'pend') { if (Date.now() - j.at < 200000) setTimeout(iaRecover, 3000); else { iaPendSet(null); iaUnshow(j); iaRetry(j); } return; }
+    iaPendSet(null); iaUnshow(j);
     if (r.estado === 'none' || r.estado == null) return iaRetry(j); // no llegó al servidor (el móvil cerró la app justo al mandarla) o el servidor no pudo terminarla
     if (r.estado === 'ok' && r.res) IA_DONE[j.kind]?.(r.res, j.ctx || {});
     else if (r.estado === 'err') toast('IA: ' + (r.res || 'no ha podido responder'), 'error');
-  } catch { if (!j) return; if (Date.now() - j.at > 600000) { iaPendSet(null); iaRetry(j); } else setTimeout(iaRecover, 8000); } finally { iaRecover.busy = false; }
+  } catch { if (!j) return; if (Date.now() - j.at > 600000) { iaPendSet(null); iaUnshow(j); iaRetry(j); } else setTimeout(iaRecover, 5000); } finally { iaRecover.busy = false; }
+}
+// Mientras se recoge: la conversación del Coach abierta con «escribiendo…», o Dieta con «Analizando…»
+function iaShow(j) {
+  if (iaShow.id === j.id) return; iaShow.id = j.id;
+  const c = j.ctx || {};
+  if (j.kind === 'coach') { if (!$('#modalRoot').classList.contains('open') || (ui.chat?.id === c.id && $('#chatBody'))) { ui.chat = { id: c.id, msgs: c.msgs || [], busy: true, rec: true }; if ($('#chatBody')) refreshChat(); else openChat(true); } }
+  else if (j.kind === 'meal') {
+    ui.view = 'diet'; ui.addOpen = true;
+    if (!ui.aiResult && !ui.aiBusy) { ui.mealDesc = c.desc || ''; if (c.type) ui.mealType = c.type; ui.aiBusy = true; ui.iaRec = true; }
+    render(); setTimeout(() => $('#mealCard')?.scrollIntoView({ block: 'start' }), 30);
+  }
+}
+function iaUnshow(j) {
+  if (j.kind === 'coach' && ui.chat?.rec) { ui.chat.busy = false; delete ui.chat.rec; refreshChat(); }
+  if (j.kind === 'meal' && ui.iaRec) { ui.aiBusy = false; ui.iaRec = false; render(); }
 }
 // 🔁 Se perdió por el camino: se repite sola en la app (sin foto); si llevaba foto, se pide repetirla
 function iaRetry(j) {
@@ -5331,7 +5347,7 @@ function iaRetry(j) {
     const last = (c.msgs || []).at(-1);
     if (!last || last.role !== 'user') return;
     if (last.photo) return toast('Tu última pregunta al Coach (con foto) no llegó a terminar. Vuelve a mandarla.', 'warn');
-    const abre = (n = 0) => { if (!$('#modalRoot').classList.contains('open')) { ui.chat = { id: c.id, msgs: c.msgs.slice(0, -1), busy: false }; openChat(true); chatSend(last.text); } else if (n < 60) setTimeout(() => abre(n + 1), 1500); };
+    const abre = (n = 0) => { const mismo = ui.chat?.id === c.id && $('#chatBody'); if (mismo || !$('#modalRoot').classList.contains('open')) { ui.chat = { id: c.id, msgs: c.msgs.slice(0, -1), busy: false }; if (!mismo) openChat(true); chatSend(last.text); } else if (n < 60) setTimeout(() => abre(n + 1), 1500); };
     return abre();
   }
   if (j.kind === 'meal') {
@@ -5341,8 +5357,9 @@ function iaRetry(j) {
     toast('Termino de calcular tu última comida…'); analyzeMeal();
   }
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(iaRecover, 1200); });
-setTimeout(iaRecover, 3500);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(iaRecover, 150); });
+function iaBoot(n = 0) { if (access.ok) iaRecover(); else if (n < 60) setTimeout(() => iaBoot(n + 1), 250); }
+setTimeout(iaBoot, 100); // en cuanto la app ha arrancado
 
 /* 🤖 Si la IA termina mientras estás fuera de la app (por ejemplo, te has ido a WhatsApp mientras pensaba), te avisa con una notificación.
    Solo si ya diste permiso de notificaciones (🔔 Notificaciones). Funciona mientras el móvil no cierre la app por detrás */
@@ -8093,7 +8110,8 @@ IA_DONE.coach = (reply, ctx) => {
   const c = { id: ctx.id, msgs: [...(ctx.msgs || []), { role: 'model', text: clean, ...(meals.length ? { meals } : {}), ...(blocks.length ? { blocks } : {}), ...(edits.length ? { edits } : {}) }], busy: false };
   saveChatConv(c);
   const abre = (n = 0) => { // si hay otra ventana abierta (novedades, aviso…), se abre en cuanto la cierres
-    if (!$('#modalRoot').classList.contains('open')) { ui.chat = c; openChat(true); }
+    if (ui.chat?.id === c.id && $('#chatBody')) { ui.chat = c; refreshChat(); }
+    else if (!$('#modalRoot').classList.contains('open')) { ui.chat = c; openChat(true); }
     else if (n < 60) setTimeout(() => abre(n + 1), 1500);
     else toast('🤖 El Coach te ha respondido: lo tienes en su historial.');
   };
@@ -8345,6 +8363,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.30.2', ['🔔 Al tocar el aviso de la IA, la app abre directamente la conversación del Coach o la comida en Dieta.'], 'quiet'],
   ['5.30.1', ['🔔 Avisos de la IA más fiables si quitas la app de recientes justo después de preguntar.'], 'quiet'],
   ['5.30.0', ['🔔 Coach y cálculo de comidas: ahora te avisa cuando la IA termina aunque quites la app de recientes o el móvil la cierre. Al volver, tienes la respuesta esperándote.'], 'quiet'],
   ['5.29.0', ['🔐 Caja fuerte de administrador: la clave de lectura, el token de GitHub y el enlace de tu hoja se guardan cifrados con tu PIN y tu código, y vuelven solos a un móvil nuevo al meter tu PIN.'], 'admin'],
