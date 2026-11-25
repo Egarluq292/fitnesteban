@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.31.3';
+const APP_VERSION = '5.32.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4794,6 +4794,124 @@ function qcShow(cx, ops, note, ia = false) {
     copy: async (_, b) => { const o = ui._qc[+b.dataset.i], txt = `🛒 ${o.nombre}${o.olla > 1 ? ` (para ${o.olla} raciones)` : ''}\n` + o.items.map(it => `- ${qcIngTxt(o.olla > 1 ? { ...it, grams: it.grams * o.olla } : it)}`).join('\n'); try { await navigator.clipboard.writeText(txt); toast('Ingredientes copiados: pégalos en WhatsApp o en tus notas'); } catch { toast('No se pudo copiar', 'error'); } }
   });
 }
+/* =========================================================================
+   📋 PLANIFICAR MAÑANA (🧪 administrador y beta). Lo planificado se guarda APARTE (state.mealPlan) y no cuenta en nada
+   (calorías, balance, Coach, estadísticas) hasta que, ese día, pulsas «✓ Me lo he comido». Solo mañana: ni más días ni lista de la compra.
+   «¿Algo especial mañana?» (comer fuera, una boda, entreno de pierna…) cambia el reparto del día.
+   ========================================================================= */
+const mpTomorrow = () => addDays(todayISO(), 1);
+function mpOf(date) { const p = state.mealPlan; return p && p.date === date ? p : null; }
+function mpClean() { const p = state.mealPlan; if (p && p.date < todayISO()) { delete state.mealPlan; persist(); } }
+const mpSum = meals => { const t = { kcal: 0, prot: 0, carbs: 0, fat: 0 }; for (const m of meals) for (const k in t) t[k] += m[k] || 0; for (const k in t) t[k] = Math.round(t[k]); return t; };
+const mpDayName = d => parseISO(d).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' });
+// Ingredientes de la IA → los de la app (como en «¿Qué como?»)
+function mpItems(arr) {
+  return (Array.isArray(arr) ? arr : []).slice(0, 8).map(it => { const pc = it.por100 || it.per100 || {};
+    return { name: String(it.nombre || it.name || '').trim(), uds: String(it.uds || '').trim(), grams: Math.max(1, Math.round(num(it.g ?? it.gramos ?? it.grams))),
+      per100: fixPer100({ kcal: num(pc.kcal), prot: num(pc.prot ?? pc.p), carbs: num(pc.carbs ?? pc.c), fat: num(pc.fat ?? pc.g) }, it.nombre) }; })
+    .filter(it => it.name && it.grams && (it.per100.kcal > 0 || it.per100.prot > 0));
+}
+// Una comida propuesta → comida planificada (revisada como las de «¿Qué como?»; si se aleja mucho, se queda pero con ⚠️)
+function mpMeal(o, kcalSlot) {
+  const tipo = QC_SLOTS.includes(o.tipo) ? o.tipo : 'Otro';
+  if (o.fuera) { const k = Math.max(150, Math.round(num(o.kcal_reservadas) || kcalSlot || 800)); return { id: uid('pl_'), type: tipo, desc: qhTxt(o.nombre || o.titulo, 90) || 'Comida fuera', out: true, kcal: k, prot: 0, carbs: 0, fat: 0 }; }
+  const items = mpItems(o.items); if (!items.length) return null;
+  const base = { nombre: qhTxt(o.nombre || o.titulo, 90) || tipo, items, ...qcSum(items) };
+  const fx = kcalSlot ? qcFix(base, { kcal: kcalSlot }) : null, r = fx || base;
+  return { id: uid('pl_'), type: tipo, desc: r.nombre, items: r.items.map(it => ({ name: it.uds ? `${it.name} (${it.uds})` : it.name, grams: it.grams, per100: { ...it.per100 } })),
+    kcal: r.kcal, prot: r.prot, carbs: r.carbs, fat: r.fat, pasos: qhTxt(o.pasos, 400), ...(fx ? {} : kcalSlot ? { warn: true } : {}) };
+}
+function mpPrompt(ctxTxt, only = null, keep = []) {
+  const st = state.settings, kept = mpSum(keep), left = { kcal: st.targetKcal - kept.kcal, prot: st.targetProt - kept.prot };
+  const slots = only ? [only] : QC_SLOTS, W = slots.reduce((a, tp) => a + QC_W[tp], 0);
+  const recent = [...new Set(QC_SLOTS.flatMap(tp => qcRecent(tp)))].slice(0, 20);
+  return `Eres un dietista práctico de España. Planifica ${only ? `SOLO ${qcDe(only).toUpperCase()}` : 'TODAS las comidas'} de MAÑANA (${mpDayName(mpTomorrow())}) para ${profileText()}.
+Objetivo del día completo: ${st.targetKcal} kcal, ${st.targetProt} g de proteína, ${st.targetCarbs} g de hidratos, ${st.targetFat} g de grasa.
+${keep.length ? `Ya tiene planificado: ${keep.map(m => `${m.type}: ${m.desc} (${Math.round(m.kcal)} kcal)`).join('; ')}. Para lo que planifiques ahora quedan unas ${Math.max(0, Math.round(left.kcal))} kcal y ${Math.max(0, Math.round(left.prot))} g de proteína.\n` : ''}Reparto orientativo: ${slots.map(tp => `${tp} ~${Math.round((keep.length ? left.kcal : st.targetKcal) * QC_W[tp] / W)} kcal`).join(', ')}.
+${ctxTxt ? `LO QUE HARÁ MAÑANA (tenlo muy en cuenta): «${ctxTxt}».
+- Si come o cena FUERA (restaurante, boda, comida familiar, de empresa…), esa comida va con "fuera":true, sin items, con "kcal_reservadas" realistas para ese tipo de comida, y el resto del día más ligero y con más proteína para compensar sin pasar hambre.
+- Si entrena, más hidratos en la comida de antes y la de después.
+- Si va de viaje o trabaja fuera, comidas para llevar (táper o bocadillo) que aguanten sin nevera unas horas.\n` : ''}${recent.length ? `Estos días ya ha comido: ${recent.join('; ')}. Propón platos diferentes.\n` : ''}${QC_RULES}${algPrompt()}
+Para cada ingrediente da su peso en gramos (en crudo si se cocina; si va por unidades, pon también las unidades) y sus valores por 100 g, realistas (tablas españolas).
+Responde SOLO con JSON: {"comidas":[{"tipo":"Desayuno|Comida|Puente|Cena","nombre":"…","fuera":false,"kcal_reservadas":0,"items":[{"nombre":"Merluza","g":150,"uds":"","por100":{"kcal":0,"prot":0,"carbs":0,"fat":0}}],"pasos":"una frase"}],"nota":"una frase útil o vacío"}`;
+}
+async function mpAsk(ctxTxt, only = null) {
+  const p0 = mpOf(mpTomorrow()), keep = only ? (p0?.meals || []).filter(m => m.type !== only) : [];
+  openModal(`<div class="text-center py-6"><span class="spinner" style="width:34px;height:34px;border-width:3px;border-color:rgba(34,211,238,.25);border-top-color:#22d3ee"></span><h3 class="modal-title mt-3">${only ? `Buscando otra idea para ${esc(qcDe(only))}…` : 'Planificando tu día de mañana…'}</h3><p class="text-sm text-mute">Con tus objetivos${ctxTxt ? ' y lo que vas a hacer' : ''}.</p><div class="mt-4">${iaAskHTML()}</div></div>`, { noClose: true });
+  try {
+    const raw = await callGemini([{ text: mpPrompt(ctxTxt, only, keep) }], { temperature: 0.5, timeout: 60000, relay: { kind: 'plan', ctx: { ctxTxt, only }, title: '📋 Ya tienes planificado mañana', cuerpo: 'Ábrelo para revisarlo.' } });
+    iaNotify('📋 Ya tienes planificado mañana', 'Ábrelo para revisarlo.', 'diet');
+    mpApply(raw, ctxTxt, only);
+  } catch (e) {
+    const why = String(e?.message || 'No ha respondido.').trim();
+    openModal(`<div class="text-center text-4xl">😕</div><h3 class="modal-title text-center">No he podido planificarlo</h3><p class="text-sm text-mute text-center">${esc(why)}</p>
+      <button class="btn-primary w-full mt-3" data-mact="again" type="button">🔄 Reintentar</button><button class="btn-ghost w-full mt-2" data-mact="back" type="button">Volver</button>`, { again: () => mpAsk(ctxTxt, only), back: () => mpModal() });
+  }
+}
+function mpApply(raw, ctxTxt, only) {
+  const d = parseJSONLoose(raw), st = state.settings, T1 = mpTomorrow();
+  const p0 = mpOf(T1), keep = only ? (p0?.meals || []).filter(m => m.type !== only) : [];
+  const list = (Array.isArray(d.comidas) ? d.comidas : []).filter(o => !only || o.tipo === only || (d.comidas.length === 1));
+  const fuera = list.filter(o => o.fuera).reduce((a, o) => a + (num(o.kcal_reservadas) || 0), 0) + mpSum(keep).kcal;
+  const free = list.filter(o => !o.fuera).map(o => QC_SLOTS.includes(o.tipo) ? o.tipo : only).filter(Boolean), W = free.reduce((a, tp) => a + (QC_W[tp] || 10), 0) || 1;
+  const meals = list.map(o => { const tp = QC_SLOTS.includes(o.tipo) ? o.tipo : only; return mpMeal({ ...o, tipo: tp }, o.fuera ? 0 : Math.max(120, Math.round((st.targetKcal - fuera) * (QC_W[tp] || 10) / W))); }).filter(Boolean);
+  if (!meals.length) throw new Error('vacío');
+  state.mealPlan = { date: T1, ctx: ctxTxt || p0?.ctx || '', note: qhTxt(d.nota, 400) || (only ? p0?.note || '' : ''), meals: [...keep, ...meals].sort((a, b) => QC_SLOTS.indexOf(a.type) - QC_SLOTS.indexOf(b.type)) };
+  persist(); mpModal();
+}
+// Lo de un día (hoy u otro) copiado como plan de mañana
+function mpCopyFrom(date) {
+  const ms = mealsOf(date); if (!ms.length) return toast('Ese día no tiene comidas registradas', 'warn');
+  state.mealPlan = { date: mpTomorrow(), ctx: mpOf(mpTomorrow())?.ctx || '', note: '', meals: ms.map(m => ({ ...clone(mealRecord(m, uid('pl_'))), type: m.type || 'Otro' })) };
+  persist(); mpModal(); toast('Copiado como plan de mañana ✓');
+}
+function mpModal() {
+  mpClean();
+  const T1 = mpTomorrow(), p = mpOf(T1), st = state.settings, meals = p?.meals || [], tot = mpSum(meals);
+  const off = meals.length && Math.abs(tot.kcal - st.targetKcal) > st.targetKcal * 0.1;
+  const row = m => `<div class="plan-row"><div class="min-w-0 flex-1"><div class="text-[10.5px] font-black tracking-widest text-mute">${esc(m.type.toUpperCase())}${m.warn ? ' · <span class="text-amber-300">⚠️ revisa cantidades</span>' : ''}</div>
+      <div class="font-bold text-[14px] leading-snug">${m.out ? '🍽️ ' : ''}${esc(m.desc)}</div>
+      <div class="text-[11px] font-mono mt-0.5">${m.out ? `<span class="${MAC.kcal.text}">~${Math.round(m.kcal)} kcal reservadas</span>` : macroLine(m)}</div>
+      ${m.items?.length ? `<div class="text-[11px] text-mute mt-0.5">${esc(m.items.map(it => `${it.name} ${it.grams} g`).join(' · '))}</div>` : ''}</div>
+      <div class="flex flex-col gap-1 shrink-0">${QC_SLOTS.includes(m.type) ? `<button class="chip chip-sm" data-mact="otra" data-t="${esc(m.type)}" type="button">↻ Otra</button>` : ''}<button class="chip chip-sm" data-mact="del" data-id="${esc(m.id)}" type="button">✕</button></div></div>`;
+  openModal(`<h3 class="modal-title">📋 Mañana · ${esc(mpDayName(T1))}</h3>
+    <p class="text-[12px] text-mute -mt-1">Lo planificado no cuenta hasta que mañana pulses «✓ Me lo he comido».</p>
+    <div class="lbl mt-2">¿Algo especial mañana? <span class="text-mute font-normal">(opcional)</span></div>
+    <textarea class="field w-full" id="planCtx" rows="2" maxlength="300" placeholder="Ej.: como fuera con la familia · boda por la tarde · entreno pierna por la mañana · viaje en coche">${esc(p?.ctx || '')}</textarea>
+    <button class="btn-primary w-full mt-2" data-mact="ia" type="button">${meals.length ? '✨ Rehacer el día con IA' : '✨ Planificar el día con IA'}</button>
+    ${mealsOf(todayISO()).length && !meals.length ? '<button class="btn-ghost w-full mt-2" data-mact="copy" type="button">⧉ Copiar lo de hoy</button>' : ''}
+    ${meals.length ? `<div class="plan-tot ${off ? 'plan-off' : ''}"><span>Previsto: <b>${tot.kcal}</b> / ${st.targetKcal} kcal · P <b>${tot.prot}</b> / ${st.targetProt} g${meals.some(m => m.out) ? ' <span class="text-mute">(la proteína, sin contar lo de fuera)</span>' : ''}</span>${off ? `<span class="text-amber-300 text-[11px] block">⚠️ Se aleja más de un 10 % de tu objetivo: cambia alguna comida con «↻ Otra».</span>` : ''}</div>
+      ${p.note ? `<p class="text-[12px] text-slate-300 mt-2">${esc(p.note)}</p>` : ''}
+      <div class="mt-2">${meals.map(row).join('')}</div>
+      <button class="btn-ghost w-full mt-3 text-rose-300" data-mact="clear" type="button">Borrar el plan de mañana</button>` : ''}`, {
+    ia: root => { const c = $('#planCtx', root)?.value.trim() || ''; if (!state.settings.apiKey) return toast('Necesitas tu clave de Gemini (Ajustes → IA)', 'warn'); mpAsk(c); },
+    otra: (root, b) => { const c = $('#planCtx', root)?.value.trim() || p?.ctx || ''; if (!state.settings.apiKey) return toast('Necesitas tu clave de Gemini (Ajustes → IA)', 'warn'); mpAsk(c, b.dataset.t); },
+    del: (_, b) => { p.meals = p.meals.filter(m => m.id !== b.dataset.id); persist(); mpModal(); },
+    copy: () => mpCopyFrom(todayISO()),
+    clear: () => { delete state.mealPlan; persist(); closeModal(); render(); toast('Plan de mañana borrado'); }
+  });
+}
+// El día que toca: lo planificado sale arriba de cada comida, con ✓ (se registra tal cual), ✏️ (lo ajustas antes) y ✕
+function mpRowsHTML(tp) {
+  const p = mpOf(todayISO()); if (!p || ui.dietDate !== todayISO()) return '';
+  return p.meals.filter(m => (m.type || 'Otro') === tp).map(m => `<div class="plan-today"><span class="min-w-0 flex-1"><span class="block text-[10.5px] font-black tracking-widest text-cyan-300">📋 PLANIFICADO</span>
+    <span class="block text-sm font-semibold">${m.out ? '🍽️ ' : ''}${esc(m.desc)}</span><span class="block text-[11px] font-mono">${m.out ? `~${Math.round(m.kcal)} kcal reservadas` : macroLine(m)}</span></span>
+    <span class="flex gap-1 shrink-0"><button class="plan-ok" data-act="planOk" data-id="${esc(m.id)}" type="button" aria-label="Me lo he comido">✓</button><button class="plan-ed" data-act="planEd" data-id="${esc(m.id)}" type="button" aria-label="Ajustar">✏️</button><button class="plan-ed" data-act="planDel" data-id="${esc(m.id)}" type="button" aria-label="Quitar">✕</button></span></div>`).join('');
+}
+function mpCardHTML() {
+  if (ui.dietDate !== todayISO()) return '';
+  const p = mpOf(mpTomorrow()), n = p?.meals.length || 0;
+  return `<button class="d2-add-empty d2-add-otro plan-card" data-act="planOpen" type="button">📋 ${n ? `Mañana: ${n} ${n === 1 ? 'comida planificada' : 'comidas planificadas'} · ~${mpSum(p.meals).kcal} kcal` : 'Planificar mañana'}</button>`;
+}
+function mpTake(id, how) {
+  const p = mpOf(todayISO()), m = p?.meals.find(x => x.id === id); if (!m) return;
+  p.meals = p.meals.filter(x => x.id !== id); if (!p.meals.length) delete state.mealPlan;
+  if (how === 'del') { persist(); render(); return toast('Quitado del plan'); }
+  if (m.out) { persist(); render(); return outMealModal(); }
+  if (how === 'ok') { addMeal(todayISO(), m); ui._animRings = true; render(); return toast(`✓ ${m.desc} registrado`); }
+  persist(); mealFromChat({ title: m.desc, type: m.type, items: m.items || [] }, '📋 De tu plan de mañana: ajusta lo que de verdad comas y pulsa Registrar.');
+}
+
 function renderDiet() {
   const date = ui.dietDate;
   const isToday = date === todayISO();
@@ -4823,7 +4941,7 @@ function renderDiet() {
     const sub = items.reduce((a, m) => a + m.kcal, 0), subP = items.reduce((a, m) => a + (m.prot || 0), 0);
     const low = PROT_TYPES.includes(tp) && items.length && subP < minProt();
     const yd = yday.filter(m => (m.type || 'Otro') === tp);
-    if (!items.length && tp === 'Otro') return `<button class="d2-add-empty d2-add-otro" data-act="addFor" data-type="Otro" type="button">＋ Picoteo u otra cosa</button>`;
+    if (!items.length && tp === 'Otro') return `${mpRowsHTML('Otro')}<button class="d2-add-empty d2-add-otro" data-act="addFor" data-type="Otro" type="button">＋ Picoteo u otra cosa</button>`;
     const open = items.length && !!(ui.dietOpen || {})[tp];
     return `<div class="d2-group">
       <div class="d2-gh">
@@ -4836,12 +4954,12 @@ function renderDiet() {
         ${items.length ? `<button class="d2-fold ${open ? 'd2-fold-on' : ''}" data-act="dietFold" data-type="${tp}" type="button" aria-label="${open ? 'Plegar' : 'Desplegar'} ${tp}"><span class="d2-tri"></span></button>` : ''}
         <button class="d2-plus" data-act="addFor" data-type="${tp}" type="button" aria-label="Añadir a ${tp}">＋</button>
       </div>
-      ${!open ? '' : items.map(m => { const q = mealQty(m); return `<div class="relative"><button class="d2-meal ${ui.editing?.id === m.id ? 'd2-meal-on' : ''} ${q ? 'd2-meal-q' : ''}" data-act="mealMenu" data-id="${esc(m.id)}" type="button">
+      ${mpRowsHTML(tp)}${!open ? '' : items.map(m => { const q = mealQty(m); return `<div class="relative"><button class="d2-meal ${ui.editing?.id === m.id ? 'd2-meal-on' : ''} ${q ? 'd2-meal-q' : ''}" data-act="mealMenu" data-id="${esc(m.id)}" type="button">
         <span class="min-w-0 flex-1 text-left"><span class="block text-sm font-semibold truncate">${isFavMeal(normName(m.desc)) ? '<span class="text-amber-300">★ </span>' : ''}${esc(m.desc || tp)}</span>
         <span class="block text-[11px] font-mono mt-0.5">${macroLine(m)}</span></span><span class="text-mute text-lg leading-none">⋯</span></button>${q ? `<span class="d2-qty"><button data-act="mealQty" data-id="${esc(m.id)}" data-d="-1" type="button" aria-label="Una menos" ${q.n <= 1 ? 'disabled' : ''}>−</button><b>${q.n}</b><button data-act="mealQty" data-id="${esc(m.id)}" data-d="1" type="button" aria-label="Una más">＋</button></span>` : ''}</div>`; }).join('')}
       ${!items.length && yd.length ? `<button class="d2-add-empty" data-act="repeatYday" data-type="${tp}" type="button">↻ Repetir el de ayer <span class="text-mute font-normal">· ${esc(yd.map(m => m.desc).join(' + ').slice(0, 38))}</span></button>` : ''}
     </div>`;
-  }).join('') + (canBeta() ? `<button class="d2-add-empty d2-add-otro" data-act="outMeal" type="button">🍽️ Comida fuera o copas</button>` : '');
+  }).join('') + (canBeta() ? `<button class="d2-add-empty d2-add-otro" data-act="outMeal" type="button">🍽️ Comida fuera o copas</button>` : '') + mpCardHTML();
 
   const over = leftK < 0;
   const hint = !mealsOf(date).length ? (isToday ? 'Aún no has registrado nada hoy. Toca ＋ en la comida que toque.' : 'Sin comidas registradas este día.')
@@ -5604,6 +5722,7 @@ function iaShow(j) {
   if (iaShow.id === j.id) return; iaShow.id = j.id;
   const c = j.ctx || {};
   if (j.kind === 'coach') { if (!$('#modalRoot').classList.contains('open') || (ui.chat?.id === c.id && $('#chatBody'))) { ui.chat = { id: c.id, msgs: c.msgs || [], busy: true, rec: true }; if ($('#chatBody')) refreshChat(); else openChat(true); } }
+  else if (j.kind === 'plan') { if (!$('#modalRoot').classList.contains('open')) { ui.view = 'diet'; render(); openModal('<div class="text-center py-6"><span class="spinner" style="width:34px;height:34px;border-width:3px;border-color:rgba(34,211,238,.25);border-top-color:#22d3ee"></span><h3 class="modal-title mt-3">Recogiendo tu plan de mañana…</h3></div>', { noClose: true }); } }
   else if (j.kind === 'qh') { if (!$('#modalRoot').classList.contains('open')) { ui.view = 'train'; render(); openModal('<div class="text-center py-6"><span class="spinner" style="width:34px;height:34px;border-width:3px;border-color:rgba(34,211,238,.25);border-top-color:#22d3ee"></span><h3 class="modal-title mt-3">Recogiendo tu entreno…</h3></div>', { noClose: true }); } }
   else if (j.kind === 'meal') {
     ui.view = 'diet'; ui.addOpen = true;
@@ -5613,6 +5732,7 @@ function iaShow(j) {
 }
 function iaUnshow(j) {
   if (j.kind === 'qh' && $('#modalRoot .modal-title')?.textContent === 'Recogiendo tu entreno…') closeModal();
+  if (j.kind === 'plan' && $('#modalRoot .modal-title')?.textContent === 'Recogiendo tu plan de mañana…') closeModal();
   if (j.kind === 'coach' && ui.chat?.rec) { ui.chat.busy = false; delete ui.chat.rec; refreshChat(); }
   if (j.kind === 'meal' && ui.iaRec) { ui.aiBusy = false; ui.iaRec = false; render(); }
 }
@@ -5620,6 +5740,7 @@ function iaUnshow(j) {
 function iaRetry(j) {
   const c = j.ctx || {};
   if (j.kind === 'qh') { if (canBeta()) { toast('Tu entreno no llegó a prepararse. Vuelve a pulsar «Proponer».', 'warn'); queHagoModal(c.c || {}); } return; }
+  if (j.kind === 'plan') { toast('El plan de mañana no llegó a prepararse. Vuelve a pulsar «Planificar».', 'warn'); ui.view = 'diet'; render(); mpModal(); return; }
   if (Date.now() - j.at > 6 * 3600000 || !state.settings.apiKey) return;
   if (j.kind === 'coach') {
     const last = (c.msgs || []).at(-1);
@@ -5709,6 +5830,8 @@ function mealApply(raw, desc) {
 }
 // 🏋️ «¿Qué hago hoy?» recogido del servidor (el móvil cerró la app mientras la IA lo preparaba)
 IA_DONE.qh = (raw, ctx) => { const c = ctx.c || qhCfg(); let r; try { r = qhParse(raw, c); } catch { r = qhLocal(c); } ui.view = 'train'; render(); qhShow(r, c); };
+// 📥 Plan de mañana recogido del servidor (el móvil cerró la app mientras la IA lo preparaba)
+IA_DONE.plan = (raw, ctx) => { try { ui.view = 'diet'; render(); mpApply(raw, ctx.ctxTxt || '', ctx.only || null); } catch { toast('No he podido leer el plan de la IA. Vuelve a probar.', 'warn'); } };
 IA_DONE.meal = (raw, ctx) => {
   try {
     if (ui.aiResult || ui.aiBusy) { ui.view = 'diet'; render(); return toast('La IA terminó otra comida mientras estabas fuera, pero estás con otra: vuelve a pedirla cuando acabes.', 'warn'); }
@@ -8098,7 +8221,12 @@ Reglas:
 {"opciones":[{"titulo":"nombre corto","tipo":"Desayuno|Comida|Puente|Cena|Otro","items":[{"nombre":"alimento","gramos":número,"por100":{"kcal":n,"p":n,"c":n,"g":n}}]}]}
 \`\`\`
   Una opción por cada alternativa que propongas. Valores por 100 g del alimento tal como se come. Si no propones comida concreta, no añadas el bloque.
-- Si te pide CREAR un bloque o rutina de entreno: si no sabe qué material tiene, cuántos días por semana entrena o cuánto tiempo, pregúntaselo antes (en una sola pregunta corta). Usa SOLO el material que diga que tiene (si dice que nada, solo peso corporal y objetos de casa). Ten en cuenta su nivel, sus sesiones, retos y molestias. Resume el bloque en el texto (días y ejercicios) y añade al final un bloque oculto EXACTAMENTE con este formato (no lo menciones):
+${true ? `- Si te pide PLANIFICAR lo que comerá MAÑANA (todo el día, o porque mañana tiene algo especial: come fuera, un evento, un entreno…): propón el día entero teniendo en cuenta lo que haga mañana y, en vez del bloque «comida», añade al final:
+\`\`\`manana
+{"contexto":"lo que hará mañana, si lo ha dicho","comidas":[{"tipo":"Desayuno|Comida|Puente|Cena","nombre":"…","fuera":false,"kcal_reservadas":0,"items":[{"nombre":"Merluza","g":150,"uds":"","por100":{"kcal":0,"prot":0,"carbs":0,"fat":0}}]}]}
+\`\`\`
+  Si come o cena fuera, esa comida va con "fuera":true, sin items y con "kcal_reservadas" realistas. Solo para mañana: nunca planifiques otros días.
+` : ''}- Si te pide CREAR un bloque o rutina de entreno: si no sabe qué material tiene, cuántos días por semana entrena o cuánto tiempo, pregúntaselo antes (en una sola pregunta corta). Usa SOLO el material que diga que tiene (si dice que nada, solo peso corporal y objetos de casa). Ten en cuenta su nivel, sus sesiones, retos y molestias. Resume el bloque en el texto (días y ejercicios) y añade al final un bloque oculto EXACTAMENTE con este formato (no lo menciones):
 \`\`\`bloque
 {"nombre":"NOMBRE CORTO EN MAYÚSCULAS (máx. 30)","icono":"un emoji","veces_por_semana":número de sesiones por semana que recomiendas,"dias":[{"label":"DÍA A (máx. 8)","titulo":"título del día","ejercicios":[{"grupo":"Pecho|Espalda|Pierna|Hombro|Brazos|Core|Cardio…","nombre":"nombre del ejercicio en español","series":3,"reps_min":8,"reps_max":12,"descanso_s":90,"peso_corporal":true,"por_tiempo":false,"nota":"consejo técnico de máx. 10 palabras","alternativas":[{"nombre":"alternativa con el mismo material","nota":"…"}]}]}]}
 \`\`\`
@@ -8150,7 +8278,12 @@ function chatMeals(reply) {
     try { const e = chatEdit(parseJSONLoose(js)); if (e) edits.push(e); } catch { /* ilegible: se ignora */ }
     return '';
   }).trim();
-  return { text: text3, meals: meals.slice(0, 4), blocks: blocks.slice(0, 1), edits: edits.slice(0, 2) };
+  let plans = []; // 📋 plan de mañana propuesto por el Coach
+  const text4 = text3.replace(/```manana\s*([\s\S]*?)```/gi, (_, js) => {
+    try { const d = parseJSONLoose(js); if (Array.isArray(d.comidas) && d.comidas.length) plans.push({ ctx: qhTxt(d.contexto, 300), json: JSON.stringify({ comidas: d.comidas }), n: d.comidas.length }); } catch { /* ilegible: se ignora */ }
+    return '';
+  }).trim();
+  return { text: text4, meals: meals.slice(0, 4), blocks: blocks.slice(0, 1), edits: edits.slice(0, 2), plans: plans.slice(0, 1) };
 }
 /* Bloque de entreno propuesto por el coach → mismo formato que los bloques de la biblioteca */
 /* Ejercicio en el formato del coach («ejercicios» de ```bloque``` y ```cambios```) → ejercicio de la app */
@@ -8331,7 +8464,7 @@ function chatBodyHTML() {
       <div class="text-[11px] font-bold uppercase tracking-wider text-brand">✏️ Cambios en ${esc(ed.name)}</div>
       <ul class="text-[13px] leading-snug space-y-1 mt-1.5">${ed.lines.map(l => `<li>${l}</li>`).join('')}</ul>
       ${ed.ops.length ? (ed.applied ? `<div class="grid grid-cols-2 gap-2 mt-2.5"><button class="chat-meal items-center justify-center text-center" data-mact="editGo" data-m="${i}" data-o="${j}" type="button"><span>✓ Ver bloque</span></button><button class="chat-meal items-center justify-center text-center !bg-transparent" data-mact="editUndo" data-m="${i}" data-o="${j}" type="button"><span>↩️ Deshacer</span></button></div>`
-        : `<button class="chat-meal items-center justify-center text-center w-full mt-2.5" data-mact="editApply" data-m="${i}" data-o="${j}" type="button"><span>Aplicar cambios</span></button>`) : ''}</div>`).join('')}</div>`).join('')
+        : `<button class="chat-meal items-center justify-center text-center w-full mt-2.5" data-mact="editApply" data-m="${i}" data-o="${j}" type="button"><span>Aplicar cambios</span></button>`) : ''}</div>`).join('')}${(m.plans || []).map((pl, j) => `<button class="chat-meal w-full mt-2" data-mact="planGo" data-m="${i}" data-o="${j}" type="button"><span>📋 ${pl.saved ? 'Ver el plan de mañana' : 'Guardar como plan de mañana'}</span><span class="text-[11px] opacity-80">${pl.n} ${pl.n === 1 ? 'comida' : 'comidas'}${pl.ctx ? ' · ' + esc(pl.ctx) : ''}</span></button>`).join('')}</div>`).join('')
     + (c.busy ? '<div class="chat-ai chat-typing"><span></span><span></span><span></span></div>' + iaAskHTML() : '');
 }
 /* Historial: conversaciones de los últimos 7 días (máx. 20). Solo la conversación abierta se envía a Gemini. */
@@ -8389,8 +8522,8 @@ async function chatSend(text, img = null) {
     if (!c.id) c.id = uid('c_');
     const ctx = { id: c.id, msgs: c.msgs.filter(m => !m.error).slice(-30).map(({ img, ...m }) => m) };
     const reply = await callGemini(null, { json: false, contents, system: chatSystem(), temperature: 0.4, timeout: 60000, relay: { kind: 'coach', ctx, title: '🤖 El Coach ya te ha respondido', conTexto: true } });
-    const { text: clean, meals, blocks, edits } = chatMeals(reply);
-    c.msgs.push({ role: 'model', text: clean, ...(meals.length ? { meals } : {}), ...(blocks.length ? { blocks } : {}), ...(edits.length ? { edits } : {}) });
+    const { text: clean, meals, blocks, edits, plans } = chatMeals(reply);
+    c.msgs.push({ role: 'model', text: clean, ...(meals.length ? { meals } : {}), ...(blocks.length ? { blocks } : {}), ...(edits.length ? { edits } : {}), ...(plans.length ? { plans } : {}) });
     saveChatConv(c);
     iaNotify('🤖 El Coach ya te ha respondido', clean, 'coach');
   } catch (e) {
@@ -8399,8 +8532,8 @@ async function chatSend(text, img = null) {
 }
 // 📥 Respuesta del Coach recogida del servidor (el móvil cerró la app mientras pensaba): se guarda en tu historial y se abre la conversación
 IA_DONE.coach = (reply, ctx) => {
-  const { text: clean, meals, blocks, edits } = chatMeals(reply);
-  const c = { id: ctx.id, msgs: [...(ctx.msgs || []), { role: 'model', text: clean, ...(meals.length ? { meals } : {}), ...(blocks.length ? { blocks } : {}), ...(edits.length ? { edits } : {}) }], busy: false };
+  const { text: clean, meals, blocks, edits, plans } = chatMeals(reply);
+  const c = { id: ctx.id, msgs: [...(ctx.msgs || []), { role: 'model', text: clean, ...(meals.length ? { meals } : {}), ...(blocks.length ? { blocks } : {}), ...(edits.length ? { edits } : {}), ...(plans.length ? { plans } : {}) }], busy: false };
   saveChatConv(c);
   const abre = (n = 0) => { // si hay otra ventana abierta (novedades, aviso…), se abre en cuanto la cierres
     if (ui.chat?.id === c.id && $('#chatBody')) { ui.chat = c; refreshChat(); }
@@ -8532,6 +8665,7 @@ function openChat(keep) {
     chip: (r, b) => chatSend(CHAT_CHIPS[+b.dataset.i]),
     toDiet: (r, b) => { const ml = ui.chat.msgs[+b.dataset.m]?.meals?.[+b.dataset.o]; if (ml) mealFromChat(ml); },
     recipe: (r, b) => recipeSheet(+b.dataset.m, +b.dataset.o),
+    planGo: (r, b) => { const pl = ui.chat.msgs[+b.dataset.m]?.plans?.[+b.dataset.o]; if (!pl) return; if (!pl.saved) { try { mpApply(pl.json, pl.ctx, null); pl.saved = true; saveChatConv(ui.chat); } catch { toast('No he podido leer ese plan', 'warn'); } } else mpModal(); },
     editApply: (r, b) => { const ed = ui.chat.msgs[+b.dataset.m]?.edits?.[+b.dataset.o]; if (ed && !ed.applied) applyChatEdit(ed); },
     editUndo: (r, b) => { const ed = ui.chat.msgs[+b.dataset.m]?.edits?.[+b.dataset.o]; if (ed?.applied) undoChatEdit(ed); },
     editGo: (r, b) => { const ed = ui.chat.msgs[+b.dataset.m]?.edits?.[+b.dataset.o]; const p = ed && state.plan.programs.find(x => x.id === ed.prog); if (p) { closeModal(); openBlock('p:' + p.id); } },
@@ -8656,6 +8790,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.32.0', ['📋 Nuevo en Dieta: «Planificar mañana». Cuéntale qué harás mañana (comes fuera, un evento, entrenas…) y la IA te prepara el día; también puedes copiar lo de hoy o pedírselo al Coach. Lo planificado no cuenta hasta que, ese día, pulses «✓ Me lo he comido».']],
   ['5.31.3', ['🤔 «¿Qué hago hoy?»: si la IA falla, el aviso se lee entero y la propuesta de la biblioteca reparte mejor el tiempo (más ejercicios, descansos contenidos).'], 'quiet'],
   ['5.31.2', ['📥 Bandeja de mensajes (admin): solo descarga los mensajes nuevos en vez de todas las conversaciones cada vez; menos datos y menos batería.'], 'admin'],
   ['5.31.1', ['⚡ Acceso (admin): los usuarios activos salen en cuanto contesta Supabase, sin esperar a la hoja de Google; la caja fuerte ya no retrasa la carga.'], 'admin'],
@@ -9104,6 +9239,7 @@ const GUIDE = [
     'El cardio aparece en Dieta (quemado y balance neto), pero <b>no amplía</b> lo que te queda por comer: tu objetivo es siempre el de Ajustes. Los cálculos de ejercicio (y los relojes) tienden a pasarse, y así el déficit es más fiable.'
   ]],
   ['🥗 Dieta y raciones', [
+    '📋 <b>Planificar mañana</b> (al final de «Hoy has comido»): cuéntale qué harás mañana si es algo especial (comes fuera, una boda, entrenas pierna, vas de viaje…) y la IA te prepara el día entero; o copia lo de hoy. Cambia una comida con «↻ Otra». Lo planificado <b>no cuenta</b> en tus calorías hasta que, al día siguiente, pulsas <b>✓</b> en cada comida (o ✏️ para ajustar antes). También se lo puedes pedir al Coach: «planifícame mañana».',
     '🍽️ <b>¿Qué como?</b> (debajo de lo que te queda) te da ideas que encajan en tus kcal y proteína de hoy: para cerrar el día, con lo que tienes en casa o con una foto de la nevera. Cada idea se añade con un toque y puedes copiar sus ingredientes para la compra. Con la clave de Gemini las ideas son mucho mejores.',
     'En «Hoy has comido» cada comida (Desayuno, Comida, Puente, Cena) sale <b>plegada</b> con sus kcal, proteína, carbohidratos y grasas; despliégala con la flechita ▶ o tocando su nombre. Su <b>＋</b> abre el panel para añadir. Si esa comida está vacía y ayer la registraste, «↻ Repetir el de ayer» la copia con un toque.',
     'Foto (cámara o galería) y/o descripción. Lo que escribas <b>manda</b>: «200 g de pollo» fija esa cantidad. Con 🎤 puedes dictarla en vez de escribirla.',
@@ -10382,6 +10518,8 @@ const actions = {
   addClose: () => { ui.addOpen = false; ui.aiResult = null; ui.editing = null; ui.img = null; render(); },
   dietGo: b => { if (dietPending()) return toast('Termina o cierra la comida que estás añadiendo', 'warn'); ui.dietDate = b.dataset.date; ui._animRings = true; render(); },
   outMeal: () => outMealModal(),
+  planOpen: () => mpModal(),
+  planOk: b => mpTake(b.dataset.id, 'ok'), planEd: b => mpTake(b.dataset.id, 'ed'), planDel: b => mpTake(b.dataset.id, 'del'),
   repeatYday: b => {
     const tp = b.dataset.type, src = mealsOf(addDays(ui.dietDate, -1)).filter(m => (m.type || 'Otro') === tp);
     src.forEach(m => { const c = clone(m); delete c.id; addMeal(ui.dietDate, c); });
