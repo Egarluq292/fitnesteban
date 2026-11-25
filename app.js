@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.30.2';
+const APP_VERSION = '5.30.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -5266,8 +5266,9 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 // La nota de «consulta pendiente» se guarda también en IndexedDB, que queda escrita en el acto (localStorage puede tardar en guardarse
 // y perderse si el móvil cierra la app enseguida)
 const iaIdb = (mode, fn) => new Promise(res => { try { const o = indexedDB.open('fitnesteban-ia', 1); o.onupgradeneeded = () => o.result.createObjectStore('k'); o.onsuccess = () => { try { const tx = o.result.transaction('k', mode); const r = fn(tx.objectStore('k')); tx.oncomplete = () => { res(r?.result); o.result.close(); }; tx.onerror = tx.onabort = () => { res(null); o.result.close(); }; } catch { res(null); } }; o.onerror = () => res(null); } catch { res(null); } });
-const iaPendSet = v => { lsSet(IAJOB_KEY, v); iaIdb('readwrite', st => v ? st.put(v, 'job') : st.delete('job')); };
-const iaPendGet = async () => lsGet(IAJOB_KEY) || await iaIdb('readonly', st => st.get('job')) || null;
+// la foto de la comida solo va a IndexedDB (cabe de sobra): si la consulta se pierde, se repite sola sin tener que hacerla otra vez
+const iaPendSet = v => { lsSet(IAJOB_KEY, v && v.ctx?.foto ? { ...v, ctx: { ...v.ctx, foto: undefined } } : v); iaIdb('readwrite', st => v ? st.put(v, 'job') : st.delete('job')); };
+const iaPendGet = async () => { const a = lsGet(IAJOB_KEY), b = await iaIdb('readonly', st => st.get('job')); return (b && (!a || b.id === a.id) ? b : a) || b || null; };
 async function iaViaServer(relay, models, body, local) {
   if (!state.settings.apiKey || body.length > 4e6 || !navigator.onLine) return local();
   const job = { id: iaHex(), ...relay, at: Date.now() };
@@ -5317,7 +5318,7 @@ async function iaRecover() {
     if (Date.now() - j.at > 86400000) return iaPendSet(null);
     iaShow(j); // al instante, sin esperar al servidor: ya estás en el sitio donde aparecerá
     const r = await sbCall({ op: 'ia_res', id: j.id }, 20000, SB_IA);
-    if (r.estado === 'pend') { if (Date.now() - j.at < 200000) setTimeout(iaRecover, 3000); else { iaPendSet(null); iaUnshow(j); iaRetry(j); } return; }
+    if (r.estado === 'pend') { if (Date.now() - j.at < 150000) setTimeout(iaRecover, 3000); else { iaPendSet(null); iaUnshow(j); iaRetry(j); } return; }
     iaPendSet(null); iaUnshow(j);
     if (r.estado === 'none' || r.estado == null) return iaRetry(j); // no llegó al servidor (el móvil cerró la app justo al mandarla) o el servidor no pudo terminarla
     if (r.estado === 'ok' && r.res) IA_DONE[j.kind]?.(r.res, j.ctx || {});
@@ -5331,7 +5332,7 @@ function iaShow(j) {
   if (j.kind === 'coach') { if (!$('#modalRoot').classList.contains('open') || (ui.chat?.id === c.id && $('#chatBody'))) { ui.chat = { id: c.id, msgs: c.msgs || [], busy: true, rec: true }; if ($('#chatBody')) refreshChat(); else openChat(true); } }
   else if (j.kind === 'meal') {
     ui.view = 'diet'; ui.addOpen = true;
-    if (!ui.aiResult && !ui.aiBusy) { ui.mealDesc = c.desc || ''; if (c.type) ui.mealType = c.type; ui.aiBusy = true; ui.iaRec = true; }
+    if (!ui.aiResult && !ui.aiBusy) { ui.mealDesc = c.desc || ''; if (c.foto) ui.img = c.foto; if (c.type) ui.mealType = c.type; ui.aiBusy = true; ui.iaRec = true; }
     render(); setTimeout(() => $('#mealCard')?.scrollIntoView({ block: 'start' }), 30);
   }
 }
@@ -5351,10 +5352,10 @@ function iaRetry(j) {
     return abre();
   }
   if (j.kind === 'meal') {
-    if (c.img || !c.desc) { ui.view = 'diet'; render(); return toast('El cálculo de tu última foto no llegó a terminar. Vuelve a hacerla.', 'warn'); }
+    if ((c.img && !c.foto) || (!c.img && !c.desc)) { ui.view = 'diet'; render(); return toast('El cálculo de tu última foto no llegó a terminar. Vuelve a hacerla.', 'warn'); }
     if (ui.aiResult || ui.aiBusy) return;
-    ui.mealDesc = c.desc; ui.img = null; if (c.type) ui.mealType = c.type; ui.addOpen = true; ui.view = 'diet'; render();
-    toast('Termino de calcular tu última comida…'); analyzeMeal();
+    ui.mealDesc = c.desc || ''; ui.img = c.foto || null; if (c.type) ui.mealType = c.type; ui.addOpen = true; ui.view = 'diet'; render();
+    toast(c.foto ? 'Termino de calcular tu última foto…' : 'Termino de calcular tu última comida…'); analyzeMeal();
   }
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(iaRecover, 150); });
@@ -5393,7 +5394,7 @@ Responde SOLO con JSON válido:
 Descripción del usuario: ${desc ? JSON.stringify(desc) : '(sin descripción, usa solo la foto)'}`;
     const parts = [{ text: prompt }];
     if (ui.img) parts.push({ inlineData: { mimeType: 'image/jpeg', data: ui.img.split(',')[1] } });
-    mealApply(await callGemini(parts, { relay: { kind: 'meal', ctx: { desc, type: ui.mealType, img: !!ui.img }, title: '🍽️ Ya tienes los macros de tu comida', cuerpo: `${(desc || 'Tu foto').slice(0, 60)}: ábrela para revisarlos y registrarla.` } }), desc);
+    mealApply(await callGemini(parts, { relay: { kind: 'meal', ctx: { desc, type: ui.mealType, img: !!ui.img, foto: ui.img || undefined }, title: '🍽️ Ya tienes los macros de tu comida', cuerpo: `${(desc || 'Tu foto').slice(0, 60)}: ábrela para revisarlos y registrarla.` } }), desc);
     if (ui.aiPending) { const was = ui.aiPending.auto; ui.aiPending = null; aiPendSave(); if (was) toast(`✅ Ya tengo los macros de «${(desc || 'tu foto').slice(0, 40)}». Revísalos y pulsa Registrar.`); }
   } catch (e) {
     if (e.net) { // sin conexión con Google: no se pierde nada, se calcula solo al volver
@@ -8363,6 +8364,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.30.3', ['🔁 Si una estimación con foto se pierde por el camino, la app la repite sola con la misma foto (ya no hay que volver a hacerla).'], 'quiet'],
   ['5.30.2', ['🔔 Al tocar el aviso de la IA, la app abre directamente la conversación del Coach o la comida en Dieta.'], 'quiet'],
   ['5.30.1', ['🔔 Avisos de la IA más fiables si quitas la app de recientes justo después de preguntar.'], 'quiet'],
   ['5.30.0', ['🔔 Coach y cálculo de comidas: ahora te avisa cuando la IA termina aunque quites la app de recientes o el móvil la cierre. Al volver, tienes la respuesta esperándote.'], 'quiet'],
