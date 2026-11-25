@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.30.3';
+const APP_VERSION = '5.30.4';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -8364,6 +8364,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.30.4', ['📱 Inicio en móviles pequeños: la última tarjeta (Asistente IA) ya no queda tapada por la barra de abajo ni se mueve sola al deslizar.'], 'quiet'],
   ['5.30.3', ['🔁 Si una estimación con foto se pierde por el camino, la app la repite sola con la misma foto (ya no hay que volver a hacerla).'], 'quiet'],
   ['5.30.2', ['🔔 Al tocar el aviso de la IA, la app abre directamente la conversación del Coach o la comida en Dieta.'], 'quiet'],
   ['5.30.1', ['🔔 Avisos de la IA más fiables si quitas la app de recientes justo después de preguntar.'], 'quiet'],
@@ -9565,10 +9566,16 @@ function renderHome() {
 function fitHome() {
   const hc = $('#homeCards'); if (!hc) return;
   const nav = document.querySelector('nav');
-  const h = window.innerHeight - (hc.getBoundingClientRect().top + window.scrollY) - (nav?.offsetHeight || 0) - 12;
-  hc.style.height = Math.max(4 * 92 + 36, h) + 'px';
+  const nh = nav?.offsetHeight || 0, min = 4 * 92 + 36;
+  const h = window.innerHeight - (hc.getBoundingClientRect().top + window.scrollY) - nh - 12;
+  hc.style.height = Math.max(min, h) + 'px';
+  // si no caben (móvil pequeño o tarjetas extra arriba, como el Adviento), se deja hueco abajo para que la barra no tape la última
+  document.body.style.setProperty('--home-pb', h < min ? nh + 16 + 'px' : '0px');
+  fitHome.w = window.innerWidth; fitHome.h = window.innerHeight;
 }
-window.addEventListener('resize', () => { if (ui.view === 'home') fitHome(); });
+// solo se reajusta si cambia de verdad la pantalla (girar, teclado…), no cuando el navegador esconde su barra al deslizar:
+// eso movía las tarjetas solas mientras hacías scroll
+window.addEventListener('resize', () => { if (ui.view === 'home' && (window.innerWidth !== fitHome.w || Math.abs(window.innerHeight - (fitHome.h || 0)) > 150)) fitHome(); });
 /* Mantiene a la vista el bloque activo en la fila de bloques (la fila se repinta en cada render) */
 /* El bloque activo se coloca a la izquierda de la fila (si se puede), dejando ver los siguientes */
 function progScrollFor(row, chip) {
