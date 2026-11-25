@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.30.4';
+const APP_VERSION = '5.31.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -556,7 +556,11 @@ function defaultState() {
   return { version: 4, plan: normalizePlan(clone(DEFAULT_PLAN)), selectedVariants: {}, memory: {}, sessions: [], bodyMetrics: [], meals: {}, cardio: [], reports: [], deload: null, deloadSnooze: '', settings: defaultSettings(), drafts: {}, chat: null, chats: [], retos: {}, accessNames: {}, accessCodes: {}, habitLog: {}, habitCount: {} };
 }
 const safeUrl = u => { const t = String(u || '').trim(); return /^https:\/\/[^\s"'<>]+$/i.test(t) ? t : ''; };
-const videoUrl = v => v.video || `https://www.youtube.com/results?search_query=${encodeURIComponent(v.name + ' técnica correcta')}`;
+const videoUrl = v => { // sin vídeo fijado: búsqueda en YouTube (movilidad y estiramientos, con su propia búsqueda)
+  if (v.video) return v.video;
+  const m = String(v.name).match(/^(movilidad|estiramiento):\s*(.*)$/i);
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(m ? `${m[2]} ${m[1].toLowerCase()} cómo hacerlo` : v.name + ' técnica correcta')}`;
+};
 
 const BW_DEFAULT = new Set(['d2_pullup', 'd3_ss1_pull', 'd3_ss2_push', 'fb_pullup']);
 function normalizeExercise(e) {
@@ -1293,7 +1297,7 @@ function renderTrainHome() {
   const { retos, own, libs, inUse, ppTop, rs } = trainHomeParts();
   const nNew = libs.filter(x => x.nw).length;
   const tc0 = todayCardHTML(), done = tc0.includes('today-done'), tc = done ? '' : tc0, td = trainTodayHTML(), tpk = tc ? todayPick() : null;
-  return `${td}${td && tc ? '<div class="h-2"></div>' : ''}${tc}${tpk?.day?.exercises.length ? '<button class="qc-btn np-btn" data-act="noPuedo" type="button">¿Y si hoy no puedo?</button>' : ''}${trainWeekHTML()}${td || tc ? '<div class="h-3"></div>' : ''}
+  return `${td}${td && tc ? '<div class="h-2"></div>' : ''}${tc}${canBeta() ? '<button class="qc-btn np-btn" data-act="queHago" type="button">🤔 ¿Qué hago hoy?</button>' : tpk?.day?.exercises.length ? '<button class="qc-btn np-btn" data-act="noPuedo" type="button">¿Y si hoy no puedo?</button>' : ''}${trainWeekHTML()}${td || tc ? '<div class="h-3"></div>' : ''}
   ${retos ? galleryCard({ key: 'retos', name: 'RETOS', icon: '🏆', look: RETOS_LOOK, tag: 'Retos de calistenia', menu: false, slim: true,
       sub: rs ? `${rs} ${rs === 1 ? 'reto en marcha' : 'retos en marcha'} · niveles que suben contigo` : 'Flexiones, dominadas, sentadillas… a tu ritmo' }) : ''}
   <div class="h-2"></div>${galleryCard({ key: 'taller', name: 'TALLER DE DOMINADAS', icon: '🎯', look: TALLER_LOOK, tag: 'Taller · 6 semanas', menu: false,
@@ -1614,7 +1618,7 @@ function estimateMinutes(day, d) {
     const { key } = variantOf(e);
     const n = d ? setCount(e, key, d) : baseSets(e);
     const reps = (e.minReps + e.maxReps) / 2;
-    sec += n * (reps * 3 + 15) + Math.max(0, n - 1) * e.rest + 60; // trabajo + descansos + cambio de ejercicio
+    sec += n * ((e.timed ? reps : reps * 3) + 15) + Math.max(0, n - 1) * e.rest + 60; // trabajo (por tiempo: los segundos) + descansos + cambio de ejercicio
   }
   return Math.round(sec / 60 / 5) * 5;
 }
@@ -2862,6 +2866,7 @@ const RETO_MUSCLES = { pullup: 'Dominadas', pushup: 'Flexiones', dips: 'Fondos',
 const musclesCache = new Map();
 function musclesOf(name) {
   const key = String(name || '').toLowerCase();
+  if (/^(movilidad|estiramiento):/.test(key)) return {}; // «Suave» de ¿Qué hago hoy?: no carga músculos
   if (musclesCache.has(key)) return musclesCache.get(key);
   const out = {};
   const add = (list, w) => { for (const m of list) out[m] = Math.max(out[m] || 0, w); };
@@ -3161,6 +3166,7 @@ function npHome(day) { // por cada ejercicio: su versión sin material si ya exi
 }
 function npRestoreSwaps() { // los cambios de «sin material» solo valen el día que se hacen
   const T = todayISO(); let ch = false;
+  for (const d of Object.values(state.drafts || {})) if (d?.tired && d.tired.date !== T) { for (const k of d.tired.keys || []) delete d.counts[k]; delete d.tired; ch = true; }
   for (const d of Object.values(state.drafts || {})) if (d?.swap && d.swap.date !== T) { for (const [id, v] of Object.entries(d.swap.prev)) state.selectedVariants[id] = v; delete d.swap; ch = true; }
   if (ch) persist();
 }
@@ -3234,6 +3240,268 @@ function noPuedoModal() {
       <button class="np-opt" data-mact="hurt" type="button"><span class="text-2xl">🩹</span><span><b>Algo me molesta</b><small>Quito lo que carga esa zona</small></span></button>
     </div>`, { time, home, hurt });
 }
+/* =========================================================================
+   🤔 ¿QUÉ HAGO HOY? (🧪 administrador y beta) — una pantalla, un toque si te vale lo marcado.
+   «Lo que me toca»: sin IA, recorta y adapta tu día (tiempo, molestia, material, cansancio).
+   Fuerza, cardio y suave: una consulta a la IA (por el servidor, con aviso si sales) con tus datos; si no hay IA, la app lo arma sola.
+   El entreno sale en FREE (día «PROPUESTA»), listo para empezar; «⭐ Guardar» lo deja como un día más de FREE.
+   ========================================================================= */
+const QH_FOCUS = [['toca', '📅', 'Lo que me toca'], ['fuerza', '💪', 'Fuerza o músculo'], ['cardio', '🫀', 'Cardio'], ['suave', '🧘', 'Suave o recuperación']];
+const QH_TIME = [15, 30, 45, 60];
+const QH_MOOD = [['cansado', '😮‍💨', 'Cansado'], ['normal', '🙂', 'Normal'], ['tope', '🔥', 'A tope']];
+const QH_PLACE = [['gym', '🏋️', 'Gimnasio'], ['home', '🏠', 'Casa con material'], ['none', '🤸', 'Sin material'], ['out', '🌳', 'Al aire libre']];
+const QH_GEAR = [['db', 'Mancuernas'], ['kb', 'Kettlebell'], ['band', 'Bandas elásticas'], ['pullup', 'Barra de dominadas'], ['trx', 'TRX']];
+const QH_DAY = 'qh'; // el día «PROPUESTA» dentro de FREE
+/* Movilidad y estiramientos (para «Suave»): por tiempo y sin fatiga muscular (musclesOf no los cuenta) */
+const QH_MOB = [['Movilidad: gato-camello', 'A cuatro patas, redondea y arquea la espalda despacio.'], ['Movilidad: rotación torácica a cuatro patas', 'Mano en la nuca, abre el codo al techo. Segundos por lado.'],
+  ['Movilidad: círculos de cadera de pie', 'Manos en la cintura, círculos amplios. Cambia de sentido a mitad.'], ['Movilidad: sentadilla profunda con apoyo', 'Agárrate a algo, baja y quédate abajo respirando.'],
+  ['Movilidad: zancada con giro', 'Zancada larga, gira el tronco hacia la pierna de delante. Segundos por lado.'], ['Movilidad: hombros con palo o toalla', 'Brazos estirados, pasa del frente a la espalda despacio.'],
+  ['Movilidad: tobillo contra la pared', 'Rodilla hacia la pared sin levantar el talón. Segundos por lado.'], ['Estiramiento: flexor de cadera', 'Rodilla atrás en el suelo, cadera adelante, glúteo apretado. Segundos por lado.'],
+  ['Estiramiento: isquiotibiales tumbado', 'Pierna arriba con una toalla, rodilla casi estirada. Segundos por lado.'], ['Estiramiento: glúteo en figura de 4', 'Tumbado, tobillo sobre la rodilla contraria, tira del muslo. Segundos por lado.'],
+  ['Estiramiento: pecho en el marco de la puerta', 'Antebrazo en el marco, gira el cuerpo hacia fuera. Segundos por lado.'], ['Estiramiento: dorsal en el suelo', 'De rodillas, brazos estirados al frente, lleva la cadera atrás.'],
+  ['Estiramiento: cuádriceps de pie', 'Talón al glúteo, rodillas juntas. Segundos por lado.'], ['Estiramiento: gemelo en la pared', 'Pierna de atrás estirada, talón al suelo. Segundos por lado.'],
+  ['Movilidad: respiración en postura del niño', 'Rodillas abiertas, brazos al frente, respira lento hacia la espalda.']];
+const qhIsMob = n => /^(movilidad|estiramiento):/i.test(String(n));
+// Material que necesita cada ejercicio, deducido del nombre: 'gym' = solo en gimnasio
+function qhEq(name) {
+  const n = normTxt(name), t = new Set();
+  if (/polea|maquina|prensa|multipower|smith|hack|contractora|pec deck|landmine|predicador|scott|paralelas|hexagonal|remo en t\b|jalon|cajon|con barra|barra z|pendlay|peso muerto sumo|^peso muerto rumano$|buenos dias|rueda abdominal|lastre|con disco|hiperextensi|press militar|crunch en|gemelo en prensa|sentadilla frontal|press cerrado con barra|en barra/.test(n)) t.add('gym');
+  if (/mancuerna/.test(n)) t.add('db');
+  if (/kettlebell/.test(n)) t.add('kb');
+  if (/banda/.test(n)) t.add('band');
+  if (/dominada|colgado/.test(n)) t.add('pullup');
+  if (/trx/.test(n)) t.add('trx');
+  return t;
+}
+function qhFits(name, cfg) {
+  if (cfg.place === 'gym' || qhIsMob(name)) return true;
+  const t = qhEq(name), x = qhLibOf(name);
+  if (x) { // con la ficha de la biblioteca se sabe mejor: grupo, nota y si es con el peso corporal
+    const txt = normTxt(x[1] + ' ' + x[2]);
+    if (x[0] === 'Kettlebell') t.add('kb');
+    if (x[0] === 'Bandas elásticas') t.add('band');
+    if (/mancuerna/.test(txt)) t.add('db');
+    if (/polea|maquina|banco scott|paralelas|barra\b/.test(txt) && !t.size) t.add('gym');
+    if (!x[8] && !t.size) t.add('gym'); // con carga y sin material de casa reconocible: solo gimnasio
+  }
+  if (t.has('gym')) return false;
+  const gear = cfg.place === 'home' ? new Set(cfg.gear || []) : new Set();
+  return [...t].every(x => gear.has(x));
+}
+const qhLibOf = name => { const k = normTxt(name).trim(); return exLibAll().find(x => normTxt(x[1]) === k) || exLibAll().find(x => x[9].some(a => normTxt(a[0]) === k)); };
+function qhExFromLib(x, o = {}) {
+  const timed = x[11] === 't';
+  return normalizeExercise({ id: uid('c_'), alts27: true, block: `${EX_LIB_ICON[x[0]] || '⚡'} ${x[0]}`, sets: o.sets || x[3], minReps: o.min || x[4], maxReps: o.max || x[5], increment: x[6], rest: o.rest || x[7], bw: !!x[8], ...(timed ? { timed: true } : {}),
+    variants: [{ name: x[1], note: x[2] }, ...x[9].map(([name, note]) => ({ name, note }))] });
+}
+const qhMobEx = (m, o = {}) => normalizeExercise({ id: uid('c_'), alts27: true, block: '🧘 Movilidad', sets: o.sets || 1, minReps: o.min || 30, maxReps: o.max || 45, increment: 0, rest: o.rest || 15, bw: true, timed: true, variants: [{ name: m[0], note: m[1] }] });
+// La misma cuenta que usa la app al enseñar el día (así lo que prometo y lo que ves coinciden)
+const qhMinutes = exs => estimateMinutes({ exercises: exs });
+// Se ajusta al tiempo elegido: primero quita aislamientos y desde el final, luego series (nunca menos de 2 ejercicios)
+function qhFit(exs, min) {
+  const L = [...exs];
+  while (qhMinutes(L) > min + 3 && L.length > 2) {
+    let i = -1; for (let k = L.length - 1; k >= 0; k--) if (NP_ISO.test(L[k].variants[0].name)) { i = k; break; }
+    L.splice(i >= 0 ? i : L.length - 1, 1);
+  }
+  for (let g = 0; qhMinutes(L) > min + 3 && g < 20; g++) { const e = [...L].sort((a, b) => b.sets - a.sets)[0]; if (e.sets <= 1) break; e.sets--; }
+  return L;
+}
+const qhCfg = () => ({ focus: 'fuerza', min: 30, mood: 'normal', zone: '', place: '', gear: [], ...(state.settings.qh || {}) });
+function qhTodayDay() { const tp = todayPick(); return tp && !tp.done && tp.day?.exercises.length ? tp : null; }
+
+function queHagoModal(over = {}) {
+  const tp = qhTodayDay(), c = { ...qhCfg(), ...over };
+  if (!tp && c.focus === 'toca') c.focus = 'fuerza';
+  const w = activeWip?.();
+  const chips = (list, cur, act, extra = '') => `<div class="qh-row">${list.map(([k, ic, t]) => `<button class="qh-chip ${String(cur) === String(k) ? 'on' : ''}" data-mact="${act}" data-k="${k}" type="button">${ic ? `<span>${ic}</span>` : ''}${t}</button>`).join('')}${extra}</div>`;
+  const place = QH_PLACE.find(p => p[0] === c.place), gearTxt = c.place === 'home' && c.gear.length ? ` (${QH_GEAR.filter(g => c.gear.includes(g[0])).map(g => g[1].toLowerCase()).join(', ')})` : '';
+  const askPlace = !c.place || over._where;
+  const zone = NP_ZONES.find(z => z.k === c.zone);
+  openModal(`<h3 class="modal-title">🤔 ¿Qué hago hoy?</h3>
+    ${w ? '<p class="text-[12px] text-amber-200 -mt-1">Tienes un entreno a medias. Si empiezas otro, el de ahora sigue guardado.</p>' : ''}
+    <div class="lbl mt-1">Enfoque</div>${chips(QH_FOCUS.filter(f => f[0] !== 'toca' || tp).map(f => f[0] === 'toca' ? [f[0], f[1], `${f[2]}: ${tp.day.label}`] : f), c.focus, 'f')}
+    <div class="lbl mt-3">Tiempo</div>${chips(QH_TIME.map(m => [m, '', m === 60 ? '60+ min' : `${m} min`]), c.min, 'm')}
+    <div class="lbl mt-3">¿Cómo estás?</div>${chips(QH_MOOD, c.mood, 'e')}
+    <div class="lbl mt-3">¿Algo te molesta?</div>${over._zones || zone ? chips([['', '', 'Nada'], ...NP_ZONES.map(z => [z.k, '', z.t])], c.zone, 'z') : `<button class="qh-link" data-mact="zones" type="button">Nada · tocar si te molesta algo</button>`}
+    <div class="lbl mt-3">¿Dónde entrenas?</div>
+    ${askPlace ? `${chips(QH_PLACE, c.place, 'p')}${c.place === 'home' ? `<div class="lbl mt-2">¿Qué tienes en casa?</div><div class="qh-row">${QH_GEAR.map(([k, t]) => `<button class="qh-chip ${c.gear.includes(k) ? 'on' : ''}" data-mact="g" data-k="${k}" type="button">${c.gear.includes(k) ? '✓ ' : ''}${t}</button>`).join('')}</div>` : ''}`
+      : `<button class="qh-link" data-mact="where" type="button">${place[1]} ${place[2]}${esc(gearTxt)} · cambiar</button>`}
+    ${zone ? '<p class="np-warn">Si es un dolor fuerte, hay hinchazón o va a más, hoy no entrenes esa zona y consúltalo con un profesional.</p>' : ''}
+    <button class="btn-primary w-full mt-4" data-mact="go" type="button" ${c.place ? '' : 'disabled'}>${c.focus === 'toca' ? 'Adaptar mi día' : '✨ Proponer'}</button>
+    <p class="text-[11px] text-mute text-center mt-2">${c.focus === 'toca' ? 'Sin IA y al instante: recorto y adapto lo que te toca hoy.' : state.settings.apiKey ? 'La IA lo prepara con tus últimos entrenos, la fatiga de cada músculo y tu objetivo.' : 'Sin clave de IA: lo preparo yo con la biblioteca de ejercicios.'}</p>`, {
+    f: (_, b) => queHagoModal({ ...c, focus: b.dataset.k }), m: (_, b) => queHagoModal({ ...c, min: +b.dataset.k }), e: (_, b) => queHagoModal({ ...c, mood: b.dataset.k }),
+    z: (_, b) => queHagoModal({ ...c, zone: b.dataset.k, _zones: true }), zones: () => queHagoModal({ ...c, _zones: true }),
+    p: (_, b) => queHagoModal({ ...c, place: b.dataset.k, _where: true }), where: () => queHagoModal({ ...c, _where: true }),
+    g: (_, b) => queHagoModal({ ...c, gear: c.gear.includes(b.dataset.k) ? c.gear.filter(x => x !== b.dataset.k) : [...c.gear, b.dataset.k], _where: true }),
+    go: () => { const { _where, _zones, ...keep } = c; state.settings.qh = keep; persist(); qhGo(keep, tp); }
+  });
+}
+async function qhGo(c, tp) {
+  if (c.focus === 'toca' && tp) return qhToca(c, tp);
+  if (!state.settings.apiKey || !navigator.onLine) return qhShow(qhLocal(c), c, state.settings.apiKey ? 'Sin conexión: te lo he preparado yo, sin IA.' : '');
+  openModal(`<div class="text-center py-6"><span class="spinner" style="width:34px;height:34px;border-width:3px;border-color:rgba(34,211,238,.25);border-top-color:#22d3ee"></span><h3 class="modal-title mt-3">Preparando tu entreno…</h3><p class="text-sm text-mute">Mirando tus últimos entrenos y cómo están tus músculos.</p><div class="mt-4">${iaAskHTML()}</div></div>`, { noClose: true });
+  try {
+    const raw = await callGemini([{ text: qhPrompt(c) }], { temperature: 0.5, timeout: 60000, relay: { kind: 'qh', ctx: { c }, title: '🏋️ Ya tienes tu entreno de hoy', cuerpo: 'Ábrelo para empezar.' } });
+    iaNotify('🏋️ Ya tienes tu entreno de hoy', 'Ábrelo para empezar.', 'train');
+    qhShow(qhParse(raw, c), c);
+  } catch (e) {
+    qhShow(qhLocal(c), c, `La IA no ha podido (${String(e.message || e).slice(0, 80)}). Te lo he preparado yo con la biblioteca.`);
+  }
+}
+
+/* Lo que se le pide a la IA */
+function qhPrompt(c) {
+  const ctx = chatContext();
+  for (const k of ['dieta_hoy', 'dieta_ultimos_7_dias', 'objetivos', 'medidas_corporales']) delete ctx[k];
+  const zone = NP_ZONES.find(z => z.k === c.zone);
+  const cardioMachine = c.focus === 'cardio' && (c.place === 'gym' || c.place === 'out');
+  const lib = c.focus === 'suave' ? QH_MOB.map(m => m[0]).join(' | ') + ' | Dead bug | Bird dog | Plancha | Puente de glúteo'
+    : EX_LIB_GROUPS.map(g => { const L = exLibAll().filter(x => x[0] === g && qhFits(x[1], c)).map(x => x[1]); return L.length ? `${g}: ${L.join(' | ')}` : ''; }).filter(Boolean).join('\n');
+  const where = c.place === 'gym' ? 'en el GIMNASIO (tiene de todo)' : c.place === 'home' ? `en CASA con: ${QH_GEAR.filter(g => c.gear.includes(g[0])).map(g => g[1].toLowerCase()).join(', ') || 'nada'} (más una silla y el suelo)` : c.place === 'out' ? 'AL AIRE LIBRE, sin material' : 'en casa SIN MATERIAL (peso corporal, una silla, una mochila)';
+  return `Eres el entrenador de FITNESTEBAN. Prepara el entreno de HOY para ${profileText()}.
+SUS DATOS (últimas sesiones con pesos y comentarios, fatiga actual de cada músculo en %, volumen de 30 días, cardio de 14 días, retos y bloques):
+${JSON.stringify(ctx)}
+
+LO QUE PIDE HOY:
+- Enfoque: ${c.focus === 'fuerza' ? 'FUERZA / MÚSCULO (si dice tonificar, es esto con algo más de repeticiones)' : c.focus === 'cardio' ? 'CARDIO' : 'SUAVE / RECUPERACIÓN (movilidad y estiramientos, nada de cargar)'}
+- Tiempo total: ${c.min === 60 ? '60 minutos o algo más' : `${c.min} minutos`} contando 4 minutos de calentamiento. NO te pases.
+- Cómo está: ${c.mood === 'cansado' ? 'CANSADO: poco volumen (2–3 series), ejercicios sencillos, lejos del fallo (deja 3 repeticiones en recámara). Nada explosivo.' : c.mood === 'tope' ? 'A TOPE: puede apretar más (más series o intensidad), pero sin pasar de su nivel.' : 'normal.'}
+- ${zone ? `LE MOLESTA: ${zone.t.replace(/^\S+\s/, '')}. PROHIBIDO cualquier ejercicio que cargue esa zona (ni de forma secundaria). Si dudas, no lo pongas.` : 'No tiene molestias.'}
+- Dónde: ${where}.
+
+REGLAS:
+- Mira "musculos.fatiga_ahora_pct": NO trabajes de forma directa músculos con fatiga del 50 % o más. Prioriza los que lleva más días sin trabajar.
+- Si "ultimas_sesiones" muestra que es principiante (pocas sesiones o pesos bajos), ejercicios sencillos.
+${cardioMachine ? `- Es CARDIO ${c.place === 'gym' ? 'en el gimnasio (cinta, bici, elíptica, remo, escaleras…)' : 'al aire libre (correr, andar rápido, bici)'}: propón UN plan por tramos (calentar, bloques de trabajo, vuelta a la calma) que sume exactamente el tiempo.
+Responde SOLO este JSON: {"tipo":"cardio","titulo":"máx. 40 letras","explicacion":"1–2 frases de por qué esto hoy, con algún dato suyo","actividad":"run|walk|bike|elliptical|row|spin|stairs","intensidad":"baja|media-baja|media|media-alta|alta","minutos":número,"tramos":[{"min":número,"que":"qué hacer, máx. 70 letras (ritmo o sensación: suave, puedes hablar; fuerte, frases cortas…)"}]}`
+  : `- Usa SOLO ejercicios de esta lista, con el nombre EXACTO:
+${lib}
+- ${c.focus === 'cardio' ? 'Es un CIRCUITO de cardio: 4–6 ejercicios por tiempo (30–45 s de trabajo, 15–30 s de descanso), "series" = vueltas (3–5). Alterna tren superior, inferior y todo el cuerpo.' : c.focus === 'suave' ? 'Todo por tiempo (30–60 s), 1–2 series, descanso 10–20 s. Empieza por movilidad y acaba con estiramientos de lo que más ha trabajado estos días.' : '4–6 ejercicios: primero los compuestos (los que mueven más músculos), luego accesorios. Series 2–4, descanso 60–150 s según el ejercicio.'}
+Responde SOLO este JSON: {"tipo":"sesion","titulo":"máx. 40 letras","explicacion":"1–2 frases de por qué esto hoy, con algún dato suyo (fatiga, días sin trabajar algo…)","ejercicios":[{"nombre":"nombre exacto de la lista","series":número,"reps_min":número,"reps_max":número,"descanso_s":número,"por_tiempo":true|false}]}
+Con "por_tiempo":true, reps_min y reps_max son segundos.`}
+Español de España, cercano y sin tecnicismos.`;
+}
+/* Respuesta de la IA → entreno de la app (o plan de cardio), siempre comprobado: lista, material, molestia y tiempo */
+function qhParse(raw, c) {
+  const d = parseJSONLoose(raw);
+  if (d.tipo === 'cardio' && Array.isArray(d.tramos)) {
+    const act = (CARDIO_TYPES[d.actividad] || CARDIO_EXTRA[d.actividad]) ? d.actividad : c.place === 'out' ? 'run' : 'elliptical';
+    const tr = d.tramos.slice(0, 12).map(t => ({ min: clamp(parseInt(t.min, 10) || 1, 1, 60), que: String(t.que || '').slice(0, 90) })).filter(t => t.que);
+    if (!tr.length) throw new Error('vacío');
+    return { cardio: true, title: String(d.titulo || 'Cardio').slice(0, 40), why: String(d.explicacion || '').slice(0, 240), act, int: INTENSITIES.some(i => i[0] === d.intensidad) ? d.intensidad : 'media', min: tr.reduce((a, t) => a + t.min, 0), tramos: tr };
+  }
+  const zone = NP_ZONES.find(z => z.k === c.zone);
+  let exs = (Array.isArray(d.ejercicios) ? d.ejercicios : []).slice(0, 8).map(x => {
+    const o = { sets: clamp(parseInt(x.series, 10) || 3, 1, 6), min: parseInt(x.reps_min, 10) || 0, max: parseInt(x.reps_max, 10) || 0, rest: clamp(parseInt(x.descanso_s, 10) || 60, 10, 240) };
+    const timed = !!x.por_tiempo;
+    if (o.min) o.min = clamp(o.min, 1, timed ? 120 : 30); if (o.max) o.max = Math.max(o.min || 1, clamp(o.max, 1, timed ? 120 : 30));
+    const mob = QH_MOB.find(m => normTxt(m[0]) === normTxt(x.nombre || ''));
+    if (mob) return qhMobEx(mob, o);
+    const L = qhLibOf(x.nombre || ''); if (!L || !qhFits(L[1], c)) return null; // fuera de la lista o sin ese material: fuera
+    return qhExFromLib(L, o);
+  }).filter(Boolean);
+  if (zone) exs = exs.filter(e => !(zone.re.test(e.variants[0].name) || npPrim(e).some(m => zone.m.includes(m))));
+  const seen = new Set(); exs = exs.filter(e => { const k = normTxt(e.variants[0].name); if (seen.has(k)) return false; seen.add(k); return true; });
+  if (exs.length < 2) throw new Error('La propuesta no encajaba con tu material o tu molestia');
+  exs = qhFit(exs, c.min === 60 ? 70 : c.min);
+  return { title: String(d.titulo || 'Tu entreno de hoy').slice(0, 40), why: String(d.explicacion || '').slice(0, 240), exs };
+}
+/* Sin IA: la app lo arma con la biblioteca (músculos menos cargados, tu material, sin tu molestia) */
+function qhLocal(c) {
+  const zone = NP_ZONES.find(z => z.k === c.zone), f = muscleFatigue();
+  const okZone = x => !zone || !(zone.re.test(x[1]) || Object.entries(musclesOf(x[1])).some(([m, w]) => w === 1 && zone.m.includes(m)));
+  const L = exLibAll().filter(x => qhFits(x[1], c) && okZone(x));
+  const tired = c.mood === 'cansado';
+  if (c.focus === 'suave') {
+    const mob = QH_MOB.filter(m => !zone || !zone.re.test(m[0]));
+    const n = Math.max(4, Math.min(mob.length, Math.round(c.min / 2.2)));
+    return { title: 'Movilidad y estiramientos', why: 'Para recuperar: todo suave, respirando lento. Nada debe doler.', exs: qhFit(mob.slice(0, n).map(m => qhMobEx(m, { sets: c.min >= 30 ? 2 : 1 })), c.min) };
+  }
+  if (c.focus === 'cardio' && (c.place === 'gym' || c.place === 'out')) {
+    const act = c.place === 'out' ? 'run' : 'elliptical', work = Math.max(1, c.min - 10), blocks = Math.max(2, Math.floor(work / 4));
+    const tr = [{ min: 5, que: 'Suave para calentar: puedes hablar sin problema' }];
+    for (let i = 0; i < blocks; i++) tr.push({ min: 2, que: tired ? 'Algo más vivo, sin ahogarte' : 'Fuerte: solo puedes decir frases cortas' }, { min: 2, que: 'Suave para recuperar' });
+    tr.push({ min: Math.max(3, c.min - 5 - blocks * 4), que: 'Vuelta a la calma, muy suave' });
+    return { cardio: true, title: `${cardioType(act).label}: cambios de ritmo`, why: 'Tramos fuertes y suaves alternos: más eficaz que ir siempre igual.', act, int: tired ? 'media-baja' : 'media', min: tr.reduce((a, t) => a + t.min, 0), tramos: tr };
+  }
+  if (c.focus === 'cardio') {
+    // por orden de preferencia: lo que más sube pulsaciones primero, sin repetir patrón
+    const PRI = [/jumping/, /escalador/, /burpee/, /sentadilla con salto/, /swing/, /zancadas con salto/, /^sentadilla (goblet|bulgara sin peso)|goblet squat/, /^flexiones$/, /plancha lateral|^plancha$/, /remo con banda|gorilla|remo con mancuerna/];
+    const pick = []; for (const re of PRI) { const x = L.find(y => re.test(normTxt(y[1])) && !pick.includes(y)); if (x) pick.push(x); if (pick.length >= 6) break; }
+    return { title: 'Circuito de cardio', why: 'Trabajo por tiempo con poco descanso: sube pulsaciones sin necesitar máquinas.', exs: qhFit(pick.map(x => qhExFromLib(x, { sets: c.min >= 30 ? 4 : 3, min: tired ? 25 : 35, max: tired ? 30 : 45, rest: 20 })).map(e => ({ ...e, timed: true })), c.min) };
+  }
+  // fuerza: los grupos con menos fatiga, un ejercicio por grupo (compuestos primero)
+  const gF = g => { const ms = (MG[g]?.[1]) || []; return ms.length ? Math.max(...ms.map(m => f[m]?.frac || 0)) : 0; };
+  const ALLG = ['Pierna', 'Espalda', 'Pecho', 'Femoral y glúteo', 'Hombro', 'Core', 'Bíceps', 'Tríceps'];
+  const groups = [...ALLG.filter(g => gF(g) < 0.5).sort((a, b) => gF(a) - gF(b)), ...ALLG.filter(g => gF(g) >= 0.5 && gF(g) < 0.8).sort((a, b) => gF(a) - gF(b))]; // si falta, también lo poco cargado
+  const CARDIOISH = /burpee|jumping|escalador|salto/;
+  const pickOf = g => { const c0 = L.filter(x => !CARDIOISH.test(normTxt(x[1])) && (x[0] === g || (x[0] === 'Peso corporal' || x[0] === 'Kettlebell' || x[0] === 'Bandas elásticas') && Object.keys(musclesOf(x[1])).some(m => (MG[g]?.[1] || []).includes(m) && musclesOf(x[1])[m] === 1))); return c0.find(x => !NP_ISO.test(x[1]) && !exs.some(e => e[1] === x[1])) || c0.find(x => !exs.some(e => e[1] === x[1])); };
+  const exs = [], goal = c.min === 60 ? 60 : c.min;
+  for (const g of groups) { const x = pickOf(g); if (x) exs.push(x); if (exs.length >= 7 || qhMinutes(exs.map(y => qhExFromLib(y, tired ? { sets: 2 } : {}))) >= goal) break; }
+  return { title: 'Fuerza: lo que tienes más fresco', why: groups.length ? `Trabajo ${groups.slice(0, 3).join(', ').toLowerCase()}, que es lo que tienes menos cargado.` : 'Cuerpo completo, suave.', exs: qhFit(exs.map(x => qhExFromLib(x, tired ? { sets: 2 } : {})), c.min === 60 ? 70 : c.min) };
+}
+/* «Lo que me toca», sin IA: tiempo + molestia + material + cansancio a la vez */
+function qhToca(c, tp) {
+  const { pr, day } = tp, zone = NP_ZONES.find(z => z.k === c.zone);
+  let skip = zone ? npHits(day, zone) : [], swaps = [];
+  if (c.place === 'none' || c.place === 'out' || (c.place === 'home' && day.exercises.some(e => !qhFits(variantOf(e).variant.name, c)))) {
+    const rows = npHome(day).filter(r => !skip.includes(r.e.id) && (c.place !== 'home' || !qhFits(variantOf(r.e).variant.name, c)));
+    swaps = rows.filter(r => r.vi != null || r.sub); skip = [...skip, ...rows.filter(r => r.skip).map(r => r.e.id)];
+  }
+  if (day.exercises.length - skip.length < 2) { toast('Con esa molestia casi no queda nada de lo que te toca. Prueba «Suave o recuperación».', 'warn'); return queHagoModal({ ...c, focus: 'suave' }); }
+  npApply(pr, day, { skip, swaps });
+  const d = draftOf(day.id);
+  if (c.mood === 'cansado') { d.tired = { date: todayISO(), keys: [] }; for (const e of day.exercises) { const k = variantOf(e).key; if (!(k in d.counts)) { d.counts[k] = Math.max(1, baseSets(e) - 1); d.tired.keys.push(k); } } } // solo hoy (npRestoreSwaps lo deshace mañana)
+  const r = npCut(day, c.min === 60 ? 999 : c.min);
+  if (r.skip.length) d.skip.ids = [...new Set([...d.skip.ids, ...r.skip])];
+  persist(); render();
+  const est = estimateMinutes(day, d);
+  const left = day.exercises.length - skippedToday(d).length;
+  toast(`${day.label} adaptado: ~${est} min${c.mood === 'cansado' ? ', una serie menos en cada ejercicio' : ''}${zone ? ', sin lo que carga la zona' : ''} ✓${left * 2 < day.exercises.length ? ' Queda poco: si quieres algo más completo, elige «Fuerza o músculo» y te propongo otra cosa.' : ''}`);
+}
+/* El resultado: lo ves, y con un toque lo empiezas (o lo apuntas, si es cardio de máquina o de calle) */
+function qhShow(r, c, note = '') {
+  if (r.cardio) {
+    openModal(`<h3 class="modal-title">🫀 ${esc(r.title)}</h3>
+      ${r.why ? `<p class="text-[13px] text-slate-300 -mt-1">${esc(r.why)}</p>` : ''}${note ? `<p class="text-[11px] text-amber-200 mt-1">${esc(note)}</p>` : ''}
+      <div class="np-list">${r.tramos.map(t => `<div class="np-row"><span class="np-ic text-brand font-black">${t.min}′</span><span class="min-w-0 flex-1">${esc(t.que)}</span></div>`).join('')}</div>
+      <p class="text-[12px] text-mute mt-2">${cardioType(r.act).icon} ${cardioType(r.act).label} · ${r.min} min · intensidad ${INTENSITIES.find(i => i[0] === r.int)[1].toLowerCase()}</p>
+      <button class="btn-primary w-full mt-3" data-mact="log" type="button">Al acabar, apuntarlo en Cardio</button>
+      <button class="btn-ghost w-full mt-2" data-mact="again" type="button">↻ Otra propuesta</button>`, {
+      log: () => { const st = state.settings; if (!cardioOnKeys().includes(r.act)) { st.cardioOn = [...cardioOnKeys(), r.act]; persist(); } closeModal(); openBlock('cardio'); Object.assign(ui.cardio, { type: r.act, minutes: String(r.min), intensity: r.int, est: null, date: todayISO() }); render(); setTimeout(() => $('#cdMin')?.scrollIntoView({ block: 'center' }), 60); toast('Revisa los minutos y pulsa calcular cuando acabes'); },
+      again: () => queHagoModal(c)
+    });
+    return;
+  }
+  const est = qhMinutes(r.exs);
+  openModal(`<h3 class="modal-title">${c.focus === 'suave' ? '🧘' : c.focus === 'cardio' ? '🫀' : '💪'} ${esc(r.title)}</h3>
+    ${r.why ? `<p class="text-[13px] text-slate-300 -mt-1">${esc(r.why)}</p>` : ''}${note ? `<p class="text-[11px] text-amber-200 mt-1">${esc(note)}</p>` : ''}
+    <div class="np-list">${r.exs.map(e => `<div class="np-row"><span class="np-ic">•</span><span class="min-w-0 flex-1">${esc(e.variants[0].name)}<small class="block text-[11px] text-mute font-normal">${e.sets} ${c.focus === 'cardio' ? (e.sets === 1 ? 'vuelta' : 'vueltas') : e.sets === 1 ? 'serie' : 'series'} × ${e.minReps}${e.maxReps > e.minReps ? `–${e.maxReps}` : ''}${e.timed ? ' s' : ' reps'} · descanso ${e.rest} s</small></span></div>`).join('')}</div>
+    <p class="text-[12px] text-mute mt-2">⏱ ~${est} min${c.focus === 'fuerza' ? ' · los pesos te los pongo según tus últimas sesiones' : ''}.</p>
+    <button class="btn-primary w-full mt-3" data-mact="start" type="button">▶ Empezar</button>
+    <div class="grid grid-cols-2 gap-2 mt-2"><button class="btn-ghost" data-mact="save" type="button">⭐ Guardar en FREE</button><button class="btn-ghost" data-mact="again" type="button">↻ Otra</button></div>`, {
+    start: () => { qhPut(r, c); closeModal(); openBlock('free'); ui.dayId = QH_DAY; render(); window.scrollTo({ top: 0 }); },
+    save: (root, b) => { const id = qhSave(r, c); b.disabled = true; b.textContent = '⭐ Guardado'; toast(`Guardado en FREE como «${state.plan.programs.find(p => p.id === 'free').days.find(x => x.id === id)?.label}» ✓`); },
+    again: () => queHagoModal(c)
+  });
+}
+const qhLabel = c => `${c.focus === 'suave' ? 'SUAVE' : c.focus === 'cardio' ? 'CARDIO' : 'FUERZA'} ${c.min}`;
+function qhPut(r, c) { // el día PROPUESTA de FREE pasa a ser este entreno (lo anterior de ese día, fuera)
+  const fp = state.plan.programs.find(p => p.id === 'free'); if (!fp) return;
+  const day = normalizeDay({ id: QH_DAY, label: 'PROPUESTA', rotation: false, title: r.title, subtitle: `🤔 ¿Qué hago hoy? · ${qhLabel(c).toLowerCase()} min`, exercises: r.exs.map(e => ({ ...clone(e), id: uid('c_') })) });
+  const i = fp.days.findIndex(d => d.id === QH_DAY); if (i >= 0) fp.days[i] = day; else fp.days.push(day);
+  delete state.drafts[QH_DAY];
+  persist();
+}
+function qhSave(r, c) {
+  const fp = state.plan.programs.find(p => p.id === 'free'); if (!fp) return null;
+  let label = qhLabel(c); for (let n = 2; fp.days.some(d => d.label === label); n++) label = `${qhLabel(c).split(' ')[0].slice(0, 6)} ${c.min}·${n}`;
+  const id = uid('d_');
+  fp.days.push(normalizeDay({ id, label: label.slice(0, 10), rotation: false, title: r.title, subtitle: r.why.slice(0, 120), exercises: r.exs.map(e => ({ ...clone(e), id: uid('c_') })) }));
+  persist(); return id;
+}
+
 /* =========================================================================
    🎯 TALLER DE DOMINADAS — 6 semanas: test inicial → nivel 0-3 → días A/B (48 h entre ellos) → descarga + test final.
    La app avanza sola: con menos del 80 % de lo previsto o «Muy duro», repite la semana; dos «Fácil» seguidos, adelanta;
@@ -5330,6 +5598,7 @@ function iaShow(j) {
   if (iaShow.id === j.id) return; iaShow.id = j.id;
   const c = j.ctx || {};
   if (j.kind === 'coach') { if (!$('#modalRoot').classList.contains('open') || (ui.chat?.id === c.id && $('#chatBody'))) { ui.chat = { id: c.id, msgs: c.msgs || [], busy: true, rec: true }; if ($('#chatBody')) refreshChat(); else openChat(true); } }
+  else if (j.kind === 'qh') { if (!$('#modalRoot').classList.contains('open')) { ui.view = 'train'; render(); openModal('<div class="text-center py-6"><span class="spinner" style="width:34px;height:34px;border-width:3px;border-color:rgba(34,211,238,.25);border-top-color:#22d3ee"></span><h3 class="modal-title mt-3">Recogiendo tu entreno…</h3></div>', { noClose: true }); } }
   else if (j.kind === 'meal') {
     ui.view = 'diet'; ui.addOpen = true;
     if (!ui.aiResult && !ui.aiBusy) { ui.mealDesc = c.desc || ''; if (c.foto) ui.img = c.foto; if (c.type) ui.mealType = c.type; ui.aiBusy = true; ui.iaRec = true; }
@@ -5337,12 +5606,14 @@ function iaShow(j) {
   }
 }
 function iaUnshow(j) {
+  if (j.kind === 'qh' && $('#modalRoot .modal-title')?.textContent === 'Recogiendo tu entreno…') closeModal();
   if (j.kind === 'coach' && ui.chat?.rec) { ui.chat.busy = false; delete ui.chat.rec; refreshChat(); }
   if (j.kind === 'meal' && ui.iaRec) { ui.aiBusy = false; ui.iaRec = false; render(); }
 }
 // 🔁 Se perdió por el camino: se repite sola en la app (sin foto); si llevaba foto, se pide repetirla
 function iaRetry(j) {
   const c = j.ctx || {};
+  if (j.kind === 'qh') { if (canBeta()) { toast('Tu entreno no llegó a prepararse. Vuelve a pulsar «Proponer».', 'warn'); queHagoModal(c.c || {}); } return; }
   if (Date.now() - j.at > 6 * 3600000 || !state.settings.apiKey) return;
   if (j.kind === 'coach') {
     const last = (c.msgs || []).at(-1);
@@ -5430,6 +5701,8 @@ function mealApply(raw, desc) {
     iaNotify('🍽️ Ya tienes los macros de tu comida', `${ui.aiResult.desc || 'Comida'}: ${Math.round(ui.aiResult.kcal)} kcal · P ${Math.round(ui.aiResult.prot)} g. Ábrela para revisarlos y registrarla.`, 'diet');
     if (ui.aiResult.kcal > 2500) toast('Revisa las cantidades: sale una comida de más de 2.500 kcal.', 'warn');
 }
+// 🏋️ «¿Qué hago hoy?» recogido del servidor (el móvil cerró la app mientras la IA lo preparaba)
+IA_DONE.qh = (raw, ctx) => { const c = ctx.c || qhCfg(); let r; try { r = qhParse(raw, c); } catch { r = qhLocal(c); } ui.view = 'train'; render(); qhShow(r, c); };
 IA_DONE.meal = (raw, ctx) => {
   try {
     if (ui.aiResult || ui.aiBusy) { ui.view = 'diet'; render(); return toast('La IA terminó otra comida mientras estabas fuera, pero estás con otra: vuelve a pedirla cuando acabes.', 'warn'); }
@@ -8364,6 +8637,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.31.0', ['🤔 Nuevo en Entreno: «¿Qué hago hoy?». Eliges enfoque, tiempo, cómo estás, si algo te molesta y dónde entrenas, y te preparo el entreno listo para empezar (o adapto lo que te toca, sin IA). Lo que te guste lo guardas en FREE.'], 'beta'],
   ['5.30.4', ['📱 Inicio en móviles pequeños: la última tarjeta (Asistente IA) ya no queda tapada por la barra de abajo ni se mueve sola al deslizar.'], 'quiet'],
   ['5.30.3', ['🔁 Si una estimación con foto se pierde por el camino, la app la repite sola con la misma foto (ya no hay que volver a hacerla).'], 'quiet'],
   ['5.30.2', ['🔔 Al tocar el aviso de la IA, la app abre directamente la conversación del Coach o la comida en Dieta.'], 'quiet'],
@@ -8864,7 +9138,7 @@ const GUIDE = [
 ];
 
 const isAdminUser = () => !!access.me?.admin;
-const newsForMe = ([, , tag]) => isAdminUser() || !tag;
+const newsForMe = ([, , tag]) => isAdminUser() || !tag || (tag === 'beta' && !!access.me?.beta); // 'beta': solo administrador y 🧪
 function newsRows(fromVer) {
   let list = CHANGELOG.filter(([v]) => !fromVer || cmpVer(v, fromVer) > 0);
   if (fromVer && !isAdminUser()) list = list.filter(newsForMe);
@@ -10112,6 +10386,7 @@ const actions = {
   },
   openCal: () => openCalendar(),
   noPuedo: () => noPuedoModal(),
+  queHago: () => queHagoModal(),
   trainToday: () => trainTodayModal(),
   openCalDay: b => openCalendar(b.dataset.d),
   blocksBack: () => { ui.blocksAll = false; render(); window.scrollTo({ top: 0 }); },
