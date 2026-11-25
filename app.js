@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.32.0';
+const APP_VERSION = '5.32.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -1297,7 +1297,7 @@ function renderTrainHome() {
   const { retos, own, libs, inUse, ppTop, rs } = trainHomeParts();
   const nNew = libs.filter(x => x.nw).length;
   const tc0 = todayCardHTML(), done = tc0.includes('today-done'), tc = done ? '' : tc0, td = trainTodayHTML(), tpk = tc ? todayPick() : null;
-  return `${td}${td && tc ? '<div class="h-2"></div>' : ''}${tc}${canBeta() ? '<button class="qc-btn np-btn" data-act="queHago" type="button">🤔 ¿Qué hago hoy?</button>' : tpk?.day?.exercises.length ? '<button class="qc-btn np-btn" data-act="noPuedo" type="button">¿Y si hoy no puedo?</button>' : ''}${trainWeekHTML()}${td || tc ? '<div class="h-3"></div>' : ''}
+  return `${td}${td && tc ? '<div class="h-2"></div>' : ''}${tc}<button class="qc-btn np-btn" data-act="queHago" type="button">🤔 ¿Qué hago hoy?</button>${trainWeekHTML()}${td || tc ? '<div class="h-3"></div>' : ''}
   ${retos ? galleryCard({ key: 'retos', name: 'RETOS', icon: '🏆', look: RETOS_LOOK, tag: 'Retos de calistenia', menu: false, slim: true,
       sub: rs ? `${rs} ${rs === 1 ? 'reto en marcha' : 'retos en marcha'} · niveles que suben contigo` : 'Flexiones, dominadas, sentadillas… a tu ritmo' }) : ''}
   <div class="h-2"></div>${galleryCard({ key: 'taller', name: 'TALLER DE DOMINADAS', icon: '🎯', look: TALLER_LOOK, tag: 'Taller · 6 semanas', menu: false,
@@ -5739,7 +5739,7 @@ function iaUnshow(j) {
 // 🔁 Se perdió por el camino: se repite sola en la app (sin foto); si llevaba foto, se pide repetirla
 function iaRetry(j) {
   const c = j.ctx || {};
-  if (j.kind === 'qh') { if (canBeta()) { toast('Tu entreno no llegó a prepararse. Vuelve a pulsar «Proponer».', 'warn'); queHagoModal(c.c || {}); } return; }
+  if (j.kind === 'qh') { toast('Tu entreno no llegó a prepararse. Vuelve a pulsar «Proponer».', 'warn'); queHagoModal(c.c || {}); return; }
   if (j.kind === 'plan') { toast('El plan de mañana no llegó a prepararse. Vuelve a pulsar «Planificar».', 'warn'); ui.view = 'diet'; render(); mpModal(); return; }
   if (Date.now() - j.at > 6 * 3600000 || !state.settings.apiKey) return;
   if (j.kind === 'coach') {
@@ -8790,6 +8790,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.32.1', ['🤔 Nuevo en Entreno: «¿Qué hago hoy?» (debajo de «Hoy te toca»). Eliges enfoque, tiempo, cómo estás, si algo te molesta y dónde entrenas, y te preparo un entreno listo para empezar; o adapto lo que te toca, sin IA. Lo que te guste lo guardas en FREE.', '📣 Nuevo vídeo de la app para compartir (en «Recomienda FITNESTEBAN»).']],
   ['5.32.0', ['📋 Nuevo en Dieta: «Planificar mañana». Cuéntale qué harás mañana (comes fuera, un evento, entrenas…) y la IA te prepara el día; también puedes copiar lo de hoy o pedírselo al Coach. Lo planificado no cuenta hasta que, ese día, pulses «✓ Me lo he comido».']],
   ['5.31.3', ['🤔 «¿Qué hago hoy?»: si la IA falla, el aviso se lee entero y la propuesta de la biblioteca reparte mejor el tiempo (más ejercicios, descansos contenidos).'], 'quiet'],
   ['5.31.2', ['📥 Bandeja de mensajes (admin): solo descarga los mensajes nuevos en vez de todas las conversaciones cada vez; menos datos y menos batería.'], 'admin'],
@@ -9199,7 +9200,7 @@ const GUIDE = [
     'Abre «Registrar series» en cada ejercicio. El peso sugerido ya viene puesto; apunta las reps y pulsa ✓: arranca el descanso de ese ejercicio (vibra y pita al acabar; en ⏱ puedes «🔊 Probar el pitido»). En iPhone no pita con el modo silencio ni con la pantalla bloqueada.',
     '✅ <b>Hoy has hecho</b>: cuando entrenas, arriba de Entreno ves lo que llevas hoy (fuerza, retos y cardio); tócalo para ver cada ejercicio con sus series. Debajo, «Esta semana llevas…»: toca un día para verlo en el calendario.',
     '📚 <b>Bloques</b>: los que usas salen en «En uso»; el resto (los tuyos y los preparados) están dentro de la tarjeta «Bloques», con ⋯ para editarlos u ocultarlos.',
-    '🤔 <b>¿Y si hoy no puedo?</b> (bajo «HOY TE TOCA»): si vas justo de tiempo, recorta la sesión a 20, 30 o 45 min quitando primero los accesorios; si estás fuera o sin material, cambia cada ejercicio por uno con tu peso corporal para los mismos músculos (solo ese día); si algo te molesta, elige la zona (arriba salen las que más carga la sesión de ese día) y quita lo que la carga. Lo quitado se recupera con «Deshacer».',
+    '🤔 <b>¿Qué hago hoy?</b> (bajo «HOY TE TOCA»): eliges enfoque (lo que te toca, fuerza, cardio o suave), tiempo, cómo estás, si algo te molesta y dónde entrenas. «Lo que me toca» recorta y adapta tu día al instante, sin IA (tiempo, molestia, sin material, una serie menos si estás cansado). Los demás enfoques te preparan un entreno con tus datos, listo para ▶ Empezar; el cardio en gimnasio o al aire libre sale como plan por tramos que apuntas en Cardio. «⭐ Guardar en FREE» lo deja como un día más de FREE.',
     'Todo se guarda solo mientras escribes: puedes cerrar la app a mitad de sesión.',
     '🤸 <b>Peso corporal</b>: en dominadas, flexiones, fondos… el campo de peso es el <b>lastre</b>: vacío = solo tu peso (PC). Actívalo en el ✎ del ejercicio con «Con peso corporal».',
     '⏱ <b>Ejercicios por tiempo</b> (plancha, hollow hold…): ▶ cronometra la serie y apunta los segundos solos.',
@@ -11310,14 +11311,14 @@ async function deviceGuard() {
   access.ok = false; if (deviceReason !== 'exp') try { localStorage.removeItem(ACCESS_KEY); } catch { /* nada */ }
   closeModal(); lockScreen('code', deviceReason === 'exp' ? expiredMsg(true) : blockedMsg());
 }
-/* 📣 Recomienda FITNESTEBAN: el vídeo de la app (promo.mp4, ~2,7 MB) solo se descarga al verlo o compartirlo */
+/* 📣 Recomienda FITNESTEBAN: el vídeo de la app (promo.mp4, ~3 MB) solo se descarga al verlo o compartirlo */
 const PROMO_TXT = 'Mira la app que uso para entrenar y llevar la dieta 💪 👉 https://www.fitnesteban.app';
 let promoBlob = null;
-async function promoFile() { if (!promoBlob) { const r = await fetch('promo.mp4', { cache: 'no-store' }); if (!r.ok) throw new Error('Sin conexión: no se pudo descargar el vídeo'); promoBlob = await r.blob(); } return new File([promoBlob], 'FITNESTEBAN.mp4', { type: 'video/mp4' }); }
+async function promoFile() { if (!promoBlob) { const r = await fetch('promo.mp4?v=' + APP_VERSION, { cache: 'no-store' }); if (!r.ok) throw new Error('Sin conexión: no se pudo descargar el vídeo'); promoBlob = await r.blob(); } return new File([promoBlob], 'FITNESTEBAN.mp4', { type: 'video/mp4' }); }
 function promoModal(fromLock = false) {
   if (fromLock) $('#modalRoot').style.zIndex = 50; // por encima de la pantalla de acceso
   openModal(`<h3 class="modal-title">${fromLock ? '▶ Así es FITNESTEBAN' : '📣 Recomienda FITNESTEBAN'}</h3>
-    <video src="promo.mp4" poster="promo.jpg" class="w-full rounded-2xl border border-line" style="max-height:56vh;background:#000" controls playsinline preload="none"></video>
+    <video src="promo.mp4?v=${APP_VERSION}" poster="promo.jpg?v=${APP_VERSION}" class="w-full rounded-2xl border border-line" style="max-height:56vh;background:#000" controls playsinline preload="none"></video>
     ${fromLock ? '' : `<p class="text-[12px] text-mute">Compártelo en WhatsApp, en tus estados o en redes. Si Instagram no sale al compartir, guárdalo y súbelo desde la galería.</p>
     <div class="grid grid-cols-2 gap-2"><button class="btn-ghost" data-mact="save" type="button">⬇️ Guardar vídeo</button><button class="btn-primary" data-mact="share" type="button">📤 Compartir vídeo</button></div>
     <button class="text-xs text-mute underline w-full" data-mact="link" type="button">🔗 Compartir solo el enlace</button>`}
