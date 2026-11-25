@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.32.1';
+const APP_VERSION = '5.32.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -3311,6 +3311,8 @@ const qhCfg = () => ({ focus: 'fuerza', min: 30, mood: 'normal', zone: '', place
 function qhTodayDay() { const tp = todayPick(); return tp && !tp.done && tp.day?.exercises.length ? tp : null; }
 
 function queHagoModal(over = {}) {
+  // al tocar una opción la ventana se vuelve a pintar: se queda donde estabas, sin volver arriba
+  const sh0 = $('#modalRoot.open .modal-sheet'), keepY = sh0 && sh0.querySelector('.modal-title')?.textContent === '🤔 ¿Qué hago hoy?' ? sh0.scrollTop : 0;
   const tp = qhTodayDay(), c = { ...qhCfg(), ...over };
   if (!tp && c.focus === 'toca') c.focus = 'fuerza';
   const w = activeWip?.();
@@ -3336,6 +3338,7 @@ function queHagoModal(over = {}) {
     g: (_, b) => queHagoModal({ ...c, gear: c.gear.includes(b.dataset.k) ? c.gear.filter(x => x !== b.dataset.k) : [...c.gear, b.dataset.k], _where: true }),
     go: () => { const { _where, _zones, ...keep } = c; state.settings.qh = keep; persist(); qhGo(keep, tp); }
   });
+  if (keepY) { const sh = $('#modalRoot .modal-sheet'); if (sh) sh.scrollTop = keepY; }
 }
 async function qhGo(c, tp) {
   if (c.focus === 'toca' && tp) return qhToca(c, tp);
@@ -8790,6 +8793,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.32.2', ['🤔 «¿Qué hago hoy?»: al marcar opciones (como el material de casa), la ventana ya no vuelve arriba.'], 'quiet'],
   ['5.32.1', ['🤔 Nuevo en Entreno: «¿Qué hago hoy?» (debajo de «Hoy te toca»). Eliges enfoque, tiempo, cómo estás, si algo te molesta y dónde entrenas, y te preparo un entreno listo para empezar; o adapto lo que te toca, sin IA. Lo que te guste lo guardas en FREE.', '📣 Nuevo vídeo de la app para compartir (en «Recomienda FITNESTEBAN»).']],
   ['5.32.0', ['📋 Nuevo en Dieta: «Planificar mañana». Cuéntale qué harás mañana (comes fuera, un evento, entrenas…) y la IA te prepara el día; también puedes copiar lo de hoy o pedírselo al Coach. Lo planificado no cuenta hasta que, ese día, pulses «✓ Me lo he comido».']],
   ['5.31.3', ['🤔 «¿Qué hago hoy?»: si la IA falla, el aviso se lee entero y la propuesta de la biblioteca reparte mejor el tiempo (más ejercicios, descansos contenidos).'], 'quiet'],
