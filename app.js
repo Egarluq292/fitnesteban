@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.30.0';
+const APP_VERSION = '5.30.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -5258,23 +5258,37 @@ async function geminiDiscover(skip) { // el modelo Flash más nuevo que la clave
 const IAJOB_KEY = 'fitnesteban_iajob';
 const iaRun = { cur: null };
 const iaHex = () => [...crypto.getRandomValues(new Uint8Array(16))].map(x => x.toString(16).padStart(2, '0')).join('');
+// La suscripción a las notificaciones se tiene preparada de antemano: al pulsar, la consulta sale en el acto, sin esperar a nada
+let iaSub = null;
+const iaSubLoad = () => { try { if (pushCan() && Notification.permission === 'granted') navigator.serviceWorker.ready.then(r => r.pushManager.getSubscription()).then(x => { iaSub = x?.toJSON() || null; }).catch(() => null); } catch { /* nada */ } };
+setTimeout(iaSubLoad, 2000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') iaSubLoad(); });
+// La nota de «consulta pendiente» se guarda también en IndexedDB, que queda escrita en el acto (localStorage puede tardar en guardarse
+// y perderse si el móvil cierra la app enseguida)
+const iaIdb = (mode, fn) => new Promise(res => { try { const o = indexedDB.open('fitnesteban-ia', 1); o.onupgradeneeded = () => o.result.createObjectStore('k'); o.onsuccess = () => { try { const tx = o.result.transaction('k', mode); const r = fn(tx.objectStore('k')); tx.oncomplete = () => { res(r?.result); o.result.close(); }; tx.onerror = tx.onabort = () => { res(null); o.result.close(); }; } catch { res(null); } }; o.onerror = () => res(null); } catch { res(null); } });
+const iaPendSet = v => { lsSet(IAJOB_KEY, v); iaIdb('readwrite', st => v ? st.put(v, 'job') : st.delete('job')); };
+const iaPendGet = async () => lsGet(IAJOB_KEY) || await iaIdb('readonly', st => st.get('job')) || null;
 async function iaViaServer(relay, models, body, local) {
   if (!state.settings.apiKey || body.length > 4e6 || !navigator.onLine) return local();
   const job = { id: iaHex(), ...relay, at: Date.now() };
   iaRun.cur = job;
-  lsSet(IAJOB_KEY, { id: job.id, kind: job.kind, ctx: job.ctx, at: job.at }); // se apunta al pulsar: si el móvil cierra la app, al volver se recoge
-  const fin = () => { lsSet(IAJOB_KEY, null); sbCall({ op: 'ia_cancel', id: job.id }, 20000, SB_IA).catch(() => null); }; // recibida: el servidor ya no avisa
+  const fin = () => { iaPendSet(null); sbCall({ op: 'ia_cancel', id: job.id }, 20000, SB_IA).catch(() => null); }; // recibida: el servidor ya no avisa
   try {
-    let sub = null; try { if (pushCan() && Notification.permission === 'granted') sub = (await (await navigator.serviceWorker.ready).pushManager.getSubscription())?.toJSON() || null; } catch { /* sin avisos */ }
+    if (!iaSub) iaSubLoad();
+    const payload = JSON.stringify({ op: 'ia_pedir', espera: 1, id: job.id, gk: state.settings.apiKey, models: models.slice(0, 4), body, sub: iaSub, title: job.title, cuerpo: job.cuerpo || '', conTexto: !!job.conTexto });
+    const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 135000);
+    // sin foto cabe en un envío «garantizado» (keepalive): llega al servidor aunque quites la app de recientes al instante
+    const req = fetch(SB_IA, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SB_KEY }, body: payload, signal: ctl.signal, keepalive: payload.length < 30000 && new TextEncoder().encode(payload).length < 63000 });
+    iaPendSet({ id: job.id, kind: job.kind, ctx: job.ctx, at: job.at }); // apuntada al pulsar: si el móvil cierra la app, al volver se recoge
     let j = null;
-    try { j = await sbCall({ op: 'ia_pedir', espera: 1, id: job.id, gk: state.settings.apiKey, models: models.slice(0, 4), body, sub, title: job.title, cuerpo: job.cuerpo || '', conTexto: !!job.conTexto }, 135000, SB_IA); } catch { j = null; }
+    try { j = await (await req).json(); } catch { j = null; } finally { clearTimeout(tm); }
     if (j?.estado === 'ok' && j.res) { fin(); return j.res; }
     if (j?.estado === 'err') { fin(); if (j.nf) return local(); throw new Error(j.res || 'La IA no ha podido responder. Vuelve a probar.'); } // nf: ningún modelo existe → la app busca otro
-    if (j && j.ok === false && !j.estado) { lsSet(IAJOB_KEY, null); return local(); } // el servidor no la aceptó
+    if (j && j.ok === false && !j.estado) { iaPendSet(null); return local(); } // el servidor no la aceptó
     // se cortó la conexión (p. ej. en segundo plano): si el servidor la tiene, se espera su respuesta; si no, la hace la app
     const t = await iaWaitServer(job);
-    if (t != null) { lsSet(IAJOB_KEY, null); return t; }
-    lsSet(IAJOB_KEY, null); return local();
+    iaPendSet(null);
+    return t != null ? t : local();
   } finally { if (iaRun.cur === job) iaRun.cur = null; }
 }
 async function iaWaitServer(job) {
@@ -5294,18 +5308,20 @@ async function iaWaitServer(job) {
 // 📥 Al abrir o volver a la app: si el móvil la cerró mientras la IA pensaba, se recoge la respuesta del servidor
 const IA_DONE = {};
 async function iaRecover() {
-  const j = lsGet(IAJOB_KEY);
-  if (!j?.id || iaRun.cur || iaRecover.busy || !access.ok) return;
-  if (Date.now() - j.at > 86400000) return lsSet(IAJOB_KEY, null);
+  if (iaRun.cur || iaRecover.busy || !access.ok) return;
   iaRecover.busy = true;
+  let j = null;
   try {
+    j = await iaPendGet();
+    if (!j?.id || iaRun.cur) return;
+    if (Date.now() - j.at > 86400000) return iaPendSet(null);
     const r = await sbCall({ op: 'ia_res', id: j.id }, 20000, SB_IA);
-    if (r.estado === 'pend') { if (Date.now() - j.at < 200000) setTimeout(iaRecover, 5000); else { lsSet(IAJOB_KEY, null); iaRetry(j); } return; }
-    lsSet(IAJOB_KEY, null);
+    if (r.estado === 'pend') { if (Date.now() - j.at < 200000) setTimeout(iaRecover, 5000); else { iaPendSet(null); iaRetry(j); } return; }
+    iaPendSet(null);
     if (r.estado === 'none' || r.estado == null) return iaRetry(j); // no llegó al servidor (el móvil cerró la app justo al mandarla) o el servidor no pudo terminarla
     if (r.estado === 'ok' && r.res) IA_DONE[j.kind]?.(r.res, j.ctx || {});
     else if (r.estado === 'err') toast('IA: ' + (r.res || 'no ha podido responder'), 'error');
-  } catch { if (Date.now() - j.at > 600000) { lsSet(IAJOB_KEY, null); iaRetry(j); } else setTimeout(iaRecover, 8000); } finally { iaRecover.busy = false; }
+  } catch { if (!j) return; if (Date.now() - j.at > 600000) { iaPendSet(null); iaRetry(j); } else setTimeout(iaRecover, 8000); } finally { iaRecover.busy = false; }
 }
 // 🔁 Se perdió por el camino: se repite sola en la app (sin foto); si llevaba foto, se pide repetirla
 function iaRetry(j) {
@@ -8329,6 +8345,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.30.1', ['🔔 Avisos de la IA más fiables si quitas la app de recientes justo después de preguntar.'], 'quiet'],
   ['5.30.0', ['🔔 Coach y cálculo de comidas: ahora te avisa cuando la IA termina aunque quites la app de recientes o el móvil la cierre. Al volver, tienes la respuesta esperándote.'], 'quiet'],
   ['5.29.0', ['🔐 Caja fuerte de administrador: la clave de lectura, el token de GitHub y el enlace de tu hoja se guardan cifrados con tu PIN y tu código, y vuelven solos a un móvil nuevo al meter tu PIN.'], 'admin'],
   ['5.28.0', ['🔔 Coach y cálculo de comidas: si sales de la app mientras la IA piensa, ahora te avisa aunque el móvil cierre la app. Al volver, tienes la respuesta esperándote.'], 'quiet'],
