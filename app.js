@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.31.1';
+const APP_VERSION = '5.31.2';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -7487,11 +7487,24 @@ async function msgPendCheck() {
 let msgEvT = null;
 function msgAdminEvent() { clearTimeout(msgEvT); msgEvT = setTimeout(() => { if (ui.accessPin && ui.msgs) sbAdminLoad().catch(() => { }); else msgPendCheck(); }, 400); }
 // 📥 todas las conversaciones (con tu clave). Cada persona = su código o su prueba; quien aún no tiene, su conversación
-async function sbAdminLoad() {
-  const key = await secretDec(lsGet(USE_KEY), ui.accessPin);
-  const d = await sbCall({ op: 'lista', key }); if (!d.ok) throw new Error(d.error === 'clave' ? 'clave' : 'fallo');
+/* 📥 Bandeja de administrador: la primera vez (y cada 10 min) se descargan todas las conversaciones; después, solo los mensajes
+   nuevos desde el último. Si el total no cuadra (alguien borró algo), se vuelve a descargar todo */
+const sbAdm = { raw: null, at: 0, key: null, keyPin: null, gestAt: 0 };
+async function sbAdminLoad(full = false) {
+  if (sbAdm.keyPin !== ui.accessPin) { sbAdm.key = await secretDec(lsGet(USE_KEY), ui.accessPin); sbAdm.keyPin = ui.accessPin; } // la clave se descifra una vez, no en cada consulta
+  const key = sbAdm.key;
+  const last = sbAdm.raw?.length ? sbAdm.raw[sbAdm.raw.length - 1].ts : '';
+  const inc = !full && sbAdm.raw && last && Date.now() - sbAdm.at < 600000;
+  let d = await sbCall({ op: 'lista', key, ...(inc ? { desde: last } : {}) }); if (!d.ok) throw new Error(d.error === 'clave' ? 'clave' : 'fallo');
+  if (inc && d.desde) { // el servidor ya sabe mandar solo lo nuevo
+    const M = new Map(sbAdm.raw.map(m => [m.id, m])); for (const m of d.msgs || []) M.set(m.id, m);
+    const merged = [...M.values()].sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : a.id - b.id));
+    if (d.total != null && d.total !== merged.length && merged.length < 2000) return sbAdminLoad(true);
+    d = { ...d, msgs: merged };
+  } else sbAdm.at = Date.now();
+  sbAdm.raw = d.msgs || [];
   if (d.topic && d.topic !== lsGet(ADM_TOPIC_KEY)) lsSet(ADM_TOPIC_KEY, d.topic);
-  gestPull(key).catch(() => { });
+  if (Date.now() - sbAdm.gestAt > 120000) { sbAdm.gestAt = Date.now(); gestPull(key).catch(() => { }); } // la copia de gestión, como mucho cada 2 min
   // 🔔 una vez por sesión, con tu PIN, se vuelve a dejar apuntado este móvil para los avisos (si el servicio de avisos lo dio por caducado, se recupera solo)
   if (!ui.pushAdmOk && lsGet(PUSH_KEY)?.on === 'adm' && pushCan() && Notification.permission === 'granted') { ui.pushAdmOk = true; pushOn(true, false).catch(() => { ui.pushAdmOk = false; }); }
   if (d.topic) rtSub(d.topic, msgAdminEvent);
@@ -8637,6 +8650,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.31.2', ['📥 Bandeja de mensajes (admin): solo descarga los mensajes nuevos en vez de todas las conversaciones cada vez; menos datos y menos batería.'], 'admin'],
   ['5.31.1', ['⚡ Acceso (admin): los usuarios activos salen en cuanto contesta Supabase, sin esperar a la hoja de Google; la caja fuerte ya no retrasa la carga.'], 'admin'],
   ['5.31.0', ['🤔 Nuevo en Entreno: «¿Qué hago hoy?». Eliges enfoque, tiempo, cómo estás, si algo te molesta y dónde entrenas, y te preparo el entreno listo para empezar (o adapto lo que te toca, sin IA). Lo que te guste lo guardas en FREE.'], 'beta'],
   ['5.30.4', ['📱 Inicio en móviles pequeños: la última tarjeta (Asistente IA) ya no queda tapada por la barra de abajo ni se mueve sola al deslizar.'], 'quiet'],
