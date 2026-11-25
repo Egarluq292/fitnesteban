@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.31.2';
+const APP_VERSION = '5.31.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -3346,7 +3346,8 @@ async function qhGo(c, tp) {
     iaNotify('🏋️ Ya tienes tu entreno de hoy', 'Ábrelo para empezar.', 'train');
     qhShow(qhParse(raw, c), c);
   } catch (e) {
-    qhShow(qhLocal(c), c, `La IA no ha podido (${String(e.message || e).slice(0, 80)}). Te lo he preparado yo con la biblioteca.`);
+    const why = String(e?.message || 'No ha respondido.').trim();
+    qhShow(qhLocal(c), c, `La IA no ha podido: ${why}${/[.!?]$/.test(why) ? '' : '.'} Mientras, te he preparado este con la biblioteca de ejercicios. Con «↻ Otra» se lo vuelves a pedir a la IA.`);
   }
 }
 
@@ -3382,14 +3383,16 @@ Responde SOLO este JSON: {"tipo":"sesion","titulo":"máx. 40 letras","explicacio
 Con "por_tiempo":true, reps_min y reps_max son segundos.`}
 Español de España, cercano y sin tecnicismos.`;
 }
+// Textos de la IA: nunca se cortan a media palabra; solo se descarta lo absurdamente largo (por encima del límite, hasta la última frase completa)
+function qhTxt(v, max) { const t = String(v || '').replace(/\s+/g, ' ').trim(); if (t.length <= max) return t; const c = t.slice(0, max), e = Math.max(c.lastIndexOf('. '), c.lastIndexOf('.')); return e > max / 3 ? c.slice(0, e + 1) : c.slice(0, c.lastIndexOf(' ')).replace(/[,;:]$/, ''); }
 /* Respuesta de la IA → entreno de la app (o plan de cardio), siempre comprobado: lista, material, molestia y tiempo */
 function qhParse(raw, c) {
   const d = parseJSONLoose(raw);
   if (d.tipo === 'cardio' && Array.isArray(d.tramos)) {
     const act = (CARDIO_TYPES[d.actividad] || CARDIO_EXTRA[d.actividad]) ? d.actividad : c.place === 'out' ? 'run' : 'elliptical';
-    const tr = d.tramos.slice(0, 12).map(t => ({ min: clamp(parseInt(t.min, 10) || 1, 1, 60), que: String(t.que || '').slice(0, 90) })).filter(t => t.que);
+    const tr = d.tramos.slice(0, 12).map(t => ({ min: clamp(parseInt(t.min, 10) || 1, 1, 60), que: qhTxt(t.que, 200) })).filter(t => t.que);
     if (!tr.length) throw new Error('vacío');
-    return { cardio: true, title: String(d.titulo || 'Cardio').slice(0, 40), why: String(d.explicacion || '').slice(0, 240), act, int: INTENSITIES.some(i => i[0] === d.intensidad) ? d.intensidad : 'media', min: tr.reduce((a, t) => a + t.min, 0), tramos: tr };
+    return { cardio: true, title: qhTxt(d.titulo, 90) || 'Cardio', why: qhTxt(d.explicacion, 500), act, int: INTENSITIES.some(i => i[0] === d.intensidad) ? d.intensidad : 'media', min: tr.reduce((a, t) => a + t.min, 0), tramos: tr };
   }
   const zone = NP_ZONES.find(z => z.k === c.zone);
   let exs = (Array.isArray(d.ejercicios) ? d.ejercicios : []).slice(0, 8).map(x => {
@@ -3405,7 +3408,7 @@ function qhParse(raw, c) {
   const seen = new Set(); exs = exs.filter(e => { const k = normTxt(e.variants[0].name); if (seen.has(k)) return false; seen.add(k); return true; });
   if (exs.length < 2) throw new Error('La propuesta no encajaba con tu material o tu molestia');
   exs = qhFit(exs, c.min === 60 ? 70 : c.min);
-  return { title: String(d.titulo || 'Tu entreno de hoy').slice(0, 40), why: String(d.explicacion || '').slice(0, 240), exs };
+  return { title: qhTxt(d.titulo, 90) || 'Tu entreno de hoy', why: qhTxt(d.explicacion, 500), exs };
 }
 /* Sin IA: la app lo arma con la biblioteca (músculos menos cargados, tu material, sin tu molestia) */
 function qhLocal(c) {
@@ -3438,8 +3441,11 @@ function qhLocal(c) {
   const CARDIOISH = /burpee|jumping|escalador|salto/;
   const pickOf = g => { const c0 = L.filter(x => !CARDIOISH.test(normTxt(x[1])) && (x[0] === g || (x[0] === 'Peso corporal' || x[0] === 'Kettlebell' || x[0] === 'Bandas elásticas') && Object.keys(musclesOf(x[1])).some(m => (MG[g]?.[1] || []).includes(m) && musclesOf(x[1])[m] === 1))); return c0.find(x => !NP_ISO.test(x[1]) && !exs.some(e => e[1] === x[1])) || c0.find(x => !exs.some(e => e[1] === x[1])); };
   const exs = [], goal = c.min === 60 ? 60 : c.min;
-  for (const g of groups) { const x = pickOf(g); if (x) exs.push(x); if (exs.length >= 7 || qhMinutes(exs.map(y => qhExFromLib(y, tired ? { sets: 2 } : {}))) >= goal) break; }
-  return { title: 'Fuerza: lo que tienes más fresco', why: groups.length ? `Trabajo ${groups.slice(0, 3).join(', ').toLowerCase()}, que es lo que tienes menos cargado.` : 'Cuerpo completo, suave.', exs: qhFit(exs.map(x => qhExFromLib(x, tired ? { sets: 2 } : {})), c.min === 60 ? 70 : c.min) };
+  // 3 series (2 si estás cansado o vas muy justo) y descansos contenidos: así caben 4–6 ejercicios y no 2 muy largos
+  const opt = x => ({ sets: tired || c.min <= 15 ? 2 : 3, rest: Math.min(x[7], c.min <= 30 ? 75 : 90) }), mk = L0 => L0.map(y => qhExFromLib(y, opt(y)));
+  for (const g of groups) { const x = pickOf(g); if (x) exs.push(x); if (exs.length >= 7 || qhMinutes(mk(exs)) >= goal) break; }
+  const worked = [...new Set(exs.map(x => x[0]))].slice(0, 3).join(', ').toLowerCase();
+  return { title: 'Fuerza: lo que tienes más fresco', why: worked ? `Trabajo ${worked}: es lo que tienes menos cargado.` : 'Cuerpo completo, suave.', exs: qhFit(mk(exs), c.min === 60 ? 70 : c.min) };
 }
 /* «Lo que me toca», sin IA: tiempo + molestia + material + cansancio a la vez */
 function qhToca(c, tp) {
@@ -3498,7 +3504,7 @@ function qhSave(r, c) {
   const fp = state.plan.programs.find(p => p.id === 'free'); if (!fp) return null;
   let label = qhLabel(c); for (let n = 2; fp.days.some(d => d.label === label); n++) label = `${qhLabel(c).split(' ')[0].slice(0, 6)} ${c.min}·${n}`;
   const id = uid('d_');
-  fp.days.push(normalizeDay({ id, label: label.slice(0, 10), rotation: false, title: r.title, subtitle: r.why.slice(0, 120), exercises: r.exs.map(e => ({ ...clone(e), id: uid('c_') })) }));
+  fp.days.push(normalizeDay({ id, label: label.slice(0, 10), rotation: false, title: r.title, subtitle: r.why, exercises: r.exs.map(e => ({ ...clone(e), id: uid('c_') })) }));
   persist(); return id;
 }
 
@@ -8650,6 +8656,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.31.3', ['🤔 «¿Qué hago hoy?»: si la IA falla, el aviso se lee entero y la propuesta de la biblioteca reparte mejor el tiempo (más ejercicios, descansos contenidos).'], 'quiet'],
   ['5.31.2', ['📥 Bandeja de mensajes (admin): solo descarga los mensajes nuevos en vez de todas las conversaciones cada vez; menos datos y menos batería.'], 'admin'],
   ['5.31.1', ['⚡ Acceso (admin): los usuarios activos salen en cuanto contesta Supabase, sin esperar a la hoja de Google; la caja fuerte ya no retrasa la carga.'], 'admin'],
   ['5.31.0', ['🤔 Nuevo en Entreno: «¿Qué hago hoy?». Eliges enfoque, tiempo, cómo estás, si algo te molesta y dónde entrenas, y te preparo el entreno listo para empezar (o adapto lo que te toca, sin IA). Lo que te guste lo guardas en FREE.'], 'beta'],
