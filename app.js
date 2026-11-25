@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.31.0';
+const APP_VERSION = '5.31.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -8637,6 +8637,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.31.1', ['⚡ Acceso (admin): los usuarios activos salen en cuanto contesta Supabase, sin esperar a la hoja de Google; la caja fuerte ya no retrasa la carga.'], 'admin'],
   ['5.31.0', ['🤔 Nuevo en Entreno: «¿Qué hago hoy?». Eliges enfoque, tiempo, cómo estás, si algo te molesta y dónde entrenas, y te preparo el entreno listo para empezar (o adapto lo que te toca, sin IA). Lo que te guste lo guardas en FREE.'], 'beta'],
   ['5.30.4', ['📱 Inicio en móviles pequeños: la última tarjeta (Asistente IA) ya no queda tapada por la barra de abajo ni se mueve sola al deslizar.'], 'quiet'],
   ['5.30.3', ['🔁 Si una estimación con foto se pierde por el camino, la app la repite sola con la misma foto (ya no hay que volver a hacerla).'], 'quiet'],
@@ -10548,7 +10549,9 @@ const actions = {
   openAccess: then => {
     if (typeof then !== 'function') then = null;
     // el PIN vale para toda la sesión: hasta cerrar la app o 2 horas sin tocar nada de Acceso
-    const done = pin => { ui.accessOpen = true; if (pin) { ui.accessPin = pin; ui.pinAt = Date.now(); } ui.accessReveal = ui.accessReveal || {}; ui.usageErr = ''; if (then) then(); else render(); (pin ? vaultSoon(pin) : Promise.resolve()).then(() => loadUsage()); };
+    const done = pin => { ui.accessOpen = true; if (pin) { ui.accessPin = pin; ui.pinAt = Date.now(); } ui.accessReveal = ui.accessReveal || {}; ui.usageErr = ''; if (then) then(); else render();
+      const had = !!lsGet(USE_KEY); loadUsage(); // sin esperar a la caja fuerte: solo si te devuelve la clave de lectura, se vuelve a cargar
+      if (pin) setTimeout(() => vaultSoon(pin).then(() => { if (!had && lsGet(USE_KEY)) loadUsage(); }), had ? 2500 : 0); };
     if (pinOk()) return done(ui.accessPin);
     if (state.settings.pinHash) return askPinOnly('🔑 Acceso', 'Escribe tu PIN para abrir esta sección.', pin => done(pin));
     let fails = 0;
@@ -11358,6 +11361,10 @@ function vaultSoon(pin) {
 }
 async function vaultSync(pin) {
   const code = lsGet(ACCESS_KEY).code, loc = {};
+  // ya está todo en este móvil y no ha cambiado desde la última vez que se guardó: nada que hacer (ni red ni descifrar)
+  const firma = JSON.stringify([lsGet(USE_KEY), lsGet(GH_KEY), lsGet(SHEET_KEY), pin.length, code]);
+  const sig = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(firma)))].slice(0, 12).map(x => x.toString(16).padStart(2, '0')).join('');
+  if (lsGet(USE_KEY) && lsGet(GH_KEY) && lsGet(SHEET_KEY) && lsGet(VAULT_SIG) === sig) return;
   try { const u = lsGet(USE_KEY); if (u) loc.u = await secretDec(u, pin); } catch { /* cifrada con otro PIN */ }
   try { if (lsGet(GH_KEY)) loc.g = await ghToken(pin); } catch { /* nada */ }
   if (lsGet(SHEET_KEY)) loc.s = lsGet(SHEET_KEY);
@@ -11371,9 +11378,12 @@ async function vaultSync(pin) {
   if (!loc.s && rem.s) { lsSet(SHEET_KEY, rem.s); loc.s = rem.s; vuelve.push('el enlace de tu hoja'); }
   if (vuelve.length) { toast('🔐 Recuperado en este móvil: ' + vuelve.join(', ').replace(/, ([^,]*)$/, ' y $1') + ' ✓'); render(); }
   const all = { ...rem, ...loc }, ord = o => JSON.stringify(['u', 'g', 's'].map(k => o[k] || ''));
-  if (!all.u || (got && ord(all) === ord(rem))) return; // sin cambios (o sin clave de lectura, que el servidor pide para guardar)
-  await sbCall({ op: 'caja_put', code, key: all.u, doc: await secretEnc(JSON.stringify(all), vaultPass(pin)) }, 15000);
+  if (got && ord(all) === ord(rem)) { if (lsGet(USE_KEY) && lsGet(GH_KEY) && lsGet(SHEET_KEY)) lsSet(VAULT_SIG, sig); return; } // sin cambios
+  if (!all.u) return; // sin clave de lectura no se puede guardar (el servidor la pide)
+  const j2 = await sbCall({ op: 'caja_put', code, key: all.u, doc: await secretEnc(JSON.stringify(all), vaultPass(pin)) }, 15000);
+  if (j2?.ok) lsSet(VAULT_SIG, sig);
 }
+const VAULT_SIG = 'fitnesteban_vsig';
 /* ---------- Registro de uso: día de último uso y versión (una vez al día por móvil) ----------
    Va a una hoja de Google del administrador mediante un Apps Script. Solo se envía la huella del código y la versión. */
 const USE_KEY = 'fitnesteban_usekey', PING_KEY = 'fitnesteban_ping', SHEET_KEY = 'fitnesteban_sheet'; // enlace a la hoja: solo en este dispositivo, nunca en GitHub
@@ -11420,7 +11430,15 @@ async function loadUsage() {
   try {
     const key = await secretDec(enc, ui.accessPin);
     // 📶 el registro se lee a la vez de Supabase (rápido) y de tu hoja de Google; si Google no contesta, basta con Supabase
-    const [g, sb] = await Promise.allSettled([fetchT(`${access.usageUrl}?key=${encodeURIComponent(key)}&t=${Date.now()}`).then(r => r.json()), sbCall({ op: 'usos', key }, 20000)]);
+    const gP = fetchT(`${access.usageUrl}?key=${encodeURIComponent(key)}&t=${Date.now()}`).then(r => r.json()), sbP = sbCall({ op: 'usos', key }, 20000);
+    let gDone = false; gP.finally(() => { gDone = true; }).catch(() => null);
+    // ⚡ en cuanto contesta Supabase (rápido) ya ves quién la usa; lo de tu hoja de Google (más lenta) se suma después
+    sbP.then(v => {
+      if (gDone || !v?.ok || !Array.isArray(v.rows)) return;
+      const U = { ...(ui.usage || {}) }; for (const x0 of v.rows) { const h = String(x0.h).toLowerCase(), x = { ...(U[h] || {}), ...x0 }; x.v = usageVer(x.v); U[h] = x; }
+      ui.usage = U; if ((ui.accessOpen || ui.accPage) && ui.view === 'settings') render();
+    }).catch(() => null);
+    const [g, sb] = await Promise.allSettled([gP, sbP]);
     let d = g.status === 'fulfilled' && g.value?.ok ? g.value : null;
     const sbRows = sb.status === 'fulfilled' && sb.value?.ok && Array.isArray(sb.value.rows) ? sb.value.rows : null;
     if (!d && !sbRows) { if (g.status === 'fulfilled') throw new Error(g.value?.error === 'clave' ? 'La clave del registro no coincide con la del script' : 'El registro no respondió bien'); throw g.reason; }
