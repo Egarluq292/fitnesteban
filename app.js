@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.32.3';
+const APP_VERSION = '5.33.0';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -8183,7 +8183,7 @@ function chatContext() {
     ejercicios: s.exercises.map(e => `${e.name}: ${e.sets.map(x => setTxt(e.exId, x, isTimedEx(e))).join(', ')}`) }));
   const w = activeWip();
   return {
-    hoy: T, dia_semana: parseISO(T).toLocaleDateString('es-ES', { weekday: 'long' }), hora: new Date().toTimeString().slice(0, 5),
+    hoy: T, dia_semana: parseISO(T).toLocaleDateString('es-ES', { weekday: 'long' }), hora: new Date().toTimeString().slice(0, 5), ...(bdayToday() ? { hoy_es_su_cumpleanos: `cumple ${ageFrom(profileOf().birth)} años: felicítale al principio de tu primera respuesta del día` } : {}),
     objetivos: { kcal: st.targetKcal, proteina_g: st.targetProt, carbos_g: st.targetCarbs, grasa_g: st.targetFat, proteina_min_por_comida_g: minProt(), sumar_ejercicio_al_margen: !!st.eatBackCardio },
     dieta_hoy: { comidas: mealsOf(T).map(m => ({ tipo: m.type, que: m.desc, kcal: Math.round(m.kcal), P: Math.round(m.prot), C: Math.round(m.carbs), G: Math.round(m.fat) })),
       total: { kcal: Math.round(t.kcal), P: Math.round(t.prot), C: Math.round(t.carbs), G: Math.round(t.fat) },
@@ -8794,6 +8794,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.33.0', ['🎂 El día de tu cumpleaños, la app te felicita (con tu fecha de nacimiento del perfil, que solo está en tu móvil). El Coach también lo sabe.'], 'quiet'],
   ['5.32.3', ['📋 «Planificar mañana» pasa a estar justo debajo de «¿Qué como?», en el resumen del día.'], 'quiet'],
   ['5.32.2', ['🤔 «¿Qué hago hoy?»: al marcar opciones (como el material de casa), la ventana ya no vuelve arriba.'], 'quiet'],
   ['5.32.1', ['🤔 Nuevo en Entreno: «¿Qué hago hoy?» (debajo de «Hoy te toca»). Eliges enfoque, tiempo, cómo estás, si algo te molesta y dónde entrenas, y te preparo un entreno listo para empezar; o adapto lo que te toca, sin IA. Lo que te guste lo guardas en FREE.', '📣 Nuevo vídeo de la app para compartir (en «Recomienda FITNESTEBAN»).']],
@@ -9468,7 +9469,7 @@ function renderInner() {
   $('#headerSub').textContent = sub[ui.view];
   watchWipInline();
   if (ui.view === 'train') fixProgRow();
-  if (ui.view === 'home') fitHome();
+  if (ui.view === 'home') { fitHome(); bdayConfetti(); }
 }
 
 /* ---------- Inicio: 4 tarjetas con foto que llenan la pantalla ---------- */
@@ -9992,11 +9993,32 @@ function stepsModal(d = todayISO(), val = null) {
     off: () => { st.stepsOff = !st.stepsOff; persist(); closeModal(); render(); toast(st.stepsOff ? 'Quitado de Inicio. Lo tienes en Progreso → Pasos.' : 'Los pasos vuelven a Inicio ✓'); }
   });
 }
+/* 🎂 Cumpleaños: con la fecha de nacimiento del perfil (que solo está en tu móvil). Si naciste un 29 de febrero, en los años
+   que no son bisiestos se celebra el 28. Felicitación en Inicio, confeti una vez al día y el Coach también lo sabe */
+function bdayToday(at = todayISO()) {
+  const b = profileOf()?.birth; if (!/^\d{4}-\d{2}-\d{2}$/.test(b || '')) return false;
+  const md = b.slice(5), y = +at.slice(0, 4), leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  return at.slice(5) === (md === '02-29' && !leap ? '02-28' : md);
+}
+function bdayHTML() {
+  if (!bdayToday() || lsGet('fitnesteban_bdayoff') === todayISO()) return '';
+  const age = ageFrom(profileOf().birth);
+  return `<div class="bday-card"><button class="bday-x" data-act="bdayOff" type="button" aria-label="Cerrar">✕</button>
+    <div class="text-4xl">🎂</div><div class="min-w-0"><div class="font-black text-[17px] leading-tight">¡Hoy cumples ${age} años!</div>
+    <p class="text-[13px] text-slate-200 mt-1 leading-snug">Que tengas un gran día. Y si toca celebrarlo, celébralo: un día no cambia tu progreso. 🥳</p></div></div>`;
+}
+function bdayConfetti() {
+  if (!bdayToday() || lsGet('fitnesteban_bday') === todayISO()) return; // siempre, también con animaciones reducidas
+  lsSet('fitnesteban_bday', todayISO());
+  const box = document.createElement('div'); box.className = 'bday-fx'; const C = ['#22d3ee', '#fbbf24', '#f472b6', '#34d399', '#a78bfa', '#fb7185'];
+  for (let i = 0; i < 60; i++) { const p = document.createElement('i'); p.style.cssText = `left:${Math.random() * 100}%;background:${C[i % C.length]};animation-delay:${(Math.random() * 0.9).toFixed(2)}s;animation-duration:${(2.4 + Math.random() * 1.6).toFixed(2)}s;transform:rotate(${Math.random() * 360}deg)`; box.appendChild(p); }
+  document.body.appendChild(box); setTimeout(() => box.remove(), 4800);
+}
 function renderHome() {
-  const name = profileOf()?.name || access.me?.name || '';
+  const name = profileOf()?.name || access.me?.name || '', bd = bdayToday();
   const f = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
-  return `<div class="pb-3"><div class="text-mute text-sm">${esc(f.charAt(0).toUpperCase() + f.slice(1))}</div><h1 class="text-2xl font-black mt-0.5">Hola${name ? ', ' + esc(name.split(' ')[0]) : ''}</h1></div>
-  ${v5HomeHTML()}${planBannerHTML()}${advHomeHTML()}${advTeaserHTML()}
+  return `<div class="pb-3"><div class="text-mute text-sm">${esc(f.charAt(0).toUpperCase() + f.slice(1))}</div><h1 class="text-2xl font-black mt-0.5">${bd ? `¡Feliz cumpleaños${name ? ', ' + esc(name.split(' ')[0]) : ''}! 🎉` : `Hola${name ? ', ' + esc(name.split(' ')[0]) : ''}`}</h1></div>
+  ${bdayHTML()}${v5HomeHTML()}${planBannerHTML()}${advHomeHTML()}${advTeaserHTML()}
   <div id="homeCards" class="home-cards">${HOME_CARDS.map(c => `<button class="home-card" style="--c:${c.c};background-image:url(${c.img}.webp);background-position:${c.pos}" data-act="homeGo" data-v="${c.view}" type="button">
     <span class="home-shade"></span>
     <span class="home-txt">${c.view === 'train' && libNewList().length ? `<span class="home-pill">📚 ${libNewList().length === 1 ? '1 bloque nuevo' : libNewList().length + ' bloques nuevos'}</span>` : ''}${c.view === 'progress' ? stepsPillHTML() : ''}<span class="block font-black text-[19px] leading-tight">${c.t}</span>${homeSub(c.view).filter(Boolean).slice(0, (c.view === 'train' && libNewList().length) || (c.view === 'progress' && stepsPillHTML()) ? 1 : 2).map((l, i) => `<span class="block text-[13px] ${i ? 'mt-0.5' : 'mt-1'} text-slate-300 truncate">${l}</span>`).join('')}</span>
@@ -10526,6 +10548,7 @@ const actions = {
   dietGo: b => { if (dietPending()) return toast('Termina o cierra la comida que estás añadiendo', 'warn'); ui.dietDate = b.dataset.date; ui._animRings = true; render(); },
   outMeal: () => outMealModal(),
   planOpen: () => mpModal(),
+  bdayOff: () => { lsSet('fitnesteban_bdayoff', todayISO()); render(); },
   planOk: b => mpTake(b.dataset.id, 'ok'), planEd: b => mpTake(b.dataset.id, 'ed'), planDel: b => mpTake(b.dataset.id, 'del'),
   repeatYday: b => {
     const tp = b.dataset.type, src = mealsOf(addDays(ui.dietDate, -1)).filter(m => (m.type || 'Otro') === tp);
