@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.32.2';
+const APP_VERSION = '5.32.3';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4901,10 +4901,11 @@ function mpRowsHTML(tp) {
     <span class="block text-sm font-semibold">${m.out ? '🍽️ ' : ''}${esc(m.desc)}</span><span class="block text-[11px] font-mono">${m.out ? `~${Math.round(m.kcal)} kcal reservadas` : macroLine(m)}</span></span>
     <span class="flex gap-1 shrink-0"><button class="plan-ok" data-act="planOk" data-id="${esc(m.id)}" type="button" aria-label="Me lo he comido">✓</button><button class="plan-ed" data-act="planEd" data-id="${esc(m.id)}" type="button" aria-label="Ajustar">✏️</button><button class="plan-ed" data-act="planDel" data-id="${esc(m.id)}" type="button" aria-label="Quitar">✕</button></span></div>`).join('');
 }
-function mpCardHTML() {
+// Debajo de «¿Qué como?» (en el resumen del día): siempre a mano, tengas o no comidas hoy
+function mpBtnHTML() {
   if (ui.dietDate !== todayISO()) return '';
   const p = mpOf(mpTomorrow()), n = p?.meals.length || 0;
-  return `<button class="d2-add-empty d2-add-otro plan-card" data-act="planOpen" type="button">📋 ${n ? `Mañana: ${n} ${n === 1 ? 'comida planificada' : 'comidas planificadas'} · ~${mpSum(p.meals).kcal} kcal` : 'Planificar mañana'}</button>`;
+  return `<button class="qc-btn plan-btn" data-act="planOpen" type="button">📋 ${n ? `Mañana: ${n} ${n === 1 ? 'comida planificada' : 'comidas planificadas'} · ~${mpSum(p.meals).kcal} kcal` : 'Planificar mañana'}</button>`;
 }
 function mpTake(id, how) {
   const p = mpOf(todayISO()), m = p?.meals.find(x => x.id === id); if (!m) return;
@@ -4962,7 +4963,7 @@ function renderDiet() {
         <span class="block text-[11px] font-mono mt-0.5">${macroLine(m)}</span></span><span class="text-mute text-lg leading-none">⋯</span></button>${q ? `<span class="d2-qty"><button data-act="mealQty" data-id="${esc(m.id)}" data-d="-1" type="button" aria-label="Una menos" ${q.n <= 1 ? 'disabled' : ''}>−</button><b>${q.n}</b><button data-act="mealQty" data-id="${esc(m.id)}" data-d="1" type="button" aria-label="Una más">＋</button></span>` : ''}</div>`; }).join('')}
       ${!items.length && yd.length ? `<button class="d2-add-empty" data-act="repeatYday" data-type="${tp}" type="button">↻ Repetir el de ayer <span class="text-mute font-normal">· ${esc(yd.map(m => m.desc).join(' + ').slice(0, 38))}</span></button>` : ''}
     </div>`;
-  }).join('') + (canBeta() ? `<button class="d2-add-empty d2-add-otro" data-act="outMeal" type="button">🍽️ Comida fuera o copas</button>` : '') + mpCardHTML();
+  }).join('') + (canBeta() ? `<button class="d2-add-empty d2-add-otro" data-act="outMeal" type="button">🍽️ Comida fuera o copas</button>` : '') + '';
 
   const over = leftK < 0;
   const hint = !mealsOf(date).length ? (isToday ? 'Aún no has registrado nada hoy. Toca ＋ en la comida que toque.' : 'Sin comidas registradas este día.')
@@ -4986,7 +4987,7 @@ function renderDiet() {
       <div class="d2-left"><div class="d2-left-l">${over ? (canBeta() ? 'Hoy, por encima' : 'Te has pasado') : 'Te quedan'}</div><div class="d2-left-v ${over && !canBeta() ? 'text-rose-300' : MAC.kcal.text}">${over && canBeta() ? '+' : ''}${Math.abs(leftK)}<span> kcal</span></div></div>
       <div class="d2-left"><div class="d2-left-l">${leftP > 0 ? 'Proteína que falta' : 'Proteína'}</div><div class="d2-left-v ${MAC.prot.text}">${leftP > 0 ? `${leftP}<span> g</span>` : '✓<span> cumplida</span>'}</div></div>
     </div>
-    ${isToday && mealsOf(date).length && (leftK > 60 || qcProtMode(qcLeft())) ? `<button class="qc-btn ${MAC.kcal.text}" data-act="queComo" type="button">¿Qué como?</button>` : `<p class="text-xs text-mute mt-2.5 leading-relaxed">${esc(hint)}</p>`}
+    ${isToday && mealsOf(date).length && (leftK > 60 || qcProtMode(qcLeft())) ? `<button class="qc-btn ${MAC.kcal.text}" data-act="queComo" type="button">¿Qué como?</button>` : `<p class="text-xs text-mute mt-2.5 leading-relaxed">${esc(hint)}</p>`}${mpBtnHTML()}
     ${isToday ? realTdeeHintHTML() : ''}
     ${burned ? `<button class="text-[11px] mt-2 text-mute text-left w-full" data-act="netInfo" type="button">${cardioK ? `🔥 Cardio <b class="${MAC.kcal.text}">−${cardioK}</b> · ` : ''}${gymK ? `🏋️ Gym <b class="${MAC.kcal.text}">−${gymK}</b> · ` : ''}Neto <b class="text-white">${String(Math.round(t.kcal - burned)).replace('-', '−')}</b> kcal <span class="text-brand font-bold">ⓘ</span></button>` : ''}
   </section>
@@ -8793,6 +8794,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.32.3', ['📋 «Planificar mañana» pasa a estar justo debajo de «¿Qué como?», en el resumen del día.'], 'quiet'],
   ['5.32.2', ['🤔 «¿Qué hago hoy?»: al marcar opciones (como el material de casa), la ventana ya no vuelve arriba.'], 'quiet'],
   ['5.32.1', ['🤔 Nuevo en Entreno: «¿Qué hago hoy?» (debajo de «Hoy te toca»). Eliges enfoque, tiempo, cómo estás, si algo te molesta y dónde entrenas, y te preparo un entreno listo para empezar; o adapto lo que te toca, sin IA. Lo que te guste lo guardas en FREE.', '📣 Nuevo vídeo de la app para compartir (en «Recomienda FITNESTEBAN»).']],
   ['5.32.0', ['📋 Nuevo en Dieta: «Planificar mañana». Cuéntale qué harás mañana (comes fuera, un evento, entrenas…) y la IA te prepara el día; también puedes copiar lo de hoy o pedírselo al Coach. Lo planificado no cuenta hasta que, ese día, pulses «✓ Me lo he comido».']],
