@@ -4,7 +4,7 @@
    Datos: localStorage (solo en este móvil). Sin fotos guardadas.
    ========================================================================= */
 
-const APP_VERSION = '5.33.0';
+const APP_VERSION = '5.33.1';
 const STORE_KEY = 'fitnesteban_v4';
 const OLD_KEY = 'fitnesteban_v3';
 const DEFAULT_MODEL = 'gemini-3.8-flash';
@@ -4798,13 +4798,19 @@ function qcShow(cx, ops, note, ia = false) {
   });
 }
 /* =========================================================================
-   📋 PLANIFICAR MAÑANA (🧪 administrador y beta). Lo planificado se guarda APARTE (state.mealPlan) y no cuenta en nada
+   📋 PLANIFICAR HOY O MAÑANA. Lo planificado se guarda APARTE (state.mealPlans) y no cuenta en nada
    (calorías, balance, Coach, estadísticas) hasta que, ese día, pulsas «✓ Me lo he comido». Solo mañana: ni más días ni lista de la compra.
    «¿Algo especial mañana?» (comer fuera, una boda, entreno de pierna…) cambia el reparto del día.
    ========================================================================= */
 const mpTomorrow = () => addDays(todayISO(), 1);
-function mpOf(date) { const p = state.mealPlan; return p && p.date === date ? p : null; }
-function mpClean() { const p = state.mealPlan; if (p && p.date < todayISO()) { delete state.mealPlan; persist(); } }
+// Se puede planificar HOY (si aún no has registrado nada) o MAÑANA; cada día, su plan (state.mealPlans[fecha])
+const mpD = () => ui.mpDate && ui.mpDate >= todayISO() ? ui.mpDate : mpTomorrow();
+const mpIsToday = (d = mpD()) => d === todayISO();
+const mpWord = (d = mpD()) => mpIsToday(d) ? 'hoy' : 'mañana';
+function mpPlans() { if (state.mealPlan) { state.mealPlans = { ...(state.mealPlans || {}), [state.mealPlan.date]: state.mealPlan }; delete state.mealPlan; } return state.mealPlans || (state.mealPlans = {}); }
+function mpOf(date) { const p = mpPlans()[date]; return p && p.meals?.length ? p : null; }
+function mpSet(date, p) { const P = mpPlans(); if (p && p.meals?.length) P[date] = { ...p, date }; else delete P[date]; }
+function mpClean() { const P = mpPlans(), T = todayISO(); let ch = false; for (const d of Object.keys(P)) if (d < T || !P[d]?.meals?.length) { delete P[d]; ch = true; } if (ch) persist(); }
 const mpSum = meals => { const t = { kcal: 0, prot: 0, carbs: 0, fat: 0 }; for (const m of meals) for (const k in t) t[k] += m[k] || 0; for (const k in t) t[k] = Math.round(t[k]); return t; };
 const mpDayName = d => parseISO(d).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' });
 // Ingredientes de la IA → los de la app (como en «¿Qué como?»)
@@ -4828,10 +4834,10 @@ function mpPrompt(ctxTxt, only = null, keep = []) {
   const st = state.settings, kept = mpSum(keep), left = { kcal: st.targetKcal - kept.kcal, prot: st.targetProt - kept.prot };
   const slots = only ? [only] : QC_SLOTS, W = slots.reduce((a, tp) => a + QC_W[tp], 0);
   const recent = [...new Set(QC_SLOTS.flatMap(tp => qcRecent(tp)))].slice(0, 20);
-  return `Eres un dietista práctico de España. Planifica ${only ? `SOLO ${qcDe(only).toUpperCase()}` : 'TODAS las comidas'} de MAÑANA (${mpDayName(mpTomorrow())}) para ${profileText()}.
+  return `Eres un dietista práctico de España. Planifica ${only ? `SOLO ${qcDe(only).toUpperCase()}` : 'TODAS las comidas'} de ${mpWord().toUpperCase()} (${mpDayName(mpD())}) para ${profileText()}.
 Objetivo del día completo: ${st.targetKcal} kcal, ${st.targetProt} g de proteína, ${st.targetCarbs} g de hidratos, ${st.targetFat} g de grasa.
 ${keep.length ? `Ya tiene planificado: ${keep.map(m => `${m.type}: ${m.desc} (${Math.round(m.kcal)} kcal)`).join('; ')}. Para lo que planifiques ahora quedan unas ${Math.max(0, Math.round(left.kcal))} kcal y ${Math.max(0, Math.round(left.prot))} g de proteína.\n` : ''}Reparto orientativo: ${slots.map(tp => `${tp} ~${Math.round((keep.length ? left.kcal : st.targetKcal) * QC_W[tp] / W)} kcal`).join(', ')}.
-${ctxTxt ? `LO QUE HARÁ MAÑANA (tenlo muy en cuenta): «${ctxTxt}».
+${ctxTxt ? `LO QUE HARÁ ${mpWord().toUpperCase()} (tenlo muy en cuenta): «${ctxTxt}».
 - Si come o cena FUERA (restaurante, boda, comida familiar, de empresa…), esa comida va con "fuera":true, sin items, con "kcal_reservadas" realistas para ese tipo de comida, y el resto del día más ligero y con más proteína para compensar sin pasar hambre.
 - Si entrena, más hidratos en la comida de antes y la de después.
 - Si va de viaje o trabaja fuera, comidas para llevar (táper o bocadillo) que aguanten sin nevera unas horas.\n` : ''}${recent.length ? `Estos días ya ha comido: ${recent.join('; ')}. Propón platos diferentes.\n` : ''}${QC_RULES}${algPrompt()}
@@ -4839,59 +4845,60 @@ Para cada ingrediente da su peso en gramos (en crudo si se cocina; si va por uni
 Responde SOLO con JSON: {"comidas":[{"tipo":"Desayuno|Comida|Puente|Cena","nombre":"…","fuera":false,"kcal_reservadas":0,"items":[{"nombre":"Merluza","g":150,"uds":"","por100":{"kcal":0,"prot":0,"carbs":0,"fat":0}}],"pasos":"una frase"}],"nota":"una frase útil o vacío"}`;
 }
 async function mpAsk(ctxTxt, only = null) {
-  const p0 = mpOf(mpTomorrow()), keep = only ? (p0?.meals || []).filter(m => m.type !== only) : [];
-  openModal(`<div class="text-center py-6"><span class="spinner" style="width:34px;height:34px;border-width:3px;border-color:rgba(34,211,238,.25);border-top-color:#22d3ee"></span><h3 class="modal-title mt-3">${only ? `Buscando otra idea para ${esc(qcDe(only))}…` : 'Planificando tu día de mañana…'}</h3><p class="text-sm text-mute">Con tus objetivos${ctxTxt ? ' y lo que vas a hacer' : ''}.</p><div class="mt-4">${iaAskHTML()}</div></div>`, { noClose: true });
+  const p0 = mpOf(mpD()), keep = only ? (p0?.meals || []).filter(m => m.type !== only) : [];
+  openModal(`<div class="text-center py-6"><span class="spinner" style="width:34px;height:34px;border-width:3px;border-color:rgba(34,211,238,.25);border-top-color:#22d3ee"></span><h3 class="modal-title mt-3">${only ? `Buscando otra idea para ${esc(qcDe(only))}…` : `Planificando tu día de ${mpWord()}…`}</h3><p class="text-sm text-mute">Con tus objetivos${ctxTxt ? ' y lo que vas a hacer' : ''}.</p><div class="mt-4">${iaAskHTML()}</div></div>`, { noClose: true });
   try {
-    const raw = await callGemini([{ text: mpPrompt(ctxTxt, only, keep) }], { temperature: 0.5, timeout: 60000, relay: { kind: 'plan', ctx: { ctxTxt, only }, title: '📋 Ya tienes planificado mañana', cuerpo: 'Ábrelo para revisarlo.' } });
-    iaNotify('📋 Ya tienes planificado mañana', 'Ábrelo para revisarlo.', 'diet');
+    const raw = await callGemini([{ text: mpPrompt(ctxTxt, only, keep) }], { temperature: 0.5, timeout: 60000, relay: { kind: 'plan', ctx: { ctxTxt, only, date: mpD() }, title: `📋 Ya tienes planificado ${mpWord()}`, cuerpo: 'Ábrelo para revisarlo.' } });
+    iaNotify(`📋 Ya tienes planificado ${mpWord()}`, 'Ábrelo para revisarlo.', 'diet');
     mpApply(raw, ctxTxt, only);
   } catch (e) {
     const why = String(e?.message || 'No ha respondido.').trim();
     openModal(`<div class="text-center text-4xl">😕</div><h3 class="modal-title text-center">No he podido planificarlo</h3><p class="text-sm text-mute text-center">${esc(why)}</p>
-      <button class="btn-primary w-full mt-3" data-mact="again" type="button">🔄 Reintentar</button><button class="btn-ghost w-full mt-2" data-mact="back" type="button">Volver</button>`, { again: () => mpAsk(ctxTxt, only), back: () => mpModal() });
+      <button class="btn-primary w-full mt-3" data-mact="again" type="button">🔄 Reintentar</button><button class="btn-ghost w-full mt-2" data-mact="back" type="button">Volver</button>`, { again: () => mpAsk(ctxTxt, only), back: () => mpModal(mpD()) });
   }
 }
 function mpApply(raw, ctxTxt, only) {
-  const d = parseJSONLoose(raw), st = state.settings, T1 = mpTomorrow();
+  const d = parseJSONLoose(raw), st = state.settings, T1 = mpD();
   const p0 = mpOf(T1), keep = only ? (p0?.meals || []).filter(m => m.type !== only) : [];
   const list = (Array.isArray(d.comidas) ? d.comidas : []).filter(o => !only || o.tipo === only || (d.comidas.length === 1));
   const fuera = list.filter(o => o.fuera).reduce((a, o) => a + (num(o.kcal_reservadas) || 0), 0) + mpSum(keep).kcal;
   const free = list.filter(o => !o.fuera).map(o => QC_SLOTS.includes(o.tipo) ? o.tipo : only).filter(Boolean), W = free.reduce((a, tp) => a + (QC_W[tp] || 10), 0) || 1;
   const meals = list.map(o => { const tp = QC_SLOTS.includes(o.tipo) ? o.tipo : only; return mpMeal({ ...o, tipo: tp }, o.fuera ? 0 : Math.max(120, Math.round((st.targetKcal - fuera) * (QC_W[tp] || 10) / W))); }).filter(Boolean);
   if (!meals.length) throw new Error('vacío');
-  state.mealPlan = { date: T1, ctx: ctxTxt || p0?.ctx || '', note: qhTxt(d.nota, 400) || (only ? p0?.note || '' : ''), meals: [...keep, ...meals].sort((a, b) => QC_SLOTS.indexOf(a.type) - QC_SLOTS.indexOf(b.type)) };
-  persist(); mpModal();
+  mpSet(T1, { ctx: ctxTxt || p0?.ctx || '', note: qhTxt(d.nota, 400) || (only ? p0?.note || '' : ''), meals: [...keep, ...meals].sort((a, b) => QC_SLOTS.indexOf(a.type) - QC_SLOTS.indexOf(b.type)) });
+  persist(); mpModal(T1);
 }
-// Lo de un día (hoy u otro) copiado como plan de mañana
+// Lo de otro día (hoy para mañana, o ayer para hoy) copiado como plan
 function mpCopyFrom(date) {
   const ms = mealsOf(date); if (!ms.length) return toast('Ese día no tiene comidas registradas', 'warn');
-  state.mealPlan = { date: mpTomorrow(), ctx: mpOf(mpTomorrow())?.ctx || '', note: '', meals: ms.map(m => ({ ...clone(mealRecord(m, uid('pl_'))), type: m.type || 'Otro' })) };
-  persist(); mpModal(); toast('Copiado como plan de mañana ✓');
+  const D = mpD(); mpSet(D, { ctx: mpOf(D)?.ctx || '', note: '', meals: ms.map(m => ({ ...clone(mealRecord(m, uid('pl_'))), type: m.type || 'Otro' })) });
+  persist(); mpModal(D); toast(`Copiado como plan de ${mpWord(D)} ✓`);
 }
-function mpModal() {
+function mpModal(date) {
   mpClean();
-  const T1 = mpTomorrow(), p = mpOf(T1), st = state.settings, meals = p?.meals || [], tot = mpSum(meals);
+  if (date) ui.mpDate = date;
+  const T1 = mpD(), hoy = mpIsToday(T1), p = mpOf(T1), st = state.settings, meals = p?.meals || [], tot = mpSum(meals), src = hoy ? addDays(T1, -1) : todayISO();
   const off = meals.length && Math.abs(tot.kcal - st.targetKcal) > st.targetKcal * 0.1;
   const row = m => `<div class="plan-row"><div class="min-w-0 flex-1"><div class="text-[10.5px] font-black tracking-widest text-mute">${esc(m.type.toUpperCase())}${m.warn ? ' · <span class="text-amber-300">⚠️ revisa cantidades</span>' : ''}</div>
       <div class="font-bold text-[14px] leading-snug">${m.out ? '🍽️ ' : ''}${esc(m.desc)}</div>
       <div class="text-[11px] font-mono mt-0.5">${m.out ? `<span class="${MAC.kcal.text}">~${Math.round(m.kcal)} kcal reservadas</span>` : macroLine(m)}</div>
       ${m.items?.length ? `<div class="text-[11px] text-mute mt-0.5">${esc(m.items.map(it => `${it.name} ${it.grams} g`).join(' · '))}</div>` : ''}</div>
       <div class="flex flex-col gap-1 shrink-0">${QC_SLOTS.includes(m.type) ? `<button class="chip chip-sm" data-mact="otra" data-t="${esc(m.type)}" type="button">↻ Otra</button>` : ''}<button class="chip chip-sm" data-mact="del" data-id="${esc(m.id)}" type="button">✕</button></div></div>`;
-  openModal(`<h3 class="modal-title">📋 Mañana · ${esc(mpDayName(T1))}</h3>
-    <p class="text-[12px] text-mute -mt-1">Lo planificado no cuenta hasta que mañana pulses «✓ Me lo he comido».</p>
-    <div class="lbl mt-2">¿Algo especial mañana? <span class="text-mute font-normal">(opcional)</span></div>
+  openModal(`<h3 class="modal-title">📋 ${hoy ? 'Hoy' : 'Mañana'} · ${esc(mpDayName(T1))}</h3>
+    <p class="text-[12px] text-mute -mt-1">Lo planificado no cuenta hasta que pulses «✓ Me lo he comido» en cada comida${hoy ? ', en Dieta' : ' (mañana, en Dieta)'}.</p>
+    <div class="lbl mt-2">¿Algo especial ${hoy ? 'hoy' : 'mañana'}? <span class="text-mute font-normal">(opcional)</span></div>
     <textarea class="field w-full" id="planCtx" rows="2" maxlength="300" placeholder="Ej.: como fuera con la familia · boda por la tarde · entreno pierna por la mañana · viaje en coche">${esc(p?.ctx || '')}</textarea>
     <button class="btn-primary w-full mt-2" data-mact="ia" type="button">${meals.length ? '✨ Rehacer el día con IA' : '✨ Planificar el día con IA'}</button>
-    ${mealsOf(todayISO()).length && !meals.length ? '<button class="btn-ghost w-full mt-2" data-mact="copy" type="button">⧉ Copiar lo de hoy</button>' : ''}
+    ${mealsOf(src).length && !meals.length ? `<button class="btn-ghost w-full mt-2" data-mact="copy" type="button">⧉ Copiar lo de ${hoy ? 'ayer' : 'hoy'}</button>` : ''}
     ${meals.length ? `<div class="plan-tot ${off ? 'plan-off' : ''}"><span>Previsto: <b>${tot.kcal}</b> / ${st.targetKcal} kcal · P <b>${tot.prot}</b> / ${st.targetProt} g${meals.some(m => m.out) ? ' <span class="text-mute">(la proteína, sin contar lo de fuera)</span>' : ''}</span>${off ? `<span class="text-amber-300 text-[11px] block">⚠️ Se aleja más de un 10 % de tu objetivo: cambia alguna comida con «↻ Otra».</span>` : ''}</div>
       ${p.note ? `<p class="text-[12px] text-slate-300 mt-2">${esc(p.note)}</p>` : ''}
       <div class="mt-2">${meals.map(row).join('')}</div>
-      <button class="btn-ghost w-full mt-3 text-rose-300" data-mact="clear" type="button">Borrar el plan de mañana</button>` : ''}`, {
+      <button class="btn-ghost w-full mt-3 text-rose-300" data-mact="clear" type="button">Borrar el plan de ${hoy ? 'hoy' : 'mañana'}</button>` : ''}`, {
     ia: root => { const c = $('#planCtx', root)?.value.trim() || ''; if (!state.settings.apiKey) return toast('Necesitas tu clave de Gemini (Ajustes → IA)', 'warn'); mpAsk(c); },
     otra: (root, b) => { const c = $('#planCtx', root)?.value.trim() || p?.ctx || ''; if (!state.settings.apiKey) return toast('Necesitas tu clave de Gemini (Ajustes → IA)', 'warn'); mpAsk(c, b.dataset.t); },
-    del: (_, b) => { p.meals = p.meals.filter(m => m.id !== b.dataset.id); persist(); mpModal(); },
-    copy: () => mpCopyFrom(todayISO()),
-    clear: () => { delete state.mealPlan; persist(); closeModal(); render(); toast('Plan de mañana borrado'); }
+    del: (_, b) => { mpSet(T1, { ...p, meals: p.meals.filter(m => m.id !== b.dataset.id) }); persist(); render(); mpModal(T1); },
+    copy: () => mpCopyFrom(src),
+    clear: () => { mpSet(T1, null); persist(); closeModal(); render(); toast(`Plan de ${hoy ? 'hoy' : 'mañana'} borrado`); }
   });
 }
 // El día que toca: lo planificado sale arriba de cada comida, con ✓ (se registra tal cual), ✏️ (lo ajustas antes) y ✕
@@ -4901,19 +4908,24 @@ function mpRowsHTML(tp) {
     <span class="block text-sm font-semibold">${m.out ? '🍽️ ' : ''}${esc(m.desc)}</span><span class="block text-[11px] font-mono">${m.out ? `~${Math.round(m.kcal)} kcal reservadas` : macroLine(m)}</span></span>
     <span class="flex gap-1 shrink-0"><button class="plan-ok" data-act="planOk" data-id="${esc(m.id)}" type="button" aria-label="Me lo he comido">✓</button><button class="plan-ed" data-act="planEd" data-id="${esc(m.id)}" type="button" aria-label="Ajustar">✏️</button><button class="plan-ed" data-act="planDel" data-id="${esc(m.id)}" type="button" aria-label="Quitar">✕</button></span></div>`).join('');
 }
-// Debajo de «¿Qué como?» (en el resumen del día): siempre a mano, tengas o no comidas hoy
+// Debajo de «¿Qué como?» (en el resumen del día). Hoy, solo si aún no has registrado nada; mañana, con el nombre del día para que
+// nadie lo lea como «esta mañana»
 function mpBtnHTML() {
   if (ui.dietDate !== todayISO()) return '';
-  const p = mpOf(mpTomorrow()), n = p?.meals.length || 0;
-  return `<button class="qc-btn plan-btn" data-act="planOpen" type="button">📋 ${n ? `Mañana: ${n} ${n === 1 ? 'comida planificada' : 'comidas planificadas'} · ~${mpSum(p.meals).kcal} kcal` : 'Planificar mañana'}</button>`;
+  const T = todayISO(), T1 = mpTomorrow(), ph = mpOf(T), pm = mpOf(T1), wd = parseISO(T1).toLocaleDateString('es-ES', { weekday: 'long' });
+  const bt = (d, txt) => `<button class="qc-btn plan-btn" data-act="planOpen" data-d="${d}" type="button">${txt}</button>`;
+  const nn = n => `${n} ${n === 1 ? 'comida' : 'comidas'}`;
+  const a = ph ? bt(T, `📋 Hoy: ${nn(ph.meals.length)}`) : !mealsOf(T).length ? bt(T, '📋 Planificar hoy') : '';
+  const b = bt(T1, pm ? `📋 ${wd.charAt(0).toUpperCase() + wd.slice(1)}: ${nn(pm.meals.length)}` : `📋 Planificar el ${wd}`);
+  return a ? `<div class="grid grid-cols-2 gap-2">${a}${b}</div>` : b;
 }
 function mpTake(id, how) {
-  const p = mpOf(todayISO()), m = p?.meals.find(x => x.id === id); if (!m) return;
-  p.meals = p.meals.filter(x => x.id !== id); if (!p.meals.length) delete state.mealPlan;
+  const T = todayISO(), p = mpOf(T), m = p?.meals.find(x => x.id === id); if (!m) return;
+  mpSet(T, { ...p, meals: p.meals.filter(x => x.id !== id) });
   if (how === 'del') { persist(); render(); return toast('Quitado del plan'); }
   if (m.out) { persist(); render(); return outMealModal(); }
   if (how === 'ok') { addMeal(todayISO(), m); ui._animRings = true; render(); return toast(`✓ ${m.desc} registrado`); }
-  persist(); mealFromChat({ title: m.desc, type: m.type, items: m.items || [] }, '📋 De tu plan de mañana: ajusta lo que de verdad comas y pulsa Registrar.');
+  persist(); mealFromChat({ title: m.desc, type: m.type, items: m.items || [] }, '📋 De tu plan: ajusta lo que de verdad comas y pulsa Registrar.');
 }
 
 function renderDiet() {
@@ -4987,7 +4999,7 @@ function renderDiet() {
       <div class="d2-left"><div class="d2-left-l">${over ? (canBeta() ? 'Hoy, por encima' : 'Te has pasado') : 'Te quedan'}</div><div class="d2-left-v ${over && !canBeta() ? 'text-rose-300' : MAC.kcal.text}">${over && canBeta() ? '+' : ''}${Math.abs(leftK)}<span> kcal</span></div></div>
       <div class="d2-left"><div class="d2-left-l">${leftP > 0 ? 'Proteína que falta' : 'Proteína'}</div><div class="d2-left-v ${MAC.prot.text}">${leftP > 0 ? `${leftP}<span> g</span>` : '✓<span> cumplida</span>'}</div></div>
     </div>
-    ${isToday && mealsOf(date).length && (leftK > 60 || qcProtMode(qcLeft())) ? `<button class="qc-btn ${MAC.kcal.text}" data-act="queComo" type="button">¿Qué como?</button>` : `<p class="text-xs text-mute mt-2.5 leading-relaxed">${esc(hint)}</p>`}${mpBtnHTML()}
+    ${isToday && (leftK > 60 || qcProtMode(qcLeft())) ? `<button class="qc-btn ${MAC.kcal.text}" data-act="queComo" type="button">¿Qué como?</button>` : `<p class="text-xs text-mute mt-2.5 leading-relaxed">${esc(hint)}</p>`}${mpBtnHTML()}
     ${isToday ? realTdeeHintHTML() : ''}
     ${burned ? `<button class="text-[11px] mt-2 text-mute text-left w-full" data-act="netInfo" type="button">${cardioK ? `🔥 Cardio <b class="${MAC.kcal.text}">−${cardioK}</b> · ` : ''}${gymK ? `🏋️ Gym <b class="${MAC.kcal.text}">−${gymK}</b> · ` : ''}Neto <b class="text-white">${String(Math.round(t.kcal - burned)).replace('-', '−')}</b> kcal <span class="text-brand font-bold">ⓘ</span></button>` : ''}
   </section>
@@ -5744,7 +5756,7 @@ function iaUnshow(j) {
 function iaRetry(j) {
   const c = j.ctx || {};
   if (j.kind === 'qh') { toast('Tu entreno no llegó a prepararse. Vuelve a pulsar «Proponer».', 'warn'); queHagoModal(c.c || {}); return; }
-  if (j.kind === 'plan') { toast('El plan de mañana no llegó a prepararse. Vuelve a pulsar «Planificar».', 'warn'); ui.view = 'diet'; render(); mpModal(); return; }
+  if (j.kind === 'plan') { toast('El plan no llegó a prepararse. Vuelve a pulsar «Planificar».', 'warn'); ui.view = 'diet'; render(); mpModal(c.date || mpTomorrow()); return; }
   if (Date.now() - j.at > 6 * 3600000 || !state.settings.apiKey) return;
   if (j.kind === 'coach') {
     const last = (c.msgs || []).at(-1);
@@ -5835,7 +5847,7 @@ function mealApply(raw, desc) {
 // 🏋️ «¿Qué hago hoy?» recogido del servidor (el móvil cerró la app mientras la IA lo preparaba)
 IA_DONE.qh = (raw, ctx) => { const c = ctx.c || qhCfg(); let r; try { r = qhParse(raw, c); } catch { r = qhLocal(c); } ui.view = 'train'; render(); qhShow(r, c); };
 // 📥 Plan de mañana recogido del servidor (el móvil cerró la app mientras la IA lo preparaba)
-IA_DONE.plan = (raw, ctx) => { try { ui.view = 'diet'; render(); mpApply(raw, ctx.ctxTxt || '', ctx.only || null); } catch { toast('No he podido leer el plan de la IA. Vuelve a probar.', 'warn'); } };
+IA_DONE.plan = (raw, ctx) => { try { ui.view = 'diet'; ui.mpDate = ctx.date || mpTomorrow(); render(); mpApply(raw, ctx.ctxTxt || '', ctx.only || null); } catch { toast('No he podido leer el plan de la IA. Vuelve a probar.', 'warn'); } };
 IA_DONE.meal = (raw, ctx) => {
   try {
     if (ui.aiResult || ui.aiBusy) { ui.view = 'diet'; render(); return toast('La IA terminó otra comida mientras estabas fuera, pero estás con otra: vuelve a pedirla cuando acabes.', 'warn'); }
@@ -8669,7 +8681,7 @@ function openChat(keep) {
     chip: (r, b) => chatSend(CHAT_CHIPS[+b.dataset.i]),
     toDiet: (r, b) => { const ml = ui.chat.msgs[+b.dataset.m]?.meals?.[+b.dataset.o]; if (ml) mealFromChat(ml); },
     recipe: (r, b) => recipeSheet(+b.dataset.m, +b.dataset.o),
-    planGo: (r, b) => { const pl = ui.chat.msgs[+b.dataset.m]?.plans?.[+b.dataset.o]; if (!pl) return; if (!pl.saved) { try { mpApply(pl.json, pl.ctx, null); pl.saved = true; saveChatConv(ui.chat); } catch { toast('No he podido leer ese plan', 'warn'); } } else mpModal(); },
+    planGo: (r, b) => { const pl = ui.chat.msgs[+b.dataset.m]?.plans?.[+b.dataset.o]; if (!pl) return; if (!pl.saved) { try { ui.mpDate = mpTomorrow(); mpApply(pl.json, pl.ctx, null); pl.saved = true; saveChatConv(ui.chat); } catch { toast('No he podido leer ese plan', 'warn'); } } else mpModal(mpTomorrow()); },
     editApply: (r, b) => { const ed = ui.chat.msgs[+b.dataset.m]?.edits?.[+b.dataset.o]; if (ed && !ed.applied) applyChatEdit(ed); },
     editUndo: (r, b) => { const ed = ui.chat.msgs[+b.dataset.m]?.edits?.[+b.dataset.o]; if (ed?.applied) undoChatEdit(ed); },
     editGo: (r, b) => { const ed = ui.chat.msgs[+b.dataset.m]?.edits?.[+b.dataset.o]; const p = ed && state.plan.programs.find(x => x.id === ed.prog); if (p) { closeModal(); openBlock('p:' + p.id); } },
@@ -8794,6 +8806,7 @@ function recipeView(ml, o) {
 /* Tercer campo opcional: 'admin' = solo lo ve el administrador; 'quiet' = arreglo sin aviso para nadie (tampoco el administrador).
    El resto de usuarios no reciben aviso por esas versiones; en el historial les sale «Mejoras en la aplicación». */
 const CHANGELOG = [
+  ['5.33.1', ['📋 Dieta: «¿Qué como?» sale desde la primera comida del día, «Planificar hoy» si aún no has registrado nada, y el de mañana lleva el nombre del día («Planificar el sábado») para que no se confunda con «esta mañana».'], 'quiet'],
   ['5.33.0', ['🎂 El día de tu cumpleaños, la app te felicita (con tu fecha de nacimiento del perfil, que solo está en tu móvil). El Coach también lo sabe.'], 'quiet'],
   ['5.32.3', ['📋 «Planificar mañana» pasa a estar justo debajo de «¿Qué como?», en el resumen del día.'], 'quiet'],
   ['5.32.2', ['🤔 «¿Qué hago hoy?»: al marcar opciones (como el material de casa), la ventana ya no vuelve arriba.'], 'quiet'],
@@ -10547,7 +10560,7 @@ const actions = {
   addClose: () => { ui.addOpen = false; ui.aiResult = null; ui.editing = null; ui.img = null; render(); },
   dietGo: b => { if (dietPending()) return toast('Termina o cierra la comida que estás añadiendo', 'warn'); ui.dietDate = b.dataset.date; ui._animRings = true; render(); },
   outMeal: () => outMealModal(),
-  planOpen: () => mpModal(),
+  planOpen: b => mpModal(b.dataset.d || mpTomorrow()),
   bdayOff: () => { lsSet('fitnesteban_bdayoff', todayISO()); render(); },
   planOk: b => mpTake(b.dataset.id, 'ok'), planEd: b => mpTake(b.dataset.id, 'ed'), planDel: b => mpTake(b.dataset.id, 'del'),
   repeatYday: b => {
